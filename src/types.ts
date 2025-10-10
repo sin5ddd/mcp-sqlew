@@ -258,6 +258,7 @@ export interface GetDecisionParams {
 export interface SearchByTagsParams {
   tags: string[];
   match_mode?: 'AND' | 'OR';
+  status?: 'active' | 'deprecated' | 'draft';
   layer?: string;
 }
 
@@ -268,42 +269,51 @@ export interface GetVersionsParams {
 export interface SearchByLayerParams {
   layer: string;
   status?: 'active' | 'deprecated' | 'draft';
+  include_tags?: boolean;
 }
 
 export interface SendMessageParams {
   from_agent: string;
-  to_agent?: string;  // undefined = broadcast
+  to_agent?: string | null;  // undefined or null = broadcast
   msg_type: 'decision' | 'warning' | 'request' | 'info';
+  message: string;  // The message content
   priority?: 'low' | 'medium' | 'high' | 'critical';
   payload?: any;  // Will be JSON.stringify'd
 }
 
 export interface GetMessagesParams {
-  agent: string;
-  priority?: 'low' | 'medium' | 'high' | 'critical';
+  agent_name: string;
   unread_only?: boolean;
+  priority_filter?: 'low' | 'medium' | 'high' | 'critical';
+  msg_type_filter?: 'decision' | 'warning' | 'request' | 'info';
+  limit?: number;
 }
 
 export interface MarkReadParams {
-  message_id: number;
+  message_ids: number[];
+  agent_name: string;
 }
 
 export interface RecordFileChangeParams {
   file_path: string;
-  agent: string;
+  agent_name: string;
   change_type: 'created' | 'modified' | 'deleted';
   layer?: string;
   description?: string;
 }
 
 export interface GetFileChangesParams {
-  layer?: string;
   file_path?: string;
-  hours?: number;  // Look back this many hours
+  agent_name?: string;
+  layer?: string;
+  change_type?: 'created' | 'modified' | 'deleted';
+  since?: string;  // ISO 8601 timestamp
+  limit?: number;
 }
 
 export interface CheckFileLockParams {
   file_path: string;
+  lock_duration?: number;  // Seconds (default: 300 = 5 min)
 }
 
 export interface AddConstraintParams {
@@ -320,7 +330,8 @@ export interface GetConstraintsParams {
   layer?: string;
   priority?: 'low' | 'medium' | 'high' | 'critical';
   tags?: string[];
-  tag_match?: 'AND' | 'OR';
+  active_only?: boolean;
+  limit?: number;
 }
 
 export interface DeactivateConstraintParams {
@@ -332,7 +343,8 @@ export interface GetLayerSummaryParams {
 }
 
 export interface ClearOldDataParams {
-  older_than_hours?: number;
+  messages_older_than_hours?: number;
+  file_changes_older_than_days?: number;
 }
 
 export interface GetStatsParams {
@@ -408,6 +420,7 @@ export interface MarkReadResponse {
 export interface RecordFileChangeResponse {
   success: boolean;
   change_id: number;
+  timestamp: string;
 }
 
 export interface GetFileChangesResponse {
@@ -417,9 +430,9 @@ export interface GetFileChangesResponse {
 
 export interface CheckFileLockResponse {
   locked: boolean;
-  locked_by?: string;
+  last_agent?: string;
+  last_change?: string;
   change_type?: string;
-  timestamp?: string;
 }
 
 export interface AddConstraintResponse {

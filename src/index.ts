@@ -11,11 +11,28 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { initializeDatabase, closeDatabase } from './database.js';
-import { setDecision, getContext, getDecision } from './tools/context.js';
+import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer } from './tools/context.js';
+import { sendMessage, getMessages, markRead } from './tools/messaging.js';
+import { recordFileChange, getFileChanges, checkFileLock } from './tools/files.js';
+import { addConstraint, getConstraints, deactivateConstraint } from './tools/constraints.js';
+import { getLayerSummary, clearOldData, getStats } from './tools/utils.js';
 import type {
   SetDecisionParams,
   GetContextParams,
-  GetDecisionParams
+  GetDecisionParams,
+  SearchByTagsParams,
+  GetVersionsParams,
+  SearchByLayerParams,
+  SendMessageParams,
+  GetMessagesParams,
+  MarkReadParams,
+  RecordFileChangeParams,
+  GetFileChangesParams,
+  CheckFileLockParams,
+  AddConstraintParams,
+  GetConstraintsParams,
+  DeactivateConstraintParams,
+  ClearOldDataParams
 } from './types.js';
 
 // Parse command-line arguments for database path
@@ -143,6 +160,381 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['key'],
         },
       },
+      {
+        name: 'search_by_tags',
+        description: 'Search for decisions by tags with AND/OR logic. Supports flexible tag-based filtering with optional status and layer filters.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Array of tags to search for (at least one required)',
+            },
+            match_mode: {
+              type: 'string',
+              description: 'Tag matching mode: "AND" (all tags required) or "OR" (any tag)',
+              enum: ['AND', 'OR'],
+              default: 'OR',
+            },
+            status: {
+              type: 'string',
+              description: 'Optional filter by decision status',
+              enum: ['active', 'deprecated', 'draft'],
+            },
+            layer: {
+              type: 'string',
+              description: 'Optional filter by architecture layer',
+              enum: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'],
+            },
+          },
+          required: ['tags'],
+        },
+      },
+      {
+        name: 'get_versions',
+        description: 'Get version history for a specific decision key. Returns all historical versions ordered by timestamp (newest first).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            key: {
+              type: 'string',
+              description: 'Decision key to get version history for',
+            },
+          },
+          required: ['key'],
+        },
+      },
+      {
+        name: 'search_by_layer',
+        description: 'Search for decisions within a specific architecture layer. Supports status filtering and optional tag inclusion.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            layer: {
+              type: 'string',
+              description: 'Architecture layer to search in',
+              enum: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'],
+            },
+            status: {
+              type: 'string',
+              description: 'Filter by decision status (defaults to "active")',
+              enum: ['active', 'deprecated', 'draft'],
+              default: 'active',
+            },
+            include_tags: {
+              type: 'boolean',
+              description: 'Include tag information in results (defaults to true)',
+              default: true,
+            },
+          },
+          required: ['layer'],
+        },
+      },
+      {
+        name: 'send_message',
+        description: 'Send a message from one agent to another (or broadcast to all). Supports priority levels and optional JSON payload.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            from_agent: {
+              type: 'string',
+              description: 'Name of the sending agent',
+            },
+            to_agent: {
+              type: ['string', 'null'],
+              description: 'Name of the receiving agent (null or omit for broadcast)',
+            },
+            msg_type: {
+              type: 'string',
+              description: 'Type of message',
+              enum: ['decision', 'warning', 'request', 'info'],
+            },
+            message: {
+              type: 'string',
+              description: 'The message content',
+            },
+            priority: {
+              type: 'string',
+              description: 'Message priority level (defaults to "medium")',
+              enum: ['low', 'medium', 'high', 'critical'],
+              default: 'medium',
+            },
+            payload: {
+              type: 'object',
+              description: 'Optional JSON payload with additional data',
+            },
+          },
+          required: ['from_agent', 'msg_type', 'message'],
+        },
+      },
+      {
+        name: 'get_messages',
+        description: 'Retrieve messages for an agent. Returns messages addressed to the agent or broadcast messages. Supports filtering by read status, priority, and message type.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            agent_name: {
+              type: 'string',
+              description: 'Name of the agent to retrieve messages for',
+            },
+            unread_only: {
+              type: 'boolean',
+              description: 'Only return unread messages (defaults to false)',
+              default: false,
+            },
+            priority_filter: {
+              type: 'string',
+              description: 'Filter by specific priority level',
+              enum: ['low', 'medium', 'high', 'critical'],
+            },
+            msg_type_filter: {
+              type: 'string',
+              description: 'Filter by message type',
+              enum: ['decision', 'warning', 'request', 'info'],
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of messages to return (defaults to 50)',
+              default: 50,
+            },
+          },
+          required: ['agent_name'],
+        },
+      },
+      {
+        name: 'mark_read',
+        description: 'Mark messages as read. Only marks messages addressed to the specified agent (security check). Idempotent operation.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            message_ids: {
+              type: 'array',
+              items: { type: 'number' },
+              description: 'Array of message IDs to mark as read',
+            },
+            agent_name: {
+              type: 'string',
+              description: 'Name of the agent marking messages as read',
+            },
+          },
+          required: ['message_ids', 'agent_name'],
+        },
+      },
+      {
+        name: 'record_file_change',
+        description: 'Record a file change with optional layer assignment and description. Auto-registers the file and agent. Useful for tracking file modifications across agents.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The file path (absolute or relative)',
+            },
+            agent_name: {
+              type: 'string',
+              description: 'Name of the agent making the change',
+            },
+            change_type: {
+              type: 'string',
+              description: 'Type of change made to the file',
+              enum: ['created', 'modified', 'deleted'],
+            },
+            layer: {
+              type: 'string',
+              description: 'Optional architecture layer assignment',
+              enum: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'],
+            },
+            description: {
+              type: 'string',
+              description: 'Optional description of the change',
+            },
+          },
+          required: ['file_path', 'agent_name', 'change_type'],
+        },
+      },
+      {
+        name: 'get_file_changes',
+        description: 'Retrieve file changes with advanced filtering. Supports filtering by file, agent, layer, change type, and time range. Returns token-efficient view when no filters applied.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'Filter by specific file path',
+            },
+            agent_name: {
+              type: 'string',
+              description: 'Filter by agent who made the change',
+            },
+            layer: {
+              type: 'string',
+              description: 'Filter by architecture layer',
+              enum: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'],
+            },
+            change_type: {
+              type: 'string',
+              description: 'Filter by type of change',
+              enum: ['created', 'modified', 'deleted'],
+            },
+            since: {
+              type: 'string',
+              description: 'ISO 8601 timestamp - return changes since this time',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of changes to return (default: 100)',
+              default: 100,
+            },
+          },
+        },
+      },
+      {
+        name: 'check_file_lock',
+        description: 'Check if a file is "locked" (recently modified). Useful to prevent concurrent edits by multiple agents. Returns lock status with details of last change.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'The file path to check',
+            },
+            lock_duration: {
+              type: 'number',
+              description: 'Time window in seconds to consider "locked" (default: 300 = 5 minutes)',
+              default: 300,
+            },
+          },
+          required: ['file_path'],
+        },
+      },
+      {
+        name: 'add_constraint',
+        description: 'Add a constraint with priority level, optional layer assignment, and tags. Categories: performance, architecture, security. Auto-registers category and agent.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              description: 'Constraint category',
+              enum: ['performance', 'architecture', 'security'],
+            },
+            constraint_text: {
+              type: 'string',
+              description: 'The constraint description/requirement',
+            },
+            priority: {
+              type: 'string',
+              description: 'Priority level (defaults to "medium")',
+              enum: ['low', 'medium', 'high', 'critical'],
+              default: 'medium',
+            },
+            layer: {
+              type: 'string',
+              description: 'Optional architecture layer assignment',
+              enum: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'],
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional tags for categorization (e.g., ["api", "security"])',
+            },
+            created_by: {
+              type: 'string',
+              description: 'Agent creating the constraint (defaults to "system")',
+            },
+          },
+          required: ['category', 'constraint_text'],
+        },
+      },
+      {
+        name: 'get_constraints',
+        description: 'Retrieve constraints with advanced filtering. Supports filtering by category, layer, priority, tags, and active status. Uses token-efficient view with all metadata.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              description: 'Filter by constraint category',
+              enum: ['performance', 'architecture', 'security'],
+            },
+            layer: {
+              type: 'string',
+              description: 'Filter by architecture layer',
+              enum: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'],
+            },
+            priority: {
+              type: 'string',
+              description: 'Filter by priority level',
+              enum: ['low', 'medium', 'high', 'critical'],
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Filter by tags (OR logic - matches ANY tag)',
+            },
+            active_only: {
+              type: 'boolean',
+              description: 'Only return active constraints (defaults to true)',
+              default: true,
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of constraints to return (default: 50)',
+              default: 50,
+            },
+          },
+        },
+      },
+      {
+        name: 'deactivate_constraint',
+        description: 'Deactivate a constraint (soft delete). Idempotent - deactivating already-inactive constraint is safe. Constraints are never removed from database.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            constraint_id: {
+              type: 'number',
+              description: 'The constraint ID to deactivate',
+            },
+          },
+          required: ['constraint_id'],
+        },
+      },
+      {
+        name: 'get_layer_summary',
+        description: 'Get summary statistics for all architecture layers. Returns decision counts, recent file changes (last 1 hour), and active constraints per layer.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'clear_old_data',
+        description: 'Manually clear old data from the database. Deletes messages older than specified hours and file changes older than specified days. Transaction-safe operation that returns counts of deleted records.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            messages_older_than_hours: {
+              type: 'number',
+              description: 'Delete messages older than this many hours (default: 24)',
+              default: 24,
+            },
+            file_changes_older_than_days: {
+              type: 'number',
+              description: 'Delete file changes older than this many days (default: 7)',
+              default: 7,
+            },
+          },
+        },
+      },
+      {
+        name: 'get_stats',
+        description: 'Get comprehensive database statistics including counts for all major tables, active vs total records for decisions and constraints, and overall database health metrics.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
     ],
   };
 });
@@ -182,6 +574,199 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'get_decision': {
         const params = args as unknown as GetDecisionParams;
         const result = getDecision(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'search_by_tags': {
+        const params = args as unknown as SearchByTagsParams;
+        const result = searchByTags(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_versions': {
+        const params = args as unknown as GetVersionsParams;
+        const result = getVersions(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'search_by_layer': {
+        const params = args as unknown as SearchByLayerParams;
+        const result = searchByLayer(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'send_message': {
+        const params = args as unknown as any;
+        const result = sendMessage(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_messages': {
+        const params = args as unknown as any;
+        const result = getMessages(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'mark_read': {
+        const params = args as unknown as MarkReadParams;
+        const result = markRead(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'record_file_change': {
+        const params = args as unknown as RecordFileChangeParams;
+        const result = recordFileChange(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_file_changes': {
+        const params = args as unknown as GetFileChangesParams;
+        const result = getFileChanges(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'check_file_lock': {
+        const params = args as unknown as CheckFileLockParams;
+        const result = checkFileLock(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'add_constraint': {
+        const params = args as unknown as AddConstraintParams;
+        const result = addConstraint(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_constraints': {
+        const params = args as unknown as GetConstraintsParams;
+        const result = getConstraints(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'deactivate_constraint': {
+        const params = args as unknown as DeactivateConstraintParams;
+        const result = deactivateConstraint(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_layer_summary': {
+        const result = getLayerSummary();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'clear_old_data': {
+        const params = args as unknown as ClearOldDataParams;
+        const result = clearOldData(params);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_stats': {
+        const result = getStats();
         return {
           content: [
             {

@@ -1,9 +1,12 @@
 {
-  "name": "mcp-sklew",
+  "name": "sqlew",
   "version": "1.0.0",
-  "description": "MCP Shared Context Server for efficient context sharing between Claude Code sub-agents",
+  "description": "MCP server for efficient context sharing between Claude Code sub-agents with 72% token reduction",
   "main": "dist/index.js",
   "type": "module",
+  "bin": {
+    "sqlew": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -11,19 +14,31 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "rebuild": "npm run clean && npm run build",
-    "test": "node --test"
+    "prepublishOnly": "npm run rebuild"
   },
   "engines": {
     "node": ">=18.0.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sin5ddd/mcp-sqlew.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sin5ddd/mcp-sqlew/issues"
+  },
+  "homepage": "https://github.com/sin5ddd/mcp-sqlew#readme",
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
     "context-sharing",
     "claude-code",
-    "sub-agents"
+    "sub-agents",
+    "sqlite",
+    "token-efficiency",
+    "shared-context"
   ],
-  "author": "",
+  "author": "sin5ddd",
   "license": "MIT",
   "dependencies": {
     "better-sqlite3": "^11.0.0",

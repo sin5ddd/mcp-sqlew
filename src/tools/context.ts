@@ -14,7 +14,13 @@ import type {
   GetDecisionResponse,
   TaggedDecision,
   Database,
-  Status
+  Status,
+  SearchByTagsParams,
+  SearchByTagsResponse,
+  GetVersionsParams,
+  GetVersionsResponse,
+  SearchByLayerParams,
+  SearchByLayerResponse
 } from '../types.js';
 
 /**
@@ -249,5 +255,256 @@ export function getDecision(params: GetDecisionParams): GetDecisionResponse {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to get decision: ${message}`);
+  }
+}
+
+/**
+ * Search for decisions by tags with AND/OR logic
+ * Provides flexible tag-based filtering with status and layer support
+ *
+ * @param params - Search parameters (tags, match_mode, status, layer)
+ * @returns Array of decisions matching tag criteria
+ */
+export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.tags || params.tags.length === 0) {
+    throw new Error('Parameter "tags" is required and must contain at least one tag');
+  }
+
+  try {
+    const matchMode = params.match_mode || 'OR';
+    let query = 'SELECT * FROM tagged_decisions WHERE 1=1';
+    const queryParams: any[] = [];
+
+    // Apply tag filtering based on match mode
+    if (matchMode === 'AND') {
+      // All tags must be present
+      for (const tag of params.tags) {
+        query += ' AND (tags LIKE ? OR tags = ?)';
+        queryParams.push(`%${tag}%`, tag);
+      }
+    } else if (matchMode === 'OR') {
+      // Any tag must be present
+      const tagConditions = params.tags.map(() => '(tags LIKE ? OR tags = ?)').join(' OR ');
+      query += ` AND (${tagConditions})`;
+      for (const tag of params.tags) {
+        queryParams.push(`%${tag}%`, tag);
+      }
+    } else {
+      throw new Error(`Invalid match_mode: ${matchMode}. Must be 'AND' or 'OR'`);
+    }
+
+    // Optional status filter
+    if (params.status) {
+      if (!STRING_TO_STATUS[params.status]) {
+        throw new Error(`Invalid status: ${params.status}. Must be 'active', 'deprecated', or 'draft'`);
+      }
+      query += ' AND status = ?';
+      queryParams.push(params.status);
+    }
+
+    // Optional layer filter
+    if (params.layer) {
+      // Validate layer exists
+      const layerId = getLayerId(db, params.layer);
+      if (layerId === null) {
+        throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
+      }
+      query += ' AND layer = ?';
+      queryParams.push(params.layer);
+    }
+
+    // Order by most recent
+    query += ' ORDER BY updated DESC';
+
+    // Execute query
+    const stmt = db.prepare(query);
+    const rows = stmt.all(...queryParams) as TaggedDecision[];
+
+    return {
+      decisions: rows,
+      count: rows.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to search by tags: ${message}`);
+  }
+}
+
+/**
+ * Get version history for a specific decision key
+ * Returns all historical versions ordered by timestamp (newest first)
+ *
+ * @param params - Decision key to get history for
+ * @returns Array of historical versions with metadata
+ */
+export function getVersions(params: GetVersionsParams): GetVersionsResponse {
+  const db = getDatabase();
+
+  // Validate required parameter
+  if (!params.key || params.key.trim() === '') {
+    throw new Error('Parameter "key" is required and cannot be empty');
+  }
+
+  try {
+    // Get key_id for the decision
+    const keyResult = db.prepare('SELECT id FROM context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
+
+    if (!keyResult) {
+      // Key doesn't exist, return empty history
+      return {
+        key: params.key,
+        history: [],
+        count: 0
+      };
+    }
+
+    const keyId = keyResult.id;
+
+    // Query decision_history with agent join
+    const stmt = db.prepare(`
+      SELECT
+        dh.version,
+        dh.value,
+        a.name as agent_name,
+        datetime(dh.ts, 'unixepoch') as timestamp
+      FROM decision_history dh
+      LEFT JOIN agents a ON dh.agent_id = a.id
+      WHERE dh.key_id = ?
+      ORDER BY dh.ts DESC
+    `);
+
+    const rows = stmt.all(keyId) as Array<{
+      version: string;
+      value: string;
+      agent_name: string | null;
+      timestamp: string;
+    }>;
+
+    // Transform to response format
+    const history = rows.map(row => ({
+      version: row.version,
+      value: row.value,
+      agent: row.agent_name,
+      timestamp: row.timestamp
+    }));
+
+    return {
+      key: params.key,
+      history: history,
+      count: history.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to get versions: ${message}`);
+  }
+}
+
+/**
+ * Search for decisions within a specific architecture layer
+ * Supports status filtering and optional tag inclusion
+ *
+ * @param params - Layer name, optional status and include_tags
+ * @returns Array of decisions in the specified layer
+ */
+export function searchByLayer(params: SearchByLayerParams): SearchByLayerResponse {
+  const db = getDatabase();
+
+  // Validate required parameter
+  if (!params.layer || params.layer.trim() === '') {
+    throw new Error('Parameter "layer" is required and cannot be empty');
+  }
+
+  try {
+    // Validate layer exists
+    const layerId = getLayerId(db, params.layer);
+    if (layerId === null) {
+      throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
+    }
+
+    // Determine which view/table to use
+    const includeTagsValue = params.include_tags !== undefined ? params.include_tags : true;
+    const statusValue = params.status || 'active';
+
+    // Validate status
+    if (!STRING_TO_STATUS[statusValue]) {
+      throw new Error(`Invalid status: ${statusValue}. Must be 'active', 'deprecated', or 'draft'`);
+    }
+
+    let query: string;
+    const queryParams: any[] = [params.layer, statusValue];
+
+    if (includeTagsValue) {
+      // Use tagged_decisions view for full metadata
+      query = `
+        SELECT * FROM tagged_decisions
+        WHERE layer = ? AND status = ?
+        ORDER BY updated DESC
+      `;
+    } else {
+      // Use base decisions table with minimal joins
+      query = `
+        SELECT
+          ck.key,
+          d.value,
+          d.version,
+          CASE d.status
+            WHEN 1 THEN 'active'
+            WHEN 2 THEN 'deprecated'
+            WHEN 3 THEN 'draft'
+          END as status,
+          l.name as layer,
+          NULL as tags,
+          NULL as scopes,
+          a.name as decided_by,
+          datetime(d.ts, 'unixepoch') as updated
+        FROM decisions d
+        INNER JOIN context_keys ck ON d.key_id = ck.id
+        LEFT JOIN layers l ON d.layer_id = l.id
+        LEFT JOIN agents a ON d.agent_id = a.id
+        WHERE l.name = ? AND d.status = ?
+
+        UNION ALL
+
+        SELECT
+          ck.key,
+          CAST(dn.value AS TEXT) as value,
+          dn.version,
+          CASE dn.status
+            WHEN 1 THEN 'active'
+            WHEN 2 THEN 'deprecated'
+            WHEN 3 THEN 'draft'
+          END as status,
+          l.name as layer,
+          NULL as tags,
+          NULL as scopes,
+          a.name as decided_by,
+          datetime(dn.ts, 'unixepoch') as updated
+        FROM decisions_numeric dn
+        INNER JOIN context_keys ck ON dn.key_id = ck.id
+        LEFT JOIN layers l ON dn.layer_id = l.id
+        LEFT JOIN agents a ON dn.agent_id = a.id
+        WHERE l.name = ? AND dn.status = ?
+
+        ORDER BY updated DESC
+      `;
+      // Add params for the numeric table part of UNION
+      queryParams.push(params.layer, statusValue);
+    }
+
+    // Execute query
+    const stmt = db.prepare(query);
+    const rows = stmt.all(...queryParams) as TaggedDecision[];
+
+    return {
+      layer: params.layer,
+      decisions: rows,
+      count: rows.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to search by layer: ${message}`);
   }
 }
