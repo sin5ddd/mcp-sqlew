@@ -21,7 +21,7 @@ const __dirname = dirname(__filename);
 export function initializeSchema(db: Database): void {
   try {
     // Read schema file
-    const schemaPath = join(__dirname, '..', 'docs', 'schema.sql');
+    const schemaPath = join(__dirname, '..', 'assets', 'schema.sql');
     const schemaSql = readFileSync(schemaPath, 'utf-8');
 
     // Execute schema in a transaction for atomicity

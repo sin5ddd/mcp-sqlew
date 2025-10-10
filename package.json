@@ -7,6 +7,14 @@
   "bin": {
     "sqlew": "./dist/index.js"
   },
+  "files": [
+    "dist/",
+    "assets/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "ARCHITECTURE.md"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
