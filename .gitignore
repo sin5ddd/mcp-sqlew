@@ -1,0 +1,53 @@
+# Claude Code configuration (keep these)
+.claude
+.mcp.json
+.mcp-context
+CLAUDE.md
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Database files
+.mcp-context/
+.sqlew/
+*.db
+*.db-shm
+*.db-wal
+:memory:
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+
+# Test and documentation files (phase-specific)
+PHASE*.md
+test-*.mjs
+test-*.js
