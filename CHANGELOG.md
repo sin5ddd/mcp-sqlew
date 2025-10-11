@@ -5,6 +5,19 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-10-11
+
+### Fixed
+- **Migration Bug:** Fixed migration from v1.0.0 to v1.1.0 failing with "no such table: m_config" error
+  - Migration now creates `m_config` table if it doesn't exist (new in v1.1.0, not present in v1.0.0)
+  - Automatically inserts default config values during migration
+  - Users who already migrated can manually fix by running: `sqlite3 <path-to-db> "CREATE TABLE IF NOT EXISTS m_config (key TEXT PRIMARY KEY, value TEXT NOT NULL); INSERT OR IGNORE INTO m_config VALUES ('autodelete_ignore_weekend', '0'), ('autodelete_message_hours', '24'), ('autodelete_file_history_days', '7');"`
+
+### Technical Details
+- Added table creation step to migration script for tables new in v1.1.0
+- Migration now handles both table renaming (v1.0.0 → v1.1.0) and new table creation
+- 100% backward compatible with v1.0.0 databases
+
 ## [1.1.0] - 2025-10-11
 
 ### Added
@@ -151,6 +164,7 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[1.1.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.1
 [1.1.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.0
 [1.0.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.0.1
 [1.0.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.0.0

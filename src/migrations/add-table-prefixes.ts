@@ -128,6 +128,28 @@ export function runMigration(db: Database): MigrationResult {
       }
     }
 
+    // 5. Create m_config table if it doesn't exist (new in v1.1.0)
+    const configExists = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='m_config'"
+    ).get();
+
+    if (!configExists) {
+      db.exec(`
+        CREATE TABLE m_config (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+      `);
+
+      // Insert default config values
+      db.prepare('INSERT INTO m_config (key, value) VALUES (?, ?)').run('autodelete_ignore_weekend', '0');
+      db.prepare('INSERT INTO m_config (key, value) VALUES (?, ?)').run('autodelete_message_hours', '24');
+      db.prepare('INSERT INTO m_config (key, value) VALUES (?, ?)').run('autodelete_file_history_days', '7');
+
+      details.push('Created table: m_config (new in v1.1.0)');
+      details.push('Initialized config with default values');
+    }
+
     // Commit transaction
     db.exec('COMMIT');
 
