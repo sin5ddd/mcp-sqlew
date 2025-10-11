@@ -2,6 +2,7 @@
 .claude
 .mcp.json
 .mcp-context
+.serena
 CLAUDE.md
 
 # Dependencies
@@ -49,5 +50,8 @@ temp/
 
 # Test and documentation files (phase-specific)
 PHASE*.md
-test-*.mjs
-test-*.js
+# Ignore test files in root, but allow in tests/ directory
+/test-*.mjs
+/test-*.js
+# Allow test database directories created by tests
+.sqlew-test/

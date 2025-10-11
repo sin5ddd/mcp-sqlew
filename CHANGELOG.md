@@ -5,6 +5,23 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-10-11
+
+### Added
+- **Database Schema Validation:** Comprehensive validation on startup for existing databases
+  - Detects missing tables, views, and triggers
+  - Verifies standard data integrity (layers, categories, tags)
+  - Displays detailed error messages with actionable solutions
+  - Prevents data corruption from incompatible schemas
+  - Graceful exit with error code 1 on validation failure
+
+### Fixed
+- Database initialization now validates existing schema before proceeding
+- Organized test files into `tests/` directory for better project structure
+
+### Changed
+- Updated `.gitignore` to properly handle test files (root vs tests directory)
+
 ## [1.0.0] - 2025-01-10
 
 ### Initial Release
@@ -104,4 +121,5 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[1.0.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.0.1
 [1.0.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.0.0

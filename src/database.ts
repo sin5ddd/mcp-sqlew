@@ -6,7 +6,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve, isAbsolute } from 'path';
-import { initializeSchema, isSchemaInitialized } from './schema.js';
+import { initializeSchema, isSchemaInitialized, verifySchemaIntegrity } from './schema.js';
 import { DEFAULT_DB_PATH, DB_BUSY_TIMEOUT } from './constants.js';
 import type { Database as DatabaseType } from './types.js';
 
@@ -55,12 +55,45 @@ export function initializeDatabase(dbPath?: string): DatabaseType {
 
     console.log(`✓ Connected to database: ${absolutePath}`);
 
-    // Initialize schema if needed
-    if (!isSchemaInitialized(db)) {
+    // Check if database has existing schema
+    const schemaExists = isSchemaInitialized(db);
+
+    if (schemaExists) {
+      // Validate existing schema integrity
+      console.log('→ Validating existing database schema...');
+      const validation = verifySchemaIntegrity(db);
+
+      if (!validation.valid) {
+        // Schema is invalid - display error and exit
+        console.error('\n❌ ERROR: Database schema validation failed!');
+        console.error('\nThe existing database file has an incompatible schema.');
+        console.error(`Database location: ${absolutePath}`);
+
+        if (validation.missing.length > 0) {
+          console.error('\n📋 Missing components:');
+          validation.missing.forEach(item => console.error(`  - ${item}`));
+        }
+
+        if (validation.errors.length > 0) {
+          console.error('\n⚠️  Validation errors:');
+          validation.errors.forEach(error => console.error(`  - ${error}`));
+        }
+
+        console.error('\n💡 Possible solutions:');
+        console.error('  1. Backup and delete the existing database file to start fresh');
+        console.error('  2. Use a different database path with --db-path option');
+        console.error('  3. Restore from a backup if available\n');
+
+        // Close database and exit
+        db.close();
+        process.exit(1);
+      }
+
+      console.log('✓ Database schema validation passed');
+    } else {
+      // Initialize new schema
       console.log('→ Initializing database schema...');
       initializeSchema(db);
-    } else {
-      console.log('✓ Database schema already initialized');
     }
 
     // Store instance
