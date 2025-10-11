@@ -255,6 +255,19 @@ export const SQLITE_TRUE = 1;
 export const SQLITE_FALSE = 0;
 
 // ============================================================================
+// Configuration Keys
+// ============================================================================
+
+/**
+ * Configuration key names
+ */
+export const CONFIG_KEYS = {
+  AUTODELETE_IGNORE_WEEKEND: 'autodelete_ignore_weekend',
+  AUTODELETE_MESSAGE_HOURS: 'autodelete_message_hours',
+  AUTODELETE_FILE_HISTORY_DAYS: 'autodelete_file_history_days',
+} as const;
+
+// ============================================================================
 // Error Messages
 // ============================================================================
 

@@ -19,6 +19,7 @@ import type {
   CheckFileLockResponse,
   RecentFileChange,
 } from '../types.js';
+import { performAutoCleanup } from '../utils/cleanup.js';
 
 /**
  * Record a file change with optional layer assignment and description.
@@ -29,6 +30,9 @@ import type {
  */
 export function recordFileChange(params: RecordFileChangeParams): RecordFileChangeResponse {
   const db = getDatabase();
+
+  // Cleanup old file changes before inserting new one
+  performAutoCleanup(db);
 
   try {
     // Validate change_type
@@ -57,7 +61,7 @@ export function recordFileChange(params: RecordFileChangeParams): RecordFileChan
 
     // Insert file change record
     const stmt = db.prepare(`
-      INSERT INTO file_changes (file_id, agent_id, layer_id, change_type, description)
+      INSERT INTO t_file_changes (file_id, agent_id, layer_id, change_type, description)
       VALUES (?, ?, ?, ?, ?)
     `);
 
@@ -70,7 +74,7 @@ export function recordFileChange(params: RecordFileChangeParams): RecordFileChan
     );
 
     // Get timestamp
-    const tsResult = db.prepare('SELECT ts FROM file_changes WHERE id = ?')
+    const tsResult = db.prepare('SELECT ts FROM t_file_changes WHERE id = ?')
       .get(result.lastInsertRowid) as { ts: number } | undefined;
 
     return {
@@ -141,7 +145,7 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
     // Use view if no specific filters (token efficient)
     if (conditions.length === 0) {
       const stmt = db.prepare(`
-        SELECT * FROM recent_file_changes
+        SELECT * FROM v_recent_file_changes
         LIMIT ?
       `);
 
@@ -168,10 +172,10 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
         END as change_type,
         fc.description,
         datetime(fc.ts, 'unixepoch') as changed_at
-      FROM file_changes fc
-      JOIN files f ON fc.file_id = f.id
-      JOIN agents a ON fc.agent_id = a.id
-      LEFT JOIN layers l ON fc.layer_id = l.id
+      FROM t_file_changes fc
+      JOIN m_files f ON fc.file_id = f.id
+      JOIN m_agents a ON fc.agent_id = a.id
+      LEFT JOIN m_layers l ON fc.layer_id = l.id
       ${whereClause}
       ORDER BY fc.ts DESC
       LIMIT ?
@@ -212,9 +216,9 @@ export function checkFileLock(params: CheckFileLockParams): CheckFileLockRespons
         a.name as agent,
         fc.change_type,
         fc.ts
-      FROM file_changes fc
-      JOIN files f ON fc.file_id = f.id
-      JOIN agents a ON fc.agent_id = a.id
+      FROM t_file_changes fc
+      JOIN m_files f ON fc.file_id = f.id
+      JOIN m_agents a ON fc.agent_id = a.id
       WHERE f.path = ?
       ORDER BY fc.ts DESC
       LIMIT 1

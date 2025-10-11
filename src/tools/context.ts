@@ -80,7 +80,7 @@ export function setDecision(params: SetDecisionParams): SetDecisionResponse {
       if (isNumeric) {
         // Numeric decision
         const stmt = db.prepare(`
-          INSERT INTO decisions_numeric (key_id, value, agent_id, layer_id, version, status, ts)
+          INSERT INTO t_decisions_numeric (key_id, value, agent_id, layer_id, version, status, ts)
           VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(key_id) DO UPDATE SET
             value = excluded.value,
@@ -94,7 +94,7 @@ export function setDecision(params: SetDecisionParams): SetDecisionResponse {
       } else {
         // String decision
         const stmt = db.prepare(`
-          INSERT INTO decisions (key_id, value, agent_id, layer_id, version, status, ts)
+          INSERT INTO t_decisions (key_id, value, agent_id, layer_id, version, status, ts)
           VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(key_id) DO UPDATE SET
             value = excluded.value,
@@ -107,26 +107,26 @@ export function setDecision(params: SetDecisionParams): SetDecisionResponse {
         stmt.run(keyId, String(value), agentId, layerId, version, status, ts);
       }
 
-      // Handle tags (many-to-many)
+      // Handle m_tags (many-to-many)
       if (params.tags && params.tags.length > 0) {
         // Clear existing tags
-        db.prepare('DELETE FROM decision_tags WHERE decision_key_id = ?').run(keyId);
+        db.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
 
         // Insert new tags
-        const tagStmt = db.prepare('INSERT INTO decision_tags (decision_key_id, tag_id) VALUES (?, ?)');
+        const tagStmt = db.prepare('INSERT INTO t_decision_tags (decision_key_id, tag_id) VALUES (?, ?)');
         for (const tagName of params.tags) {
           const tagId = getOrCreateTag(db, tagName);
           tagStmt.run(keyId, tagId);
         }
       }
 
-      // Handle scopes (many-to-many)
+      // Handle m_scopes (many-to-many)
       if (params.scopes && params.scopes.length > 0) {
         // Clear existing scopes
-        db.prepare('DELETE FROM decision_scopes WHERE decision_key_id = ?').run(keyId);
+        db.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
 
         // Insert new scopes
-        const scopeStmt = db.prepare('INSERT INTO decision_scopes (decision_key_id, scope_id) VALUES (?, ?)');
+        const scopeStmt = db.prepare('INSERT INTO t_decision_scopes (decision_key_id, scope_id) VALUES (?, ?)');
         for (const scopeName of params.scopes) {
           const scopeId = getOrCreateScope(db, scopeName);
           scopeStmt.run(keyId, scopeId);
@@ -148,19 +148,19 @@ export function setDecision(params: SetDecisionParams): SetDecisionResponse {
 }
 
 /**
- * Get context decisions with advanced filtering
- * Uses tagged_decisions view for token efficiency
+ * Get context t_decisions with advanced filtering
+ * Uses v_tagged_decisions view for token efficiency
  * Supports filtering by status, layer, tags, and scope
  *
  * @param params - Filter parameters
- * @returns Array of decisions with metadata
+ * @returns Array of t_decisions with metadata
  */
 export function getContext(params: GetContextParams = {}): GetContextResponse {
   const db = getDatabase();
 
   try {
     // Build query dynamically based on filters
-    let query = 'SELECT * FROM tagged_decisions WHERE 1=1';
+    let query = 'SELECT * FROM v_tagged_decisions WHERE 1=1';
     const queryParams: any[] = [];
 
     // Filter by status
@@ -181,7 +181,7 @@ export function getContext(params: GetContextParams = {}): GetContextResponse {
     // Filter by scope
     if (params.scope) {
       // Use LIKE for comma-separated scopes
-      query += ' AND (scopes LIKE ? OR scopes = ?)';
+      query += ' AND (scopes LIKE ? OR m_scopes = ?)';
       queryParams.push(`%${params.scope}%`, params.scope);
     }
 
@@ -190,14 +190,14 @@ export function getContext(params: GetContextParams = {}): GetContextResponse {
       const tagMatch = params.tag_match || 'OR';
 
       if (tagMatch === 'AND') {
-        // All tags must be present
+        // All m_tags must be present
         for (const tag of params.tags) {
-          query += ' AND (tags LIKE ? OR tags = ?)';
+          query += ' AND (tags LIKE ? OR m_tags = ?)';
           queryParams.push(`%${tag}%`, tag);
         }
       } else {
         // Any tag must be present (OR)
-        const tagConditions = params.tags.map(() => '(tags LIKE ? OR tags = ?)').join(' OR ');
+        const tagConditions = params.tags.map(() => '(tags LIKE ? OR m_tags = ?)').join(' OR ');
         query += ` AND (${tagConditions})`;
         for (const tag of params.tags) {
           queryParams.push(`%${tag}%`, tag);
@@ -238,8 +238,8 @@ export function getDecision(params: GetDecisionParams): GetDecisionResponse {
   }
 
   try {
-    // Query tagged_decisions view
-    const stmt = db.prepare('SELECT * FROM tagged_decisions WHERE key = ?');
+    // Query v_tagged_decisions view
+    const stmt = db.prepare('SELECT * FROM v_tagged_decisions WHERE key = ?');
     const row = stmt.get(params.key) as TaggedDecision | undefined;
 
     if (!row) {
@@ -259,11 +259,11 @@ export function getDecision(params: GetDecisionParams): GetDecisionResponse {
 }
 
 /**
- * Search for decisions by tags with AND/OR logic
+ * Search for t_decisions by m_tags with AND/OR logic
  * Provides flexible tag-based filtering with status and layer support
  *
  * @param params - Search parameters (tags, match_mode, status, layer)
- * @returns Array of decisions matching tag criteria
+ * @returns Array of t_decisions matching tag criteria
  */
 export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
   const db = getDatabase();
@@ -275,19 +275,19 @@ export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
 
   try {
     const matchMode = params.match_mode || 'OR';
-    let query = 'SELECT * FROM tagged_decisions WHERE 1=1';
+    let query = 'SELECT * FROM v_tagged_decisions WHERE 1=1';
     const queryParams: any[] = [];
 
     // Apply tag filtering based on match mode
     if (matchMode === 'AND') {
-      // All tags must be present
+      // All m_tags must be present
       for (const tag of params.tags) {
-        query += ' AND (tags LIKE ? OR tags = ?)';
+        query += ' AND (tags LIKE ? OR m_tags = ?)';
         queryParams.push(`%${tag}%`, tag);
       }
     } else if (matchMode === 'OR') {
       // Any tag must be present
-      const tagConditions = params.tags.map(() => '(tags LIKE ? OR tags = ?)').join(' OR ');
+      const tagConditions = params.tags.map(() => '(tags LIKE ? OR m_tags = ?)').join(' OR ');
       query += ` AND (${tagConditions})`;
       for (const tag of params.tags) {
         queryParams.push(`%${tag}%`, tag);
@@ -350,7 +350,7 @@ export function getVersions(params: GetVersionsParams): GetVersionsResponse {
 
   try {
     // Get key_id for the decision
-    const keyResult = db.prepare('SELECT id FROM context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
+    const keyResult = db.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
 
     if (!keyResult) {
       // Key doesn't exist, return empty history
@@ -363,15 +363,15 @@ export function getVersions(params: GetVersionsParams): GetVersionsResponse {
 
     const keyId = keyResult.id;
 
-    // Query decision_history with agent join
+    // Query t_decision_history with agent join
     const stmt = db.prepare(`
       SELECT
         dh.version,
         dh.value,
         a.name as agent_name,
         datetime(dh.ts, 'unixepoch') as timestamp
-      FROM decision_history dh
-      LEFT JOIN agents a ON dh.agent_id = a.id
+      FROM t_decision_history dh
+      LEFT JOIN m_agents a ON dh.agent_id = a.id
       WHERE dh.key_id = ?
       ORDER BY dh.ts DESC
     `);
@@ -403,11 +403,11 @@ export function getVersions(params: GetVersionsParams): GetVersionsResponse {
 }
 
 /**
- * Search for decisions within a specific architecture layer
+ * Search for t_decisions within a specific architecture layer
  * Supports status filtering and optional tag inclusion
  *
  * @param params - Layer name, optional status and include_tags
- * @returns Array of decisions in the specified layer
+ * @returns Array of t_decisions in the specified layer
  */
 export function searchByLayer(params: SearchByLayerParams): SearchByLayerResponse {
   const db = getDatabase();
@@ -437,14 +437,14 @@ export function searchByLayer(params: SearchByLayerParams): SearchByLayerRespons
     const queryParams: any[] = [params.layer, statusValue];
 
     if (includeTagsValue) {
-      // Use tagged_decisions view for full metadata
+      // Use v_tagged_decisions view for full metadata
       query = `
-        SELECT * FROM tagged_decisions
+        SELECT * FROM v_tagged_decisions
         WHERE layer = ? AND status = ?
         ORDER BY updated DESC
       `;
     } else {
-      // Use base decisions table with minimal joins
+      // Use base t_decisions table with minimal joins
       query = `
         SELECT
           ck.key,
@@ -460,10 +460,10 @@ export function searchByLayer(params: SearchByLayerParams): SearchByLayerRespons
           NULL as scopes,
           a.name as decided_by,
           datetime(d.ts, 'unixepoch') as updated
-        FROM decisions d
-        INNER JOIN context_keys ck ON d.key_id = ck.id
-        LEFT JOIN layers l ON d.layer_id = l.id
-        LEFT JOIN agents a ON d.agent_id = a.id
+        FROM t_decisions d
+        INNER JOIN m_context_keys ck ON d.key_id = ck.id
+        LEFT JOIN m_layers l ON d.layer_id = l.id
+        LEFT JOIN m_agents a ON d.agent_id = a.id
         WHERE l.name = ? AND d.status = ?
 
         UNION ALL
@@ -482,10 +482,10 @@ export function searchByLayer(params: SearchByLayerParams): SearchByLayerRespons
           NULL as scopes,
           a.name as decided_by,
           datetime(dn.ts, 'unixepoch') as updated
-        FROM decisions_numeric dn
-        INNER JOIN context_keys ck ON dn.key_id = ck.id
-        LEFT JOIN layers l ON dn.layer_id = l.id
-        LEFT JOIN agents a ON dn.agent_id = a.id
+        FROM t_decisions_numeric dn
+        INNER JOIN m_context_keys ck ON dn.key_id = ck.id
+        LEFT JOIN m_layers l ON dn.layer_id = l.id
+        LEFT JOIN m_agents a ON dn.agent_id = a.id
         WHERE l.name = ? AND dn.status = ?
 
         ORDER BY updated DESC

@@ -19,6 +19,7 @@ import type {
   GetMessagesResponse,
   MarkReadResponse,
 } from '../types.js';
+import { performAutoCleanup } from '../utils/cleanup.js';
 
 /**
  * Send a message from one agent to another (or broadcast)
@@ -36,6 +37,9 @@ export function sendMessage(params: {
   payload?: any;
 }): SendMessageResponse & { timestamp: string } {
   const db = getDatabase();
+
+  // Cleanup old messages before inserting new one
+  performAutoCleanup(db);
 
   // Validate msg_type
   if (!STRING_TO_MESSAGE_TYPE[params.msg_type]) {
@@ -63,14 +67,14 @@ export function sendMessage(params: {
 
   // Insert message
   const stmt = db.prepare(`
-    INSERT INTO agent_messages (from_agent_id, to_agent_id, msg_type, priority, payload, read)
+    INSERT INTO t_agent_messages (from_agent_id, to_agent_id, msg_type, priority, payload, read)
     VALUES (?, ?, ?, ?, ?, 0)
   `);
 
   const result = stmt.run(fromAgentId, toAgentId, msgTypeInt, priorityInt, payloadStr);
 
   // Get timestamp
-  const tsResult = db.prepare('SELECT ts FROM agent_messages WHERE id = ?').get(result.lastInsertRowid) as { ts: number };
+  const tsResult = db.prepare('SELECT ts FROM t_agent_messages WHERE id = ?').get(result.lastInsertRowid) as { ts: number };
   const timestamp = new Date(tsResult.ts * 1000).toISOString();
 
   return {
@@ -109,8 +113,8 @@ export function getMessages(params: {
       m.payload,
       m.ts,
       m.read
-    FROM agent_messages m
-    JOIN agents a ON m.from_agent_id = a.id
+    FROM t_agent_messages m
+    JOIN m_agents a ON m.from_agent_id = a.id
     WHERE (m.to_agent_id = ? OR m.to_agent_id IS NULL)
   `;
 
@@ -204,7 +208,7 @@ export function markRead(params: {
   // Update only messages addressed to this agent (security check)
   // Also allow broadcast messages (to_agent_id IS NULL)
   const stmt = db.prepare(`
-    UPDATE agent_messages
+    UPDATE t_agent_messages
     SET read = 1
     WHERE id IN (${placeholders})
       AND (to_agent_id = ? OR to_agent_id IS NULL)

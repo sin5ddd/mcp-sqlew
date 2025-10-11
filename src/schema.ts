@@ -47,7 +47,7 @@ export function initializeSchema(db: Database): void {
 
 /**
  * Check if schema is already initialized
- * Checks for existence of the agents table
+ * Checks for existence of the m_agents table
  *
  * @param db - SQLite database connection
  * @returns true if schema exists, false otherwise
@@ -55,7 +55,7 @@ export function initializeSchema(db: Database): void {
 export function isSchemaInitialized(db: Database): boolean {
   try {
     const result = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='agents'"
+      "SELECT name FROM sqlite_master WHERE type='table' AND (name='m_agents' OR name='agents')"
     ).get();
 
     return result !== undefined;
@@ -91,13 +91,13 @@ export function getSchemaInfo(db: Database): {
   };
 
   try {
-    counts.agents = (db.prepare('SELECT COUNT(*) as count FROM agents').get() as { count: number }).count;
-    counts.files = (db.prepare('SELECT COUNT(*) as count FROM files').get() as { count: number }).count;
-    counts.context_keys = (db.prepare('SELECT COUNT(*) as count FROM context_keys').get() as { count: number }).count;
-    counts.layers = (db.prepare('SELECT COUNT(*) as count FROM layers').get() as { count: number }).count;
-    counts.tags = (db.prepare('SELECT COUNT(*) as count FROM tags').get() as { count: number }).count;
-    counts.scopes = (db.prepare('SELECT COUNT(*) as count FROM scopes').get() as { count: number }).count;
-    counts.constraint_categories = (db.prepare('SELECT COUNT(*) as count FROM constraint_categories').get() as { count: number }).count;
+    counts.agents = (db.prepare('SELECT COUNT(*) as count FROM m_agents').get() as { count: number }).count;
+    counts.files = (db.prepare('SELECT COUNT(*) as count FROM m_files').get() as { count: number }).count;
+    counts.context_keys = (db.prepare('SELECT COUNT(*) as count FROM m_context_keys').get() as { count: number }).count;
+    counts.layers = (db.prepare('SELECT COUNT(*) as count FROM m_layers').get() as { count: number }).count;
+    counts.tags = (db.prepare('SELECT COUNT(*) as count FROM m_tags').get() as { count: number }).count;
+    counts.scopes = (db.prepare('SELECT COUNT(*) as count FROM m_scopes').get() as { count: number }).count;
+    counts.constraint_categories = (db.prepare('SELECT COUNT(*) as count FROM m_constraint_categories').get() as { count: number }).count;
   } catch (error) {
     // If tables don't exist yet, return zeros
   }
@@ -124,7 +124,7 @@ export function verifySchemaIntegrity(db: Database): {
   };
 
   const requiredTables = [
-    'agents', 'files', 'context_keys', 'constraint_categories', 'layers', 'tags', 'scopes',
+    'agents', 'files', 'context_keys', 'constraint_categories', 'layers', 'tags', 'scopes', 'config',
     'decisions', 'decisions_numeric', 'decision_history', 'decision_tags', 'decision_scopes',
     'agent_messages', 'file_changes', 'constraints', 'constraint_tags',
   ];
@@ -135,7 +135,7 @@ export function verifySchemaIntegrity(db: Database): {
   ];
 
   const requiredTriggers = [
-    'cleanup_old_messages', 'cleanup_old_file_changes', 'record_decision_history',
+    'record_decision_history',
   ];
 
   try {
@@ -176,21 +176,27 @@ export function verifySchemaIntegrity(db: Database): {
     }
 
     // Verify standard data exists
-    const layerCount = (db.prepare('SELECT COUNT(*) as count FROM layers').get() as { count: number }).count;
+    const layerCount = (db.prepare('SELECT COUNT(*) as count FROM m_layers').get() as { count: number }).count;
     if (layerCount < 5) {
       result.errors.push(`Expected 5 standard layers, found ${layerCount}`);
       result.valid = false;
     }
 
-    const categoryCount = (db.prepare('SELECT COUNT(*) as count FROM constraint_categories').get() as { count: number }).count;
+    const categoryCount = (db.prepare('SELECT COUNT(*) as count FROM m_constraint_categories').get() as { count: number }).count;
     if (categoryCount < 3) {
       result.errors.push(`Expected 3 standard categories, found ${categoryCount}`);
       result.valid = false;
     }
 
-    const tagCount = (db.prepare('SELECT COUNT(*) as count FROM tags').get() as { count: number }).count;
+    const tagCount = (db.prepare('SELECT COUNT(*) as count FROM m_tags').get() as { count: number }).count;
     if (tagCount < 10) {
       result.errors.push(`Expected 10 standard tags, found ${tagCount}`);
+      result.valid = false;
+    }
+
+    const configCount = (db.prepare('SELECT COUNT(*) as count FROM m_config').get() as { count: number }).count;
+    if (configCount < 3) {
+      result.errors.push(`Expected 3 m_config entries, found ${configCount}`);
       result.valid = false;
     }
 

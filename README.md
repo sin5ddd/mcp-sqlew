@@ -12,7 +12,7 @@ When coordinating multiple Claude Code agents on a complex project, context shar
 - **72% Token Reduction:** ID-based normalization, integer enums, and pre-aggregated views
 - **Structured Metadata:** Tags, layers, scopes, versions, and priorities for intelligent organization
 - **Fast & Reliable:** SQLite-backed with ACID guarantees and automatic cleanup
-- **18 MCP Tools:** Comprehensive API for decisions, messaging, file tracking, and constraints
+- **20 MCP Tools:** Comprehensive API for decisions, messaging, file tracking, constraints, and configuration
 
 ## Features
 
@@ -21,7 +21,8 @@ When coordinating multiple Claude Code agents on a complex project, context shar
 - **File Change Tracking:** Layer-based file organization with lock detection
 - **Constraint Management:** Track performance, architecture, and security constraints
 - **Token Efficient:** Pre-aggregated views and integer enums minimize token consumption
-- **Automatic Cleanup:** Configurable retention policies for messages and file changes
+- **Weekend-Aware Auto-Cleanup:** Smart retention policies that pause during weekends
+- **Configurable Retention:** Adjust cleanup periods via CLI args or MCP tools
 - **Version History:** Track decision evolution over time
 - **Concurrent Access:** Supports multiple agents simultaneously
 
@@ -56,6 +57,24 @@ Or with a custom database path:
     "sqlew": {
       "command": "npx",
       "args": ["sqlew", "/path/to/database.db"]
+    }
+  }
+}
+```
+
+Or with weekend-aware auto-deletion enabled:
+
+```json
+{
+  "mcpServers": {
+    "sqlew": {
+      "command": "npx",
+      "args": [
+        "sqlew",
+        "--autodelete-ignore-weekend",
+        "--autodelete-message-hours=48",
+        "--autodelete-file-history-days=10"
+      ]
     }
   }
 }
@@ -187,20 +206,51 @@ Deactivate a constraint (soft delete).
 Get aggregated statistics per architecture layer.
 
 #### `clear_old_data`
-Manually clear old messages and file changes.
+Manually clear old messages and file changes (uses weekend-aware config when no params provided).
 
 #### `get_stats`
 Get comprehensive database statistics.
 
+### Configuration (2 tools)
+
+#### `get_config`
+Get current auto-deletion configuration settings.
+
+```typescript
+// Returns:
+{
+  ignoreWeekend: false,
+  messageRetentionHours: 24,
+  fileHistoryRetentionDays: 7
+}
+```
+
+#### `update_config`
+Update auto-deletion configuration settings.
+
+```typescript
+{
+  ignoreWeekend: true,
+  messageRetentionHours: 48,
+  fileHistoryRetentionDays: 10
+}
+```
+
 ## Database Schema
 
-sqlew uses a normalized SQLite schema optimized for token efficiency:
+sqlew uses a normalized SQLite schema (v1.3.0) optimized for token efficiency with category-based table prefixes:
 
-**Master Tables:** agents, files, context_keys, layers, tags, scopes, constraint_categories
+**Master Tables (m_ prefix):** m_agents, m_files, m_context_keys, m_layers, m_tags, m_scopes, m_constraint_categories, m_config
 
-**Transaction Tables:** decisions, decisions_numeric, decision_history, agent_messages, file_changes, constraints
+**Transaction Tables (t_ prefix):** t_decisions, t_decisions_numeric, t_decision_history, t_decision_tags, t_decision_scopes, t_agent_messages, t_file_changes, t_constraints, t_constraint_tags
 
-**Token-Efficient Views:** tagged_decisions, active_context, layer_summary, recent_file_changes, tagged_constraints
+**Token-Efficient Views (v_ prefix):** v_tagged_decisions, v_active_context, v_layer_summary, v_unread_messages_by_priority, v_recent_file_changes, v_tagged_constraints
+
+**Triggers (trg_ prefix):** trg_record_decision_history
+
+### Automatic Migration
+
+When upgrading from v1.2.0 to v1.3.0, the server automatically migrates your database to use the new prefixed table names. The migration is safe and runs in a transaction - if it fails, the database is unchanged.
 
 ## Token Efficiency
 
@@ -303,10 +353,48 @@ sqlew/
 
 ## Configuration
 
-### Retention Periods
+### Weekend-Aware Auto-Deletion
 
-- **Messages:** Auto-deleted after 24 hours
-- **File Changes:** Auto-deleted after 7 days
+sqlew supports weekend-aware retention policies that intelligently handle 3-day weekends and holidays:
+
+**How it works:**
+- When `ignoreWeekend: false` (default): Standard time-based deletion
+- When `ignoreWeekend: true`: Weekends (Sat/Sun) don't count toward retention period
+
+**Example:** With 24-hour retention and `ignoreWeekend: true`:
+- Message sent Friday 3pm → Deleted Monday 3pm (skips Sat/Sun)
+- Message sent Monday 10am → Deleted Tuesday 10am (no weekend in between)
+
+**Configuration Methods:**
+
+1. **CLI Arguments (at startup):**
+```bash
+npx sqlew \
+  --autodelete-ignore-weekend \
+  --autodelete-message-hours=48 \
+  --autodelete-file-history-days=10
+```
+
+2. **MCP Tools (runtime):**
+```typescript
+// Get current config
+get_config()
+
+// Update config
+update_config({
+  ignoreWeekend: true,
+  messageRetentionHours: 72,
+  fileHistoryRetentionDays: 14
+})
+```
+
+3. **Database (persisted):**
+Config is stored in the database and travels with the DB file.
+
+### Default Retention Periods
+
+- **Messages:** 24 hours (weekend-aware optional)
+- **File Changes:** 7 days (weekend-aware optional)
 - **Decisions:** Permanent (version history preserved)
 - **Constraints:** Permanent (soft delete only)
 

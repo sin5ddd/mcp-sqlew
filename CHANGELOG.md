@@ -5,6 +5,36 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-10-11
+
+### Added
+- **Category-Based Table Prefixes:** All database objects now use prefixes for better SQL utility navigation
+  - Master tables: `m_` prefix (8 tables)
+  - Transaction tables: `t_` prefix (9 tables)
+  - Views: `v_` prefix (6 views)
+  - Triggers: `trg_` prefix (1 trigger)
+- **Automatic Migration System:** Seamless upgrade from v1.0.x to v1.1.0
+  - Detects old unprefixed schema automatically
+  - Transaction-based migration with rollback on failure
+  - Zero downtime - runs on startup
+  - Detailed migration logging
+- **Migration Script:** New `src/migrations/add-table-prefixes.ts` module
+  - Safe table renaming in transaction
+  - Backward compatibility check
+  - Comprehensive error handling
+
+### Changed
+- Database schema structure updated to v1.1.0
+- All SQL queries updated to use prefixed table names
+- Schema initialization now supports both old and new table structures
+- Documentation updated to reflect new table naming convention
+
+### Technical Details
+- 24 database objects renamed (8 master tables, 9 transaction tables, 6 views, 1 trigger)
+- Migration preserves all existing data
+- No breaking changes for MCP tool API
+- Full backward compatibility with existing databases
+
 ## [1.0.1] - 2025-10-11
 
 ### Added
@@ -121,5 +151,6 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[1.1.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.0
 [1.0.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.0.1
 [1.0.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.0.0

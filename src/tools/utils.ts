@@ -12,10 +12,12 @@ import type {
   LayerSummary,
   Database,
 } from '../types.js';
+import { calculateMessageCutoff, calculateFileChangeCutoff } from '../utils/retention.js';
+import { cleanupWithCustomRetention } from '../utils/cleanup.js';
 
 /**
  * Get summary statistics for all architecture layers
- * Uses the layer_summary view for token efficiency
+ * Uses the v_layer_summary view for token efficiency
  * 
  * @returns Layer summaries for all 5 standard layers
  */
@@ -23,14 +25,14 @@ export function getLayerSummary(): GetLayerSummaryResponse {
   const db = getDatabase();
 
   try {
-    // Query the layer_summary view for all layers
+    // Query the v_layer_summary view for all layers
     const stmt = db.prepare(`
       SELECT 
         layer,
         decisions_count,
         file_changes_count,
         constraints_count
-      FROM layer_summary
+      FROM v_layer_summary
       ORDER BY layer
     `);
 
@@ -49,50 +51,64 @@ export function getLayerSummary(): GetLayerSummaryResponse {
  * Clear old data from the database
  * Deletes messages and file changes older than specified thresholds
  * Preserves decision_history, constraints, and core decisions
- * 
- * @param params - Optional parameters for cleanup thresholds
+ *
+ * If parameters are not provided, uses config-based weekend-aware retention.
+ * If parameters are provided, they override m_config settings (no weekend-awareness).
+ *
+ * @param params - Optional parameters for cleanup thresholds (overrides config)
  * @returns Counts of deleted records
  */
 export function clearOldData(params?: ClearOldDataParams): ClearOldDataResponse {
   const db = getDatabase();
 
-  // Default thresholds
-  const messagesHours = params?.messages_older_than_hours ?? 24;
-  const fileChangesDays = params?.file_changes_older_than_days ?? 7;
-
-  // Calculate Unix epoch thresholds
-  const now = Math.floor(Date.now() / 1000);
-  const messagesThreshold = now - (messagesHours * 3600);
-  const fileChangesThreshold = now - (fileChangesDays * 86400);
-
   try {
     return transaction(db, () => {
-      // Count messages to be deleted
-      const messagesCount = db.prepare(
-        'SELECT COUNT(*) as count FROM agent_messages WHERE ts < ?'
-      ).get(messagesThreshold) as { count: number };
+      let messagesThreshold: number;
+      let fileChangesThreshold: number;
+      let messagesDeleted = 0;
+      let fileChangesDeleted = 0;
 
-      // Count file changes to be deleted
-      const fileChangesCount = db.prepare(
-        'SELECT COUNT(*) as count FROM file_changes WHERE ts < ?'
-      ).get(fileChangesThreshold) as { count: number };
+      if (params?.messages_older_than_hours !== undefined || params?.file_changes_older_than_days !== undefined) {
+        // Parameters provided: use custom retention (no weekend-awareness)
+        const result = cleanupWithCustomRetention(
+          db,
+          params.messages_older_than_hours,
+          params.file_changes_older_than_days
+        );
+        messagesDeleted = result.messagesDeleted;
+        fileChangesDeleted = result.fileChangesDeleted;
+      } else {
+        // No parameters: use config-based weekend-aware retention
+        messagesThreshold = calculateMessageCutoff(db);
+        fileChangesThreshold = calculateFileChangeCutoff(db);
 
-      // Delete old messages
-      const deleteMessages = db.prepare(
-        'DELETE FROM agent_messages WHERE ts < ?'
-      );
-      deleteMessages.run(messagesThreshold);
+        // Count and delete messages
+        const messagesCount = db.prepare(
+          'SELECT COUNT(*) as count FROM t_agent_messages WHERE ts < ?'
+        ).get(messagesThreshold) as { count: number };
 
-      // Delete old file changes
-      const deleteFileChanges = db.prepare(
-        'DELETE FROM file_changes WHERE ts < ?'
-      );
-      deleteFileChanges.run(fileChangesThreshold);
+        const deleteMessages = db.prepare(
+          'DELETE FROM t_agent_messages WHERE ts < ?'
+        );
+        deleteMessages.run(messagesThreshold);
+        messagesDeleted = messagesCount.count;
+
+        // Count and delete file changes
+        const fileChangesCount = db.prepare(
+          'SELECT COUNT(*) as count FROM t_file_changes WHERE ts < ?'
+        ).get(fileChangesThreshold) as { count: number };
+
+        const deleteFileChanges = db.prepare(
+          'DELETE FROM t_file_changes WHERE ts < ?'
+        );
+        deleteFileChanges.run(fileChangesThreshold);
+        fileChangesDeleted = fileChangesCount.count;
+      }
 
       return {
         success: true,
-        messages_deleted: messagesCount.count,
-        file_changes_deleted: fileChangesCount.count,
+        messages_deleted: messagesDeleted,
+        file_changes_deleted: fileChangesDeleted,
       };
     });
   } catch (error) {
@@ -121,28 +137,28 @@ export function getStats(): GetStatsResponse {
     };
 
     // Get all statistics
-    const agents = getCount('agents');
-    const files = getCount('files');
-    const context_keys = getCount('context_keys');
-    
+    const agents = getCount('m_agents');
+    const files = getCount('m_files');
+    const context_keys = getCount('m_context_keys');
+
     // Decisions (active vs total)
-    const active_decisions = getCount('decisions', 'status = 1');
-    const total_decisions = getCount('decisions');
-    
+    const active_decisions = getCount('t_decisions', 'status = 1');
+    const total_decisions = getCount('t_decisions');
+
     // Messages
-    const messages = getCount('agent_messages');
-    
+    const messages = getCount('t_agent_messages');
+
     // File changes
-    const file_changes = getCount('file_changes');
-    
+    const file_changes = getCount('t_file_changes');
+
     // Constraints (active vs total)
-    const active_constraints = getCount('constraints', 'active = 1');
-    const total_constraints = getCount('constraints');
-    
+    const active_constraints = getCount('t_constraints', 'active = 1');
+    const total_constraints = getCount('t_constraints');
+
     // Metadata
-    const tags = getCount('tags');
-    const scopes = getCount('scopes');
-    const layers = getCount('layers');
+    const tags = getCount('m_tags');
+    const scopes = getCount('m_scopes');
+    const layers = getCount('m_layers');
 
     return {
       agents,

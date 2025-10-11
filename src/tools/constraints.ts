@@ -40,10 +40,10 @@ function validateCategory(category: string): void {
  */
 function getOrCreateCategoryId(db: Database, category: string): number {
   // Insert if doesn't exist
-  db.prepare('INSERT OR IGNORE INTO constraint_categories (name) VALUES (?)').run(category);
+  db.prepare('INSERT OR IGNORE INTO m_constraint_categories (name) VALUES (?)').run(category);
 
   // Get the ID
-  const result = db.prepare('SELECT id FROM constraint_categories WHERE name = ?').get(category) as { id: number } | undefined;
+  const result = db.prepare('SELECT id FROM m_constraint_categories WHERE name = ?').get(category) as { id: number } | undefined;
 
   if (!result) {
     throw new Error(`Failed to get or create category: ${category}`);
@@ -101,15 +101,15 @@ export function addConstraint(params: AddConstraintParams): AddConstraintRespons
 
       // Insert constraint
       const insertResult = db.prepare(`
-        INSERT INTO constraints (category_id, layer_id, constraint_text, priority, active, created_by, ts)
+        INSERT INTO t_constraints (category_id, layer_id, constraint_text, priority, active, created_by, ts)
         VALUES (?, ?, ?, ?, ?, ?, unixepoch())
       `).run(categoryId, layerId, params.constraint_text, priority, SQLITE_TRUE, agentId);
 
       const constraintId = insertResult.lastInsertRowid as number;
 
-      // Insert tags if provided
+      // Insert m_tags if provided
       if (params.tags && params.tags.length > 0) {
-        const tagStmt = db.prepare('INSERT INTO constraint_tags (constraint_id, tag_id) VALUES (?, ?)');
+        const tagStmt = db.prepare('INSERT INTO t_constraint_tags (constraint_id, tag_id) VALUES (?, ?)');
 
         for (const tagName of params.tags) {
           const tagId = getOrCreateTag(db, tagName);
@@ -131,11 +131,11 @@ export function addConstraint(params: AddConstraintParams): AddConstraintRespons
 }
 
 /**
- * Retrieve constraints with advanced filtering
- * Uses tagged_constraints view for token efficiency
+ * Retrieve t_constraints with advanced filtering
+ * Uses v_tagged_constraints view for token efficiency
  *
  * @param params - Filter parameters
- * @returns Array of constraints matching filters
+ * @returns Array of t_constraints matching filters
  */
 export function getConstraints(params: GetConstraintsParams): GetConstraintsResponse {
   const db = getDatabase();
@@ -145,8 +145,8 @@ export function getConstraints(params: GetConstraintsParams): GetConstraintsResp
     const conditions: string[] = [];
     const values: any[] = [];
 
-    // Use tagged_constraints view (already filters active=1)
-    let sql = 'SELECT * FROM tagged_constraints WHERE 1=1';
+    // Use v_tagged_constraints view (already filters active=1)
+    let sql = 'SELECT * FROM v_tagged_constraints WHERE 1=1';
 
     // Filter by category
     if (params.category) {
@@ -167,7 +167,7 @@ export function getConstraints(params: GetConstraintsParams): GetConstraintsResp
       values.push(params.priority);
     }
 
-    // Filter by tags (OR logic - match ANY tag)
+    // Filter by m_tags (OR logic - match ANY tag)
     if (params.tags && params.tags.length > 0) {
       const tagConditions = params.tags.map(() => 'tags LIKE ?').join(' OR ');
       conditions.push(`(${tagConditions})`);
@@ -181,7 +181,7 @@ export function getConstraints(params: GetConstraintsParams): GetConstraintsResp
       sql += ' AND ' + conditions.join(' AND ');
     }
 
-    // Note: tagged_constraints view already orders by priority DESC, category, ts DESC
+    // Note: v_tagged_constraints view already orders by priority DESC, category, ts DESC
     // Add limit if provided
     const limit = params.limit || 50;
     sql += ' LIMIT ?';
@@ -190,7 +190,7 @@ export function getConstraints(params: GetConstraintsParams): GetConstraintsResp
     // Execute query
     const rows = db.prepare(sql).all(...values) as TaggedConstraint[];
 
-    // Parse tags from comma-separated to array for consistency
+    // Parse m_tags from comma-separated to array for consistency
     const constraints = rows.map(row => ({
       ...row,
       tags: row.tags ? row.tags.split(',') : null,
@@ -223,14 +223,14 @@ export function deactivateConstraint(params: DeactivateConstraintParams): Deacti
     }
 
     // Check if constraint exists
-    const constraint = db.prepare('SELECT id, active FROM constraints WHERE id = ?').get(params.constraint_id) as { id: number; active: number } | undefined;
+    const constraint = db.prepare('SELECT id, active FROM t_constraints WHERE id = ?').get(params.constraint_id) as { id: number; active: number } | undefined;
 
     if (!constraint) {
       throw new Error(`Constraint not found: ${params.constraint_id}`);
     }
 
     // Update constraint to inactive (idempotent)
-    db.prepare('UPDATE constraints SET active = ? WHERE id = ?').run(SQLITE_FALSE, params.constraint_id);
+    db.prepare('UPDATE t_constraints SET active = ? WHERE id = ?').run(SQLITE_FALSE, params.constraint_id);
 
     return {
       success: true,

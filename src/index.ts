@@ -10,12 +10,14 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initializeDatabase, closeDatabase } from './database.js';
+import { initializeDatabase, closeDatabase, setConfigValue, getAllConfig } from './database.js';
+import { CONFIG_KEYS } from './constants.js';
 import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer } from './tools/context.js';
 import { sendMessage, getMessages, markRead } from './tools/messaging.js';
 import { recordFileChange, getFileChanges, checkFileLock } from './tools/files.js';
 import { addConstraint, getConstraints, deactivateConstraint } from './tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats } from './tools/utils.js';
+import { getConfig, updateConfig } from './tools/config.js';
 import type {
   SetDecisionParams,
   GetContextParams,
@@ -35,15 +37,69 @@ import type {
   ClearOldDataParams
 } from './types.js';
 
-// Parse command-line arguments for database path
+// Parse command-line arguments
 const args = process.argv.slice(2);
-const dbPath = args.length > 0 ? args[0] : undefined;
+const parsedArgs: {
+  dbPath?: string;
+  autodeleteIgnoreWeekend?: boolean;
+  autodeleteMessageHours?: number;
+  autodeleteFileHistoryDays?: number;
+} = {};
+
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i];
+
+  if (arg.startsWith('--db-path=')) {
+    parsedArgs.dbPath = arg.split('=')[1];
+  } else if (arg === '--db-path' && i + 1 < args.length) {
+    parsedArgs.dbPath = args[++i];
+  } else if (arg.startsWith('--autodelete-ignore-weekend=')) {
+    const value = arg.split('=')[1].toLowerCase();
+    parsedArgs.autodeleteIgnoreWeekend = value === 'true' || value === '1';
+  } else if (arg === '--autodelete-ignore-weekend') {
+    parsedArgs.autodeleteIgnoreWeekend = true;
+  } else if (arg.startsWith('--autodelete-message-hours=')) {
+    parsedArgs.autodeleteMessageHours = parseInt(arg.split('=')[1], 10);
+  } else if (arg === '--autodelete-message-hours' && i + 1 < args.length) {
+    parsedArgs.autodeleteMessageHours = parseInt(args[++i], 10);
+  } else if (arg.startsWith('--autodelete-file-history-days=')) {
+    parsedArgs.autodeleteFileHistoryDays = parseInt(arg.split('=')[1], 10);
+  } else if (arg === '--autodelete-file-history-days' && i + 1 < args.length) {
+    parsedArgs.autodeleteFileHistoryDays = parseInt(args[++i], 10);
+  } else if (!arg.startsWith('--')) {
+    // Backward compatibility: first non-flag argument is dbPath
+    if (!parsedArgs.dbPath) {
+      parsedArgs.dbPath = arg;
+    }
+  }
+}
+
+const dbPath = parsedArgs.dbPath;
 
 // Initialize database
 let db;
 try {
   db = initializeDatabase(dbPath);
+
+  // Apply CLI config overrides if provided
+  if (parsedArgs.autodeleteIgnoreWeekend !== undefined) {
+    setConfigValue(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, parsedArgs.autodeleteIgnoreWeekend ? '1' : '0');
+  }
+  if (parsedArgs.autodeleteMessageHours !== undefined) {
+    setConfigValue(db, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, String(parsedArgs.autodeleteMessageHours));
+  }
+  if (parsedArgs.autodeleteFileHistoryDays !== undefined) {
+    setConfigValue(db, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(parsedArgs.autodeleteFileHistoryDays));
+  }
+
+  // Display current config
+  const config = getAllConfig(db);
+  const ignoreWeekend = config[CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND] === '1';
+  const messageHours = config[CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS];
+  const fileHistoryDays = config[CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS];
+
   console.error('✓ MCP Shared Context Server initialized');
+  console.error(`  Auto-delete config: messages=${messageHours}h, file_history=${fileHistoryDays}d, ignore_weekend=${ignoreWeekend}`);
 } catch (error) {
   console.error('✗ Failed to initialize database:', error);
   process.exit(1);
@@ -535,6 +591,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {},
         },
       },
+      {
+        name: 'get_config',
+        description: 'Get current auto-deletion configuration settings. Returns weekend-awareness flag, message retention hours, and file history retention days.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'update_config',
+        description: 'Update auto-deletion configuration settings. All parameters are optional. Changes take effect immediately for subsequent cleanup operations.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            ignoreWeekend: {
+              type: 'boolean',
+              description: 'Whether to skip weekends when calculating retention periods (true = skip weekends)',
+            },
+            messageRetentionHours: {
+              type: 'number',
+              description: 'Number of hours to retain messages (1-168 hours)',
+              minimum: 1,
+              maximum: 168,
+            },
+            fileHistoryRetentionDays: {
+              type: 'number',
+              description: 'Number of days to retain file change history (1-90 days)',
+              minimum: 1,
+              maximum: 90,
+            },
+          },
+        },
+      },
     ],
   };
 });
@@ -767,6 +856,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'get_stats': {
         const result = getStats();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_config': {
+        const result = getConfig();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'update_config': {
+        const params = args as unknown as {
+          ignoreWeekend?: boolean;
+          messageRetentionHours?: number;
+          fileHistoryRetentionDays?: number;
+        };
+        const result = updateConfig(params);
         return {
           content: [
             {
