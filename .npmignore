@@ -45,6 +45,7 @@ docs/
 
 # Config files (MCP specific)
 .mcp.json
+.serena
 
 # Lock files
 package-lock.json

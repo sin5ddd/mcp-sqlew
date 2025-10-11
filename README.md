@@ -3,16 +3,26 @@
 [![npm version](https://img.shields.io/npm/v/sqlew.svg)](https://www.npmjs.com/package/sqlew)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**sqlew** (SQL Efficient Workflow) is a Model Context Protocol (MCP) server for efficient context sharing between Claude Code sub-agents. Achieve **72% token reduction** while managing structured data through a metadata-driven SQLite database.
+**sqlew** (SQL Efficient Workflow) is a Model Context Protocol (MCP) server for efficient context sharing between Claude Code sub-agents. Achieve **96% token reduction** through action-based tools while managing structured data through a metadata-driven SQLite database.
+
+## ⚠️ Version 2.0.0 - Breaking Changes
+
+**v2.0.0 introduces action-based tools that consolidate the API from 20 tools to 6 tools.** This is a breaking change in the MCP tool API only.
+
+**Database Compatibility:** ✅ **100% compatible** - v2.0 uses the same database schema as v1.x. No data migration needed.
+
+**Migration Required:** Only for code that calls MCP tools - see [MIGRATION_v2.md](MIGRATION_v2.md) for upgrade guide.
 
 ## Why sqlew?
 
 When coordinating multiple Claude Code agents on a complex project, context sharing becomes critical. Traditional JSON-based approaches consume massive amounts of tokens. sqlew solves this with:
 
-- **72% Token Reduction:** ID-based normalization, integer enums, and pre-aggregated views
+- **96% Token Reduction:** Action-based API eliminates tool duplication (12,848 → 481 tokens)
+- **67% MCP Context Reduction:** From ~13,730 to ~4,482 tokens in MCP server definitions
 - **Structured Metadata:** Tags, layers, scopes, versions, and priorities for intelligent organization
 - **Fast & Reliable:** SQLite-backed with ACID guarantees and automatic cleanup
-- **20 MCP Tools:** Comprehensive API for decisions, messaging, file tracking, constraints, and configuration
+- **6 Action-Based Tools:** Comprehensive API for decisions, messaging, file tracking, constraints, config, and stats
+- **Help Actions:** On-demand documentation with zero token cost until called
 
 ## Features
 
@@ -92,15 +102,20 @@ npx @modelcontextprotocol/inspector npx sqlew
 
 Default: `.sqlew/sqlew.db` (created in current directory)
 
-## Available Tools
+## Available Tools (v2.0.0)
 
-### Context Management (6 tools)
+All tools now use action-based routing. Call any tool with `action: "help"` for comprehensive documentation.
 
-#### `set_decision`
-Set or update a decision with metadata support.
+### `decision` - Context Management
+
+Manage decisions with metadata (tags, layers, versions, scopes).
+
+**Actions:** `set`, `get`, `list`, `search_tags`, `search_layer`, `versions`, `help`
 
 ```typescript
+// Set a decision
 {
+  action: "set",
   key: "auth_method",
   value: "JWT",
   agent: "auth-agent",
@@ -110,39 +125,47 @@ Set or update a decision with metadata support.
   version: "1.0.0",
   status: "active"
 }
-```
 
-#### `get_context`
-Retrieve decisions with advanced filtering.
-
-```typescript
+// Get decision by key
 {
+  action: "get",
+  key: "auth_method"
+}
+
+// List with filtering
+{
+  action: "list",
   status: "active",
-  layer: "business",
-  tags: ["authentication"],
+  layer: "business"
+}
+
+// Search by tags
+{
+  action: "search_tags",
+  tags: ["authentication", "security"],
   tag_match: "AND"
 }
+
+// Get version history
+{
+  action: "versions",
+  key: "auth_method"
+}
+
+// Get help
+{ action: "help" }
 ```
 
-#### `get_decision`
-Get a specific decision by key.
+### `message` - Agent Messaging
 
-#### `search_by_tags`
-Search decisions by tags with AND/OR logic.
+Send and retrieve messages between agents with priority levels.
 
-#### `get_versions`
-Retrieve version history for a decision.
-
-#### `search_by_layer`
-Search decisions within an architecture layer.
-
-### Messaging (3 tools)
-
-#### `send_message`
-Send messages between agents with priority levels.
+**Actions:** `send`, `get`, `mark_read`, `help`
 
 ```typescript
+// Send message
 {
+  action: "send",
   from_agent: "agent1",
   to_agent: "agent2",
   msg_type: "warning",
@@ -150,86 +173,118 @@ Send messages between agents with priority levels.
   priority: "high",
   payload: { file: "/src/auth.ts" }
 }
+
+// Get messages
+{
+  action: "get",
+  unread_only: true,
+  priority_filter: "high"
+}
+
+// Mark as read
+{
+  action: "mark_read",
+  message_ids: [1, 2, 3]
+}
 ```
 
-#### `get_messages`
-Retrieve messages with filtering (priority, unread status).
+### `file` - File Change Tracking
 
-#### `mark_read`
-Mark messages as read.
+Track file modifications with layer assignment and lock detection.
 
-### File Tracking (3 tools)
-
-#### `record_file_change`
-Record file changes with layer assignment.
+**Actions:** `record`, `get`, `check_lock`, `help`
 
 ```typescript
+// Record file change
 {
+  action: "record",
   file_path: "/src/auth.ts",
   agent_name: "auth-agent",
   change_type: "modified",
   layer: "business",
   description: "Updated JWT validation"
 }
+
+// Get file changes
+{
+  action: "get",
+  since: "2025-01-10T10:00:00Z",
+  layer: "business"
+}
+
+// Check file lock
+{
+  action: "check_lock",
+  file_path: "/src/auth.ts",
+  lock_duration: 300
+}
 ```
 
-#### `get_file_changes`
-Retrieve file change history with filtering.
+### `constraint` - Constraint Management
 
-#### `check_file_lock`
-Check if a file is recently modified (prevents concurrent edits).
+Manage architectural, performance, and security constraints.
 
-### Constraint Management (3 tools)
-
-#### `add_constraint`
-Add constraints with priority and metadata.
+**Actions:** `add`, `get`, `deactivate`, `help`
 
 ```typescript
+// Add constraint
 {
+  action: "add",
   category: "performance",
   constraint_text: "Response time < 200ms",
   priority: "high",
   layer: "business",
   tags: ["api", "performance"]
 }
-```
 
-#### `get_constraints`
-Retrieve constraints with complex filtering.
-
-#### `deactivate_constraint`
-Deactivate a constraint (soft delete).
-
-### Utilities (3 tools)
-
-#### `get_layer_summary`
-Get aggregated statistics per architecture layer.
-
-#### `clear_old_data`
-Manually clear old messages and file changes (uses weekend-aware config when no params provided).
-
-#### `get_stats`
-Get comprehensive database statistics.
-
-### Configuration (2 tools)
-
-#### `get_config`
-Get current auto-deletion configuration settings.
-
-```typescript
-// Returns:
+// Get constraints
 {
-  ignoreWeekend: false,
-  messageRetentionHours: 24,
-  fileHistoryRetentionDays: 7
+  action: "get",
+  category: "performance",
+  active_only: true
+}
+
+// Deactivate constraint
+{
+  action: "deactivate",
+  constraint_id: 42
 }
 ```
 
-#### `update_config`
-Update auto-deletion configuration settings.
+### `stats` - Statistics & Utilities
+
+Get database statistics and manage data cleanup.
+
+**Actions:** `layer_summary`, `db_stats`, `clear`, `help`
 
 ```typescript
+// Layer summary
+{ action: "layer_summary" }
+
+// Database stats
+{ action: "db_stats" }
+
+// Clear old data (weekend-aware)
 {
+  action: "clear",
+  messages_older_than_hours: 48,
+  file_changes_older_than_days: 14
+}
+```
+
+### `config` - Configuration
+
+Manage auto-deletion and retention settings.
+
+**Actions:** `get`, `update`, `help`
+
+```typescript
+// Get config
+{ action: "get" }
+
+// Update config
+{
+  action: "update",
   ignoreWeekend: true,
   messageRetentionHours: 48,
   fileHistoryRetentionDays: 10
@@ -254,13 +309,19 @@ When upgrading from v1.2.0 to v1.3.0, the server automatically migrates your dat
 
 ## Token Efficiency
 
-sqlew achieves **72% token reduction** through:
+sqlew achieves **96% token reduction** through:
 
-1. **ID-Based Normalization:** Strings stored once, referenced by integer IDs
-2. **Integer Enums:** Status, priority, message types use integers (1-4) instead of strings
-3. **Pre-Aggregated Views:** Common queries use pre-computed results
-4. **Type-Based Tables:** Separate storage for numeric vs string values
-5. **Automatic Cleanup:** Prevents database bloat
+1. **Action-Based Tools (v2.0):** Consolidates 20 tools → 6 tools, eliminating duplication
+2. **ID-Based Normalization:** Strings stored once, referenced by integer IDs
+3. **Integer Enums:** Status, priority, message types use integers (1-4) instead of strings
+4. **Pre-Aggregated Views:** Common queries use pre-computed results
+5. **Type-Based Tables:** Separate storage for numeric vs string values
+6. **Automatic Cleanup:** Prevents database bloat
+
+### v2.0.0 Token Savings
+
+- **Tool Definitions:** 12,848 → 481 tokens (96.3% reduction)
+- **MCP Context Usage:** ~13,730 → ~4,482 tokens (67% reduction)
 
 ### Example Comparison
 
@@ -324,11 +385,11 @@ npm start
 ### Testing
 
 ```bash
-# Run verification script
-node verify-all-tools.mjs
-
-# Or use MCP Inspector
+# Use MCP Inspector to test all tools
 npm run inspector
+
+# Or test individual tools via CLI
+npx @modelcontextprotocol/inspector npx sqlew
 ```
 
 ### Project Structure
