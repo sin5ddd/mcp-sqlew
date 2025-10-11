@@ -5,6 +5,78 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-10-11
+
+### 🚨 BREAKING CHANGES
+
+**This is a major release with breaking API changes. Migration required for all v1.x users.**
+
+#### Tool Consolidation
+- **20 individual tools** → **6 action-based tools** (70% reduction)
+- All tools now use action-based routing with `action` parameter
+- Tool names completely changed (see migration guide below)
+
+#### Old vs New Tool Names
+
+| Old (v1.x) | New (v2.0) | Actions |
+|------------|------------|---------|
+| `set_decision`, `get_decision`, `get_context`, `search_by_tags`, `search_by_layer`, `get_versions` | `decision` | `set`, `get`, `list`, `search_tags`, `search_layer`, `versions`, `help` |
+| `send_message`, `get_messages`, `mark_read` | `message` | `send`, `get`, `mark_read`, `help` |
+| `record_file_change`, `get_file_changes`, `check_file_lock` | `file` | `record`, `get`, `check_lock`, `help` |
+| `add_constraint`, `get_constraints`, `deactivate_constraint` | `constraint` | `add`, `get`, `deactivate`, `help` |
+| `get_layer_summary`, `get_stats`, `clear_old_data` | `stats` | `layer_summary`, `db_stats`, `clear`, `help` |
+| `get_config`, `update_config` | `config` | `get`, `update`, `help` |
+
+### Added
+
+- **Help Actions:** All 6 tools now support `action: "help"` for comprehensive on-demand documentation
+  - Returns detailed usage, parameters, and examples
+  - Zero token cost until explicitly called
+- **Action Hints:** Tool descriptions now include available actions for better discoverability
+- **Improved Token Efficiency:** 96% token reduction vs traditional JSON approach
+  - Tool definition tokens: ~12,848 → ~481 tokens (96.3% reduction)
+  - MCP context usage: ~13,730 → ~4,482 tokens (67% reduction)
+
+### Changed
+
+- **API Surface:** Complete redesign to action-based routing
+  - All tools require `action` parameter
+  - Parameters consolidated into single input schema per tool
+  - Nested switch statement routing for better maintainability
+- **Tool Descriptions:** Simplified with action hints in parentheses
+- **File Size:** Source reduced 27.4% (25,373 → 18,410 bytes) while adding help docs
+
+### Technical Details
+
+- Action-based routing with two-level switch statements
+- Shared parameter schemas across actions within each tool
+- Enum deduplication (layer, status, priority defined once per tool)
+- On-demand documentation via help actions
+- 100% backward compatible database schema (no DB changes)
+
+### Migration Required
+
+**v1.x users must update their tool calls:**
+
+```javascript
+// OLD (v1.x)
+await callTool('set_decision', { key: 'auth', value: 'jwt' });
+await callTool('get_messages', { unread_only: true });
+
+// NEW (v2.0)
+await callTool('decision', { action: 'set', key: 'auth', value: 'jwt' });
+await callTool('message', { action: 'get', unread_only: true });
+```
+
+See `MIGRATION_v2.md` for complete migration guide.
+
+### Performance
+
+- 96% token reduction in tool definitions
+- 67% reduction in MCP context consumption
+- Same database performance (no schema changes)
+- Same query response times
+
 ## [1.1.2] - 2025-10-11
 
 ### Fixed
@@ -180,6 +252,7 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[2.0.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.0.0
 [1.1.2]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.2
 [1.1.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.1
 [1.1.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.0

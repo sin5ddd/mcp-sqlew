@@ -1,7 +1,7 @@
 {
   "name": "sqlew",
-  "version": "1.1.2",
-  "description": "MCP server for efficient context sharing between Claude Code sub-agents with 72% token reduction",
+  "version": "2.0.0",
+  "description": "MCP server for efficient context sharing between Claude Code sub-agents with 96% token reduction via action-based tools",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -13,6 +13,7 @@
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
+    "MIGRATION_v2.md",
     "ARCHITECTURE.md"
   ],
   "scripts": {
