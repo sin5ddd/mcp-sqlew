@@ -124,18 +124,20 @@ export function verifySchemaIntegrity(db: Database): {
   };
 
   const requiredTables = [
-    'agents', 'files', 'context_keys', 'constraint_categories', 'layers', 'tags', 'scopes', 'config',
-    'decisions', 'decisions_numeric', 'decision_history', 'decision_tags', 'decision_scopes',
-    'agent_messages', 'file_changes', 'constraints', 'constraint_tags',
+    'm_agents', 'm_files', 'm_context_keys', 'm_constraint_categories',
+    'm_layers', 'm_tags', 'm_scopes', 'm_config',
+    't_decisions', 't_decisions_numeric', 't_decision_history',
+    't_decision_tags', 't_decision_scopes',
+    't_agent_messages', 't_file_changes', 't_constraints', 't_constraint_tags',
   ];
 
   const requiredViews = [
-    'tagged_decisions', 'active_context', 'layer_summary',
-    'unread_messages_by_priority', 'recent_file_changes', 'tagged_constraints',
+    'v_tagged_decisions', 'v_active_context', 'v_layer_summary',
+    'v_unread_messages_by_priority', 'v_recent_file_changes', 'v_tagged_constraints',
   ];
 
   const requiredTriggers = [
-    'record_decision_history',
+    'trg_record_decision_history',
   ];
 
   try {

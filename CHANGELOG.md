@@ -5,6 +5,22 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2025-10-11
+
+### Fixed
+- **Schema Validation Bug:** Fixed validation checking for old unprefixed table names instead of new prefixed names
+  - Updated `requiredTables` to check for `m_*` and `t_*` prefixed names
+  - Updated `requiredViews` to check for `v_*` prefixed names
+  - Updated `requiredTriggers` to check for `trg_*` prefixed names
+- **Migration Missing Views/Triggers:** After migration, views and triggers are now created automatically
+  - Added `initializeSchema()` call after successful migration
+  - Ensures v1.0.0 → v1.1.x migration creates all required database objects
+
+### Technical Details
+- Migration now runs schema initialization after table renaming to create views/triggers
+- Schema validation properly detects v1.1.x databases with prefixed names
+- Full backward compatibility maintained with v1.0.0 databases
+
 ## [1.1.1] - 2025-10-11
 
 ### Fixed
@@ -164,6 +180,7 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[1.1.2]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.2
 [1.1.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.1
 [1.1.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.0
 [1.0.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.0.1

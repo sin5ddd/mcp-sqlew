@@ -75,6 +75,11 @@ export function initializeDatabase(dbPath?: string): DatabaseType {
       if (migrationResult.details && migrationResult.details.length > 0) {
         migrationResult.details.forEach(detail => console.log(`  - ${detail}`));
       }
+
+      // After migration, run schema initialization to create new views/triggers
+      // (tables already exist, CREATE TABLE IF NOT EXISTS will skip them)
+      console.log('→ Creating views and triggers for new schema...');
+      initializeSchema(db);
     }
 
     // Check if database has existing schema
