@@ -129,6 +129,7 @@ export function verifySchemaIntegrity(db: Database): {
     't_decisions', 't_decisions_numeric', 't_decision_history',
     't_decision_tags', 't_decision_scopes',
     't_agent_messages', 't_file_changes', 't_constraints', 't_constraint_tags',
+    't_activity_log', 't_decision_templates',
   ];
 
   const requiredViews = [
@@ -138,6 +139,10 @@ export function verifySchemaIntegrity(db: Database): {
 
   const requiredTriggers = [
     'trg_record_decision_history',
+    'trg_log_decision_set',
+    'trg_log_decision_update',
+    'trg_log_message_send',
+    'trg_log_file_record',
   ];
 
   try {

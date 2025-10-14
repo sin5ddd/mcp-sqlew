@@ -11,6 +11,11 @@ import { DEFAULT_DB_PATH, DB_BUSY_TIMEOUT } from './constants.js';
 import type { Database as DatabaseType } from './types.js';
 import { performAutoCleanup } from './utils/cleanup.js';
 import { needsMigration, runMigration, getMigrationInfo } from './migrations/add-table-prefixes.js';
+import {
+  needsMigration as needsV21Migration,
+  runMigration as runV21Migration,
+  getMigrationInfo as getV21MigrationInfo
+} from './migrations/add-v2.1.0-features.js';
 
 let dbInstance: DatabaseType | null = null;
 
@@ -121,6 +126,27 @@ export function initializeDatabase(dbPath?: string): DatabaseType {
       // Initialize new schema
       console.log('→ Initializing database schema...');
       initializeSchema(db);
+    }
+
+    // Check if v2.1.0 migration is needed (v2.0.0 -> v2.1.0: activity log, templates)
+    // This runs AFTER schema initialization to ensure base tables exist
+    if (needsV21Migration(db)) {
+      console.log('→ Migration required: Adding v2.1.0 features (v2.0.0 -> v2.1.0)');
+      console.log(getV21MigrationInfo());
+
+      const v21MigrationResult = runV21Migration(db);
+
+      if (!v21MigrationResult.success) {
+        console.error('\n❌ ERROR: v2.1.0 Migration failed!');
+        console.error(v21MigrationResult.message);
+        db.close();
+        process.exit(1);
+      }
+
+      console.log('✓ v2.1.0 Migration completed successfully');
+      if (v21MigrationResult.details && v21MigrationResult.details.length > 0) {
+        v21MigrationResult.details.forEach(detail => console.log(`  - ${detail}`));
+      }
     }
 
     // Store instance

@@ -20,7 +20,21 @@ import type {
   GetVersionsParams,
   GetVersionsResponse,
   SearchByLayerParams,
-  SearchByLayerResponse
+  SearchByLayerResponse,
+  QuickSetDecisionParams,
+  QuickSetDecisionResponse,
+  SearchAdvancedParams,
+  SearchAdvancedResponse,
+  SetDecisionBatchParams,
+  SetDecisionBatchResponse,
+  SetFromTemplateParams,
+  SetFromTemplateResponse,
+  CreateTemplateParams,
+  CreateTemplateResponse,
+  ListTemplatesParams,
+  ListTemplatesResponse,
+  HasUpdatesParams,
+  HasUpdatesResponse
 } from '../types.js';
 
 /**
@@ -506,5 +520,718 @@ export function searchByLayer(params: SearchByLayerParams): SearchByLayerRespons
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to search by layer: ${message}`);
+  }
+}
+
+/**
+ * Quick set decision with smart defaults and inference
+ * Reduces required parameters from 7 to 2 (key + value only)
+ *
+ * Inference Rules:
+ * - Layer: Inferred from key prefix
+ *   - api/*, endpoint/*, ui/* → "presentation"
+ *   - service/*, logic/*, workflow/* → "business"
+ *   - db/*, model/*, schema/* → "data"
+ *   - config/*, deploy/* → "infrastructure"
+ *   - Default → "business"
+ *
+ * - Tags: Extracted from key hierarchy
+ *   - Key "api/instruments/synthesis" → tags: ["api", "instruments", "synthesis"]
+ *
+ * - Scope: Inferred from key hierarchy
+ *   - Key "api/instruments/synthesis" → scope: "api/instruments"
+ *
+ * - Auto-defaults:
+ *   - status: "active"
+ *   - version: "1.0.0"
+ *
+ * All inferred fields can be overridden via optional parameters.
+ *
+ * @param params - Quick set parameters (key and value required)
+ * @returns Response with success status and inferred metadata
+ */
+export function quickSetDecision(params: QuickSetDecisionParams): QuickSetDecisionResponse {
+  // Validate required parameters
+  if (!params.key || params.key.trim() === '') {
+    throw new Error('Parameter "key" is required and cannot be empty');
+  }
+
+  if (params.value === undefined || params.value === null) {
+    throw new Error('Parameter "value" is required');
+  }
+
+  // Track what was inferred
+  const inferred: {
+    layer?: string;
+    tags?: string[];
+    scope?: string;
+  } = {};
+
+  // Infer layer from key prefix (if not provided)
+  let inferredLayer = params.layer;
+  if (!inferredLayer) {
+    const keyLower = params.key.toLowerCase();
+
+    if (keyLower.startsWith('api/') || keyLower.startsWith('endpoint/') || keyLower.startsWith('ui/')) {
+      inferredLayer = 'presentation';
+    } else if (keyLower.startsWith('service/') || keyLower.startsWith('logic/') || keyLower.startsWith('workflow/')) {
+      inferredLayer = 'business';
+    } else if (keyLower.startsWith('db/') || keyLower.startsWith('model/') || keyLower.startsWith('schema/')) {
+      inferredLayer = 'data';
+    } else if (keyLower.startsWith('config/') || keyLower.startsWith('deploy/')) {
+      inferredLayer = 'infrastructure';
+    } else {
+      // Default layer
+      inferredLayer = 'business';
+    }
+    inferred.layer = inferredLayer;
+  }
+
+  // Extract tags from key hierarchy (if not provided)
+  let inferredTags = params.tags;
+  if (!inferredTags || inferredTags.length === 0) {
+    // Split key by '/', '-', or '_' to get hierarchy parts
+    const parts = params.key.split(/[\/\-_]/).filter(p => p.trim() !== '');
+    inferredTags = parts;
+    inferred.tags = inferredTags;
+  }
+
+  // Infer scope from key hierarchy (if not provided)
+  let inferredScopes = params.scopes;
+  if (!inferredScopes || inferredScopes.length === 0) {
+    // Get parent scope from key (everything except last part)
+    const parts = params.key.split('/');
+    if (parts.length > 1) {
+      // Take all but the last part
+      const scopeParts = parts.slice(0, -1);
+      const scope = scopeParts.join('/');
+      inferredScopes = [scope];
+      inferred.scope = scope;
+    }
+  }
+
+  // Build full params for setDecision
+  const fullParams: SetDecisionParams = {
+    key: params.key,
+    value: params.value,
+    agent: params.agent, // May be undefined, setDecision will default to 'system'
+    layer: inferredLayer,
+    version: params.version || DEFAULT_VERSION,
+    status: params.status || 'active',
+    tags: inferredTags,
+    scopes: inferredScopes
+  };
+
+  // Call setDecision with full params
+  const result = setDecision(fullParams);
+
+  // Return response with inferred metadata
+  return {
+    success: result.success,
+    key: result.key,
+    key_id: result.key_id,
+    version: result.version,
+    inferred: inferred,
+    message: `Decision "${params.key}" set successfully with smart defaults`
+  };
+}
+
+/**
+ * Advanced query composition with complex filtering capabilities
+ * Supports multiple filter types, sorting, and pagination
+ *
+ * Filter Logic:
+ * - layers: OR relationship - match any layer in the array
+ * - tags_all: AND relationship - must have ALL tags
+ * - tags_any: OR relationship - must have ANY tag
+ * - exclude_tags: Exclude decisions with these tags
+ * - scopes: Wildcard support (e.g., "api/instruments/*")
+ * - updated_after/before: Temporal filtering (ISO timestamp or relative like "7d")
+ * - decided_by: Filter by agent names (OR relationship)
+ * - statuses: Multiple statuses (OR relationship)
+ * - search_text: Full-text search in value field
+ *
+ * @param params - Advanced search parameters with filtering, sorting, pagination
+ * @returns Filtered decisions with total count for pagination
+ */
+export function searchAdvanced(params: SearchAdvancedParams = {}): SearchAdvancedResponse {
+  const db = getDatabase();
+
+  try {
+    // Parse relative time to Unix timestamp
+    const parseRelativeTime = (relativeTime: string): number | null => {
+      const match = relativeTime.match(/^(\d+)(m|h|d)$/);
+      if (!match) {
+        // Try parsing as ISO timestamp
+        const date = new Date(relativeTime);
+        if (isNaN(date.getTime())) {
+          return null;
+        }
+        return Math.floor(date.getTime() / 1000);
+      }
+
+      const value = parseInt(match[1], 10);
+      const unit = match[2];
+      const now = Math.floor(Date.now() / 1000);
+
+      switch (unit) {
+        case 'm': return now - (value * 60);
+        case 'h': return now - (value * 3600);
+        case 'd': return now - (value * 86400);
+        default: return null;
+      }
+    };
+
+    // Build base query using v_tagged_decisions view
+    let query = 'SELECT * FROM v_tagged_decisions WHERE 1=1';
+    const queryParams: any[] = [];
+
+    // Filter by layers (OR relationship)
+    if (params.layers && params.layers.length > 0) {
+      const layerConditions = params.layers.map(() => 'layer = ?').join(' OR ');
+      query += ` AND (${layerConditions})`;
+      queryParams.push(...params.layers);
+    }
+
+    // Filter by tags_all (AND relationship - must have ALL tags)
+    if (params.tags_all && params.tags_all.length > 0) {
+      for (const tag of params.tags_all) {
+        query += ' AND (tags LIKE ? OR tags = ?)';
+        queryParams.push(`%${tag}%`, tag);
+      }
+    }
+
+    // Filter by tags_any (OR relationship - must have ANY tag)
+    if (params.tags_any && params.tags_any.length > 0) {
+      const tagConditions = params.tags_any.map(() => '(tags LIKE ? OR tags = ?)').join(' OR ');
+      query += ` AND (${tagConditions})`;
+      for (const tag of params.tags_any) {
+        queryParams.push(`%${tag}%`, tag);
+      }
+    }
+
+    // Exclude tags
+    if (params.exclude_tags && params.exclude_tags.length > 0) {
+      for (const tag of params.exclude_tags) {
+        query += ' AND (tags IS NULL OR (tags NOT LIKE ? AND tags != ?))';
+        queryParams.push(`%${tag}%`, tag);
+      }
+    }
+
+    // Filter by scopes with wildcard support
+    if (params.scopes && params.scopes.length > 0) {
+      const scopeConditions: string[] = [];
+      for (const scope of params.scopes) {
+        if (scope.includes('*')) {
+          // Wildcard pattern - convert to LIKE pattern
+          const likePattern = scope.replace(/\*/g, '%');
+          scopeConditions.push('(scopes LIKE ? OR scopes = ?)');
+          queryParams.push(`%${likePattern}%`, likePattern);
+        } else {
+          // Exact match
+          scopeConditions.push('(scopes LIKE ? OR scopes = ?)');
+          queryParams.push(`%${scope}%`, scope);
+        }
+      }
+      query += ` AND (${scopeConditions.join(' OR ')})`;
+    }
+
+    // Temporal filtering - updated_after
+    if (params.updated_after) {
+      const timestamp = parseRelativeTime(params.updated_after);
+      if (timestamp !== null) {
+        query += ' AND (SELECT unixepoch(updated)) >= ?';
+        queryParams.push(timestamp);
+      } else {
+        throw new Error(`Invalid updated_after format: ${params.updated_after}. Use ISO timestamp or relative time like "7d", "2h", "30m"`);
+      }
+    }
+
+    // Temporal filtering - updated_before
+    if (params.updated_before) {
+      const timestamp = parseRelativeTime(params.updated_before);
+      if (timestamp !== null) {
+        query += ' AND (SELECT unixepoch(updated)) <= ?';
+        queryParams.push(timestamp);
+      } else {
+        throw new Error(`Invalid updated_before format: ${params.updated_before}. Use ISO timestamp or relative time like "7d", "2h", "30m"`);
+      }
+    }
+
+    // Filter by decided_by (OR relationship)
+    if (params.decided_by && params.decided_by.length > 0) {
+      const agentConditions = params.decided_by.map(() => 'decided_by = ?').join(' OR ');
+      query += ` AND (${agentConditions})`;
+      queryParams.push(...params.decided_by);
+    }
+
+    // Filter by statuses (OR relationship)
+    if (params.statuses && params.statuses.length > 0) {
+      const statusConditions = params.statuses.map(() => 'status = ?').join(' OR ');
+      query += ` AND (${statusConditions})`;
+      queryParams.push(...params.statuses);
+    }
+
+    // Full-text search in value field
+    if (params.search_text) {
+      query += ' AND value LIKE ?';
+      queryParams.push(`%${params.search_text}%`);
+    }
+
+    // Count total matching records (before pagination)
+    const countQuery = query.replace('SELECT * FROM', 'SELECT COUNT(*) as total FROM');
+    const countStmt = db.prepare(countQuery);
+    const countResult = countStmt.get(...queryParams) as { total: number };
+    const totalCount = countResult.total;
+
+    // Sorting
+    const sortBy = params.sort_by || 'updated';
+    const sortOrder = params.sort_order || 'desc';
+
+    // Validate sort parameters
+    if (!['updated', 'key', 'version'].includes(sortBy)) {
+      throw new Error(`Invalid sort_by: ${sortBy}. Must be 'updated', 'key', or 'version'`);
+    }
+    if (!['asc', 'desc'].includes(sortOrder)) {
+      throw new Error(`Invalid sort_order: ${sortOrder}. Must be 'asc' or 'desc'`);
+    }
+
+    query += ` ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
+
+    // Pagination
+    const limit = params.limit !== undefined ? params.limit : 20;
+    const offset = params.offset || 0;
+
+    // Validate pagination parameters
+    if (limit < 0 || limit > 1000) {
+      throw new Error('Parameter "limit" must be between 0 and 1000');
+    }
+    if (offset < 0) {
+      throw new Error('Parameter "offset" must be non-negative');
+    }
+
+    query += ' LIMIT ? OFFSET ?';
+    queryParams.push(limit, offset);
+
+    // Execute query
+    const stmt = db.prepare(query);
+    const rows = stmt.all(...queryParams) as TaggedDecision[];
+
+    return {
+      decisions: rows,
+      count: rows.length,
+      total_count: totalCount
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to execute advanced search: ${message}`);
+  }
+}
+
+/**
+ * Set multiple decisions in a single batch operation (FR-005)
+ * Supports atomic (all succeed or all fail) and non-atomic modes
+ * Limit: 50 items per batch (constraint #3)
+ *
+ * @param params - Batch parameters with array of decisions and atomic flag
+ * @returns Response with success status and detailed results for each item
+ */
+export function setDecisionBatch(params: SetDecisionBatchParams): SetDecisionBatchResponse {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.decisions || !Array.isArray(params.decisions)) {
+    throw new Error('Parameter "decisions" is required and must be an array');
+  }
+
+  // Enforce limit (constraint #3)
+  if (params.decisions.length === 0) {
+    throw new Error('Parameter "decisions" must contain at least one item');
+  }
+
+  if (params.decisions.length > 50) {
+    throw new Error('Batch operations are limited to 50 items maximum (constraint #3)');
+  }
+
+  const atomic = params.atomic !== undefined ? params.atomic : true;
+  const results: Array<{
+    key: string;
+    key_id?: number;
+    version?: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+
+  let inserted = 0;
+  let failed = 0;
+
+  // Helper function to process a single decision
+  const processSingleDecision = (decision: SetDecisionParams): void => {
+    try {
+      const result = setDecision(decision);
+      results.push({
+        key: decision.key,
+        key_id: result.key_id,
+        version: result.version,
+        success: true
+      });
+      inserted++;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      results.push({
+        key: decision.key,
+        success: false,
+        error: errorMessage
+      });
+      failed++;
+
+      // In atomic mode, throw immediately to trigger rollback
+      if (atomic) {
+        throw error;
+      }
+    }
+  };
+
+  try {
+    if (atomic) {
+      // Atomic mode: use transaction, all succeed or all fail
+      return transaction(db, () => {
+        for (const decision of params.decisions) {
+          processSingleDecision(decision);
+        }
+
+        return {
+          success: failed === 0,
+          inserted,
+          failed,
+          results
+        };
+      });
+    } else {
+      // Non-atomic mode: process all, return individual results
+      for (const decision of params.decisions) {
+        processSingleDecision(decision);
+      }
+
+      return {
+        success: failed === 0,
+        inserted,
+        failed,
+        results
+      };
+    }
+  } catch (error) {
+    if (atomic) {
+      // In atomic mode, if any error occurred, all failed
+      throw new Error(`Batch operation failed (atomic mode): ${error instanceof Error ? error.message : String(error)}`);
+    } else {
+      // In non-atomic mode, return partial results
+      return {
+        success: false,
+        inserted,
+        failed,
+        results
+      };
+    }
+  }
+}
+
+/**
+ * Check for updates since a given timestamp (FR-003 Phase A)
+ * Lightweight polling mechanism using COUNT queries
+ * Token cost: ~5-10 tokens per check
+ *
+ * @param params - Agent name and since_timestamp (ISO 8601)
+ * @returns Boolean flag and counts for decisions, messages, files
+ */
+export function hasUpdates(params: HasUpdatesParams): HasUpdatesResponse {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.agent_name || params.agent_name.trim() === '') {
+    throw new Error('Parameter "agent_name" is required and cannot be empty');
+  }
+
+  if (!params.since_timestamp || params.since_timestamp.trim() === '') {
+    throw new Error('Parameter "since_timestamp" is required and cannot be empty');
+  }
+
+  try {
+    // Parse ISO timestamp to Unix epoch
+    const sinceDate = new Date(params.since_timestamp);
+    if (isNaN(sinceDate.getTime())) {
+      throw new Error(`Invalid since_timestamp format: ${params.since_timestamp}. Use ISO 8601 format (e.g., "2025-10-14T08:00:00Z")`);
+    }
+    const sinceTs = Math.floor(sinceDate.getTime() / 1000);
+
+    // Count decisions updated since timestamp (both string and numeric tables)
+    const decisionCountStmt = db.prepare(`
+      SELECT COUNT(*) as count FROM (
+        SELECT ts FROM t_decisions WHERE ts > ?
+        UNION ALL
+        SELECT ts FROM t_decisions_numeric WHERE ts > ?
+      )
+    `);
+    const decisionResult = decisionCountStmt.get(sinceTs, sinceTs) as { count: number };
+    const decisionsCount = decisionResult.count;
+
+    // Get agent_id for the requesting agent
+    const agentResult = db.prepare('SELECT id FROM m_agents WHERE name = ?').get(params.agent_name) as { id: number } | undefined;
+
+    // Count messages for the agent (received messages - to_agent_id matches OR broadcast messages)
+    let messagesCount = 0;
+    if (agentResult) {
+      const agentId = agentResult.id;
+      const messageCountStmt = db.prepare(`
+        SELECT COUNT(*) as count FROM t_agent_messages
+        WHERE ts > ? AND (to_agent_id = ? OR to_agent_id IS NULL)
+      `);
+      const messageResult = messageCountStmt.get(sinceTs, agentId) as { count: number };
+      messagesCount = messageResult.count;
+    }
+
+    // Count file changes since timestamp
+    const fileCountStmt = db.prepare(`
+      SELECT COUNT(*) as count FROM t_file_changes WHERE ts > ?
+    `);
+    const fileResult = fileCountStmt.get(sinceTs) as { count: number };
+    const filesCount = fileResult.count;
+
+    // Determine if there are any updates
+    const hasUpdates = decisionsCount > 0 || messagesCount > 0 || filesCount > 0;
+
+    return {
+      has_updates: hasUpdates,
+      counts: {
+        decisions: decisionsCount,
+        messages: messagesCount,
+        files: filesCount
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to check for updates: ${message}`);
+  }
+}
+
+/**
+ * Set decision from template with defaults and required field validation (FR-006)
+ * Applies template defaults while allowing overrides
+ * Validates required fields if template specifies any
+ *
+ * @param params - Template name, key, value, and optional overrides
+ * @returns Response with success status and applied defaults metadata
+ */
+export function setFromTemplate(params: SetFromTemplateParams): SetFromTemplateResponse {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.template || params.template.trim() === '') {
+    throw new Error('Parameter "template" is required and cannot be empty');
+  }
+
+  if (!params.key || params.key.trim() === '') {
+    throw new Error('Parameter "key" is required and cannot be empty');
+  }
+
+  if (params.value === undefined || params.value === null) {
+    throw new Error('Parameter "value" is required');
+  }
+
+  try {
+    // Get template
+    const templateRow = db.prepare('SELECT * FROM t_decision_templates WHERE name = ?').get(params.template) as {
+      id: number;
+      name: string;
+      defaults: string;
+      required_fields: string | null;
+    } | undefined;
+
+    if (!templateRow) {
+      throw new Error(`Template not found: ${params.template}`);
+    }
+
+    // Parse template defaults
+    const defaults = JSON.parse(templateRow.defaults) as {
+      layer?: string;
+      status?: 'active' | 'deprecated' | 'draft';
+      tags?: string[];
+      priority?: 'low' | 'medium' | 'high' | 'critical';
+    };
+
+    // Parse required fields
+    const requiredFields = templateRow.required_fields ? JSON.parse(templateRow.required_fields) as string[] : null;
+
+    // Validate required fields if specified
+    if (requiredFields && requiredFields.length > 0) {
+      for (const field of requiredFields) {
+        if (!(field in params) || params[field] === undefined || params[field] === null) {
+          throw new Error(`Template "${params.template}" requires field: ${field}`);
+        }
+      }
+    }
+
+    // Build decision params with template defaults (overridable)
+    const appliedDefaults: {
+      layer?: string;
+      tags?: string[];
+      status?: string;
+    } = {};
+
+    const decisionParams: SetDecisionParams = {
+      key: params.key,
+      value: params.value,
+      agent: params.agent,
+      layer: params.layer || defaults.layer,
+      version: params.version,
+      status: params.status || defaults.status,
+      tags: params.tags || defaults.tags,
+      scopes: params.scopes
+    };
+
+    // Track what defaults were applied
+    if (!params.layer && defaults.layer) {
+      appliedDefaults.layer = defaults.layer;
+    }
+    if (!params.tags && defaults.tags) {
+      appliedDefaults.tags = defaults.tags;
+    }
+    if (!params.status && defaults.status) {
+      appliedDefaults.status = defaults.status;
+    }
+
+    // Call setDecision with merged params
+    const result = setDecision(decisionParams);
+
+    return {
+      success: result.success,
+      key: result.key,
+      key_id: result.key_id,
+      version: result.version,
+      template_used: params.template,
+      applied_defaults: appliedDefaults,
+      message: `Decision "${params.key}" set successfully using template "${params.template}"`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to set decision from template: ${message}`);
+  }
+}
+
+/**
+ * Create a new decision template (FR-006)
+ * Defines reusable defaults and required fields for decisions
+ *
+ * @param params - Template name, defaults, required fields, and creator
+ * @returns Response with success status and template ID
+ */
+export function createTemplate(params: CreateTemplateParams): CreateTemplateResponse {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.name || params.name.trim() === '') {
+    throw new Error('Parameter "name" is required and cannot be empty');
+  }
+
+  if (!params.defaults || typeof params.defaults !== 'object') {
+    throw new Error('Parameter "defaults" is required and must be an object');
+  }
+
+  try {
+    return transaction(db, () => {
+      // Validate layer if provided in defaults
+      if (params.defaults.layer) {
+        const layerId = getLayerId(db, params.defaults.layer);
+        if (layerId === null) {
+          throw new Error(`Invalid layer in defaults: ${params.defaults.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
+        }
+      }
+
+      // Validate status if provided in defaults
+      if (params.defaults.status && !STRING_TO_STATUS[params.defaults.status]) {
+        throw new Error(`Invalid status in defaults: ${params.defaults.status}. Must be 'active', 'deprecated', or 'draft'`);
+      }
+
+      // Get or create agent if creator specified
+      let createdById: number | null = null;
+      if (params.created_by) {
+        createdById = getOrCreateAgent(db, params.created_by);
+      }
+
+      // Serialize defaults and required fields
+      const defaultsJson = JSON.stringify(params.defaults);
+      const requiredFieldsJson = params.required_fields ? JSON.stringify(params.required_fields) : null;
+
+      // Insert template
+      const stmt = db.prepare(`
+        INSERT INTO t_decision_templates (name, defaults, required_fields, created_by)
+        VALUES (?, ?, ?, ?)
+      `);
+
+      const info = stmt.run(params.name, defaultsJson, requiredFieldsJson, createdById);
+
+      return {
+        success: true,
+        template_id: info.lastInsertRowid as number,
+        template_name: params.name,
+        message: `Template "${params.name}" created successfully`
+      };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to create template: ${message}`);
+  }
+}
+
+/**
+ * List all available decision templates (FR-006)
+ * Returns all templates with their defaults and metadata
+ *
+ * @param params - No parameters required
+ * @returns Array of all templates with parsed JSON fields
+ */
+export function listTemplates(params: ListTemplatesParams = {}): ListTemplatesResponse {
+  const db = getDatabase();
+
+  try {
+    const stmt = db.prepare(`
+      SELECT
+        t.id,
+        t.name,
+        t.defaults,
+        t.required_fields,
+        a.name as created_by,
+        datetime(t.ts, 'unixepoch') as created_at
+      FROM t_decision_templates t
+      LEFT JOIN m_agents a ON t.created_by = a.id
+      ORDER BY t.name ASC
+    `);
+
+    const rows = stmt.all() as Array<{
+      id: number;
+      name: string;
+      defaults: string;
+      required_fields: string | null;
+      created_by: string | null;
+      created_at: string;
+    }>;
+
+    // Parse JSON fields
+    const templates = rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      defaults: JSON.parse(row.defaults),
+      required_fields: row.required_fields ? JSON.parse(row.required_fields) : null,
+      created_by: row.created_by,
+      created_at: row.created_at
+    }));
+
+    return {
+      templates: templates,
+      count: templates.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to list templates: ${message}`);
   }
 }

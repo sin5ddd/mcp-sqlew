@@ -1,63 +1,63 @@
 -- MCP Shared Context Server - Database Schema
--- Version: 1.1.0 (with configurable weekend-aware auto-deletion)
+-- Version: 2.1.0 (with activity log, smart defaults, batch ops, templates, CLI, subscriptions)
 
 -- ============================================================================
--- マスターテーブル群（正規化）
+-- Master Tables (Normalization)
 -- ============================================================================
 
--- エージェント管理
+-- Agent Management
 CREATE TABLE IF NOT EXISTS m_agents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
 );
 
--- ファイルパス管理
+-- File Path Management
 CREATE TABLE IF NOT EXISTS m_files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT UNIQUE NOT NULL
 );
 
--- コンテキストキー管理
+-- Context Key Management
 CREATE TABLE IF NOT EXISTS m_context_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT UNIQUE NOT NULL
 );
 
--- 制約カテゴリ管理
+-- Constraint Category Management
 CREATE TABLE IF NOT EXISTS m_constraint_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
 );
 
--- レイヤー管理
+-- Layer Management
 CREATE TABLE IF NOT EXISTS m_layers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
 );
 
--- タグ管理
+-- Tag Management
 CREATE TABLE IF NOT EXISTS m_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
 );
 
--- スコープ管理（モジュール・コンポーネント）
+-- Scope Management (Modules/Components)
 CREATE TABLE IF NOT EXISTS m_scopes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
 );
 
--- 設定管理（サーバー設定）
+-- Configuration Management (Server Settings)
 CREATE TABLE IF NOT EXISTS m_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
 
 -- ============================================================================
--- トランザクションテーブル群
+-- Transaction Tables
 -- ============================================================================
 
--- 決定事項（文字列値）
+-- Decisions (String Values)
 CREATE TABLE IF NOT EXISTS t_decisions (
     key_id INTEGER PRIMARY KEY REFERENCES m_context_keys(id),
     value TEXT NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS t_decisions (
     ts INTEGER DEFAULT (unixepoch())
 );
 
--- 決定事項（数値）
+-- Decisions (Numeric Values)
 CREATE TABLE IF NOT EXISTS t_decisions_numeric (
     key_id INTEGER PRIMARY KEY REFERENCES m_context_keys(id),
     value REAL NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS t_decisions_numeric (
     ts INTEGER DEFAULT (unixepoch())
 );
 
--- 決定事項のバージョン履歴
+-- Decision Version History
 CREATE TABLE IF NOT EXISTS t_decision_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key_id INTEGER REFERENCES m_context_keys(id),
@@ -89,33 +89,33 @@ CREATE TABLE IF NOT EXISTS t_decision_history (
     ts INTEGER NOT NULL
 );
 
--- 決定事項へのタグ付け（多対多）
+-- Decision Tagging (Many-to-Many)
 CREATE TABLE IF NOT EXISTS t_decision_tags (
     decision_key_id INTEGER REFERENCES m_context_keys(id),
     tag_id INTEGER REFERENCES m_tags(id),
     PRIMARY KEY (decision_key_id, tag_id)
 );
 
--- 決定事項のスコープ（多対多）
+-- Decision Scopes (Many-to-Many)
 CREATE TABLE IF NOT EXISTS t_decision_scopes (
     decision_key_id INTEGER REFERENCES m_context_keys(id),
     scope_id INTEGER REFERENCES m_scopes(id),
     PRIMARY KEY (decision_key_id, scope_id)
 );
 
--- エージェント間メッセージ
+-- Inter-Agent Messages
 CREATE TABLE IF NOT EXISTS t_agent_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_agent_id INTEGER NOT NULL REFERENCES m_agents(id),
     to_agent_id INTEGER REFERENCES m_agents(id),  -- NULL = broadcast
     msg_type INTEGER NOT NULL,  -- 1=decision, 2=warning, 3=request, 4=info
     priority INTEGER DEFAULT 2,  -- 1=low, 2=medium, 3=high, 4=critical
-    payload TEXT,  -- JSON文字列（必要な場合のみ）
+    payload TEXT,  -- JSON string (only when needed)
     ts INTEGER DEFAULT (unixepoch()),
     read INTEGER DEFAULT 0
 );
 
--- ファイル変更履歴
+-- File Change History
 CREATE TABLE IF NOT EXISTS t_file_changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL REFERENCES m_files(id),
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS t_file_changes (
     ts INTEGER DEFAULT (unixepoch())
 );
 
--- 制約・要件
+-- Constraints/Requirements
 CREATE TABLE IF NOT EXISTS t_constraints (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     category_id INTEGER NOT NULL REFERENCES m_constraint_categories(id),
@@ -138,15 +138,36 @@ CREATE TABLE IF NOT EXISTS t_constraints (
     ts INTEGER DEFAULT (unixepoch())
 );
 
--- 制約へのタグ付け（多対多）
+-- Constraint Tagging (Many-to-Many)
 CREATE TABLE IF NOT EXISTS t_constraint_tags (
     constraint_id INTEGER REFERENCES t_constraints(id),
     tag_id INTEGER REFERENCES m_tags(id),
     PRIMARY KEY (constraint_id, tag_id)
 );
 
+-- Activity Log (v2.1.0 - FR-001)
+CREATE TABLE IF NOT EXISTS t_activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER DEFAULT (unixepoch()),
+    agent_id INTEGER NOT NULL REFERENCES m_agents(id),
+    action_type TEXT NOT NULL,  -- 'decision_set', 'decision_update', 'message_send', 'file_record'
+    target TEXT NOT NULL,  -- key name, message id, file path, etc.
+    layer_id INTEGER REFERENCES m_layers(id),
+    details TEXT  -- JSON string with additional details
+);
+
+-- Decision Templates (v2.1.0 - FR-006)
+CREATE TABLE IF NOT EXISTS t_decision_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    defaults TEXT NOT NULL,  -- JSON: {layer, status, tags, priority}
+    required_fields TEXT,  -- JSON array: ["cve_id", "severity"]
+    created_by INTEGER REFERENCES m_agents(id),
+    ts INTEGER DEFAULT (unixepoch())
+);
+
 -- ============================================================================
--- インデックス
+-- Indexes
 -- ============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_decisions_ts ON t_decisions(ts DESC);
@@ -162,12 +183,15 @@ CREATE INDEX IF NOT EXISTS idx_constraints_active ON t_constraints(active, categ
 CREATE INDEX IF NOT EXISTS idx_constraints_priority ON t_constraints(priority DESC);
 CREATE INDEX IF NOT EXISTS idx_decision_tags_tag ON t_decision_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_decision_scopes_scope ON t_decision_scopes(scope_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_ts ON t_activity_log(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_agent ON t_activity_log(agent_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_action ON t_activity_log(action_type);
 
 -- ============================================================================
--- ビュー（トークン効率化）
+-- Views (Token Efficiency)
 -- ============================================================================
 
--- タグ付き決定事項（最も効率的なビュー）
+-- Tagged Decisions (Most Efficient View)
 CREATE VIEW IF NOT EXISTS v_tagged_decisions AS
 SELECT
     k.key,
@@ -188,7 +212,7 @@ JOIN m_context_keys k ON d.key_id = k.id
 LEFT JOIN m_layers l ON d.layer_id = l.id
 LEFT JOIN m_agents a ON d.agent_id = a.id;
 
--- アクティブなコンテキスト（直近1時間、アクティブのみ）
+-- Active Context (Last Hour, Active Only)
 CREATE VIEW IF NOT EXISTS v_active_context AS
 SELECT 
     k.key,
@@ -204,7 +228,7 @@ LEFT JOIN m_agents a ON d.agent_id = a.id
 WHERE d.status = 1 AND d.ts > unixepoch() - 3600
 ORDER BY d.ts DESC;
 
--- レイヤー別サマリー
+-- Layer Summary
 CREATE VIEW IF NOT EXISTS v_layer_summary AS
 SELECT 
     l.name as layer,
@@ -217,7 +241,7 @@ LEFT JOIN t_file_changes fc ON l.id = fc.layer_id AND fc.ts > unixepoch() - 3600
 LEFT JOIN t_constraints c ON l.id = c.layer_id AND c.active = 1
 GROUP BY l.id;
 
--- 優先度別未読メッセージ
+-- Unread Messages by Priority
 CREATE VIEW IF NOT EXISTS v_unread_messages_by_priority AS
 SELECT 
     a.name as agent,
@@ -229,7 +253,7 @@ WHERE m.read = 0
 GROUP BY m.to_agent_id, m.priority
 ORDER BY m.priority DESC;
 
--- 最近のファイル変更（レイヤー付き）
+-- Recent File Changes (With Layer)
 CREATE VIEW IF NOT EXISTS v_recent_file_changes AS
 SELECT 
     f.path,
@@ -245,7 +269,7 @@ LEFT JOIN m_layers l ON fc.layer_id = l.id
 WHERE fc.ts > unixepoch() - 3600
 ORDER BY fc.ts DESC;
 
--- タグ付き制約
+-- Tagged Constraints
 CREATE VIEW IF NOT EXISTS v_tagged_constraints AS
 SELECT
     c.id,
@@ -266,10 +290,10 @@ WHERE c.active = 1
 ORDER BY c.priority DESC, cc.name, c.ts DESC;
 
 -- ============================================================================
--- トリガー（自動処理）
+-- Triggers (Automatic Processing)
 -- ============================================================================
 
--- バージョン履歴の自動記録
+-- Automatic Version History Recording
 CREATE TRIGGER IF NOT EXISTS trg_record_decision_history
 AFTER UPDATE ON t_decisions
 WHEN OLD.value != NEW.value OR OLD.version != NEW.version
@@ -278,11 +302,65 @@ BEGIN
     VALUES (OLD.key_id, OLD.version, OLD.value, OLD.agent_id, OLD.ts);
 END;
 
+-- Activity Log Recording Triggers (v2.1.0 - FR-001)
+-- Decision Addition Log
+CREATE TRIGGER IF NOT EXISTS trg_log_decision_set
+AFTER INSERT ON t_decisions
+BEGIN
+    INSERT INTO t_activity_log (agent_id, action_type, target, layer_id, details)
+    SELECT
+        COALESCE(NEW.agent_id, (SELECT id FROM m_agents WHERE name = 'system' LIMIT 1)),
+        'decision_set',
+        (SELECT key FROM m_context_keys WHERE id = NEW.key_id),
+        NEW.layer_id,
+        json_object('value', NEW.value, 'version', NEW.version, 'status', NEW.status);
+END;
+
+-- Decision Update Log
+CREATE TRIGGER IF NOT EXISTS trg_log_decision_update
+AFTER UPDATE ON t_decisions
+WHEN OLD.value != NEW.value OR OLD.version != NEW.version OR OLD.status != NEW.status
+BEGIN
+    INSERT INTO t_activity_log (agent_id, action_type, target, layer_id, details)
+    SELECT
+        COALESCE(NEW.agent_id, (SELECT id FROM m_agents WHERE name = 'system' LIMIT 1)),
+        'decision_update',
+        (SELECT key FROM m_context_keys WHERE id = NEW.key_id),
+        NEW.layer_id,
+        json_object('old_value', OLD.value, 'new_value', NEW.value, 'old_version', OLD.version, 'new_version', NEW.version, 'old_status', OLD.status, 'new_status', NEW.status);
+END;
+
+-- Message Send Log
+CREATE TRIGGER IF NOT EXISTS trg_log_message_send
+AFTER INSERT ON t_agent_messages
+BEGIN
+    INSERT INTO t_activity_log (agent_id, action_type, target, layer_id, details)
+    SELECT
+        NEW.from_agent_id,
+        'message_send',
+        'msg_id:' || NEW.id,
+        NULL,
+        json_object('to_agent_id', NEW.to_agent_id, 'msg_type', NEW.msg_type, 'priority', NEW.priority);
+END;
+
+-- File Change Log
+CREATE TRIGGER IF NOT EXISTS trg_log_file_record
+AFTER INSERT ON t_file_changes
+BEGIN
+    INSERT INTO t_activity_log (agent_id, action_type, target, layer_id, details)
+    SELECT
+        NEW.agent_id,
+        'file_record',
+        (SELECT path FROM m_files WHERE id = NEW.file_id),
+        NEW.layer_id,
+        json_object('change_type', NEW.change_type, 'description', NEW.description);
+END;
+
 -- ============================================================================
--- 初期データ
+-- Initial Data
 -- ============================================================================
 
--- 標準レイヤー
+-- Standard Layers
 INSERT OR IGNORE INTO m_layers (name) VALUES 
     ('presentation'),
     ('business'),
@@ -290,13 +368,13 @@ INSERT OR IGNORE INTO m_layers (name) VALUES
     ('infrastructure'),
     ('cross-cutting');
 
--- 標準カテゴリ
+-- Standard Categories
 INSERT OR IGNORE INTO m_constraint_categories (name) VALUES
     ('performance'),
     ('architecture'),
     ('security');
 
--- よくあるタグ
+-- Common Tags
 INSERT OR IGNORE INTO m_tags (name) VALUES
     ('authentication'),
     ('authorization'),
@@ -309,8 +387,16 @@ INSERT OR IGNORE INTO m_tags (name) VALUES
     ('validation'),
     ('error-handling');
 
--- デフォルト設定（自動削除の設定）
+-- Default Settings (Auto-deletion Configuration)
 INSERT OR IGNORE INTO m_config (key, value) VALUES
     ('autodelete_ignore_weekend', '0'),
     ('autodelete_message_hours', '24'),
     ('autodelete_file_history_days', '7');
+
+-- Built-in Templates (Built-in Decision Templates - FR-006)
+INSERT OR IGNORE INTO t_decision_templates (name, defaults, required_fields, created_by, ts) VALUES
+    ('breaking_change', '{"layer":"business","status":"active","tags":["breaking"]}', NULL, NULL, unixepoch()),
+    ('security_vulnerability', '{"layer":"infrastructure","status":"active","tags":["security","vulnerability"]}', '["cve_id","severity"]', NULL, unixepoch()),
+    ('performance_optimization', '{"layer":"business","status":"active","tags":["performance","optimization"]}', NULL, NULL, unixepoch()),
+    ('deprecation', '{"layer":"business","status":"active","tags":["deprecation"]}', NULL, NULL, unixepoch()),
+    ('architecture_decision', '{"layer":"infrastructure","status":"active","tags":["architecture","adr"]}', NULL, NULL, unixepoch());

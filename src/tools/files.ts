@@ -3,7 +3,7 @@
  * Provides file change tracking with layer integration and lock detection
  */
 
-import { getDatabase, getOrCreateFile, getOrCreateAgent, getLayerId } from '../database.js';
+import { getDatabase, getOrCreateFile, getOrCreateAgent, getLayerId, transaction } from '../database.js';
 import {
   STRING_TO_CHANGE_TYPE,
   CHANGE_TYPE_TO_STRING,
@@ -18,6 +18,9 @@ import type {
   CheckFileLockParams,
   CheckFileLockResponse,
   RecentFileChange,
+  RecordFileChangeBatchParams,
+  RecordFileChangeBatchResponse,
+  Database
 } from '../types.js';
 import { performAutoCleanup } from '../utils/cleanup.js';
 
@@ -255,5 +258,116 @@ export function checkFileLock(params: CheckFileLockParams): CheckFileLockRespons
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to check file lock: ${message}`);
+  }
+}
+
+/**
+ * Record multiple file changes in a single batch operation (FR-005)
+ * Supports atomic (all succeed or all fail) and non-atomic modes
+ * Limit: 50 items per batch (constraint #3)
+ *
+ * @param params - Batch parameters with array of file changes and atomic flag
+ * @returns Response with success status and detailed results for each item
+ */
+export function recordFileChangeBatch(params: RecordFileChangeBatchParams): RecordFileChangeBatchResponse {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.file_changes || !Array.isArray(params.file_changes)) {
+    throw new Error('Parameter "file_changes" is required and must be an array');
+  }
+
+  // Enforce limit (constraint #3)
+  if (params.file_changes.length === 0) {
+    throw new Error('Parameter "file_changes" must contain at least one item');
+  }
+
+  if (params.file_changes.length > 50) {
+    throw new Error('Batch operations are limited to 50 items maximum (constraint #3)');
+  }
+
+  // Cleanup old file changes before processing batch
+  performAutoCleanup(db);
+
+  const atomic = params.atomic !== undefined ? params.atomic : true;
+  const results: Array<{
+    file_path: string;
+    change_id?: number;
+    timestamp?: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+
+  let inserted = 0;
+  let failed = 0;
+
+  // Helper function to process a single file change
+  const processSingleFileChange = (fileChange: RecordFileChangeParams): void => {
+    try {
+      const result = recordFileChange(fileChange);
+      results.push({
+        file_path: fileChange.file_path,
+        change_id: result.change_id,
+        timestamp: result.timestamp,
+        success: true
+      });
+      inserted++;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      results.push({
+        file_path: fileChange.file_path,
+        success: false,
+        error: errorMessage
+      });
+      failed++;
+
+      // In atomic mode, throw immediately to trigger rollback
+      if (atomic) {
+        throw error;
+      }
+    }
+  };
+
+  try {
+    if (atomic) {
+      // Atomic mode: use transaction, all succeed or all fail
+      return transaction(db, () => {
+        for (const fileChange of params.file_changes) {
+          processSingleFileChange(fileChange);
+        }
+
+        return {
+          success: failed === 0,
+          inserted,
+          failed,
+          results
+        };
+      });
+    } else {
+      // Non-atomic mode: process all, return individual results
+      for (const fileChange of params.file_changes) {
+        processSingleFileChange(fileChange);
+      }
+
+      return {
+        success: failed === 0,
+        inserted,
+        failed,
+        results
+      };
+    }
+  } catch (error) {
+    if (atomic) {
+      // In atomic mode, if any error occurred, all failed
+      throw new Error(`Batch operation failed (atomic mode): ${error instanceof Error ? error.message : String(error)}`);
+    } else {
+      // In non-atomic mode, return partial results
+      return {
+        success: false,
+        inserted,
+        failed,
+        results
+      };
+    }
   }
 }

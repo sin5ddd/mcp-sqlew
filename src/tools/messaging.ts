@@ -3,7 +3,7 @@
  * Agent-to-agent communication with priority and read tracking
  */
 
-import { getDatabase, getOrCreateAgent } from '../database.js';
+import { getDatabase, getOrCreateAgent, transaction } from '../database.js';
 import {
   STRING_TO_MESSAGE_TYPE,
   STRING_TO_PRIORITY,
@@ -18,6 +18,9 @@ import type {
   SendMessageResponse,
   GetMessagesResponse,
   MarkReadResponse,
+  SendMessageBatchParams,
+  SendMessageBatchResponse,
+  Database
 } from '../types.js';
 import { performAutoCleanup } from '../utils/cleanup.js';
 
@@ -220,4 +223,125 @@ export function markRead(params: {
     success: true,
     marked_count: result.changes,
   };
+}
+
+/**
+ * Send multiple messages in a single batch operation (FR-005)
+ * Supports atomic (all succeed or all fail) and non-atomic modes
+ * Limit: 50 items per batch (constraint #3)
+ *
+ * @param params - Batch parameters with array of messages and atomic flag
+ * @returns Response with success status and detailed results for each item
+ */
+export function sendMessageBatch(params: SendMessageBatchParams): SendMessageBatchResponse {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.messages || !Array.isArray(params.messages)) {
+    throw new Error('Parameter "messages" is required and must be an array');
+  }
+
+  // Enforce limit (constraint #3)
+  if (params.messages.length === 0) {
+    throw new Error('Parameter "messages" must contain at least one item');
+  }
+
+  if (params.messages.length > 50) {
+    throw new Error('Batch operations are limited to 50 items maximum (constraint #3)');
+  }
+
+  // Cleanup old messages before processing batch
+  performAutoCleanup(db);
+
+  const atomic = params.atomic !== undefined ? params.atomic : true;
+  const results: Array<{
+    from_agent: string;
+    to_agent: string | null;
+    message_id?: number;
+    timestamp?: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+
+  let inserted = 0;
+  let failed = 0;
+
+  // Helper function to process a single message
+  const processSingleMessage = (message: SendMessageParams): void => {
+    try {
+      const result = sendMessage({
+        from_agent: message.from_agent,
+        to_agent: message.to_agent,
+        msg_type: message.msg_type,
+        message: message.message,
+        priority: message.priority,
+        payload: message.payload
+      });
+      results.push({
+        from_agent: message.from_agent,
+        to_agent: message.to_agent || null,
+        message_id: result.message_id,
+        timestamp: result.timestamp,
+        success: true
+      });
+      inserted++;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      results.push({
+        from_agent: message.from_agent,
+        to_agent: message.to_agent || null,
+        success: false,
+        error: errorMessage
+      });
+      failed++;
+
+      // In atomic mode, throw immediately to trigger rollback
+      if (atomic) {
+        throw error;
+      }
+    }
+  };
+
+  try {
+    if (atomic) {
+      // Atomic mode: use transaction, all succeed or all fail
+      return transaction(db, () => {
+        for (const message of params.messages) {
+          processSingleMessage(message);
+        }
+
+        return {
+          success: failed === 0,
+          inserted,
+          failed,
+          results
+        };
+      });
+    } else {
+      // Non-atomic mode: process all, return individual results
+      for (const message of params.messages) {
+        processSingleMessage(message);
+      }
+
+      return {
+        success: failed === 0,
+        inserted,
+        failed,
+        results
+      };
+    }
+  } catch (error) {
+    if (atomic) {
+      // In atomic mode, if any error occurred, all failed
+      throw new Error(`Batch operation failed (atomic mode): ${error instanceof Error ? error.message : String(error)}`);
+    } else {
+      // In non-atomic mode, return partial results
+      return {
+        success: false,
+        inserted,
+        failed,
+        results
+      };
+    }
+  }
 }

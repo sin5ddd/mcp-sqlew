@@ -170,6 +170,25 @@ export interface ConstraintTag {
   readonly tag_id: number;
 }
 
+export interface ActivityLog {
+  readonly id: number;
+  readonly ts: number;
+  readonly agent_id: number;
+  readonly action_type: string;  // 'decision_set', 'decision_update', 'message_send', 'file_record'
+  readonly target: string;
+  readonly layer_id: number | null;
+  readonly details: string | null;  // JSON string
+}
+
+export interface DecisionTemplate {
+  readonly id: number;
+  readonly name: string;
+  readonly defaults: string;  // JSON string: {layer, status, tags, priority}
+  readonly required_fields: string | null;  // JSON array: ["cve_id", "severity"]
+  readonly created_by: number | null;
+  readonly ts: number;
+}
+
 // ============================================================================
 // View Result Types
 // ============================================================================
@@ -243,6 +262,17 @@ export interface SetDecisionParams {
   scopes?: string[];
 }
 
+export interface QuickSetDecisionParams {
+  key: string;
+  value: string | number;
+  agent?: string;
+  layer?: string;
+  version?: string;
+  status?: 'active' | 'deprecated' | 'draft';
+  tags?: string[];
+  scopes?: string[];
+}
+
 export interface GetContextParams {
   tags?: string[];
   layer?: string;
@@ -270,6 +300,28 @@ export interface SearchByLayerParams {
   layer: string;
   status?: 'active' | 'deprecated' | 'draft';
   include_tags?: boolean;
+}
+
+export interface SearchAdvancedParams {
+  layers?: string[];  // OR relationship - match any
+  tags_all?: string[];  // AND relationship - must have ALL
+  tags_any?: string[];  // OR relationship - must have ANY
+  exclude_tags?: string[];  // Exclude these tags
+  scopes?: string[];  // Wildcard support (e.g., "api/instruments/*")
+  updated_after?: string;  // ISO timestamp or relative time ("7d")
+  updated_before?: string;  // ISO timestamp or relative time
+  decided_by?: string[];  // Array of agent names
+  statuses?: ('active' | 'deprecated' | 'draft')[];  // Multiple statuses
+  search_text?: string;  // Full-text search in value field
+  sort_by?: 'updated' | 'key' | 'version';
+  sort_order?: 'asc' | 'desc';
+  limit?: number;  // Max results (default: 20)
+  offset?: number;  // For pagination (default: 0)
+}
+
+export interface HasUpdatesParams {
+  agent_name: string;
+  since_timestamp: string;  // ISO 8601 timestamp
 }
 
 export interface SendMessageParams {
@@ -351,6 +403,67 @@ export interface GetStatsParams {
   // No parameters - returns overall stats
 }
 
+export interface GetActivityLogParams {
+  since?: string;  // ISO timestamp or relative like "5m", "1h", "2h", "1d"
+  agent_names?: string[];  // Filter by agents (or ["*"] for all)
+  actions?: string[];  // Filter by action types
+  limit?: number;  // Max results (default: 100)
+}
+
+// ============================================================================
+// Batch Operation Parameter Types (FR-005)
+// ============================================================================
+
+export interface SetDecisionBatchParams {
+  decisions: SetDecisionParams[];
+  atomic?: boolean;  // Default: true (all succeed or all fail)
+}
+
+export interface SendMessageBatchParams {
+  messages: SendMessageParams[];
+  atomic?: boolean;  // Default: true (all succeed or all fail)
+}
+
+export interface RecordFileChangeBatchParams {
+  file_changes: RecordFileChangeParams[];
+  atomic?: boolean;  // Default: true (all succeed or all fail)
+}
+
+// ============================================================================
+// Decision Template Parameter Types (FR-006)
+// ============================================================================
+
+export interface SetFromTemplateParams {
+  template: string;  // Template name
+  key: string;
+  value: string | number;
+  agent?: string;
+  // Override template defaults if needed
+  layer?: string;
+  version?: string;
+  status?: 'active' | 'deprecated' | 'draft';
+  tags?: string[];
+  scopes?: string[];
+  // Required fields (template-specific)
+  [key: string]: any;
+}
+
+export interface CreateTemplateParams {
+  name: string;
+  defaults: {
+    layer?: string;
+    status?: 'active' | 'deprecated' | 'draft';
+    tags?: string[];
+    priority?: 'low' | 'medium' | 'high' | 'critical';
+  };
+  required_fields?: string[];
+  created_by?: string;
+}
+
+export interface ListTemplatesParams {
+  // No parameters - returns all templates
+}
+
 // ============================================================================
 // MCP Tool Response Types
 // ============================================================================
@@ -360,6 +473,19 @@ export interface SetDecisionResponse {
   key: string;
   key_id: number;
   version: string;
+  message?: string;
+}
+
+export interface QuickSetDecisionResponse {
+  success: boolean;
+  key: string;
+  key_id: number;
+  version: string;
+  inferred: {
+    layer?: string;
+    tags?: string[];
+    scope?: string;
+  };
   message?: string;
 }
 
@@ -393,6 +519,21 @@ export interface SearchByLayerResponse {
   layer: string;
   decisions: TaggedDecision[];
   count: number;
+}
+
+export interface SearchAdvancedResponse {
+  decisions: TaggedDecision[];
+  count: number;
+  total_count: number;  // Total matching records (for pagination)
+}
+
+export interface HasUpdatesResponse {
+  has_updates: boolean;
+  counts: {
+    decisions: number;
+    messages: number;
+    files: number;
+  };
 }
 
 export interface SendMessageResponse {
@@ -457,6 +598,7 @@ export interface ClearOldDataResponse {
   success: boolean;
   messages_deleted: number;
   file_changes_deleted: number;
+  activity_logs_deleted: number;
 }
 
 export interface GetStatsResponse {
@@ -472,6 +614,102 @@ export interface GetStatsResponse {
   tags: number;
   scopes: number;
   layers: number;
+}
+
+export interface ActivityLogEntry {
+  id: number;
+  timestamp: string;  // ISO 8601
+  agent: string;
+  action: string;
+  target: string;
+  layer: string | null;
+  details: any;  // Parsed JSON
+}
+
+export interface GetActivityLogResponse {
+  activities: ActivityLogEntry[];
+  count: number;
+}
+
+// ============================================================================
+// Batch Operation Response Types (FR-005)
+// ============================================================================
+
+export interface SetDecisionBatchResponse {
+  success: boolean;
+  inserted: number;
+  failed: number;
+  results: Array<{
+    key: string;
+    key_id?: number;
+    version?: string;
+    success: boolean;
+    error?: string;
+  }>;
+}
+
+export interface SendMessageBatchResponse {
+  success: boolean;
+  inserted: number;
+  failed: number;
+  results: Array<{
+    from_agent: string;
+    to_agent: string | null;
+    message_id?: number;
+    timestamp?: string;
+    success: boolean;
+    error?: string;
+  }>;
+}
+
+export interface RecordFileChangeBatchResponse {
+  success: boolean;
+  inserted: number;
+  failed: number;
+  results: Array<{
+    file_path: string;
+    change_id?: number;
+    timestamp?: string;
+    success: boolean;
+    error?: string;
+  }>;
+}
+
+// ============================================================================
+// Decision Template Response Types (FR-006)
+// ============================================================================
+
+export interface SetFromTemplateResponse {
+  success: boolean;
+  key: string;
+  key_id: number;
+  version: string;
+  template_used: string;
+  applied_defaults: {
+    layer?: string;
+    tags?: string[];
+    status?: string;
+  };
+  message?: string;
+}
+
+export interface CreateTemplateResponse {
+  success: boolean;
+  template_id: number;
+  template_name: string;
+  message?: string;
+}
+
+export interface ListTemplatesResponse {
+  templates: Array<{
+    id: number;
+    name: string;
+    defaults: any;  // Parsed JSON
+    required_fields: string[] | null;  // Parsed JSON array
+    created_by: string | null;
+    created_at: string;
+  }>;
+  count: number;
 }
 
 // ============================================================================
