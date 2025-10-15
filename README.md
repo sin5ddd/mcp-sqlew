@@ -570,7 +570,7 @@ Configure via CLI args or MCP tools at runtime.
 No breaking changes. Only bin command configuration changed:
 
 - **Old:** `npx sqlew` → CLI, `npx sqlew-server` → MCP server
-- **New:** `npx sqlew` → MCP server, `npx sqlew-cli` → CLI
+- **New:** `npx sqlew` → MCP server (default), `sqlew-cli` → CLI (after installing the package)
 
 Update Claude Desktop config if using custom commands.
 

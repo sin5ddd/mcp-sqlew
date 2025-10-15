@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bin Command Configuration:** Fixed `npx sqlew` to launch MCP server by default instead of CLI
   - Changed `package.json` bin mapping: `sqlew` now points to MCP server (`dist/index.js`)
   - CLI mode moved to `sqlew-cli` command (`dist/cli.js`)
-  - **Before:** `npx sqlew` → CLI mode, `npx sqlew-server` → MCP server
-  - **After:** `npx sqlew` → MCP server (default), `npx sqlew-cli` → CLI mode (optional)
+  - **Before:** `npx sqlew` → CLI mode
+  - **After:** `npx sqlew` → MCP server (default), `sqlew-cli` → CLI mode (after installing the package)
   - Fixes user experience issue where MCP server launch required non-intuitive command
 
 - **Batch Operations Nested Transaction Bug:** Fixed `set_batch` failing with "cannot start a transaction within a transaction" error
@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration Notes
 - No breaking changes for MCP tool API
-- Users who relied on `npx sqlew` for CLI should update to `npx sqlew-cli`
+- Users who relied on `npx sqlew` for CLI should install the package and use `sqlew-cli` command
 - MCP server configuration unchanged (still uses stdio transport)
 
 ## [2.1.0] - 2025-10-14
