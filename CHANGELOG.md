@@ -5,6 +5,34 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2025-10-15
+
+### Fixed
+- **v2.1.0 Migration Bug:** Fixed initialization order issue preventing v2.0.0 databases from migrating to v2.1.0
+  - **Problem:** Schema validation ran before v2.1.0 migration check, causing v2.0.0 databases to fail validation and exit
+  - **Solution:** Moved v2.1.0 migration check to run before schema validation (src/database.ts:96-113)
+  - **Impact:** v2.0.0 databases now automatically migrate to v2.1.0 on startup without errors
+  - Database components added by migration: `t_activity_log`, `t_decision_templates`, 4 activity logging triggers
+
+### Changed
+- **Batch Operations Help Documentation:** Enhanced help text for all batch operations with AI agent guidance
+  - Added detailed ATOMIC MODE behavior explanation (all-or-nothing transaction with rollback)
+  - Added detailed NON-ATOMIC MODE behavior explanation (best-effort processing with partial results)
+  - Added RECOMMENDATION FOR AI AGENTS section suggesting `atomic:false` by default
+  - Applies to: `set_batch` (decision tool), `send_batch` (message tool), `record_batch` (file tool)
+  - **Zero token impact:** Help text is on-demand only (called with `action: "help"`)
+  - Helps prevent "cannot start a transaction within a transaction" errors from incorrect usage
+
+### Technical Details
+- v2.1.0 migration now runs before schema validation to ensure all required components exist
+- Help documentation improvements have no effect on MCP tool schema (zero upfront token cost)
+- Batch operation help text expanded from ~150 to ~350 characters per action
+
+### Migration from v2.1.0/v2.1.1
+- No breaking changes
+- Existing v2.0.0 databases will now migrate successfully on first startup
+- No action required for v2.1.0+ users
+
 ## [2.1.1] - 2025-10-15
 
 ### Fixed
@@ -472,6 +500,7 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[2.1.2]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.2
 [2.1.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.1
 [2.1.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.0
 [2.0.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.0.0
