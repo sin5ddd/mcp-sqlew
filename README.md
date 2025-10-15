@@ -188,6 +188,83 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 
 `.sqlew/sqlew.db` (created in current directory)
 
+## For AI Agents
+
+**🤖 Claude Code and other AI agents: Read this section first!**
+
+### Most Important Rule
+
+⚠️ **ALWAYS include the `action` parameter** - This is required in ALL tool calls and is the #1 cause of errors.
+
+```javascript
+// ❌ WRONG
+{key: "auth_method", value: "jwt"}
+
+// ✅ CORRECT
+{action: "set", key: "auth_method", value: "jwt", layer: "business"}
+```
+
+### Quick Parameter Reference
+
+Every tool requires an `action` parameter. Use `{action: "help"}` on any tool for detailed documentation.
+
+| Tool | Common Actions | Required Parameters (besides action) |
+|------|----------------|-------------------------------------|
+| **decision** | set, get, list, search_tags | set: key, value, layer |
+| **message** | send, get, mark_read | send: from_agent, msg_type, message |
+| **file** | record, get, check_lock | record: file_path, agent_name, change_type |
+| **constraint** | add, get, deactivate | add: category, constraint_text |
+| **stats** | layer_summary, db_stats, clear | (no additional required) |
+| **config** | get, update | (no additional required) |
+
+### Common Errors & Quick Fixes
+
+```javascript
+// Error: "Unknown action: undefined"
+// Fix: Add action parameter
+{action: "set", ...}
+
+// Error: "Parameter \"value\" is required"
+// Fix: Don't nest in defaults, provide directly
+{action: "set_from_template", template: "...", key: "...", value: "..."}
+
+// Error: "Invalid layer"
+// Fix: Use one of 5 valid layers
+{layer: "business"}  // Valid: presentation, business, data, infrastructure, cross-cutting
+
+// Error: "Invalid status"
+// Fix: Use one of 3 valid statuses
+{status: "active"}  // Valid: active, deprecated, draft
+```
+
+### Best Practices for AI Agents
+
+1. **Use `atomic: false` for batch operations** (recommended for AI agents to avoid transaction failures)
+2. **Specify `layer` when setting decisions** (helps organize architectural concerns)
+3. **Use `search_advanced` for complex queries** (more powerful than `list` or `search_tags`)
+4. **Check `has_updates` before fetching** (95% token savings vs full data retrieval)
+5. **Use templates for common patterns** (consistent metadata, enforced requirements)
+
+### Comprehensive Guide
+
+For complete documentation with parameter matrices, search decision trees, batch operation guides, and troubleshooting:
+
+**📖 [AI Agent Guide](docs/AI_AGENT_GUIDE.md)** ← Full reference for AI agents
+
+### Valid Enum Values
+
+**layer**: `presentation` | `business` | `data` | `infrastructure` | `cross-cutting`
+
+**status**: `active` | `deprecated` | `draft`
+
+**msg_type**: `decision` | `warning` | `request` | `info`
+
+**priority**: `low` | `medium` | `high` | `critical`
+
+**change_type**: `created` | `modified` | `deleted`
+
+**category** (constraints): `performance` | `architecture` | `security`
+
 ## MCP Tools Reference
 
 All tools use action-based routing. Call any tool with `action: "help"` for comprehensive documentation.

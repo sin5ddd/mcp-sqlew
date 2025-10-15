@@ -91,7 +91,7 @@ try {
 const server = new Server(
   {
     name: 'mcp-sklew',
-    version: '2.1.3',
+    version: '2.1.4',
   },
   {
     capabilities: {
@@ -106,7 +106,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'decision',
-        description: 'Manage decisions (13 actions + help)',
+        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Context Management - Store decisions with metadata (tags, layers, versions, scopes)
+
+## Quick Examples
+- Set decision: {action: "set", key: "auth_method", value: "jwt", layer: "business", tags: ["security"]}
+- Get decision: {action: "get", key: "auth_method"}
+- List decisions: {action: "list", status: "active", layer: "business"}
+
+## Parameter Requirements by Action
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|---------------------|
+| set | action, key, value, layer | agent, version, status, tags, scopes |
+| get | action, key | version |
+| list | action | status, layer, tags, scope, tag_match, limit, offset |
+| search_tags | action, tags | match_mode, status, layer |
+| search_layer | action, layer | status, include_tags |
+| versions | action, key | - |
+| quick_set | action, key, value | agent, layer, version, status, tags, scopes |
+| search_advanced | action | layers, tags_all, tags_any, exclude_tags, scopes, updated_after, updated_before, decided_by, statuses, search_text, sort_by, sort_order, limit, offset |
+| set_batch | action, decisions | atomic |
+| has_updates | action, agent_name, since_timestamp | - |
+| set_from_template | action, template, key, value, layer | agent, version, status, tags, scopes |
+| create_template | action, name, defaults | required_fields, created_by |
+| list_templates | action | - |
+
+## Common Errors & Fixes
+- "Unknown action: undefined" → Add action parameter (REQUIRED!)
+- "Parameter \\"value\\" is required" → Provide value parameter directly (not nested in defaults)
+- "Invalid layer" → Use: presentation, business, data, infrastructure, cross-cutting
+- "Invalid status" → Use: active, deprecated, draft
+
+## Valid Values
+- **layer**: presentation | business | data | infrastructure | cross-cutting
+- **status**: active | deprecated | draft
+- **tag_match**: AND | OR
+
+Use action: "help" for detailed documentation.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -154,7 +192,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'message',
-        description: 'Agent messaging (actions: send, get, mark_read, send_batch)',
+        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Agent Messaging - Send messages between agents with priority levels and read tracking
+
+## Quick Examples
+- Send message: {action: "send", from_agent: "bot1", msg_type: "info", message: "Task complete"}
+- Get messages: {action: "get", agent_name: "bot1", unread_only: true}
+- Mark as read: {action: "mark_read", agent_name: "bot1", message_ids: [1, 2, 3]}
+
+## Parameter Requirements by Action
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|---------------------|
+| send | action, from_agent, msg_type, message | to_agent, priority, payload |
+| get | action, agent_name | unread_only, priority_filter, msg_type_filter, limit |
+| mark_read | action, agent_name, message_ids | - |
+| send_batch | action, messages | atomic |
+
+## Common Errors & Fixes
+- "Unknown action: undefined" → Add action parameter (REQUIRED!)
+- "Invalid msg_type" → Use: decision, warning, request, info
+- "Invalid priority" → Use: low, medium, high, critical
+- "message_ids array cannot be empty" → Provide at least one message ID
+
+## Valid Values
+- **msg_type**: decision | warning | request | info
+- **priority**: low | medium | high | critical (default: medium)
+- **to_agent**: agent name or null for broadcast
+- **atomic** (batch): true (all-or-nothing) | false (best-effort, recommended for AI agents)
+
+Use action: "help" for detailed documentation.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -180,7 +248,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'file',
-        description: 'File change tracking (actions: record, get, check_lock, record_batch)',
+        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+File Change Tracking - Track file changes with layer classification and lock detection
+
+## Quick Examples
+- Record change: {action: "record", file_path: "src/index.ts", agent_name: "bot1", change_type: "modified", layer: "infrastructure"}
+- Get changes: {action: "get", agent_name: "bot1", layer: "infrastructure", limit: 10}
+- Check lock: {action: "check_lock", file_path: "src/index.ts", lock_duration: 300}
+
+## Parameter Requirements by Action
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|---------------------|
+| record | action, file_path, agent_name, change_type | layer, description |
+| get | action | file_path, agent_name, layer, change_type, since, limit |
+| check_lock | action, file_path | lock_duration |
+| record_batch | action, file_changes | atomic |
+
+## Common Errors & Fixes
+- "Unknown action: undefined" → Add action parameter (REQUIRED!)
+- "Invalid change_type" → Use: created, modified, deleted
+- "Invalid layer" → Use: presentation, business, data, infrastructure, cross-cutting
+- "Parameter \\"file_changes\\" must contain at least one item" → Provide non-empty array
+
+## Valid Values
+- **change_type**: created | modified | deleted
+- **layer**: presentation | business | data | infrastructure | cross-cutting
+- **lock_duration**: seconds (default: 300 = 5 minutes)
+- **atomic** (batch): true (all-or-nothing) | false (best-effort, recommended for AI agents)
+
+Use action: "help" for detailed documentation.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -202,7 +300,40 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'constraint',
-        description: 'Constraint management (actions: add, get, deactivate)',
+        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Constraint Management - Manage architectural rules and requirements
+
+## What are Constraints vs Decisions?
+- **Decision**: Documents a choice that was made ("We chose JWT over sessions")
+- **Constraint**: Enforces a rule that must be followed ("API response time must be <100ms")
+
+## Quick Examples
+- Add constraint: {action: "add", category: "performance", constraint_text: "API response <100ms", priority: "high", layer: "business"}
+- Get constraints: {action: "get", category: "performance", active_only: true}
+- Deactivate: {action: "deactivate", constraint_id: 5}
+
+## Parameter Requirements by Action
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|---------------------|
+| add | action, category, constraint_text | priority, layer, tags, created_by |
+| get | action | category, layer, priority, tags, active_only, limit |
+| deactivate | action, constraint_id | - |
+
+## Common Errors & Fixes
+- "Unknown action: undefined" → Add action parameter (REQUIRED!)
+- "Invalid category" → Use: performance, architecture, security
+- "category and constraint_text are required" → Provide both required fields
+- "constraint_id is required" → Provide valid constraint ID number
+
+## Valid Values
+- **category**: performance | architecture | security
+- **priority**: low | medium | high | critical (default: medium)
+- **layer**: presentation | business | data | infrastructure | cross-cutting
+- **active_only**: true (default) | false
+
+Use action: "help" for detailed documentation.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -222,7 +353,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'stats',
-        description: 'Statistics and data cleanup (actions: layer_summary, db_stats, clear, activity_log)',
+        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Statistics & Utilities - View stats, activity logs, and manage data cleanup
+
+## Quick Examples
+- Layer summary: {action: "layer_summary"}
+- DB statistics: {action: "db_stats"}
+- Clear old data: {action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14}
+- Activity log: {action: "activity_log", since: "1h", agent_names: ["bot1"], limit: 50}
+
+## Parameter Requirements by Action
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|---------------------|
+| layer_summary | action | - |
+| db_stats | action | - |
+| clear | action | messages_older_than_hours, file_changes_older_than_days |
+| activity_log | action | since, agent_names, actions, limit |
+
+## Common Errors & Fixes
+- "Unknown action: undefined" → Add action parameter (REQUIRED!)
+- "Invalid 'since' parameter" → Use relative format (5m, 1h, 2d) or ISO timestamp
+
+## Valid Values
+- **since**: Relative time (5m, 1h, 2d) or ISO 8601 timestamp
+- **agent_names**: Array of agent names or ["*"] for all
+- **limit**: Number (default: 100 for activity_log)
+
+## Clear Action Behavior
+- **Without parameters**: Uses config-based weekend-aware retention
+- **With parameters**: Overrides config, no weekend-awareness
+
+Use action: "help" for detailed documentation.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -239,7 +402,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'config',
-        description: 'Auto-deletion config (actions: get, update)',
+        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Configuration - Manage auto-deletion settings with weekend-aware retention
+
+## Quick Examples
+- Get config: {action: "get"}
+- Update config: {action: "update", ignoreWeekend: true, messageRetentionHours: 48, fileHistoryRetentionDays: 10}
+
+## Parameter Requirements by Action
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|---------------------|
+| get | action | - |
+| update | action | ignoreWeekend, messageRetentionHours, fileHistoryRetentionDays |
+
+## Common Errors & Fixes
+- "Unknown action: undefined" → Add action parameter (REQUIRED!)
+- "messageRetentionHours must be between 1 and 168" → Use value 1-168 (1 week max)
+- "fileHistoryRetentionDays must be between 1 and 90" → Use value 1-90
+
+## Valid Values
+- **ignoreWeekend**: true (skip weekends in retention calculation) | false (standard time-based)
+- **messageRetentionHours**: 1-168 (default: 24)
+- **fileHistoryRetentionDays**: 1-90 (default: 7)
+
+## Weekend-Aware Behavior
+- **ignoreWeekend=false**: 24h = 24 hours ago (standard)
+- **ignoreWeekend=true**: 24h on Monday = Friday (skips Sat/Sun)
+
+Use action: "help" for detailed documentation.`,
         inputSchema: {
           type: 'object',
           properties: {
