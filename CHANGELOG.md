@@ -5,6 +5,41 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2025-10-15
+
+### Fixed
+- **Bin Command Configuration:** Fixed `npx sqlew` to launch MCP server by default instead of CLI
+  - Changed `package.json` bin mapping: `sqlew` now points to MCP server (`dist/index.js`)
+  - CLI mode moved to `sqlew-cli` command (`dist/cli.js`)
+  - **Before:** `npx sqlew` → CLI mode, `npx sqlew-server` → MCP server
+  - **After:** `npx sqlew` → MCP server (default), `npx sqlew-cli` → CLI mode (optional)
+  - Fixes user experience issue where MCP server launch required non-intuitive command
+
+- **Batch Operations Nested Transaction Bug:** Fixed `set_batch` failing with "cannot start a transaction within a transaction" error
+  - Root cause: `setDecision()` wraps logic in `transaction()`, but `setDecisionBatch()` also wraps calls in `transaction()` for atomic mode
+  - Solution: Created `setDecisionInternal()` helper function with core logic but no transaction wrapper
+  - `setDecision()` now calls `setDecisionInternal()` wrapped in transaction
+  - `setDecisionBatch()` now calls `setDecisionInternal()` directly (batch manages its own transaction)
+  - All batch operations verified working: `set_batch`, `send_batch`, `record_batch`
+  - Location: `src/tools/context.ts:40-152` (setDecisionInternal), `context.ts:154-174` (setDecision), `context.ts:883` (setDecisionBatch)
+
+### Changed
+- **Documentation Improvements:**
+  - **README Benefits Section:** Rewrote to emphasize organizational memory for AI agents as the core value proposition
+    - Added comparison table: Git history (WHAT) vs Code comments (HOW) vs sqlew decisions (WHY)
+    - Added real-world example showing cross-session context survival
+    - Highlighted 4 key LLM benefits: context survival, prevents regression, historical reasoning, knowledge discovery
+  - **README Token Savings:** Replaced internal architecture metrics with honest real-world token reduction analysis
+    - Shows concrete scenario: 5 agents, 10 sessions, 20,000 → 7,400 tokens (63% reduction)
+    - Explains 4 savings mechanisms: selective retrieval, structured vs unstructured, cross-session persistence, search vs scan
+    - Provides realistic ranges: Conservative (50-65%), Realistic (60-75%), Optimal (70-85%)
+    - Clarified that 96%/67% metrics are internal v1.0→v2.0 improvements, not usage benefits
+
+### Migration Notes
+- No breaking changes for MCP tool API
+- Users who relied on `npx sqlew` for CLI should update to `npx sqlew-cli`
+- MCP server configuration unchanged (still uses stdio transport)
+
 ## [2.1.0] - 2025-10-14
 
 ### 🎉 Feature Release
@@ -437,6 +472,7 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[2.1.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.1
 [2.1.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.0
 [2.0.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.0.0
 [1.1.2]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v1.1.2

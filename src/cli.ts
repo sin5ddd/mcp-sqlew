@@ -130,7 +130,7 @@ function formatTable(data: any[], headers: string[]): void {
  */
 function showHelp(): void {
   console.log(`
-sqlew CLI - Query tool for mcp-sqlew v2.1.0
+sqlew CLI - Query tool for mcp-sqlew v2.1.1
 
 USAGE:
   sqlew query <subcommand> [options]

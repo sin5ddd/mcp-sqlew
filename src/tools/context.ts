@@ -38,16 +38,14 @@ import type {
 } from '../types.js';
 
 /**
- * Set or update a decision in the context
- * Auto-detects numeric vs string values and routes to appropriate table
- * Supports tags, layers, scopes, and version tracking
+ * Internal helper: Set decision without wrapping in transaction
+ * Used by setDecision (with transaction) and setDecisionBatch (manages its own transaction)
  *
  * @param params - Decision parameters
+ * @param db - Database instance
  * @returns Response with success status and metadata
  */
-export function setDecision(params: SetDecisionParams): SetDecisionResponse {
-  const db = getDatabase();
-
+function setDecisionInternal(params: SetDecisionParams, db: Database): SetDecisionResponse {
   // Validate required parameters
   if (!params.key || params.key.trim() === '') {
     throw new Error('Parameter "key" is required and cannot be empty');
@@ -80,80 +78,94 @@ export function setDecision(params: SetDecisionParams): SetDecisionResponse {
     }
   }
 
+  // Get or create master records
+  const agentId = getOrCreateAgent(db, agentName);
+  const keyId = getOrCreateContextKey(db, params.key);
+
+  // Current timestamp
+  const ts = Math.floor(Date.now() / 1000);
+
+  // Insert or update decision based on value type
+  if (isNumeric) {
+    // Numeric decision
+    const stmt = db.prepare(`
+      INSERT INTO t_decisions_numeric (key_id, value, agent_id, layer_id, version, status, ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(key_id) DO UPDATE SET
+        value = excluded.value,
+        agent_id = excluded.agent_id,
+        layer_id = excluded.layer_id,
+        version = excluded.version,
+        status = excluded.status,
+        ts = excluded.ts
+    `);
+    stmt.run(keyId, value, agentId, layerId, version, status, ts);
+  } else {
+    // String decision
+    const stmt = db.prepare(`
+      INSERT INTO t_decisions (key_id, value, agent_id, layer_id, version, status, ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(key_id) DO UPDATE SET
+        value = excluded.value,
+        agent_id = excluded.agent_id,
+        layer_id = excluded.layer_id,
+        version = excluded.version,
+        status = excluded.status,
+        ts = excluded.ts
+    `);
+    stmt.run(keyId, String(value), agentId, layerId, version, status, ts);
+  }
+
+  // Handle m_tags (many-to-many)
+  if (params.tags && params.tags.length > 0) {
+    // Clear existing tags
+    db.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
+
+    // Insert new tags
+    const tagStmt = db.prepare('INSERT INTO t_decision_tags (decision_key_id, tag_id) VALUES (?, ?)');
+    for (const tagName of params.tags) {
+      const tagId = getOrCreateTag(db, tagName);
+      tagStmt.run(keyId, tagId);
+    }
+  }
+
+  // Handle m_scopes (many-to-many)
+  if (params.scopes && params.scopes.length > 0) {
+    // Clear existing scopes
+    db.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
+
+    // Insert new scopes
+    const scopeStmt = db.prepare('INSERT INTO t_decision_scopes (decision_key_id, scope_id) VALUES (?, ?)');
+    for (const scopeName of params.scopes) {
+      const scopeId = getOrCreateScope(db, scopeName);
+      scopeStmt.run(keyId, scopeId);
+    }
+  }
+
+  return {
+    success: true,
+    key: params.key,
+    key_id: keyId,
+    version: version,
+    message: `Decision "${params.key}" set successfully`
+  };
+}
+
+/**
+ * Set or update a decision in the context
+ * Auto-detects numeric vs string values and routes to appropriate table
+ * Supports tags, layers, scopes, and version tracking
+ *
+ * @param params - Decision parameters
+ * @returns Response with success status and metadata
+ */
+export function setDecision(params: SetDecisionParams): SetDecisionResponse {
+  const db = getDatabase();
+
   try {
     // Use transaction for atomicity
     return transaction(db, () => {
-      // Get or create master records
-      const agentId = getOrCreateAgent(db, agentName);
-      const keyId = getOrCreateContextKey(db, params.key);
-
-      // Current timestamp
-      const ts = Math.floor(Date.now() / 1000);
-
-      // Insert or update decision based on value type
-      if (isNumeric) {
-        // Numeric decision
-        const stmt = db.prepare(`
-          INSERT INTO t_decisions_numeric (key_id, value, agent_id, layer_id, version, status, ts)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(key_id) DO UPDATE SET
-            value = excluded.value,
-            agent_id = excluded.agent_id,
-            layer_id = excluded.layer_id,
-            version = excluded.version,
-            status = excluded.status,
-            ts = excluded.ts
-        `);
-        stmt.run(keyId, value, agentId, layerId, version, status, ts);
-      } else {
-        // String decision
-        const stmt = db.prepare(`
-          INSERT INTO t_decisions (key_id, value, agent_id, layer_id, version, status, ts)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(key_id) DO UPDATE SET
-            value = excluded.value,
-            agent_id = excluded.agent_id,
-            layer_id = excluded.layer_id,
-            version = excluded.version,
-            status = excluded.status,
-            ts = excluded.ts
-        `);
-        stmt.run(keyId, String(value), agentId, layerId, version, status, ts);
-      }
-
-      // Handle m_tags (many-to-many)
-      if (params.tags && params.tags.length > 0) {
-        // Clear existing tags
-        db.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
-
-        // Insert new tags
-        const tagStmt = db.prepare('INSERT INTO t_decision_tags (decision_key_id, tag_id) VALUES (?, ?)');
-        for (const tagName of params.tags) {
-          const tagId = getOrCreateTag(db, tagName);
-          tagStmt.run(keyId, tagId);
-        }
-      }
-
-      // Handle m_scopes (many-to-many)
-      if (params.scopes && params.scopes.length > 0) {
-        // Clear existing scopes
-        db.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
-
-        // Insert new scopes
-        const scopeStmt = db.prepare('INSERT INTO t_decision_scopes (decision_key_id, scope_id) VALUES (?, ?)');
-        for (const scopeName of params.scopes) {
-          const scopeId = getOrCreateScope(db, scopeName);
-          scopeStmt.run(keyId, scopeId);
-        }
-      }
-
-      return {
-        success: true,
-        key: params.key,
-        key_id: keyId,
-        version: version,
-        message: `Decision "${params.key}" set successfully`
-      };
+      return setDecisionInternal(params, db);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -868,7 +880,7 @@ export function setDecisionBatch(params: SetDecisionBatchParams): SetDecisionBat
   // Helper function to process a single decision
   const processSingleDecision = (decision: SetDecisionParams): void => {
     try {
-      const result = setDecision(decision);
+      const result = setDecisionInternal(decision, db);
       results.push({
         key: decision.key,
         key_id: result.key_id,
