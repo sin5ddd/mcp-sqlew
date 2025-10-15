@@ -5,6 +5,29 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] - 2025-10-15
+
+### Fixed
+- **CRITICAL: Tag/Scope Query Bug** - Fixed "no such column: m_tags" and "no such column: m_scopes" errors in filtering
+  - **Impact:** ALL tag-based queries (`search_tags`, `list` with tags, `search_advanced` with tags) were broken
+  - **Root cause:** Code referenced non-existent columns `m_tags` and `m_scopes` (table names, not columns)
+  - **Affected functions:**
+    - `searchByTags()` (src/tools/context.ts:311-320) - Used `m_tags` instead of `tags`
+    - `getContext()` (src/tools/context.ts:210, 221-230) - Used `m_tags` and `m_scopes` instead of `tags`/`scopes`
+  - **Fix:** Use only `tags` and `scopes` columns from `v_tagged_decisions` view (comma-separated GROUP_CONCAT values)
+  - **Testing:** Verified with `action: "search_tags", tags: ["architecture","loom"], match_mode: "AND"`
+
+### Technical Details
+- The `v_tagged_decisions` view has `tags` and `scopes` as comma-separated string columns
+- `m_tags` and `m_scopes` are **table names** in the normalized schema, not view columns
+- Fixed by removing incorrect column references and using only LIKE pattern matching on the view columns
+- All tag/scope filtering now works correctly with AND/OR logic
+
+### Migration from v2.1.2
+- No breaking changes
+- Existing queries will now work correctly instead of failing with SQL errors
+- **Recommendation:** Upgrade immediately if using any tag or scope filtering
+
 ## [2.1.2] - 2025-10-15
 
 ### Fixed
@@ -500,6 +523,7 @@ First production release of sqlew - MCP server for efficient context sharing bet
 - Full type safety
 - Comprehensive error handling
 
+[2.1.3]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.3
 [2.1.2]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.2
 [2.1.1]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.1
 [2.1.0]: https://github.com/sin5ddd/mcp-sqlew/releases/tag/v2.1.0

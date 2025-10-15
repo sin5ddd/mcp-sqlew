@@ -207,8 +207,8 @@ export function getContext(params: GetContextParams = {}): GetContextResponse {
     // Filter by scope
     if (params.scope) {
       // Use LIKE for comma-separated scopes
-      query += ' AND (scopes LIKE ? OR m_scopes = ?)';
-      queryParams.push(`%${params.scope}%`, params.scope);
+      query += ' AND scopes LIKE ?';
+      queryParams.push(`%${params.scope}%`);
     }
 
     // Filter by tags
@@ -216,17 +216,17 @@ export function getContext(params: GetContextParams = {}): GetContextResponse {
       const tagMatch = params.tag_match || 'OR';
 
       if (tagMatch === 'AND') {
-        // All m_tags must be present
+        // All tags must be present
         for (const tag of params.tags) {
-          query += ' AND (tags LIKE ? OR m_tags = ?)';
-          queryParams.push(`%${tag}%`, tag);
+          query += ' AND tags LIKE ?';
+          queryParams.push(`%${tag}%`);
         }
       } else {
         // Any tag must be present (OR)
-        const tagConditions = params.tags.map(() => '(tags LIKE ? OR m_tags = ?)').join(' OR ');
+        const tagConditions = params.tags.map(() => 'tags LIKE ?').join(' OR ');
         query += ` AND (${tagConditions})`;
         for (const tag of params.tags) {
-          queryParams.push(`%${tag}%`, tag);
+          queryParams.push(`%${tag}%`);
         }
       }
     }
@@ -306,17 +306,17 @@ export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
 
     // Apply tag filtering based on match mode
     if (matchMode === 'AND') {
-      // All m_tags must be present
+      // All tags must be present
       for (const tag of params.tags) {
-        query += ' AND (tags LIKE ? OR m_tags = ?)';
-        queryParams.push(`%${tag}%`, tag);
+        query += ' AND tags LIKE ?';
+        queryParams.push(`%${tag}%`);
       }
     } else if (matchMode === 'OR') {
       // Any tag must be present
-      const tagConditions = params.tags.map(() => '(tags LIKE ? OR m_tags = ?)').join(' OR ');
+      const tagConditions = params.tags.map(() => 'tags LIKE ?').join(' OR ');
       query += ` AND (${tagConditions})`;
       for (const tag of params.tags) {
-        queryParams.push(`%${tag}%`, tag);
+        queryParams.push(`%${tag}%`);
       }
     } else {
       throw new Error(`Invalid match_mode: ${matchMode}. Must be 'AND' or 'OR'`);

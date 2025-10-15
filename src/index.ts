@@ -91,7 +91,7 @@ try {
 const server = new Server(
   {
     name: 'mcp-sklew',
-    version: '2.1.2',
+    version: '2.1.3',
   },
   {
     capabilities: {
