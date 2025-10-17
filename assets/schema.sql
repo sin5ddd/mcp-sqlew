@@ -365,14 +365,14 @@ SELECT
     t.created_ts,
     t.updated_ts,
     t.completed_ts,
-    GROUP_CONCAT(DISTINCT tg.name, ', ') as tags
+    (SELECT GROUP_CONCAT(tg2.name, ', ')
+     FROM t_task_tags tt2
+     JOIN m_tags tg2 ON tt2.tag_id = tg2.id
+     WHERE tt2.task_id = t.id) as tags
 FROM t_tasks t
 LEFT JOIN m_task_statuses s ON t.status_id = s.id
 LEFT JOIN m_agents a ON t.assigned_agent_id = a.id
-LEFT JOIN m_layers l ON t.layer_id = l.id
-LEFT JOIN t_task_tags tt ON t.id = tt.task_id
-LEFT JOIN m_tags tg ON tt.tag_id = tg.id
-GROUP BY t.id;
+LEFT JOIN m_layers l ON t.layer_id = l.id;
 
 -- ============================================================================
 -- Triggers (Automatic Processing)

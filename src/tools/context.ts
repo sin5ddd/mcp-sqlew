@@ -5,6 +5,7 @@
 
 import { getDatabase, getOrCreateAgent, getOrCreateContextKey, getOrCreateTag, getOrCreateScope, getLayerId, transaction } from '../database.js';
 import { STRING_TO_STATUS, STATUS_TO_STRING, DEFAULT_VERSION, DEFAULT_STATUS } from '../constants.js';
+import { processBatch } from '../utils/batch.js';
 import type {
   SetDecisionParams,
   GetContextParams,
@@ -858,96 +859,37 @@ export function setDecisionBatch(params: SetDecisionBatchParams): SetDecisionBat
     throw new Error('Parameter "decisions" is required and must be an array');
   }
 
-  // Enforce limit (constraint #3)
-  if (params.decisions.length === 0) {
-    throw new Error('Parameter "decisions" must contain at least one item');
-  }
-
-  if (params.decisions.length > 50) {
-    throw new Error('Batch operations are limited to 50 items maximum (constraint #3)');
-  }
-
   const atomic = params.atomic !== undefined ? params.atomic : true;
-  const results: Array<{
-    key: string;
-    key_id?: number;
-    version?: string;
-    success: boolean;
-    error?: string;
-  }> = [];
 
-  let inserted = 0;
-  let failed = 0;
-
-  // Helper function to process a single decision
-  const processSingleDecision = (decision: SetDecisionParams): void => {
-    try {
+  // Use processBatch utility
+  const batchResult = processBatch(
+    db,
+    params.decisions,
+    (decision, db) => {
       const result = setDecisionInternal(decision, db);
-      results.push({
+      return {
         key: decision.key,
         key_id: result.key_id,
-        version: result.version,
-        success: true
-      });
-      inserted++;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      results.push({
-        key: decision.key,
-        success: false,
-        error: errorMessage
-      });
-      failed++;
+        version: result.version
+      };
+    },
+    atomic,
+    50
+  );
 
-      // In atomic mode, throw immediately to trigger rollback
-      if (atomic) {
-        throw error;
-      }
-    }
+  // Map batch results to SetDecisionBatchResponse format
+  return {
+    success: batchResult.success,
+    inserted: batchResult.processed,
+    failed: batchResult.failed,
+    results: batchResult.results.map(r => ({
+      key: (r.data as any)?.key || '',
+      key_id: r.data?.key_id,
+      version: r.data?.version,
+      success: r.success,
+      error: r.error
+    }))
   };
-
-  try {
-    if (atomic) {
-      // Atomic mode: use transaction, all succeed or all fail
-      return transaction(db, () => {
-        for (const decision of params.decisions) {
-          processSingleDecision(decision);
-        }
-
-        return {
-          success: failed === 0,
-          inserted,
-          failed,
-          results
-        };
-      });
-    } else {
-      // Non-atomic mode: process all, return individual results
-      for (const decision of params.decisions) {
-        processSingleDecision(decision);
-      }
-
-      return {
-        success: failed === 0,
-        inserted,
-        failed,
-        results
-      };
-    }
-  } catch (error) {
-    if (atomic) {
-      // In atomic mode, if any error occurred, all failed
-      throw new Error(`Batch operation failed (atomic mode): ${error instanceof Error ? error.message : String(error)}`);
-    } else {
-      // In non-atomic mode, return partial results
-      return {
-        success: false,
-        inserted,
-        failed,
-        results
-      };
-    }
-  }
 }
 
 /**

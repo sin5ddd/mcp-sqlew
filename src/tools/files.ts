@@ -23,6 +23,65 @@ import type {
   Database
 } from '../types.js';
 import { performAutoCleanup } from '../utils/cleanup.js';
+import { processBatch } from '../utils/batch.js';
+
+/**
+ * Internal helper: Record file change without cleanup or transaction wrapper
+ * Used by recordFileChange (with cleanup) and recordFileChangeBatch (manages its own transaction)
+ *
+ * @param params - File change parameters
+ * @param db - Database instance
+ * @returns Success response with change ID and timestamp
+ */
+function recordFileChangeInternal(params: RecordFileChangeParams, db: Database): RecordFileChangeResponse {
+  // Validate change_type
+  const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
+  if (changeTypeInt === undefined) {
+    throw new Error(`Invalid change_type: ${params.change_type}. Must be one of: created, modified, deleted`);
+  }
+
+  // Validate layer if provided
+  let layerId: number | null = null;
+  if (params.layer) {
+    if (!STANDARD_LAYERS.includes(params.layer as any)) {
+      throw new Error(
+        `Invalid layer: ${params.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
+      );
+    }
+    layerId = getLayerId(db, params.layer);
+    if (layerId === null) {
+      throw new Error(`Layer not found: ${params.layer}`);
+    }
+  }
+
+  // Auto-register file and agent
+  const fileId = getOrCreateFile(db, params.file_path);
+  const agentId = getOrCreateAgent(db, params.agent_name);
+
+  // Insert file change record
+  const stmt = db.prepare(`
+    INSERT INTO t_file_changes (file_id, agent_id, layer_id, change_type, description)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const result = stmt.run(
+    fileId,
+    agentId,
+    layerId,
+    changeTypeInt,
+    params.description || null
+  );
+
+  // Get timestamp
+  const tsResult = db.prepare('SELECT ts FROM t_file_changes WHERE id = ?')
+    .get(result.lastInsertRowid) as { ts: number } | undefined;
+
+  return {
+    success: true,
+    change_id: result.lastInsertRowid as number,
+    timestamp: tsResult ? new Date(tsResult.ts * 1000).toISOString() : new Date().toISOString(),
+  };
+}
 
 /**
  * Record a file change with optional layer assignment and description.
@@ -38,54 +97,7 @@ export function recordFileChange(params: RecordFileChangeParams): RecordFileChan
   performAutoCleanup(db);
 
   try {
-    // Validate change_type
-    const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
-    if (changeTypeInt === undefined) {
-      throw new Error(`Invalid change_type: ${params.change_type}. Must be one of: created, modified, deleted`);
-    }
-
-    // Validate layer if provided
-    let layerId: number | null = null;
-    if (params.layer) {
-      if (!STANDARD_LAYERS.includes(params.layer as any)) {
-        throw new Error(
-          `Invalid layer: ${params.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
-        );
-      }
-      layerId = getLayerId(db, params.layer);
-      if (layerId === null) {
-        throw new Error(`Layer not found: ${params.layer}`);
-      }
-    }
-
-    // Auto-register file and agent
-    const fileId = getOrCreateFile(db, params.file_path);
-    const agentId = getOrCreateAgent(db, params.agent_name);
-
-    // Insert file change record
-    const stmt = db.prepare(`
-      INSERT INTO t_file_changes (file_id, agent_id, layer_id, change_type, description)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    const result = stmt.run(
-      fileId,
-      agentId,
-      layerId,
-      changeTypeInt,
-      params.description || null
-    );
-
-    // Get timestamp
-    const tsResult = db.prepare('SELECT ts FROM t_file_changes WHERE id = ?')
-      .get(result.lastInsertRowid) as { ts: number } | undefined;
-
-    return {
-      success: true,
-      change_id: result.lastInsertRowid as number,
-      timestamp: tsResult ? new Date(tsResult.ts * 1000).toISOString() : new Date().toISOString(),
-    };
-
+    return recordFileChangeInternal(params, db);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to record file change: ${message}`);
@@ -277,97 +289,38 @@ export function recordFileChangeBatch(params: RecordFileChangeBatchParams): Reco
     throw new Error('Parameter "file_changes" is required and must be an array');
   }
 
-  // Enforce limit (constraint #3)
-  if (params.file_changes.length === 0) {
-    throw new Error('Parameter "file_changes" must contain at least one item');
-  }
-
-  if (params.file_changes.length > 50) {
-    throw new Error('Batch operations are limited to 50 items maximum (constraint #3)');
-  }
-
   // Cleanup old file changes before processing batch
   performAutoCleanup(db);
 
   const atomic = params.atomic !== undefined ? params.atomic : true;
-  const results: Array<{
-    file_path: string;
-    change_id?: number;
-    timestamp?: string;
-    success: boolean;
-    error?: string;
-  }> = [];
 
-  let inserted = 0;
-  let failed = 0;
-
-  // Helper function to process a single file change
-  const processSingleFileChange = (fileChange: RecordFileChangeParams): void => {
-    try {
-      const result = recordFileChange(fileChange);
-      results.push({
+  // Use processBatch utility
+  const batchResult = processBatch(
+    db,
+    params.file_changes,
+    (fileChange, db) => {
+      const result = recordFileChangeInternal(fileChange, db);
+      return {
         file_path: fileChange.file_path,
         change_id: result.change_id,
-        timestamp: result.timestamp,
-        success: true
-      });
-      inserted++;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      results.push({
-        file_path: fileChange.file_path,
-        success: false,
-        error: errorMessage
-      });
-      failed++;
+        timestamp: result.timestamp
+      };
+    },
+    atomic,
+    50
+  );
 
-      // In atomic mode, throw immediately to trigger rollback
-      if (atomic) {
-        throw error;
-      }
-    }
+  // Map batch results to RecordFileChangeBatchResponse format
+  return {
+    success: batchResult.success,
+    inserted: batchResult.processed,
+    failed: batchResult.failed,
+    results: batchResult.results.map(r => ({
+      file_path: (r.data as any)?.file_path || '',
+      change_id: r.data?.change_id,
+      timestamp: r.data?.timestamp,
+      success: r.success,
+      error: r.error
+    }))
   };
-
-  try {
-    if (atomic) {
-      // Atomic mode: use transaction, all succeed or all fail
-      return transaction(db, () => {
-        for (const fileChange of params.file_changes) {
-          processSingleFileChange(fileChange);
-        }
-
-        return {
-          success: failed === 0,
-          inserted,
-          failed,
-          results
-        };
-      });
-    } else {
-      // Non-atomic mode: process all, return individual results
-      for (const fileChange of params.file_changes) {
-        processSingleFileChange(fileChange);
-      }
-
-      return {
-        success: failed === 0,
-        inserted,
-        failed,
-        results
-      };
-    }
-  } catch (error) {
-    if (atomic) {
-      // In atomic mode, if any error occurred, all failed
-      throw new Error(`Batch operation failed (atomic mode): ${error instanceof Error ? error.message : String(error)}`);
-    } else {
-      // In non-atomic mode, return partial results
-      return {
-        success: false,
-        inserted,
-        failed,
-        results
-      };
-    }
-  }
 }

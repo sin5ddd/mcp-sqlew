@@ -13,6 +13,7 @@ import {
   transaction
 } from '../database.js';
 import { detectAndTransitionStaleTasks } from '../utils/task-stale-detection.js';
+import { processBatch } from '../utils/batch.js';
 import type { Database } from '../types.js';
 
 /**
@@ -61,6 +62,113 @@ const VALID_TRANSITIONS: Record<number, number[]> = {
 };
 
 /**
+ * Internal helper: Create task without wrapping in transaction
+ * Used by createTask (with transaction) and batchCreateTasks (manages its own transaction)
+ *
+ * @param params - Task parameters
+ * @param db - Database instance
+ * @returns Response with success status and task metadata
+ */
+function createTaskInternal(params: {
+  title: string;
+  description?: string;
+  acceptance_criteria?: string;
+  notes?: string;
+  priority?: number;
+  assigned_agent?: string;
+  created_by_agent?: string;
+  layer?: string;
+  tags?: string[];
+  status?: string;
+}, db: Database): any {
+  // Validate priority
+  const priority = params.priority !== undefined ? params.priority : 2;
+  if (priority < 1 || priority > 4) {
+    throw new Error('Parameter "priority" must be between 1 (low) and 4 (critical)');
+  }
+
+  // Get status_id
+  const status = params.status || 'todo';
+  const statusId = STATUS_TO_ID[status];
+  if (!statusId) {
+    throw new Error(`Invalid status: ${status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
+  }
+
+  // Validate layer if provided
+  let layerId: number | null = null;
+  if (params.layer) {
+    layerId = getLayerId(db, params.layer);
+    if (layerId === null) {
+      throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
+    }
+  }
+
+  // Get or create agents
+  let assignedAgentId: number | null = null;
+  if (params.assigned_agent) {
+    assignedAgentId = getOrCreateAgent(db, params.assigned_agent);
+  }
+
+  let createdByAgentId: number | null = null;
+  if (params.created_by_agent) {
+    createdByAgentId = getOrCreateAgent(db, params.created_by_agent);
+  }
+
+  // Insert task
+  const insertTaskStmt = db.prepare(`
+    INSERT INTO t_tasks (title, status_id, priority, assigned_agent_id, created_by_agent_id, layer_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const taskResult = insertTaskStmt.run(
+    params.title,
+    statusId,
+    priority,
+    assignedAgentId,
+    createdByAgentId,
+    layerId
+  );
+
+  const taskId = taskResult.lastInsertRowid as number;
+
+  // Insert task details if provided
+  if (params.description || params.acceptance_criteria || params.notes) {
+    const insertDetailsStmt = db.prepare(`
+      INSERT INTO t_task_details (task_id, description, acceptance_criteria, notes)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    insertDetailsStmt.run(
+      taskId,
+      params.description || null,
+      params.acceptance_criteria || null,
+      params.notes || null
+    );
+  }
+
+  // Insert tags if provided
+  if (params.tags && params.tags.length > 0) {
+    const insertTagStmt = db.prepare(`
+      INSERT INTO t_task_tags (task_id, tag_id)
+      VALUES (?, ?)
+    `);
+
+    for (const tagName of params.tags) {
+      const tagId = getOrCreateTag(db, tagName);
+      insertTagStmt.run(taskId, tagId);
+    }
+  }
+
+  return {
+    success: true,
+    task_id: taskId,
+    title: params.title,
+    status: status,
+    message: `Task "${params.title}" created successfully`
+  };
+}
+
+/**
  * Create a new task
  */
 export function createTask(params: {
@@ -88,91 +196,7 @@ export function createTask(params: {
 
   try {
     return transaction(db, () => {
-      // Validate priority
-      const priority = params.priority !== undefined ? params.priority : 2;
-      if (priority < 1 || priority > 4) {
-        throw new Error('Parameter "priority" must be between 1 (low) and 4 (critical)');
-      }
-
-      // Get status_id
-      const status = params.status || 'todo';
-      const statusId = STATUS_TO_ID[status];
-      if (!statusId) {
-        throw new Error(`Invalid status: ${status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
-      }
-
-      // Validate layer if provided
-      let layerId: number | null = null;
-      if (params.layer) {
-        layerId = getLayerId(db, params.layer);
-        if (layerId === null) {
-          throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
-        }
-      }
-
-      // Get or create agents
-      let assignedAgentId: number | null = null;
-      if (params.assigned_agent) {
-        assignedAgentId = getOrCreateAgent(db, params.assigned_agent);
-      }
-
-      let createdByAgentId: number | null = null;
-      if (params.created_by_agent) {
-        createdByAgentId = getOrCreateAgent(db, params.created_by_agent);
-      }
-
-      // Insert task
-      const insertTaskStmt = db.prepare(`
-        INSERT INTO t_tasks (title, status_id, priority, assigned_agent_id, created_by_agent_id, layer_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-
-      const taskResult = insertTaskStmt.run(
-        params.title,
-        statusId,
-        priority,
-        assignedAgentId,
-        createdByAgentId,
-        layerId
-      );
-
-      const taskId = taskResult.lastInsertRowid as number;
-
-      // Insert task details if provided
-      if (params.description || params.acceptance_criteria || params.notes) {
-        const insertDetailsStmt = db.prepare(`
-          INSERT INTO t_task_details (task_id, description, acceptance_criteria, notes)
-          VALUES (?, ?, ?, ?)
-        `);
-
-        insertDetailsStmt.run(
-          taskId,
-          params.description || null,
-          params.acceptance_criteria || null,
-          params.notes || null
-        );
-      }
-
-      // Insert tags if provided
-      if (params.tags && params.tags.length > 0) {
-        const insertTagStmt = db.prepare(`
-          INSERT INTO t_task_tags (task_id, tag_id)
-          VALUES (?, ?)
-        `);
-
-        for (const tagName of params.tags) {
-          const tagId = getOrCreateTag(db, tagName);
-          insertTagStmt.run(taskId, tagId);
-        }
-      }
-
-      return {
-        success: true,
-        task_id: taskId,
-        title: params.title,
-        status: status,
-        message: `Task "${params.title}" created successfully`
-      };
+      return createTaskInternal(params, db);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -723,87 +747,35 @@ export function batchCreateTasks(params: {
     throw new Error('Parameter "tasks" is required and must be an array');
   }
 
-  if (params.tasks.length === 0) {
-    throw new Error('Parameter "tasks" must contain at least one item');
-  }
-
-  if (params.tasks.length > 50) {
-    throw new Error('Batch operations are limited to 50 items maximum');
-  }
-
   const atomic = params.atomic !== undefined ? params.atomic : true;
-  const results: Array<{
-    title: string;
-    task_id?: number;
-    success: boolean;
-    error?: string;
-  }> = [];
 
-  let created = 0;
-  let failed = 0;
-
-  const processSingleTask = (task: any): void => {
-    try {
-      const result = createTask(task);
-      results.push({
+  // Use processBatch utility
+  const batchResult = processBatch(
+    db,
+    params.tasks,
+    (task, db) => {
+      const result = createTaskInternal(task, db);
+      return {
         title: task.title,
-        task_id: result.task_id,
-        success: true
-      });
-      created++;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      results.push({
-        title: task.title,
-        success: false,
-        error: errorMessage
-      });
-      failed++;
+        task_id: result.task_id
+      };
+    },
+    atomic,
+    50
+  );
 
-      if (atomic) {
-        throw error;
-      }
-    }
+  // Map batch results to task batch response format
+  return {
+    success: batchResult.success,
+    created: batchResult.processed,
+    failed: batchResult.failed,
+    results: batchResult.results.map(r => ({
+      title: (r.data as any)?.title || '',
+      task_id: r.data?.task_id,
+      success: r.success,
+      error: r.error
+    }))
   };
-
-  try {
-    if (atomic) {
-      return transaction(db, () => {
-        for (const task of params.tasks) {
-          processSingleTask(task);
-        }
-
-        return {
-          success: failed === 0,
-          created,
-          failed,
-          results
-        };
-      });
-    } else {
-      for (const task of params.tasks) {
-        processSingleTask(task);
-      }
-
-      return {
-        success: failed === 0,
-        created,
-        failed,
-        results
-      };
-    }
-  } catch (error) {
-    if (atomic) {
-      throw new Error(`Batch operation failed (atomic mode): ${error instanceof Error ? error.message : String(error)}`);
-    } else {
-      return {
-        success: false,
-        created,
-        failed,
-        results
-      };
-    }
-  }
 }
 
 /**

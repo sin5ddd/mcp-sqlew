@@ -23,27 +23,17 @@ import type {
   Database
 } from '../types.js';
 import { performAutoCleanup } from '../utils/cleanup.js';
+import { processBatch } from '../utils/batch.js';
 
 /**
- * Send a message from one agent to another (or broadcast)
- * Supports priority levels and optional JSON payload
+ * Internal helper: Send message without cleanup or transaction wrapper
+ * Used by sendMessage (with cleanup) and sendMessageBatch (manages its own transaction)
  *
  * @param params - Message parameters
+ * @param db - Database instance
  * @returns Response with message ID and timestamp
  */
-export function sendMessage(params: {
-  from_agent: string;
-  to_agent: string | null | undefined;
-  msg_type: 'decision' | 'warning' | 'request' | 'info';
-  message: string;
-  priority?: 'low' | 'medium' | 'high' | 'critical';
-  payload?: any;
-}): SendMessageResponse & { timestamp: string } {
-  const db = getDatabase();
-
-  // Cleanup old messages before inserting new one
-  performAutoCleanup(db);
-
+function sendMessageInternal(params: SendMessageParams, db: Database): SendMessageResponse & { timestamp: string } {
   // Validate msg_type
   if (!STRING_TO_MESSAGE_TYPE[params.msg_type]) {
     throw new Error(`Invalid msg_type: ${params.msg_type}. Must be one of: decision, warning, request, info`);
@@ -85,6 +75,22 @@ export function sendMessage(params: {
     message_id: Number(result.lastInsertRowid),
     timestamp,
   };
+}
+
+/**
+ * Send a message from one agent to another (or broadcast)
+ * Supports priority levels and optional JSON payload
+ *
+ * @param params - Message parameters
+ * @returns Response with message ID and timestamp
+ */
+export function sendMessage(params: SendMessageParams): SendMessageResponse & { timestamp: string } {
+  const db = getDatabase();
+
+  // Cleanup old messages before inserting new one
+  performAutoCleanup(db);
+
+  return sendMessageInternal(params, db);
 }
 
 /**
@@ -241,107 +247,40 @@ export function sendMessageBatch(params: SendMessageBatchParams): SendMessageBat
     throw new Error('Parameter "messages" is required and must be an array');
   }
 
-  // Enforce limit (constraint #3)
-  if (params.messages.length === 0) {
-    throw new Error('Parameter "messages" must contain at least one item');
-  }
-
-  if (params.messages.length > 50) {
-    throw new Error('Batch operations are limited to 50 items maximum (constraint #3)');
-  }
-
   // Cleanup old messages before processing batch
   performAutoCleanup(db);
 
   const atomic = params.atomic !== undefined ? params.atomic : true;
-  const results: Array<{
-    from_agent: string;
-    to_agent: string | null;
-    message_id?: number;
-    timestamp?: string;
-    success: boolean;
-    error?: string;
-  }> = [];
 
-  let inserted = 0;
-  let failed = 0;
-
-  // Helper function to process a single message
-  const processSingleMessage = (message: SendMessageParams): void => {
-    try {
-      const result = sendMessage({
-        from_agent: message.from_agent,
-        to_agent: message.to_agent,
-        msg_type: message.msg_type,
-        message: message.message,
-        priority: message.priority,
-        payload: message.payload
-      });
-      results.push({
+  // Use processBatch utility
+  const batchResult = processBatch(
+    db,
+    params.messages,
+    (message, db) => {
+      const result = sendMessageInternal(message, db);
+      return {
         from_agent: message.from_agent,
         to_agent: message.to_agent || null,
         message_id: result.message_id,
-        timestamp: result.timestamp,
-        success: true
-      });
-      inserted++;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      results.push({
-        from_agent: message.from_agent,
-        to_agent: message.to_agent || null,
-        success: false,
-        error: errorMessage
-      });
-      failed++;
+        timestamp: result.timestamp
+      };
+    },
+    atomic,
+    50
+  );
 
-      // In atomic mode, throw immediately to trigger rollback
-      if (atomic) {
-        throw error;
-      }
-    }
+  // Map batch results to SendMessageBatchResponse format
+  return {
+    success: batchResult.success,
+    inserted: batchResult.processed,
+    failed: batchResult.failed,
+    results: batchResult.results.map(r => ({
+      from_agent: (r.data as any)?.from_agent || '',
+      to_agent: (r.data as any)?.to_agent || null,
+      message_id: r.data?.message_id,
+      timestamp: r.data?.timestamp,
+      success: r.success,
+      error: r.error
+    }))
   };
-
-  try {
-    if (atomic) {
-      // Atomic mode: use transaction, all succeed or all fail
-      return transaction(db, () => {
-        for (const message of params.messages) {
-          processSingleMessage(message);
-        }
-
-        return {
-          success: failed === 0,
-          inserted,
-          failed,
-          results
-        };
-      });
-    } else {
-      // Non-atomic mode: process all, return individual results
-      for (const message of params.messages) {
-        processSingleMessage(message);
-      }
-
-      return {
-        success: failed === 0,
-        inserted,
-        failed,
-        results
-      };
-    }
-  } catch (error) {
-    if (atomic) {
-      // In atomic mode, if any error occurred, all failed
-      throw new Error(`Batch operation failed (atomic mode): ${error instanceof Error ? error.message : String(error)}`);
-    } else {
-      // In non-atomic mode, return partial results
-      return {
-        success: false,
-        inserted,
-        failed,
-        results
-      };
-    }
-  }
 }
