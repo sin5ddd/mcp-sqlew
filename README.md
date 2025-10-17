@@ -159,9 +159,24 @@ Default location: `.sqlew/sqlew.db` in current directory
 | **stats** | Database metrics | Get layer summary |
 | **config** | Retention settings | Auto-cleanup config |
 
-Each tool supports `action: "help"` for full documentation.
+Each tool supports `action: "help"` for full documentation and `action: "example"` for comprehensive usage examples.
 
 ## Documentation
+
+### On-Demand Documentation
+
+**All tools provide built-in documentation with zero upfront token cost:**
+- `action: "help"` - Detailed parameter reference, action descriptions, examples
+- `action: "example"` - Comprehensive usage scenarios, workflows, best practices
+
+**Example:**
+```javascript
+// Get detailed help for decision tool
+{action: "help"}
+
+// Get comprehensive examples for task tool
+{action: "example"}
+```
 
 ### For AI Agents (68% Token Reduction)
 

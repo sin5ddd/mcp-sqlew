@@ -111,48 +111,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 Context Management - Store decisions with metadata (tags, layers, versions, scopes)
 
-## Quick Examples
-- Set decision: {action: "set", key: "auth_method", value: "jwt", layer: "business", tags: ["security"]}
-- Get decision: {action: "get", key: "auth_method"}
-- List decisions: {action: "list", status: "active", layer: "business"}
-
-## Parameter Requirements by Action
-
-| Action | Required Parameters | Optional Parameters |
-|--------|-------------------|---------------------|
-| set | action, key, value, layer | agent, version, status, tags, scopes |
-| get | action, key | version |
-| list | action | status, layer, tags, scope, tag_match, limit, offset |
-| search_tags | action, tags | match_mode, status, layer |
-| search_layer | action, layer | status, include_tags |
-| versions | action, key | - |
-| quick_set | action, key, value | agent, layer, version, status, tags, scopes |
-| search_advanced | action | layers, tags_all, tags_any, exclude_tags, scopes, updated_after, updated_before, decided_by, statuses, search_text, sort_by, sort_order, limit, offset |
-| set_batch | action, decisions | atomic |
-| has_updates | action, agent_name, since_timestamp | - |
-| set_from_template | action, template, key, value, layer | agent, version, status, tags, scopes |
-| create_template | action, name, defaults | required_fields, created_by |
-| list_templates | action | - |
-
-## Common Errors & Fixes
-- "Unknown action: undefined" → Add action parameter (REQUIRED!)
-- "Parameter \\"value\\" is required" → Provide value parameter directly (not nested in defaults)
-- "Invalid layer" → Use: presentation, business, data, infrastructure, cross-cutting
-- "Invalid status" → Use: active, deprecated, draft
-
-## Valid Values
-- **layer**: presentation | business | data | infrastructure | cross-cutting
-- **status**: active | deprecated | draft
-- **tag_match**: AND | OR
-
-Use action: "help" for detailed documentation.`,
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'help']
+              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'help', 'example']
             },
             key: { type: 'string' },
             value: { type: ['string', 'number'] },
@@ -197,37 +164,12 @@ Use action: "help" for detailed documentation.`,
 
 Agent Messaging - Send messages between agents with priority levels and read tracking
 
-## Quick Examples
-- Send message: {action: "send", from_agent: "bot1", msg_type: "info", message: "Task complete"}
-- Get messages: {action: "get", agent_name: "bot1", unread_only: true}
-- Mark as read: {action: "mark_read", agent_name: "bot1", message_ids: [1, 2, 3]}
-
-## Parameter Requirements by Action
-
-| Action | Required Parameters | Optional Parameters |
-|--------|-------------------|---------------------|
-| send | action, from_agent, msg_type, message | to_agent, priority, payload |
-| get | action, agent_name | unread_only, priority_filter, msg_type_filter, limit |
-| mark_read | action, agent_name, message_ids | - |
-| send_batch | action, messages | atomic |
-
-## Common Errors & Fixes
-- "Unknown action: undefined" → Add action parameter (REQUIRED!)
-- "Invalid msg_type" → Use: decision, warning, request, info
-- "Invalid priority" → Use: low, medium, high, critical
-- "message_ids array cannot be empty" → Provide at least one message ID
-
-## Valid Values
-- **msg_type**: decision | warning | request | info
-- **priority**: low | medium | high | critical (default: medium)
-- **to_agent**: agent name or null for broadcast
-- **atomic** (batch): true (all-or-nothing) | false (best-effort, recommended for AI agents)
-
-Use action: "help" for detailed documentation.`,
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['send', 'get', 'mark_read', 'send_batch', 'help'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['send', 'get', 'mark_read', 'send_batch', 'help', 'example'] },
             agent_name: { type: 'string' },
             from_agent: { type: 'string' },
             to_agent: { type: ['string', 'null'] },
@@ -253,37 +195,12 @@ Use action: "help" for detailed documentation.`,
 
 File Change Tracking - Track file changes with layer classification and lock detection
 
-## Quick Examples
-- Record change: {action: "record", file_path: "src/index.ts", agent_name: "bot1", change_type: "modified", layer: "infrastructure"}
-- Get changes: {action: "get", agent_name: "bot1", layer: "infrastructure", limit: 10}
-- Check lock: {action: "check_lock", file_path: "src/index.ts", lock_duration: 300}
-
-## Parameter Requirements by Action
-
-| Action | Required Parameters | Optional Parameters |
-|--------|-------------------|---------------------|
-| record | action, file_path, agent_name, change_type | layer, description |
-| get | action | file_path, agent_name, layer, change_type, since, limit |
-| check_lock | action, file_path | lock_duration |
-| record_batch | action, file_changes | atomic |
-
-## Common Errors & Fixes
-- "Unknown action: undefined" → Add action parameter (REQUIRED!)
-- "Invalid change_type" → Use: created, modified, deleted
-- "Invalid layer" → Use: presentation, business, data, infrastructure, cross-cutting
-- "Parameter \\"file_changes\\" must contain at least one item" → Provide non-empty array
-
-## Valid Values
-- **change_type**: created | modified | deleted
-- **layer**: presentation | business | data | infrastructure | cross-cutting
-- **lock_duration**: seconds (default: 300 = 5 minutes)
-- **atomic** (batch): true (all-or-nothing) | false (best-effort, recommended for AI agents)
-
-Use action: "help" for detailed documentation.`,
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['record', 'get', 'check_lock', 'record_batch', 'help'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['record', 'get', 'check_lock', 'record_batch', 'help', 'example'] },
             file_path: { type: 'string' },
             agent_name: { type: 'string' },
             change_type: { type: 'string', enum: ['created', 'modified', 'deleted'] },
@@ -305,40 +222,12 @@ Use action: "help" for detailed documentation.`,
 
 Constraint Management - Manage architectural rules and requirements
 
-## What are Constraints vs Decisions?
-- **Decision**: Documents a choice that was made ("We chose JWT over sessions")
-- **Constraint**: Enforces a rule that must be followed ("API response time must be <100ms")
-
-## Quick Examples
-- Add constraint: {action: "add", category: "performance", constraint_text: "API response <100ms", priority: "high", layer: "business"}
-- Get constraints: {action: "get", category: "performance", active_only: true}
-- Deactivate: {action: "deactivate", constraint_id: 5}
-
-## Parameter Requirements by Action
-
-| Action | Required Parameters | Optional Parameters |
-|--------|-------------------|---------------------|
-| add | action, category, constraint_text | priority, layer, tags, created_by |
-| get | action | category, layer, priority, tags, active_only, limit |
-| deactivate | action, constraint_id | - |
-
-## Common Errors & Fixes
-- "Unknown action: undefined" → Add action parameter (REQUIRED!)
-- "Invalid category" → Use: performance, architecture, security
-- "category and constraint_text are required" → Provide both required fields
-- "constraint_id is required" → Provide valid constraint ID number
-
-## Valid Values
-- **category**: performance | architecture | security
-- **priority**: low | medium | high | critical (default: medium)
-- **layer**: presentation | business | data | infrastructure | cross-cutting
-- **active_only**: true (default) | false
-
-Use action: "help" for detailed documentation.`,
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['add', 'get', 'deactivate', 'help'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['add', 'get', 'deactivate', 'help', 'example'] },
             constraint_id: { type: 'number' },
             category: { type: 'string', enum: ['performance', 'architecture', 'security'] },
             constraint_text: { type: 'string' },
@@ -358,46 +247,12 @@ Use action: "help" for detailed documentation.`,
 
 Statistics & Utilities - View stats, activity logs, manage data cleanup, and WAL checkpoints
 
-## Quick Examples
-- Layer summary: {action: "layer_summary"}
-- DB statistics: {action: "db_stats"}
-- Clear old data: {action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14}
-- Activity log: {action: "activity_log", since: "1h", agent_names: ["bot1"], limit: 50}
-- Flush WAL: {action: "flush"}
-
-## Parameter Requirements by Action
-
-| Action | Required Parameters | Optional Parameters |
-|--------|-------------------|---------------------|
-| layer_summary | action | - |
-| db_stats | action | - |
-| clear | action | messages_older_than_hours, file_changes_older_than_days |
-| activity_log | action | since, agent_names, actions, limit |
-| flush | action | - |
-
-## Common Errors & Fixes
-- "Unknown action: undefined" → Add action parameter (REQUIRED!)
-- "Invalid 'since' parameter" → Use relative format (5m, 1h, 2d) or ISO timestamp
-
-## Valid Values
-- **since**: Relative time (5m, 1h, 2d) or ISO 8601 timestamp
-- **agent_names**: Array of agent names or ["*"] for all
-- **limit**: Number (default: 100 for activity_log)
-
-## Clear Action Behavior
-- **Without parameters**: Uses config-based weekend-aware retention
-- **With parameters**: Overrides config, no weekend-awareness
-
-## Flush Action Behavior
-- Forces WAL checkpoint using TRUNCATE mode
-- Flushes all pending transactions to main database file
-- Useful before git commits to ensure database file is up-to-date
-
-Use action: "help" for detailed documentation.`,
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'flush', 'help'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'flush', 'help', 'example'] },
             messages_older_than_hours: { type: 'number' },
             file_changes_older_than_days: { type: 'number' },
             since: { type: 'string', description: 'Time filter (e.g., "5m", "1h", "2d" or ISO timestamp)' },
@@ -414,36 +269,12 @@ Use action: "help" for detailed documentation.`,
 
 Configuration - Manage auto-deletion settings with weekend-aware retention
 
-## Quick Examples
-- Get config: {action: "get"}
-- Update config: {action: "update", ignoreWeekend: true, messageRetentionHours: 48, fileHistoryRetentionDays: 10}
-
-## Parameter Requirements by Action
-
-| Action | Required Parameters | Optional Parameters |
-|--------|-------------------|---------------------|
-| get | action | - |
-| update | action | ignoreWeekend, messageRetentionHours, fileHistoryRetentionDays |
-
-## Common Errors & Fixes
-- "Unknown action: undefined" → Add action parameter (REQUIRED!)
-- "messageRetentionHours must be between 1 and 168" → Use value 1-168 (1 week max)
-- "fileHistoryRetentionDays must be between 1 and 90" → Use value 1-90
-
-## Valid Values
-- **ignoreWeekend**: true (skip weekends in retention calculation) | false (standard time-based)
-- **messageRetentionHours**: 1-168 (default: 24)
-- **fileHistoryRetentionDays**: 1-90 (default: 7)
-
-## Weekend-Aware Behavior
-- **ignoreWeekend=false**: 24h = 24 hours ago (standard)
-- **ignoreWeekend=true**: 24h on Monday = Friday (skips Sat/Sun)
-
-Use action: "help" for detailed documentation.`,
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['get', 'update', 'help'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['get', 'update', 'help', 'example'] },
             ignoreWeekend: { type: 'boolean' },
             messageRetentionHours: { type: 'number', minimum: 1, maximum: 168 },
             fileHistoryRetentionDays: { type: 'number', minimum: 1, maximum: 90 },
@@ -457,47 +288,12 @@ Use action: "help" for detailed documentation.`,
 
 Kanban Task Watcher - AI-optimized task management with auto-stale detection
 
-## Quick Examples
-- Create task: {action: "create", title: "Implement auth", priority: 3, assigned_agent: "backend-agent", layer: "presentation"}
-- List tasks: {action: "list", status: "in_progress", limit: 20}
-- Move task: {action: "move", task_id: 5, new_status: "done"}
-
-## Parameter Requirements by Action
-
-| Action | Required Parameters | Optional Parameters |
-|--------|-------------------|---------------------|
-| create | action, title | description, acceptance_criteria, notes, priority, assigned_agent, created_by_agent, layer, tags, status |
-| update | action, task_id | title, priority, assigned_agent, layer, description, acceptance_criteria, notes |
-| get | action, task_id | - |
-| list | action | status, assigned_agent, layer, tags, limit, offset |
-| move | action, task_id, new_status | - |
-| link | action, task_id, link_type, target_id | link_relation |
-| archive | action, task_id | - |
-| batch_create | action, tasks | atomic |
-| help | action | - |
-
-## Common Errors & Fixes
-- "Unknown action: undefined" → Add action parameter (REQUIRED!)
-- "Invalid status" → Use: todo, in_progress, waiting_review, blocked, done, archived
-- "Invalid transition" → Check valid status transitions in help action
-- "Title must be 200 characters or less" → Shorten title
-
-## Valid Values
-- **status**: todo | in_progress | waiting_review | blocked | done | archived
-- **priority**: 1 (low) | 2 (medium, default) | 3 (high) | 4 (critical)
-- **layer**: presentation | business | data | infrastructure | cross-cutting
-- **link_type**: decision | constraint | file
-
-## Auto-Stale Detection
-- Tasks in **in_progress** >2 hours → **waiting_review**
-- Tasks in **waiting_review** >24 hours → **todo**
-- Config keys: task_stale_hours_in_progress, task_stale_hours_waiting_review, task_auto_stale_enabled
-
-Use action: "help" for detailed documentation.`,
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'help'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'help', 'example'] },
             task_id: { type: 'number' },
             title: { type: 'string' },
             description: { type: 'string' },
@@ -607,6 +403,135 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (status/layer/priority), atomic mode (339 lines, ~17k tokens)'
             }
           }; break;
+          case 'example': result = {
+            tool: 'decision',
+            description: 'Comprehensive decision tool examples without needing WebFetch access',
+            scenarios: {
+              basic_usage: {
+                title: 'Basic Decision Management',
+                examples: [
+                  {
+                    scenario: 'Record API design decision',
+                    request: '{ action: "set", key: "api_auth_method", value: "JWT with refresh tokens", layer: "business", tags: ["api", "security", "authentication"] }',
+                    explanation: 'Documents the choice of authentication method for the API'
+                  },
+                  {
+                    scenario: 'Retrieve a decision',
+                    request: '{ action: "get", key: "api_auth_method" }',
+                    response_structure: '{ key, value, layer, status, version, tags, scopes, decided_by, updated_at }'
+                  },
+                  {
+                    scenario: 'List all active decisions',
+                    request: '{ action: "list", status: "active", limit: 20 }',
+                    explanation: 'Returns active decisions with metadata for browsing'
+                  }
+                ]
+              },
+              advanced_filtering: {
+                title: 'Advanced Search and Filtering',
+                examples: [
+                  {
+                    scenario: 'Find all security-related decisions in business layer',
+                    request: '{ action: "search_advanced", layers: ["business"], tags_any: ["security", "authentication"], status: ["active"], sort_by: "updated", sort_order: "desc" }',
+                    explanation: 'Combines layer filtering, tag matching, and sorting'
+                  },
+                  {
+                    scenario: 'Search within API scope with multiple tags',
+                    request: '{ action: "search_advanced", scopes: ["api/*"], tags_all: ["breaking", "v2.0"], updated_after: "2025-01-01" }',
+                    explanation: 'Uses scope wildcards and timestamp filtering for recent breaking changes'
+                  }
+                ]
+              },
+              versioning_workflow: {
+                title: 'Version Management',
+                steps: [
+                  {
+                    step: 1,
+                    action: 'Create initial decision',
+                    request: '{ action: "set", key: "database_choice", value: "PostgreSQL", layer: "data", version: "1.0.0", tags: ["database"] }'
+                  },
+                  {
+                    step: 2,
+                    action: 'Update decision (creates new version)',
+                    request: '{ action: "set", key: "database_choice", value: "PostgreSQL with read replicas", layer: "data", version: "1.1.0", tags: ["database", "scaling"] }'
+                  },
+                  {
+                    step: 3,
+                    action: 'View version history',
+                    request: '{ action: "versions", key: "database_choice" }',
+                    result: 'Returns all versions with timestamps and changes'
+                  }
+                ]
+              },
+              batch_operations: {
+                title: 'Batch Decision Management',
+                examples: [
+                  {
+                    scenario: 'Record multiple related decisions atomically',
+                    request: '{ action: "set_batch", decisions: [{"key": "cache_layer", "value": "Redis", "layer": "infrastructure"}, {"key": "cache_ttl", "value": "3600", "layer": "infrastructure"}], atomic: true }',
+                    explanation: 'All decisions succeed or all fail together (atomic mode)'
+                  },
+                  {
+                    scenario: 'Best-effort batch insert',
+                    request: '{ action: "set_batch", decisions: [{...}, {...}, {...}], atomic: false }',
+                    explanation: 'Each decision processed independently - partial success allowed'
+                  }
+                ]
+              },
+              templates: {
+                title: 'Using Decision Templates',
+                examples: [
+                  {
+                    scenario: 'Use built-in breaking_change template',
+                    request: '{ action: "set_from_template", template: "breaking_change", key: "api_remove_legacy_endpoint", value: "Removed /v1/users endpoint - migrate to /v2/users" }',
+                    explanation: 'Automatically applies layer=business, tags=["breaking"], status=active'
+                  },
+                  {
+                    scenario: 'Create custom template',
+                    request: '{ action: "create_template", name: "feature_flag", defaults: {"layer": "presentation", "tags": ["feature-flag"], "status": "draft"}, created_by: "backend-team" }',
+                    explanation: 'Define reusable templates for common decision patterns'
+                  }
+                ]
+              },
+              quick_set_inference: {
+                title: 'Quick Set with Smart Defaults',
+                examples: [
+                  {
+                    scenario: 'Auto-infer layer from key prefix',
+                    request: '{ action: "quick_set", key: "api/instruments/oscillator-refactor", value: "Moved oscillator_type to MonophonicSynthConfig" }',
+                    inferred: 'layer=presentation (from api/*), tags=["instruments", "oscillator-refactor"], scope=api/instruments'
+                  },
+                  {
+                    scenario: 'Database decision with auto-inference',
+                    request: '{ action: "quick_set", key: "db/users/add-email-index", value: "Added index on email column" }',
+                    inferred: 'layer=data (from db/*), tags=["users", "add-email-index"]'
+                  }
+                ]
+              }
+            },
+            best_practices: {
+              key_naming: [
+                'Use hierarchical keys: "api/users/authentication"',
+                'Prefix with layer hint: api/* → presentation, db/* → data, service/* → business',
+                'Use descriptive names that explain the decision context'
+              ],
+              tagging: [
+                'Tag with relevant categories: security, performance, breaking, etc.',
+                'Include version tags for release-specific decisions',
+                'Use consistent tag naming conventions across team'
+              ],
+              versioning: [
+                'Use semantic versioning: 1.0.0, 1.1.0, 2.0.0',
+                'Increment major version for breaking changes',
+                'Document rationale in decision value text'
+              ],
+              cleanup: [
+                'Mark deprecated decisions with status="deprecated"',
+                'Use hard_delete only for sensitive data or migration cleanup',
+                'Link related decisions using scopes'
+              ]
+            }
+          }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
@@ -637,6 +562,107 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               tool_reference: 'docs/TOOL_REFERENCE.md - Message tool parameters, batch operations (471 lines, ~24k tokens)',
               shared_concepts: 'docs/SHARED_CONCEPTS.md - Enum values (msg_type/priority), atomic mode (339 lines, ~17k tokens)',
               best_practices: 'docs/BEST_PRACTICES.md - Common errors, messaging best practices (345 lines, ~17k tokens)'
+            }
+          }; break;
+          case 'example': result = {
+            tool: 'message',
+            description: 'Comprehensive messaging examples for multi-agent coordination',
+            scenarios: {
+              basic_messaging: {
+                title: 'Basic Agent Communication',
+                examples: [
+                  {
+                    scenario: 'Send info message between agents',
+                    request: '{ action: "send", from_agent: "backend-agent", to_agent: "frontend-agent", msg_type: "info", message: "API endpoint /users is ready" }',
+                    explanation: 'Direct message from one agent to another'
+                  },
+                  {
+                    scenario: 'Broadcast message to all agents',
+                    request: '{ action: "send", from_agent: "coordinator", to_agent: null, msg_type: "info", message: "Deployment starting in 5 minutes", priority: "high" }',
+                    explanation: 'null to_agent broadcasts to all agents'
+                  },
+                  {
+                    scenario: 'Get unread messages',
+                    request: '{ action: "get", agent_name: "frontend-agent", unread_only: true }',
+                    explanation: 'Retrieve only unread messages for an agent'
+                  }
+                ]
+              },
+              priority_messaging: {
+                title: 'Priority-Based Communication',
+                examples: [
+                  {
+                    scenario: 'Critical error notification',
+                    request: '{ action: "send", from_agent: "monitoring-agent", msg_type: "warning", message: "Database connection lost", priority: "critical" }',
+                    explanation: 'High-priority messages for urgent issues'
+                  },
+                  {
+                    scenario: 'Filter by priority',
+                    request: '{ action: "get", agent_name: "ops-agent", priority_filter: "critical" }',
+                    explanation: 'Get only critical priority messages'
+                  }
+                ]
+              },
+              workflow_coordination: {
+                title: 'Multi-Step Workflow',
+                steps: [
+                  {
+                    step: 1,
+                    action: 'Agent A requests work from Agent B',
+                    request: '{ action: "send", from_agent: "agent-a", to_agent: "agent-b", msg_type: "request", message: "Please process user data batch-123" }'
+                  },
+                  {
+                    step: 2,
+                    action: 'Agent B checks messages',
+                    request: '{ action: "get", agent_name: "agent-b", msg_type_filter: "request", unread_only: true }'
+                  },
+                  {
+                    step: 3,
+                    action: 'Agent B marks as read and processes',
+                    request: '{ action: "mark_read", agent_name: "agent-b", message_ids: [123] }'
+                  },
+                  {
+                    step: 4,
+                    action: 'Agent B sends completion notification',
+                    request: '{ action: "send", from_agent: "agent-b", to_agent: "agent-a", msg_type: "info", message: "Batch-123 processing complete" }'
+                  }
+                ]
+              },
+              batch_messaging: {
+                title: 'Batch Message Operations',
+                examples: [
+                  {
+                    scenario: 'Send multiple status updates atomically',
+                    request: '{ action: "send_batch", messages: [{"from_agent": "worker-1", "msg_type": "info", "message": "Task 1 done"}, {"from_agent": "worker-1", "msg_type": "info", "message": "Task 2 done"}], atomic: true }',
+                    explanation: 'All messages sent or none (atomic mode)'
+                  },
+                  {
+                    scenario: 'Best-effort batch sending',
+                    request: '{ action: "send_batch", messages: [{...}, {...}], atomic: false }',
+                    explanation: 'Each message sent independently - partial success allowed'
+                  }
+                ]
+              }
+            },
+            best_practices: {
+              message_types: [
+                'Use "decision" for recording important choices',
+                'Use "warning" for errors or issues requiring attention',
+                'Use "request" for work requests between agents',
+                'Use "info" for status updates and notifications'
+              ],
+              priority_usage: [
+                'critical: System failures, data loss, security breaches',
+                'high: Important but not emergency (deployment notifications)',
+                'medium: Regular coordination messages (default)',
+                'low: Optional information, logging'
+              ],
+              coordination_patterns: [
+                'Always mark messages as read after processing',
+                'Use broadcast (to_agent=null) for system-wide announcements',
+                'Filter by msg_type when checking for specific message categories',
+                'Include context in message text or payload for debugging'
+              ]
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -671,6 +697,98 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               best_practices: 'docs/BEST_PRACTICES.md - File tracking best practices (345 lines, ~17k tokens)'
             }
           }; break;
+          case 'example': result = {
+            tool: 'file',
+            description: 'Comprehensive file tracking examples for multi-agent coordination',
+            scenarios: {
+              basic_tracking: {
+                title: 'Basic File Change Tracking',
+                examples: [
+                  {
+                    scenario: 'Record file modification',
+                    request: '{ action: "record", file_path: "src/api/users.ts", agent_name: "refactor-agent", change_type: "modified", layer: "business", description: "Added email validation" }',
+                    explanation: 'Track changes with layer and description'
+                  },
+                  {
+                    scenario: 'Get recent changes by agent',
+                    request: '{ action: "get", agent_name: "refactor-agent", limit: 10 }',
+                    explanation: 'View what an agent has been working on'
+                  },
+                  {
+                    scenario: 'Track changes to specific file',
+                    request: '{ action: "get", file_path: "src/api/users.ts" }',
+                    explanation: 'See all modifications to a particular file'
+                  }
+                ]
+              },
+              file_locking: {
+                title: 'Concurrent Access Prevention',
+                workflow: [
+                  {
+                    step: 1,
+                    action: 'Check if file is locked',
+                    request: '{ action: "check_lock", file_path: "src/database/schema.sql", lock_duration: 300 }',
+                    result: '{ locked: false } or { locked: true, locked_by: "agent-name", locked_at: "timestamp" }'
+                  },
+                  {
+                    step: 2,
+                    action: 'If not locked, record change (creates lock)',
+                    request: '{ action: "record", file_path: "src/database/schema.sql", agent_name: "migration-agent", change_type: "modified" }'
+                  },
+                  {
+                    step: 3,
+                    action: 'Lock expires after 5 minutes (default) or specified duration'
+                  }
+                ]
+              },
+              layer_organization: {
+                title: 'Tracking by Architecture Layer',
+                examples: [
+                  {
+                    scenario: 'Get all presentation layer changes',
+                    request: '{ action: "get", layer: "presentation", limit: 20 }',
+                    explanation: 'View frontend/UI changes across agents'
+                  },
+                  {
+                    scenario: 'Track infrastructure changes',
+                    request: '{ action: "get", layer: "infrastructure", change_type: "modified" }',
+                    explanation: 'Monitor config and deployment file changes'
+                  }
+                ]
+              },
+              batch_tracking: {
+                title: 'Batch File Operations',
+                examples: [
+                  {
+                    scenario: 'Record multiple file changes atomically',
+                    request: '{ action: "record_batch", file_changes: [{"file_path": "src/api.ts", "agent_name": "bot1", "change_type": "modified", "layer": "presentation"}, {"file_path": "src/types.ts", "agent_name": "bot1", "change_type": "modified", "layer": "data"}], atomic: true }',
+                    explanation: 'All changes recorded or none (transaction)'
+                  }
+                ]
+              }
+            },
+            best_practices: {
+              change_tracking: [
+                'Always specify layer for better organization',
+                'Include description for non-obvious changes',
+                'Use check_lock before modifying shared files',
+                'Track both creation and deletion of files'
+              ],
+              lock_management: [
+                'Default lock duration is 300 seconds (5 minutes)',
+                'Locks prevent concurrent modifications',
+                'Locks auto-expire - no manual unlock needed',
+                'Use appropriate lock_duration for operation complexity'
+              ],
+              layer_assignment: [
+                'presentation: UI components, API controllers',
+                'business: Services, domain logic',
+                'data: Models, repositories, migrations',
+                'infrastructure: Config, deployment, CI/CD',
+                'cross-cutting: Utilities used across layers'
+              ]
+            }
+          }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
@@ -698,6 +816,140 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               workflows: 'docs/WORKFLOWS.md - Constraint validation workflows, requirement tracking (602 lines, ~30k tokens)',
               shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (category/priority) (339 lines, ~17k tokens)',
               best_practices: 'docs/BEST_PRACTICES.md - When to use constraints, common patterns (345 lines, ~17k tokens)'
+            }
+          }; break;
+          case 'example': result = {
+            tool: 'constraint',
+            description: 'Comprehensive constraint examples for various use cases',
+            categories: {
+              performance: {
+                description: 'Performance-related constraints for response times, throughput, resource usage',
+                examples: [
+                  {
+                    scenario: 'API Response Time',
+                    example: '{ action: "add", category: "performance", constraint_text: "All API endpoints must respond within 100ms for 95th percentile", priority: "high", layer: "business", tags: ["api", "latency"] }',
+                    rationale: 'Ensures fast user experience and prevents timeout issues'
+                  },
+                  {
+                    scenario: 'Database Query Performance',
+                    example: '{ action: "add", category: "performance", constraint_text: "Database queries must complete within 50ms", priority: "high", layer: "data", tags: ["database", "query"] }',
+                    rationale: 'Prevents database bottlenecks and ensures scalability'
+                  },
+                  {
+                    scenario: 'Memory Usage',
+                    example: '{ action: "add", category: "performance", constraint_text: "Peak memory usage must not exceed 512MB per instance", priority: "critical", layer: "infrastructure", tags: ["memory", "resource"] }',
+                    rationale: 'Prevents out-of-memory errors in containerized environments'
+                  }
+                ]
+              },
+              architecture: {
+                description: 'Architectural constraints for code structure, dependencies, patterns',
+                examples: [
+                  {
+                    scenario: 'Layer Dependency Rules',
+                    example: '{ action: "add", category: "architecture", constraint_text: "Presentation layer must not directly access data layer - use business layer only", priority: "critical", layer: "cross-cutting", tags: ["layering", "separation"] }',
+                    rationale: 'Enforces clean architecture and separation of concerns'
+                  },
+                  {
+                    scenario: 'Dependency Injection',
+                    example: '{ action: "add", category: "architecture", constraint_text: "All service classes must use constructor-based dependency injection", priority: "medium", layer: "business", tags: ["di", "testability"] }',
+                    rationale: 'Improves testability and reduces coupling'
+                  },
+                  {
+                    scenario: 'API Versioning',
+                    example: '{ action: "add", category: "architecture", constraint_text: "All public APIs must include version prefix (e.g., /v1/, /v2/)", priority: "high", layer: "presentation", tags: ["api", "versioning"] }',
+                    rationale: 'Enables backward compatibility and smooth API evolution'
+                  }
+                ]
+              },
+              security: {
+                description: 'Security constraints for authentication, authorization, data protection',
+                examples: [
+                  {
+                    scenario: 'Authentication Required',
+                    example: '{ action: "add", category: "security", constraint_text: "All non-public endpoints must require JWT authentication", priority: "critical", layer: "presentation", tags: ["auth", "jwt"] }',
+                    rationale: 'Prevents unauthorized access to protected resources'
+                  },
+                  {
+                    scenario: 'Data Encryption',
+                    example: '{ action: "add", category: "security", constraint_text: "All PII (Personally Identifiable Information) must be encrypted at rest using AES-256", priority: "critical", layer: "data", tags: ["encryption", "pii"] }',
+                    rationale: 'Protects sensitive data and ensures compliance'
+                  },
+                  {
+                    scenario: 'Input Validation',
+                    example: '{ action: "add", category: "security", constraint_text: "All user inputs must be validated and sanitized before processing", priority: "critical", layer: "presentation", tags: ["validation", "injection-prevention"] }',
+                    rationale: 'Prevents injection attacks (SQL, XSS, etc.)'
+                  }
+                ]
+              }
+            },
+            workflows: {
+              constraint_validation: {
+                description: 'Workflow for validating code against constraints',
+                steps: [
+                  {
+                    step: 1,
+                    action: 'Retrieve active constraints for layer',
+                    example: '{ action: "get", layer: "business", active_only: true }'
+                  },
+                  {
+                    step: 2,
+                    action: 'Check code changes against constraints',
+                    example: 'Review file changes and verify compliance with each constraint'
+                  },
+                  {
+                    step: 3,
+                    action: 'Report violations',
+                    example: 'Use message tool to send warnings for constraint violations'
+                  },
+                  {
+                    step: 4,
+                    action: 'Link violations to tasks',
+                    example: 'Create tasks to fix violations and link to relevant constraints'
+                  }
+                ]
+              },
+              requirement_tracking: {
+                description: 'Workflow for tracking requirements as constraints',
+                steps: [
+                  {
+                    step: 1,
+                    action: 'Add requirement as constraint',
+                    example: '{ action: "add", category: "performance", constraint_text: "System must handle 1000 concurrent users", priority: "high", tags: ["requirement", "load"] }'
+                  },
+                  {
+                    step: 2,
+                    action: 'Link related decisions',
+                    example: 'Use decision tool to record architectural decisions that address the constraint'
+                  },
+                  {
+                    step: 3,
+                    action: 'Create implementation tasks',
+                    example: 'Use task tool to break down implementation and link to constraint'
+                  },
+                  {
+                    step: 4,
+                    action: 'Validate compliance',
+                    example: 'Test implementation against constraint criteria'
+                  }
+                ]
+              }
+            },
+            best_practices: {
+              writing_constraints: [
+                'Be specific and measurable (use numbers, percentages, time limits)',
+                'Include rationale in tags or separate documentation',
+                'Use appropriate priority (critical for must-have, high for important, medium/low for nice-to-have)',
+                'Assign to correct layer (where constraint is enforced)',
+                'Tag comprehensively for easy retrieval'
+              ],
+              managing_constraints: [
+                'Review constraints regularly and deactivate outdated ones',
+                'Link constraints to related decisions and tasks',
+                'Use constraints for both technical and business requirements',
+                'Validate code changes against active constraints',
+                'Document constraint violations and remediation plans'
+              ]
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -740,6 +992,104 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               architecture: 'docs/ARCHITECTURE.md - Database schema, views, statistics tables'
             }
           }; break;
+          case 'example': result = {
+            tool: 'stats',
+            description: 'Database statistics and maintenance examples',
+            scenarios: {
+              layer_analysis: {
+                title: 'Architecture Layer Summary',
+                example: {
+                  request: '{ action: "layer_summary" }',
+                  response_structure: '{ layer: string, decision_count: number, file_changes: number, active_constraints: number }[]',
+                  use_case: 'Understand which layers have most activity and decisions'
+                }
+              },
+              database_health: {
+                title: 'Database Statistics',
+                example: {
+                  request: '{ action: "db_stats" }',
+                  response_structure: '{ decisions: N, messages: N, file_changes: N, constraints: N, db_size_mb: N }',
+                  use_case: 'Monitor database growth and table sizes'
+                }
+              },
+              activity_monitoring: {
+                title: 'Activity Log Queries',
+                examples: [
+                  {
+                    scenario: 'Recent activity (last hour)',
+                    request: '{ action: "activity_log", since: "1h", limit: 50 }',
+                    explanation: 'View all agent activity in the past hour'
+                  },
+                  {
+                    scenario: 'Specific agent activity',
+                    request: '{ action: "activity_log", since: "24h", agent_names: ["backend-agent", "frontend-agent"] }',
+                    explanation: 'Track what specific agents have been doing'
+                  },
+                  {
+                    scenario: 'Filter by action type',
+                    request: '{ action: "activity_log", since: "2d", actions: ["set_decision", "create_task"] }',
+                    explanation: 'See only specific types of actions'
+                  }
+                ]
+              },
+              data_cleanup: {
+                title: 'Maintenance and Cleanup',
+                examples: [
+                  {
+                    scenario: 'Manual cleanup with specific retention',
+                    request: '{ action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14 }',
+                    explanation: 'Override config and delete old data'
+                  },
+                  {
+                    scenario: 'Config-based automatic cleanup',
+                    request: '{ action: "clear" }',
+                    explanation: 'Use configured retention settings (respects weekend-aware mode)'
+                  }
+                ]
+              },
+              wal_management: {
+                title: 'WAL Checkpoint (Git Workflow)',
+                workflow: [
+                  {
+                    step: 1,
+                    action: 'Make changes to context (decisions, tasks, etc.)',
+                    explanation: 'SQLite WAL mode keeps changes in separate file'
+                  },
+                  {
+                    step: 2,
+                    action: 'Before git commit, flush WAL',
+                    request: '{ action: "flush" }',
+                    explanation: 'Merges WAL changes into main .db file'
+                  },
+                  {
+                    step: 3,
+                    action: 'Commit database file',
+                    explanation: 'Database file now contains all changes for version control'
+                  }
+                ]
+              }
+            },
+            best_practices: {
+              monitoring: [
+                'Check layer_summary regularly to identify hotspots',
+                'Monitor db_stats to prevent database bloat',
+                'Use activity_log for debugging multi-agent issues',
+                'Set appropriate retention periods based on project needs'
+              ],
+              cleanup: [
+                'Run periodic cleanup to manage database size',
+                'Use weekend-aware mode for business hour retention',
+                'Consider longer retention for important decisions',
+                'Test cleanup with manual parameters before automating'
+              ],
+              wal_checkpoints: [
+                'Always flush before git commits for clean diffs',
+                'WAL mode improves concurrent access performance',
+                'Checkpoint automatically happens on shutdown',
+                'Manual flush ensures immediate persistence'
+              ]
+            }
+          }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
@@ -765,6 +1115,81 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               architecture: 'docs/ARCHITECTURE.md - Auto-cleanup architecture, configuration system'
             }
           }; break;
+          case 'example': result = {
+            tool: 'config',
+            description: 'Configuration management examples',
+            scenarios: {
+              view_config: {
+                title: 'Current Configuration',
+                example: {
+                  request: '{ action: "get" }',
+                  response: '{ ignoreWeekend: boolean, messageRetentionHours: number, fileHistoryRetentionDays: number }',
+                  explanation: 'View current auto-deletion settings'
+                }
+              },
+              standard_retention: {
+                title: 'Standard Time-Based Retention',
+                example: {
+                  request: '{ action: "update", ignoreWeekend: false, messageRetentionHours: 24, fileHistoryRetentionDays: 7 }',
+                  explanation: 'Messages deleted after 24 hours, file history after 7 days (strict time-based)'
+                }
+              },
+              weekend_aware: {
+                title: 'Weekend-Aware Retention',
+                example: {
+                  request: '{ action: "update", ignoreWeekend: true, messageRetentionHours: 24, fileHistoryRetentionDays: 7 }',
+                  explanation: 'On Monday, 24h retention = Friday (skips weekend)',
+                  scenario: 'Useful for business-hour contexts where weekend messages should persist'
+                }
+              },
+              extended_retention: {
+                title: 'Long-Term Project Retention',
+                example: {
+                  request: '{ action: "update", messageRetentionHours: 168, fileHistoryRetentionDays: 90 }',
+                  explanation: '1 week message retention, 90 days file history (max allowed)',
+                  use_case: 'Long-running projects needing extended context'
+                }
+              }
+            },
+            retention_behavior: {
+              ignoreWeekend_false: {
+                description: 'Standard time-based retention',
+                examples: [
+                  '24h on Monday = 24 hours ago (Sunday)',
+                  '24h on Friday = 24 hours ago (Thursday)',
+                  'Straightforward chronological deletion'
+                ]
+              },
+              ignoreWeekend_true: {
+                description: 'Business-hours retention (skips Sat/Sun)',
+                examples: [
+                  '24h on Monday = Friday (skips Sat/Sun)',
+                  '24h on Tuesday = Monday',
+                  '24h on Friday = Thursday',
+                  '24h on Saturday/Sunday = Friday',
+                  'Preserves weekend messages until Monday cleanup'
+                ]
+              }
+            },
+            best_practices: {
+              choosing_retention: [
+                'Short projects: 24h messages, 7d file history',
+                'Medium projects: 72h messages, 14d file history',
+                'Long projects: 168h (1 week) messages, 30-90d file history',
+                'Use ignoreWeekend=true for business-hour focused work'
+              ],
+              limits: [
+                'messageRetentionHours: 1-168 (1 hour to 1 week)',
+                'fileHistoryRetentionDays: 1-90',
+                'Choose based on your projects needs and database size constraints'
+              ],
+              cli_override: [
+                'Can override config at server startup via CLI args',
+                '--autodelete-ignore-weekend, --autodelete-message-hours, --autodelete-file-history-days',
+                'Runtime updates via config tool take precedence over CLI'
+              ]
+            }
+          }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
@@ -780,6 +1205,175 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'archive': result = archiveTask(params); break;
           case 'batch_create': result = batchCreateTasks({ tasks: params.tasks, atomic: params.atomic }); break;
           case 'help': result = taskHelp(); break;
+          case 'example': result = {
+            tool: 'task',
+            description: 'Comprehensive task management examples for Kanban-style workflow',
+            scenarios: {
+              basic_task_management: {
+                title: 'Creating and Managing Tasks',
+                examples: [
+                  {
+                    scenario: 'Create a new task',
+                    request: '{ action: "create", title: "Implement user authentication", description: "Add JWT-based auth to API", priority: 3, assigned_agent: "backend-agent", layer: "business", tags: ["authentication", "security"] }',
+                    explanation: 'Creates task in todo status with high priority'
+                  },
+                  {
+                    scenario: 'Get task details',
+                    request: '{ action: "get", task_id: 5 }',
+                    response: 'Full task details including metadata, links, and timestamps'
+                  },
+                  {
+                    scenario: 'List tasks by status',
+                    request: '{ action: "list", status: "in_progress", limit: 20 }',
+                    explanation: 'View all in-progress tasks'
+                  }
+                ]
+              },
+              status_workflow: {
+                title: 'Task Lifecycle (Status Transitions)',
+                workflow: [
+                  {
+                    step: 1,
+                    status: 'todo',
+                    action: '{ action: "create", title: "...", status: "todo" }',
+                    description: 'Task created and waiting to be started'
+                  },
+                  {
+                    step: 2,
+                    status: 'in_progress',
+                    action: '{ action: "move", task_id: 1, new_status: "in_progress" }',
+                    description: 'Agent starts working on task'
+                  },
+                  {
+                    step: 3,
+                    status: 'waiting_review',
+                    action: '{ action: "move", task_id: 1, new_status: "waiting_review" }',
+                    description: 'Work complete, awaiting review/approval'
+                  },
+                  {
+                    step: 4,
+                    status: 'done',
+                    action: '{ action: "move", task_id: 1, new_status: "done" }',
+                    description: 'Task reviewed and completed'
+                  },
+                  {
+                    step: 5,
+                    status: 'archived',
+                    action: '{ action: "archive", task_id: 1 }',
+                    description: 'Task archived for historical record'
+                  }
+                ],
+                blocked_status: {
+                  description: 'Use "blocked" when task cannot proceed due to dependencies',
+                  example: '{ action: "move", task_id: 1, new_status: "blocked" }'
+                }
+              },
+              auto_stale_detection: {
+                title: 'Automatic Stale Task Management',
+                behavior: [
+                  {
+                    rule: 'in_progress > 2 hours → waiting_review',
+                    explanation: 'Tasks stuck in progress auto-move to waiting_review',
+                    rationale: 'Prevents tasks from being forgotten while in progress'
+                  },
+                  {
+                    rule: 'waiting_review > 24 hours → todo',
+                    explanation: 'Unreviewed tasks return to todo queue',
+                    rationale: 'Ensures waiting tasks dont accumulate indefinitely'
+                  }
+                ],
+                configuration: {
+                  keys: ['task_stale_hours_in_progress', 'task_stale_hours_waiting_review', 'task_auto_stale_enabled'],
+                  note: 'Configure via config table in database'
+                }
+              },
+              task_linking: {
+                title: 'Linking Tasks to Context',
+                examples: [
+                  {
+                    scenario: 'Link task to decision',
+                    request: '{ action: "link", task_id: 5, link_type: "decision", target_id: "api_auth_method", link_relation: "implements" }',
+                    explanation: 'Track which tasks implement specific decisions'
+                  },
+                  {
+                    scenario: 'Link task to constraint',
+                    request: '{ action: "link", task_id: 5, link_type: "constraint", target_id: 3, link_relation: "addresses" }',
+                    explanation: 'Show task addresses a performance/architecture/security constraint'
+                  },
+                  {
+                    scenario: 'Link task to file',
+                    request: '{ action: "link", task_id: 5, link_type: "file", target_id: "src/api/auth.ts", link_relation: "modifies" }',
+                    explanation: 'Indicate which files the task will modify'
+                  }
+                ]
+              },
+              batch_operations: {
+                title: 'Batch Task Creation',
+                examples: [
+                  {
+                    scenario: 'Create multiple related tasks',
+                    request: '{ action: "batch_create", tasks: [{"title": "Design API", "priority": 3}, {"title": "Implement API", "priority": 3}, {"title": "Write tests", "priority": 2}], atomic: false }',
+                    explanation: 'Create task breakdown - use atomic:false for best-effort'
+                  }
+                ]
+              },
+              filtering_queries: {
+                title: 'Advanced Task Queries',
+                examples: [
+                  {
+                    scenario: 'Find high-priority tasks for agent',
+                    request: '{ action: "list", assigned_agent: "backend-agent", priority: 3, status: "todo" }',
+                    note: 'Priority is numeric: 1=low, 2=medium, 3=high, 4=critical'
+                  },
+                  {
+                    scenario: 'Get all security-related tasks',
+                    request: '{ action: "list", tags: ["security"], limit: 50 }',
+                    explanation: 'Filter by tags for topic-based views'
+                  },
+                  {
+                    scenario: 'View infrastructure layer tasks',
+                    request: '{ action: "list", layer: "infrastructure" }',
+                    explanation: 'See all DevOps/config related tasks'
+                  }
+                ]
+              }
+            },
+            valid_transitions: {
+              from_todo: ['in_progress', 'blocked', 'done', 'archived'],
+              from_in_progress: ['waiting_review', 'blocked', 'todo'],
+              from_waiting_review: ['done', 'in_progress', 'todo'],
+              from_blocked: ['todo', 'in_progress'],
+              from_done: ['archived', 'todo'],
+              from_archived: []
+            },
+            best_practices: {
+              task_creation: [
+                'Use descriptive titles (200 char max)',
+                'Set appropriate priority: 1=low, 2=medium (default), 3=high, 4=critical',
+                'Assign to layer where work will be done',
+                'Tag comprehensively for easy filtering',
+                'Include acceptance_criteria for complex tasks'
+              ],
+              status_management: [
+                'Move to in_progress when starting work',
+                'Use waiting_review for completed but unverified work',
+                'Set to blocked with notes explaining dependency',
+                'Archive done tasks periodically for cleaner views'
+              ],
+              linking: [
+                'Link tasks to decisions they implement',
+                'Link to constraints they address',
+                'Link to files they will modify',
+                'Use descriptive link_relation values'
+              ],
+              coordination: [
+                'Use assigned_agent for clear ownership',
+                'Filter by status for Kanban board views',
+                'Monitor auto-stale transitions for stuck work',
+                'Use tags for cross-cutting concerns (security, performance, etc.)'
+              ]
+            }
+          }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;

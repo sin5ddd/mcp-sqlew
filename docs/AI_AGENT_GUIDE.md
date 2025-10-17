@@ -1411,20 +1411,47 @@ Before asking for help, check:
 
 ## Need More Help?
 
-Use the built-in help action for any tool:
+### Built-In Documentation (Zero Token Cost)
 
+All tools provide comprehensive built-in documentation with zero upfront token cost:
+
+**Help Action** - Detailed reference documentation:
 ```javascript
-// Get detailed help for decision tool
+// Get detailed help for any tool
 {
   action: "help"
 }
 ```
 
-This returns comprehensive documentation with:
+Returns:
 - All actions and their parameters
-- Examples for each action
+- Quick examples for each action
 - Valid values for enum parameters
 - Behavior descriptions
+- Links to external documentation
+
+**Example Action** - Comprehensive usage scenarios (v3.0.1):
+```javascript
+// Get comprehensive examples for any tool
+{
+  action: "example"
+}
+```
+
+Returns:
+- Real-world usage scenarios by category
+- Multi-step workflows
+- Best practices specific to the tool
+- Common patterns and anti-patterns
+- Works offline without WebFetch
+
+### When to Use Each
+
+| Use | Action | What You Get |
+|-----|--------|--------------|
+| Quick parameter reference | `help` | Action list, parameters, quick examples |
+| Comprehensive examples | `example` | Detailed scenarios, workflows, best practices |
+| Specific implementation patterns | `example` | Category-based examples (e.g., performance constraints, batch operations) |
 
 ---
 
@@ -1441,4 +1468,4 @@ This returns comprehensive documentation with:
 
 ---
 
-**Remember**: When in doubt, call `{action: "help"}` on any tool!
+**Remember**: When in doubt, call `{action: "help"}` for parameters or `{action: "example"}` for comprehensive usage scenarios!

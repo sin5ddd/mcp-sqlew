@@ -150,12 +150,54 @@ Based on analysis of sample-sqlew.db from 3-day production usage:
 - **Auto-stale detection:** Handles interrupted sessions and usage limit scenarios
 - **AI-optimized format:** Metadata-only list queries, full details on demand
 
+### Token Optimization Enhancement (v3.0.0 - Documentation Update)
+
+**Added `example` action to all 7 MCP tools for offline-friendly comprehensive examples:**
+- Each tool now supports `action: "example"` to retrieve detailed usage examples
+- Zero upfront token cost - examples only loaded when explicitly requested
+- Comprehensive scenarios, workflows, and best practices for each tool
+- Enables full specification access without WebFetch or external documentation
+- **50% token reduction** in tool descriptions (964 → 481 tokens per ListToolsRequest)
+  - Simplified descriptions to 3-4 lines with references to help/example actions
+  - Removed verbose parameter tables, error fixes, and valid values from descriptions
+  - Moved all detailed documentation to on-demand help/example actions
+- Aligns with v2.0 design principle: "Help actions for on-demand documentation (zero upfront cost)"
+
+**Example Action Content:**
+- `decision` - 6 scenario categories (basic usage, advanced filtering, versioning, batch ops, templates, quick_set)
+- `message` - Multi-agent coordination with priority messaging patterns
+- `file` - File tracking with locking workflows and layer organization
+- `constraint` - Category-specific examples (performance, architecture, security)
+- `stats` - Database health monitoring, activity logs, WAL management
+- `config` - Weekend-aware retention configuration scenarios
+- `task` - Kanban workflow with status transitions and auto-stale detection
+
+**Updated Tool Descriptions:**
+```typescript
+// Before (964 tokens): Long parameter tables, error fixes, valid values
+description: `**REQUIRED PARAMETER**: action
+Context Management - Store decisions...
+## Quick Examples...
+## Parameter Requirements by Action...
+## Common Errors & Fixes...
+## Valid Values...
+Use action: "help" for detailed documentation.`
+
+// After (481 tokens): Concise with action references
+description: `**REQUIRED PARAMETER**: action
+Context Management - Store decisions with metadata
+Use action: "help" for detailed documentation.
+Use action: "example" for comprehensive usage examples.`
+```
+
 ### Testing
 
 - ✅ Compilation successful with zero errors
 - ✅ Database migration tested on .claude/docs/sqlew.db
 - ✅ All task tables, views, triggers created successfully
 - ✅ Task statuses and config keys seeded
+- ✅ Example actions verified available in all 7 tools
+- ✅ Token reduction confirmed (~50% in tool descriptions)
 - ⏳ MCP Inspector testing pending
 
 ### Migration from v2.1.4
