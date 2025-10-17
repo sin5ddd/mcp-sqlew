@@ -272,6 +272,24 @@ export function getOrCreateScope(db: DatabaseType, name: string): number {
 }
 
 /**
+ * Get or create category ID
+ * Uses INSERT to create if doesn't exist
+ *
+ * @param db - Database instance
+ * @param category - Category name
+ * @returns Category ID
+ */
+export function getOrCreateCategoryId(db: DatabaseType, category: string): number {
+  const existing = db.prepare('SELECT category_id FROM m_constraint_categories WHERE category_name = ?').get(category) as { category_id: number } | undefined;
+  if (existing) {
+    return existing.category_id;
+  }
+  
+  const result = db.prepare('INSERT INTO m_constraint_categories (category_name) VALUES (?)').run(category);
+  return result.lastInsertRowid as number;
+}
+
+/**
  * Get layer ID by name
  * Does not auto-create (layers are predefined)
  *

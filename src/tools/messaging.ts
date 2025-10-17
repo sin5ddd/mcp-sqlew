@@ -11,6 +11,7 @@ import {
   PRIORITY_TO_STRING,
   DEFAULT_PRIORITY,
 } from '../constants.js';
+import { validateMessageType, validatePriority } from '../utils/validators.js';
 import type {
   SendMessageParams,
   GetMessagesParams,
@@ -35,15 +36,11 @@ import { processBatch } from '../utils/batch.js';
  */
 function sendMessageInternal(params: SendMessageParams, db: Database): SendMessageResponse & { timestamp: string } {
   // Validate msg_type
-  if (!STRING_TO_MESSAGE_TYPE[params.msg_type]) {
-    throw new Error(`Invalid msg_type: ${params.msg_type}. Must be one of: decision, warning, request, info`);
-  }
+  validateMessageType(params.msg_type);
 
   // Validate priority if provided
   const priority = params.priority || 'medium';
-  if (!STRING_TO_PRIORITY[priority]) {
-    throw new Error(`Invalid priority: ${priority}. Must be one of: low, medium, high, critical`);
-  }
+  validatePriority(priority);
 
   // Auto-register from_agent
   const fromAgentId = getOrCreateAgent(db, params.from_agent);
@@ -136,9 +133,7 @@ export function getMessages(params: {
 
   // Filter by priority
   if (params.priority_filter) {
-    if (!STRING_TO_PRIORITY[params.priority_filter]) {
-      throw new Error(`Invalid priority_filter: ${params.priority_filter}`);
-    }
+    validatePriority(params.priority_filter);
     const priorityInt = STRING_TO_PRIORITY[params.priority_filter];
     query += ' AND m.priority = ?';
     queryParams.push(priorityInt);
@@ -146,9 +141,7 @@ export function getMessages(params: {
 
   // Filter by msg_type
   if (params.msg_type_filter) {
-    if (!STRING_TO_MESSAGE_TYPE[params.msg_type_filter]) {
-      throw new Error(`Invalid msg_type_filter: ${params.msg_type_filter}`);
-    }
+    validateMessageType(params.msg_type_filter);
     const msgTypeInt = STRING_TO_MESSAGE_TYPE[params.msg_type_filter];
     query += ' AND m.msg_type = ?';
     queryParams.push(msgTypeInt);

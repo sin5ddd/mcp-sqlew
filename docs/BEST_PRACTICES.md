@@ -23,6 +23,142 @@
 
 ---
 
+## ⚠️ CRITICAL: What to Store in Decisions
+
+**Second Most Important Rule**: Decisions table stores **WHY and REASON**, NOT **WHAT was done**.
+
+### The Principle
+
+sqlew provides **organizational memory** by filling the gap between Git and code comments:
+
+- **Git history** → WHAT changed (files, lines, commits)
+- **Code comments** → HOW it works (implementation details)
+- **sqlew decisions** → **WHY it was changed** (reasoning, trade-offs, context)
+- **sqlew tasks** → WHAT needs to be done (work items, status, completion)
+
+### ✅ GOOD Examples: Store WHY and REASON
+
+These explain **architectural reasoning** and **design rationale**:
+
+```javascript
+// ✅ GOOD - Explains WHY with reasoning and trade-offs
+{
+  action: "set",
+  key: "api/auth/jwt-choice",
+  value: "Chose JWT over session-based auth because: (1) Stateless design scales horizontally, (2) Mobile clients can cache tokens, (3) Microservice architecture requires distributed auth. Trade-off: Revocation requires token blacklist, but acceptable for 15-min token lifetime.",
+  layer: "business",
+  tags: ["authentication", "architecture-decision"]
+}
+
+// ✅ GOOD - Problem analysis with solution rationale
+{
+  action: "set",
+  key: "bug/batch-nested-transaction",
+  value: "Found nested transaction bug in setDecisionBatch. setDecision uses transaction() internally, but setDecisionBatch wraps calls to setDecision in its own transaction, causing 'cannot start a transaction within a transaction' error. Solution: Extract setDecisionInternal() without transaction wrapper, batch manages outer transaction.",
+  layer: "business",
+  tags: ["bug", "transaction", "root-cause-analysis"]
+}
+
+// ✅ GOOD - Design trade-offs with honest assessment
+{
+  action: "set",
+  key: "phase2-refactoring-assessment",
+  value: "Query builder provides value for simple filters (files.ts 31% reduction). Context.ts patterns are domain-specific and more maintainable inline. Real savings: ~450 tokens (not estimated 2,050). Learned: Not all 'duplication' should be abstracted - domain logic clarity > generic utilities.",
+  layer: "infrastructure",
+  tags: ["refactoring", "assessment", "design-decision"]
+}
+
+// ✅ GOOD - Architectural constraint reasoning
+{
+  action: "set",
+  key: "loom_material_duration_boundary",
+  value: "Duration calculation must NOT occur in Loom module. Loom generates abstract structures (pitches, timings). Material module calculates concrete note properties (duration, velocity, MIDI pitch). VIOLATION: groove_engine.rs calculates duration using dense parameter - breaks architectural separation.",
+  layer: "business",
+  tags: ["architecture", "separation-of-concerns"]
+}
+
+// ✅ GOOD - Breaking change with migration rationale
+{
+  action: "set",
+  key: "oscillator-type-refactor",
+  value: "oscillator_type moved from base SynthConfig to MonophonicSynthConfig only. Reason: FM synths use per-operator oscillator_type, wavetable/granular/sampler/physical-modeling use different synthesis methods. Breaking change necessary to support diverse synthesis architectures.",
+  layer: "data",
+  tags: ["breaking", "synthesis", "architecture"]
+}
+```
+
+### ❌ BAD Examples: Don't Store WHAT Was Done
+
+These are task completion logs, status updates, or implementation logs:
+
+```javascript
+// ❌ BAD - Task completion log (use tasks tool instead)
+{
+  action: "set",
+  key: "v3.0.2-testing-complete",
+  value: "v3.0.2 comprehensive testing complete. All refactored tools verified working: validators.ts integration confirmed, query-builder.ts functioning correctly."
+}
+// WHY BAD: This records WHAT was completed, not WHY design decisions were made.
+// FIX: Delete. Use tasks tool to track testing progress.
+
+// ❌ BAD - Implementation status (use git commit instead)
+{
+  action: "set",
+  key: "phase1-validation-refactoring-complete",
+  value: "All 5 tool files successfully refactored to use validators.ts utility module. Eliminates 27+ duplicated validation patterns."
+}
+// WHY BAD: Records completion status, not architectural reasoning.
+// FIX: Delete. If needed, create decision explaining WHY refactoring strategy was chosen.
+
+// ❌ BAD - Test results (temporary status)
+{
+  action: "set",
+  key: "refactoring/integration-test-results",
+  value: "PASS - All refactored utilities integrate correctly. Build succeeds, no breaking changes detected."
+}
+// WHY BAD: Test results are temporary status, not design rationale.
+// FIX: Delete. Test results belong in CI/CD logs, not architectural decisions.
+
+// ❌ BAD - Documentation updates (implementation log)
+{
+  action: "set",
+  key: "doc-restructure-complete",
+  value: "Split AI_AGENT_GUIDE.md into 4 focused files. Achieved 68% average token reduction."
+}
+// WHY BAD: Records WHAT was done, not WHY documentation structure was chosen.
+// FIX: Delete or rewrite to explain: "Documentation split into focused files because AI agents load only relevant sections - reduces token consumption by 81% vs loading full guide."
+
+// ❌ BAD - Git commit summary (duplicate of git history)
+{
+  action: "set",
+  key: "v2.1.1/git-commit",
+  value: "Created release commit 2bf55a0: 6 files changed (386 insertions, 537 deletions)."
+}
+// WHY BAD: Git already tracks commits - no need to duplicate.
+// FIX: Delete. Git history serves this purpose.
+```
+
+### Side-by-Side Comparison
+
+| ✅ GOOD (WHY/REASON) | ❌ BAD (WHAT/STATUS) |
+|---------------------|---------------------|
+| "Chose JWT because stateless auth scales horizontally for microservices" | "Implemented JWT authentication. Tests passing." |
+| "Nested transaction bug: setDecision wraps in transaction, batch also wraps → solution: extract internal helper" | "Fixed batch_create nested transaction bug." |
+| "Query builder works for simple filters but domain logic better inline for maintainability" | "Phase 2 refactoring complete. Query builder created." |
+| "Duration must NOT be in Loom - breaks architectural separation between abstract timing and concrete notes" | "Removed duration from Loom module. Fixed errors." |
+
+### When to Use Each Tool
+
+| Tool | Purpose | Example |
+|------|---------|---------|
+| **decision** | WHY: Architectural reasoning | "Chose Redis because sub-10ms latency required" |
+| **task** | WHAT: Work items & status | "Implement Redis caching (status: in_progress)" |
+| **constraint** | Requirements & rules | "Cache response time must be <10ms" |
+| **message** | Agent coordination | "Redis blocked - waiting for infra approval" |
+| **file** | Track changes | "Modified src/cache.ts - added Redis client" |
+
+---
+
 ## Common Errors & Solutions
 
 💡 **See also**: [ARCHITECTURE.md](ARCHITECTURE.md) for detailed layer, enum, and status definitions.

@@ -63,6 +63,9 @@ Traditional code only tells you **WHAT** and **HOW**. sqlew adds **WHY**:
 - **Weekend-Aware Cleanup**: Smart retention that pauses during weekends
 - **Batch Operations**: Process up to 50 items atomically
 
+### 🔖Kanban-style AI Scrum
+![kanban-style task management](assets/kanban-style.png)
+
 ## Installation
 
 ### Requirements

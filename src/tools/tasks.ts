@@ -14,6 +14,11 @@ import {
 } from '../database.js';
 import { detectAndTransitionStaleTasks } from '../utils/task-stale-detection.js';
 import { processBatch } from '../utils/batch.js';
+import {
+  validatePriorityRange,
+  validateLength,
+  validateRange
+} from '../utils/validators.js';
 import type { Database } from '../types.js';
 
 /**
@@ -83,9 +88,7 @@ function createTaskInternal(params: {
 }, db: Database): any {
   // Validate priority
   const priority = params.priority !== undefined ? params.priority : 2;
-  if (priority < 1 || priority > 4) {
-    throw new Error('Parameter "priority" must be between 1 (low) and 4 (critical)');
-  }
+  validatePriorityRange(priority);
 
   // Get status_id
   const status = params.status || 'todo';
@@ -190,9 +193,7 @@ export function createTask(params: {
     throw new Error('Parameter "title" is required and cannot be empty');
   }
 
-  if (params.title.length > 200) {
-    throw new Error('Parameter "title" must be 200 characters or less');
-  }
+  validateLength(params.title, 'Parameter "title"', 200);
 
   try {
     return transaction(db, () => {
@@ -240,17 +241,13 @@ export function updateTask(params: {
         if (params.title.trim() === '') {
           throw new Error('Parameter "title" cannot be empty');
         }
-        if (params.title.length > 200) {
-          throw new Error('Parameter "title" must be 200 characters or less');
-        }
+        validateLength(params.title, 'Parameter "title"', 200);
         updates.push('title = ?');
         updateParams.push(params.title);
       }
 
       if (params.priority !== undefined) {
-        if (params.priority < 1 || params.priority > 4) {
-          throw new Error('Parameter "priority" must be between 1 (low) and 4 (critical)');
-        }
+        validatePriorityRange(params.priority);
         updates.push('priority = ?');
         updateParams.push(params.priority);
       }
@@ -492,12 +489,8 @@ export function listTasks(params: {
     const limit = params.limit !== undefined ? params.limit : 50;
     const offset = params.offset || 0;
 
-    if (limit < 0 || limit > 100) {
-      throw new Error('Parameter "limit" must be between 0 and 100');
-    }
-    if (offset < 0) {
-      throw new Error('Parameter "offset" must be non-negative');
-    }
+    validateRange(limit, 'Parameter "limit"', 0, 100);
+    validateRange(offset, 'Parameter "offset"', 0, Number.MAX_SAFE_INTEGER);
 
     query += ' LIMIT ? OFFSET ?';
     queryParams.push(limit, offset);

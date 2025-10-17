@@ -69,18 +69,61 @@ This is the most common confusion. Here's the distinction:
 | **Constraint** | A requirement that MUST be followed | "Response time must be <100ms" | `constraint` |
 | **Task** | Work that NEEDS to be done | "Implement JWT authentication" | `task` |
 
+## ⚠️ Decision vs Task: WHY vs WHAT
+
+**Critical distinction**: `decision` stores WHY (reasoning), `task` stores WHAT (work status).
+
+| Question | Answer | Tool |
+|----------|--------|------|
+| **WHY** did we choose this approach? | "Chose JWT because stateless auth scales horizontally" | **decision** |
+| **WHAT** needs to be done? | "Implement JWT authentication (status: in_progress)" | **task** |
+| **WHY** was this bug introduced? | "Nested transaction bug: setDecision wraps in transaction, batch also wraps" | **decision** |
+| **WHAT** is the completion status? | "Fixed nested transaction bug (status: done)" | **task** |
+
+### Common Mistakes
+
+```javascript
+// ❌ WRONG - Using decision for task completion
+{
+  action: "set",
+  key: "jwt-implementation-complete",
+  value: "JWT authentication implemented. All tests passing."
+}
+// This is WHAT was done (completion status), not WHY decisions were made.
+// FIX: Use task tool for tracking implementation progress.
+
+// ✅ CORRECT - Using decision for architectural reasoning
+{
+  action: "set",
+  key: "api/auth/jwt-choice",
+  value: "Chose JWT over sessions because: (1) Stateless design scales, (2) Mobile clients cache tokens, (3) Microservice auth requires distributed validation."
+}
+// This explains WHY JWT was chosen with architectural reasoning.
+
+// ✅ CORRECT - Using task for work tracking
+{
+  action: "create",
+  title: "Implement JWT authentication with refresh tokens",
+  status: "in_progress",
+  assigned_agent: "backend-agent"
+}
+// This tracks WHAT work is being done and its current status.
+```
+
+💡 **See [BEST_PRACTICES.md](BEST_PRACTICES.md#critical-what-to-store-in-decisions) for detailed examples of WHY vs WHAT.**
+
 ## Scenario-Based Tool Selection
 
 ### Scenario 1: Breaking API Change
 
 ```javascript
-// 1. Record the decision (what changed)
+// 1. Record the decision (WHY the change was necessary)
 {
   action: "set",
-  key: "api_v2_breaking_change",
-  value: "Moved /users endpoint to /v2/users",
+  key: "api/v2/versioning-decision",
+  value: "Moved /users to /v2/users because: (1) Enables backward compatibility via versioning, (2) Allows gradual client migration without breaking production apps, (3) Future API changes won't force all clients to update simultaneously. Trade-off: More complex routing layer, but necessary for production stability with 50+ client apps.",
   layer: "presentation",
-  tags: ["api", "breaking-change", "v2.0.0"]
+  tags: ["api", "versioning", "architecture-decision"]
 }
 
 // 2. Add a constraint (requirement going forward)
@@ -114,13 +157,13 @@ This is the most common confusion. Here's the distinction:
 ### Scenario 2: Performance Issue
 
 ```javascript
-// 1. Record the finding (decision to investigate)
+// 1. Record the analysis and solution decision (WHY this approach)
 {
   action: "set",
-  key: "db_performance_issue_found",
-  value: "Query latency increased 300% in production",
+  key: "db/user_sessions/index-strategy",
+  value: "Adding composite index (user_id, created_at DESC) to user_sessions table because: (1) Query analysis shows 300% latency increase from full table scans on 10M+ rows, (2) 95% of queries filter by user_id + sort by timestamp, (3) Index reduces query time from 850ms to <50ms in staging tests. Trade-off: 15% slower inserts and 200MB additional storage, but read performance critical for user experience.",
   layer: "data",
-  tags: ["performance", "database", "production"]
+  tags: ["performance", "database", "indexing-strategy"]
 }
 
 // 2. Add performance constraint
@@ -146,13 +189,13 @@ This is the most common confusion. Here's the distinction:
 ### Scenario 3: Security Vulnerability
 
 ```javascript
-// 1. Record the vulnerability (decision about issue)
+// 1. Record the solution decision (WHY this mitigation approach)
 {
   action: "set",
-  key: "auth_vulnerability_CVE_2025_1234",
-  value: "JWT library vulnerable to timing attacks",
+  key: "security/jwt/timing-attack-mitigation",
+  value: "Upgrading JWT library to v9.2.0+ and implementing constant-time comparison because: (1) CVE-2025-1234 timing attack allows token forgery via timing analysis, (2) Library v9.2.0+ includes constant-time string comparison preventing timing leaks, (3) Alternative approach (rewriting auth layer) would take 3 weeks vs 2-day upgrade. Trade-off: Breaking change requires updating all microservices, but security risk is critical and affects all user sessions.",
   layer: "business",
-  tags: ["security", "vulnerability", "auth"]
+  tags: ["security", "authentication", "mitigation-strategy"]
 }
 
 // 2. Add security constraint

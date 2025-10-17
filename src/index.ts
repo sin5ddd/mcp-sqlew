@@ -365,6 +365,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'help': result = {
             tool: 'decision',
             description: 'Manage decisions with metadata (tags, layers, versions, scopes)',
+            purpose: {
+              title: '⚠️ CRITICAL: Store WHY and REASON, Not WHAT',
+              principle: 'Decisions table is for ARCHITECTURAL CONTEXT and REASONING, NOT implementation logs or task completion status',
+              what_to_store: {
+                correct: [
+                  'WHY a design choice was made (e.g., "Chose JWT over sessions because stateless auth scales better for our microservice architecture")',
+                  'REASONING behind architecture decisions (e.g., "Moved oscillator_type to MonophonicSynthConfig to separate synthesis methods - FM operators use different config")',
+                  'PROBLEM ANALYSIS and solution rationale (e.g., "Nested transaction bug: setDecision wraps in transaction, batch also wraps → solution: extract internal helper without transaction wrapper")',
+                  'DESIGN TRADE-OFFS and alternatives considered (e.g., "Query builder limited to simple filters, kept domain-specific logic inline for maintainability")',
+                  'CONSTRAINTS and requirements reasoning (e.g., "API response must be <100ms because mobile clients timeout at 200ms")',
+                  'BREAKING CHANGES with migration rationale (e.g., "Removed /v1/users endpoint - clients must use /v2/users with pagination for scalability")'
+                ],
+                incorrect: [
+                  '❌ Task completion logs (e.g., "Task 5 completed", "Refactoring done", "Tests passing") → Use tasks tool instead',
+                  '❌ Implementation status (e.g., "Added validators.ts", "Fixed bug in batch_create", "Updated README") → These are WHAT, not WHY',
+                  '❌ Test results (e.g., "All tests passing", "Integration tests complete", "v3.0.2 testing verified") → Temporary status, not architectural context',
+                  '❌ Git commit summaries (e.g., "Released v3.0.2", "Created git commit 2bf55a0") → Belongs in git history',
+                  '❌ Documentation updates (e.g., "README reorganized", "Help actions enhanced") → Implementation logs, not decisions',
+                  '❌ Build status (e.g., "Build succeeded", "TypeScript compiled with zero errors") → Temporary status'
+                ]
+              },
+              analogy: {
+                git_history: 'WHAT changed (files, lines, commits)',
+                code_comments: 'HOW it works (implementation details, algorithms)',
+                sqlew_decisions: 'WHY it was changed (reasoning, trade-offs, context)',
+                sqlew_tasks: 'WHAT needs to be done (work items, status, completion)'
+              },
+              examples: [
+                {
+                  key: 'api/auth/jwt-choice',
+                  value: 'Chose JWT over session-based auth because: (1) Stateless design scales horizontally, (2) Mobile clients can cache tokens, (3) Microservice architecture requires distributed auth. Trade-off: Revocation requires token blacklist, but acceptable for 15-min token lifetime.',
+                  explanation: 'Explains WHY JWT was chosen, considers trade-offs, provides architectural context'
+                },
+                {
+                  key: 'database/postgresql-choice',
+                  value: 'Selected PostgreSQL over MongoDB because: (1) Complex relational queries required for reporting, (2) ACID compliance critical for financial data, (3) Team has strong SQL expertise. Trade-off: Less flexible schema, but data integrity more important than schema flexibility for our use case.',
+                  explanation: 'Documents database choice with reasoning, alternatives considered, and trade-offs'
+                },
+                {
+                  key: 'security/encryption-at-rest',
+                  value: 'Implementing AES-256 encryption for all PII in database because: (1) GDPR compliance requires encryption at rest, (2) Recent security audit identified unencrypted sensitive data, (3) Performance impact <5ms per query acceptable. Alternative considered: Database-level encryption rejected due to backup/restore complexity.',
+                  explanation: 'Explains security decision with compliance reasoning and performance considerations'
+                }
+              ],
+              cleanup_rule: 'Delete decisions that start with "COMPLETED:", contain task status, test results, or implementation logs. Keep only architectural reasoning and design rationale.'
+            },
             actions: {
               set: 'Set/update a decision. Params: key (required), value (required), agent, layer, version, status, tags, scopes',
               get: 'Get specific decision by key. Params: key (required)',

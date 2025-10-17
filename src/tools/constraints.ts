@@ -3,7 +3,7 @@
  * Handles constraint tracking with priority, layer assignment, and tags
  */
 
-import { getDatabase, getOrCreateAgent, getLayerId, transaction, getOrCreateTag } from '../database.js';
+import { getDatabase, getOrCreateAgent, getLayerId, transaction, getOrCreateTag, getOrCreateCategoryId } from '../database.js';
 import {
   STRING_TO_PRIORITY,
   PRIORITY_TO_STRING,
@@ -11,6 +11,7 @@ import {
   SQLITE_TRUE,
   SQLITE_FALSE
 } from '../constants.js';
+import { validateCategory, validatePriority } from '../utils/validators.js';
 import type {
   AddConstraintParams,
   AddConstraintResponse,
@@ -24,33 +25,9 @@ import type {
 } from '../types.js';
 
 /**
- * Validate constraint category (must be one of predefined)
- * Categories: performance, architecture, security
- */
-function validateCategory(category: string): void {
-  const validCategories = ['performance', 'architecture', 'security'];
-  if (!validCategories.includes(category)) {
-    throw new Error(`Invalid category. Must be one of: ${validCategories.join(', ')}`);
-  }
-}
-
-/**
  * Get or create constraint category ID
  * Uses INSERT OR IGNORE for idempotent operation
  */
-function getOrCreateCategoryId(db: Database, category: string): number {
-  // Insert if doesn't exist
-  db.prepare('INSERT OR IGNORE INTO m_constraint_categories (name) VALUES (?)').run(category);
-
-  // Get the ID
-  const result = db.prepare('SELECT id FROM m_constraint_categories WHERE name = ?').get(category) as { id: number } | undefined;
-
-  if (!result) {
-    throw new Error(`Failed to get or create category: ${category}`);
-  }
-
-  return result.id;
-}
 
 /**
  * Add a constraint with priority, layer, and tags
@@ -72,9 +49,7 @@ export function addConstraint(params: AddConstraintParams): AddConstraintRespons
 
     // Validate priority if provided
     const priorityStr = params.priority || 'medium';
-    if (!['low', 'medium', 'high', 'critical'].includes(priorityStr)) {
-      throw new Error('Invalid priority. Must be: low, medium, high, or critical');
-    }
+    validatePriority(priorityStr);
     const priority = STRING_TO_PRIORITY[priorityStr] || DEFAULT_PRIORITY;
 
     // Validate and get layer ID if provided

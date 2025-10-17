@@ -10,6 +10,8 @@ import {
   STANDARD_LAYERS,
   DEFAULT_QUERY_LIMIT
 } from '../constants.js';
+import { validateChangeType } from '../utils/validators.js';
+import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
 import type {
   RecordFileChangeParams,
   RecordFileChangeResponse,
@@ -35,10 +37,8 @@ import { processBatch } from '../utils/batch.js';
  */
 function recordFileChangeInternal(params: RecordFileChangeParams, db: Database): RecordFileChangeResponse {
   // Validate change_type
+  validateChangeType(params.change_type);
   const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
-  if (changeTypeInt === undefined) {
-    throw new Error(`Invalid change_type: ${params.change_type}. Must be one of: created, modified, deleted`);
-  }
 
   // Validate layer if provided
   let layerId: number | null = null;
@@ -116,18 +116,16 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
 
   try {
     const limit = params.limit || DEFAULT_QUERY_LIMIT;
-    const conditions: string[] = [];
-    const values: any[] = [];
 
-    // Build WHERE clause based on filters
+    // Build filter conditions using query builder
+    const filterConditions: FilterCondition[] = [];
+
     if (params.file_path) {
-      conditions.push('f.path = ?');
-      values.push(params.file_path);
+      filterConditions.push({ type: 'equals', field: 'f.path', value: params.file_path });
     }
 
     if (params.agent_name) {
-      conditions.push('a.name = ?');
-      values.push(params.agent_name);
+      filterConditions.push({ type: 'equals', field: 'a.name', value: params.agent_name });
     }
 
     if (params.layer) {
@@ -137,28 +135,23 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
           `Invalid layer: ${params.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
         );
       }
-      conditions.push('l.name = ?');
-      values.push(params.layer);
+      filterConditions.push({ type: 'equals', field: 'l.name', value: params.layer });
     }
 
     if (params.change_type) {
+      validateChangeType(params.change_type);
       const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
-      if (changeTypeInt === undefined) {
-        throw new Error(`Invalid change_type: ${params.change_type}`);
-      }
-      conditions.push('fc.change_type = ?');
-      values.push(changeTypeInt);
+      filterConditions.push({ type: 'equals', field: 'fc.change_type', value: changeTypeInt });
     }
 
     if (params.since) {
       // Convert ISO 8601 to Unix epoch
       const sinceEpoch = Math.floor(new Date(params.since).getTime() / 1000);
-      conditions.push('fc.ts >= ?');
-      values.push(sinceEpoch);
+      filterConditions.push({ type: 'greaterThanOrEqual', field: 'fc.ts', value: sinceEpoch });
     }
 
     // Use view if no specific filters (token efficient)
-    if (conditions.length === 0) {
+    if (filterConditions.length === 0) {
       const stmt = db.prepare(`
         SELECT * FROM v_recent_file_changes
         LIMIT ?
@@ -172,8 +165,8 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
       };
     }
 
-    // Otherwise, build custom query
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Build WHERE clause using query builder
+    const { whereClause, params: queryParams } = buildWhereClause(filterConditions);
 
     const stmt = db.prepare(`
       SELECT
@@ -191,13 +184,13 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
       JOIN m_files f ON fc.file_id = f.id
       JOIN m_agents a ON fc.agent_id = a.id
       LEFT JOIN m_layers l ON fc.layer_id = l.id
-      ${whereClause}
+      WHERE 1=1${whereClause}
       ORDER BY fc.ts DESC
       LIMIT ?
     `);
 
-    values.push(limit);
-    const rows = stmt.all(...values) as RecentFileChange[];
+    queryParams.push(limit);
+    const rows = stmt.all(...queryParams) as RecentFileChange[];
 
     return {
       changes: rows,

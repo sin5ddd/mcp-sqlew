@@ -6,6 +6,8 @@
 import { getDatabase, getOrCreateAgent, getOrCreateContextKey, getOrCreateTag, getOrCreateScope, getLayerId, transaction } from '../database.js';
 import { STRING_TO_STATUS, STATUS_TO_STRING, DEFAULT_VERSION, DEFAULT_STATUS } from '../constants.js';
 import { processBatch } from '../utils/batch.js';
+import { validateRequired, validateStatus, validateLayer } from '../utils/validators.js';
+import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
 import type {
   SetDecisionParams,
   GetContextParams,
@@ -50,9 +52,7 @@ import type {
  */
 function setDecisionInternal(params: SetDecisionParams, db: Database): SetDecisionResponse {
   // Validate required parameters
-  if (!params.key || params.key.trim() === '') {
-    throw new Error('Parameter "key" is required and cannot be empty');
-  }
+  const trimmedKey = validateRequired(params.key, 'key');
 
   if (params.value === undefined || params.value === null) {
     throw new Error('Parameter "value" is required');
@@ -68,17 +68,14 @@ function setDecisionInternal(params: SetDecisionParams, db: Database): SetDecisi
   const agentName = params.agent || 'system';
 
   // Validate status
-  if (params.status && !STRING_TO_STATUS[params.status]) {
-    throw new Error(`Invalid status: ${params.status}. Must be 'active', 'deprecated', or 'draft'`);
+  if (params.status) {
+    validateStatus(params.status);
   }
 
   // Validate layer if provided
   let layerId: number | null = null;
   if (params.layer) {
-    layerId = getLayerId(db, params.layer);
-    if (layerId === null) {
-      throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
-    }
+    layerId = validateLayer(db, params.layer);
   }
 
   // Get or create master records
