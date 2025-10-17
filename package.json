@@ -1,7 +1,7 @@
 {
   "name": "sqlew",
-  "version": "2.1.4",
-  "description": "MCP server for efficient context sharing between Claude Code sub-agents with 63% token reduction via action-based tools",
+  "version": "3.0.0",
+  "description": "MCP server for efficient context sharing between Claude Code sub-agents with Kanban Task Watcher and 63% token reduction",
   "main": "dist/index.js",
   "type": "module",
   "bin": {

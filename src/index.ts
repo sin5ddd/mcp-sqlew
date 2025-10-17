@@ -12,12 +12,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { initializeDatabase, closeDatabase, setConfigValue, getAllConfig } from './database.js';
 import { CONFIG_KEYS } from './constants.js';
-import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer, quickSetDecision, searchAdvanced, setDecisionBatch, hasUpdates, setFromTemplate, createTemplate, listTemplates } from './tools/context.js';
+import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer, quickSetDecision, searchAdvanced, setDecisionBatch, hasUpdates, setFromTemplate, createTemplate, listTemplates, hardDeleteDecision } from './tools/context.js';
 import { sendMessage, getMessages, markRead, sendMessageBatch } from './tools/messaging.js';
 import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch } from './tools/files.js';
 import { addConstraint, getConstraints, deactivateConstraint } from './tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats, getActivityLog } from './tools/utils.js';
 import { getConfig, updateConfig } from './tools/config.js';
+import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, taskHelp } from './tools/tasks.js';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
@@ -90,8 +91,8 @@ try {
 // Create MCP server
 const server = new Server(
   {
-    name: 'mcp-sklew',
-    version: '2.1.4',
+    name: 'mcp-sqlew',
+    version: '3.0.0',
   },
   {
     capabilities: {
@@ -151,7 +152,7 @@ Use action: "help" for detailed documentation.`,
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'help']
+              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'help']
             },
             key: { type: 'string' },
             value: { type: ['string', 'number'] },
@@ -443,6 +444,77 @@ Use action: "help" for detailed documentation.`,
           required: ['action'],
         },
       },
+      {
+        name: 'task',
+        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Kanban Task Watcher - AI-optimized task management with auto-stale detection
+
+## Quick Examples
+- Create task: {action: "create", title: "Implement auth", priority: 3, assigned_agent: "backend-agent", layer: "presentation"}
+- List tasks: {action: "list", status: "in_progress", limit: 20}
+- Move task: {action: "move", task_id: 5, new_status: "done"}
+
+## Parameter Requirements by Action
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|---------------------|
+| create | action, title | description, acceptance_criteria, notes, priority, assigned_agent, created_by_agent, layer, tags, status |
+| update | action, task_id | title, priority, assigned_agent, layer, description, acceptance_criteria, notes |
+| get | action, task_id | - |
+| list | action | status, assigned_agent, layer, tags, limit, offset |
+| move | action, task_id, new_status | - |
+| link | action, task_id, link_type, target_id | link_relation |
+| archive | action, task_id | - |
+| batch_create | action, tasks | atomic |
+| help | action | - |
+
+## Common Errors & Fixes
+- "Unknown action: undefined" → Add action parameter (REQUIRED!)
+- "Invalid status" → Use: todo, in_progress, waiting_review, blocked, done, archived
+- "Invalid transition" → Check valid status transitions in help action
+- "Title must be 200 characters or less" → Shorten title
+
+## Valid Values
+- **status**: todo | in_progress | waiting_review | blocked | done | archived
+- **priority**: 1 (low) | 2 (medium, default) | 3 (high) | 4 (critical)
+- **layer**: presentation | business | data | infrastructure | cross-cutting
+- **link_type**: decision | constraint | file
+
+## Auto-Stale Detection
+- Tasks in **in_progress** >2 hours → **waiting_review**
+- Tasks in **waiting_review** >24 hours → **todo**
+- Config keys: task_stale_hours_in_progress, task_stale_hours_waiting_review, task_auto_stale_enabled
+
+Use action: "help" for detailed documentation.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'help'] },
+            task_id: { type: 'number' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            acceptance_criteria: { type: 'string' },
+            notes: { type: 'string' },
+            priority: { type: 'number', minimum: 1, maximum: 4 },
+            assigned_agent: { type: 'string' },
+            created_by_agent: { type: 'string' },
+            layer: { type: 'string', enum: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'] },
+            tags: { type: 'array', items: { type: 'string' } },
+            status: { type: 'string', enum: ['todo', 'in_progress', 'waiting_review', 'blocked', 'done', 'archived'] },
+            new_status: { type: 'string', enum: ['todo', 'in_progress', 'waiting_review', 'blocked', 'done', 'archived'] },
+            link_type: { type: 'string', enum: ['decision', 'constraint', 'file'] },
+            target_id: { type: ['string', 'number'] },
+            link_relation: { type: 'string' },
+            limit: { type: 'number', default: 50 },
+            offset: { type: 'number', default: 0 },
+            // batch_create parameters
+            tasks: { type: 'array', description: 'Array of tasks for batch operation (max: 50)' },
+            atomic: { type: 'boolean', description: 'Atomic mode - all succeed or all fail (default: true)' },
+          },
+          required: ['action'],
+        },
+      },
     ],
   };
 });
@@ -486,6 +558,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'set_from_template': result = setFromTemplate(params); break;
           case 'create_template': result = createTemplate(params); break;
           case 'list_templates': result = listTemplates(params); break;
+          case 'hard_delete': result = hardDeleteDecision(params); break;
           case 'help': result = {
             tool: 'decision',
             description: 'Manage decisions with metadata (tags, layers, versions, scopes)',
@@ -502,7 +575,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               has_updates: 'Check for updates since timestamp (FR-003 Phase A - Lightweight Polling). Params: agent_name (required), since_timestamp (required, ISO 8601 format like "2025-10-14T08:00:00Z"). Returns: {has_updates: boolean, counts: {decisions: N, messages: N, files: N}}. Token cost: ~5-10 tokens per check. Uses COUNT queries on t_decisions, t_agent_messages, t_file_changes with timestamp filtering. Enables efficient polling without full data retrieval.',
               set_from_template: 'Set decision using template (FR-006). Params: template (required, template name), key (required), value (required), agent, layer (override), version, status (override), tags (override), scopes, plus any template-required fields. Applies template defaults (layer, status, tags) while allowing overrides. Validates required fields if specified by template. Returns: {success, key, key_id, version, template_used, applied_defaults, message}. Built-in templates: breaking_change, security_vulnerability, performance_optimization, deprecation, architecture_decision.',
               create_template: 'Create new decision template (FR-006). Params: name (required, unique), defaults (required, object with layer/status/tags/priority), required_fields (optional, array of field names), created_by (optional, agent name). Returns: {success, template_id, template_name, message}. Example defaults: {"layer":"business","status":"active","tags":["breaking"]}. Validates layer/status values.',
-              list_templates: 'List all decision templates (FR-006). No params required. Returns: {templates: [{id, name, defaults, required_fields, created_by, created_at}], count}. Shows both built-in and custom templates.'
+              list_templates: 'List all decision templates (FR-006). No params required. Returns: {templates: [{id, name, defaults, required_fields, created_by, created_at}], count}. Shows both built-in and custom templates.',
+              hard_delete: 'Permanently delete a decision (hard delete). Params: key (required). WARNING: IRREVERSIBLE - removes all records including version history, tags, scopes. Use cases: manual cleanup after decision-to-task migration, remove test/debug decisions, purge sensitive data. Unlike soft delete (status=deprecated), this completely removes from database. Idempotent - safe to call even if already deleted. Returns: {success, key, message}.'
             },
             examples: {
               set: '{ action: "set", key: "auth_method", value: "jwt", tags: ["security"] }',
@@ -515,7 +589,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               has_updates: '{ action: "has_updates", agent_name: "my-agent", since_timestamp: "2025-10-14T08:00:00Z" }',
               set_from_template: '{ action: "set_from_template", template: "breaking_change", key: "oscillator-type-moved", value: "oscillator_type moved to MonophonicSynthConfig" }',
               create_template: '{ action: "create_template", name: "bug_fix", defaults: {"layer":"business","tags":["bug","fix"],"status":"active"}, created_by: "my-agent" }',
-              list_templates: '{ action: "list_templates" }'
+              list_templates: '{ action: "list_templates" }',
+              hard_delete: '{ action: "hard_delete", key: "task_old_authentication_refactor" }'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -644,6 +719,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               update: '{ action: "update", ignoreWeekend: true, messageRetentionHours: 48 }'
             }
           }; break;
+          default: throw new Error(`Unknown action: ${params.action}`);
+        }
+        break;
+
+      case 'task':
+        switch (params.action) {
+          case 'create': result = createTask(params); break;
+          case 'update': result = updateTask(params); break;
+          case 'get': result = getTask(params); break;
+          case 'list': result = listTasks(params); break;
+          case 'move': result = moveTask(params); break;
+          case 'link': result = linkTask(params); break;
+          case 'archive': result = archiveTask(params); break;
+          case 'batch_create': result = batchCreateTasks({ tasks: params.tasks, atomic: params.atomic }); break;
+          case 'help': result = taskHelp(); break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;

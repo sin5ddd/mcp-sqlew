@@ -5,6 +5,173 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2025-10-17
+
+### 🎉 Major Feature Release - Kanban Task Watcher
+
+**Major enhancement implementing AI-optimized task management system to solve token waste from misuse of decision tool for task tracking.**
+
+### Problem Solved
+
+Real-world usage showed AI agents were misusing the `decision` tool for task/todo tracking:
+- **Token waste:** Querying 10 task-like decisions = ~825 tokens (332 bytes/decision average)
+- **No lifecycle management:** Tasks stuck in "in_progress" after interrupts or usage limits
+- **Inefficient queries:** Full text content loaded even for simple list operations
+- **204 task-like decisions** found in 3-day production usage (~74KB total)
+
+### Added
+
+#### Kanban Task Watcher System
+- **7 New Database Tables:**
+  - `m_task_statuses` - Master table for task status definitions (6 statuses)
+  - `t_tasks` - Core task data (title, status, priority, assignee, timestamps)
+  - `t_task_details` - Task descriptions (separated for token efficiency)
+  - `t_task_tags` - Many-to-many task tag relationships
+  - `t_task_decision_links` - Link tasks to decisions
+  - `t_task_constraint_links` - Link tasks to constraints
+  - `t_task_file_links` - Link tasks to file changes
+
+- **1 Token-Efficient View:**
+  - `v_task_board` - Metadata-only task queries (no descriptions, ~100 bytes/task)
+
+- **3 Activity Logging Triggers:**
+  - `trg_log_task_create` - Automatic logging of task creation
+  - `trg_log_task_status_change` - Automatic logging of status transitions
+  - `trg_update_task_timestamp` - Auto-update task `updated_ts` on changes
+
+- **New `task` MCP Tool (9 Actions):**
+  - `create` - Create new task with metadata (title, description, status, priority, assignee, tags, layer)
+  - `update` - Update task fields (status, description, priority, assignee)
+  - `get` - Get single task with full details (includes description)
+  - `list` - List tasks with filtering (metadata only, no descriptions)
+  - `move` - Move task to new status (validates state machine transitions)
+  - `link` - Link task to decision/constraint/file
+  - `archive` - Archive completed task (soft delete)
+  - `batch_create` - Create multiple tasks atomically or best-effort
+  - `help` - Comprehensive on-demand documentation
+
+- **Auto-Stale Detection:**
+  - `detectAndTransitionStaleTasks()` utility function
+  - Configurable thresholds via `m_config` table
+  - `task_auto_stale_enabled` - Enable/disable auto-stale (default: true)
+  - `task_stale_hours_in_progress` - Hours before in_progress → waiting_review (default: 2)
+  - `task_stale_hours_waiting_review` - Hours before waiting_review → todo (default: 24)
+  - Runs automatically before `list` and `move` actions
+
+- **Status Lifecycle & Validation:**
+  - 6 statuses: `todo`, `in_progress`, `waiting_review`, `blocked`, `done`, `archived`
+  - Enforced state machine transitions:
+    - `todo` → `in_progress`, `blocked`
+    - `in_progress` → `waiting_review`, `blocked`, `done`
+    - `waiting_review` → `in_progress`, `todo`, `done`
+    - `blocked` → `todo`, `in_progress`
+    - `done` → `archived`
+    - `archived` → (terminal state)
+
+### Changed
+
+- **Package Version:** Updated to v3.0.0
+- **Package Description:** Added "with Kanban Task Watcher" to highlight new feature
+- **Server Version:** Updated MCP server version to 3.0.0 (src/index.ts)
+- **Database Schema:** Updated schema.sql version comment to v3.0.0
+- **README:** Added task tool documentation and examples
+- **Tool Count:** 6 → 7 tools, 26 → 35 actions
+
+### Technical Details
+
+#### Token Efficiency
+- **List operation:** ~100 bytes/task (metadata only, no descriptions)
+- **Get operation:** ~332 bytes/task (includes full description)
+- **70% token reduction** vs using decisions for task tracking
+- Example: List 10 tasks = ~1,000 bytes vs 10 decisions = ~3,320 bytes
+
+#### Status Transition State Machine
+```
+todo → in_progress → waiting_review → done → archived
+         ↓              ↓
+      blocked ────────┘
+```
+
+#### Auto-Stale Transition Logic
+```
+in_progress (>2h idle) → waiting_review
+waiting_review (>24h idle) → todo
+```
+
+#### Linking System
+- Link tasks to decisions by `decision_key_id`
+- Link tasks to constraints by `constraint_id`
+- Link tasks to file changes by `file_id`
+- Many-to-many relationships for flexible associations
+
+#### Configuration Keys (Added to m_config)
+- `task_auto_stale_enabled` = '1' (boolean: 0=false, 1=true)
+- `task_stale_hours_in_progress` = '2' (integer hours)
+- `task_stale_hours_waiting_review` = '24' (integer hours)
+
+#### Code Statistics
+- **New Files:**
+  - `src/tools/tasks.ts` (900+ lines) - Complete task tool implementation
+  - `src/utils/task-stale-detection.ts` (80+ lines) - Auto-stale detection logic
+- **Modified Files:**
+  - `src/index.ts` - Added task tool registration and handler
+  - `assets/schema.sql` - Added task tables, view, triggers, config
+  - `package.json` - Updated version and description
+- **Total Lines Added:** ~1,100 lines
+
+#### Migration
+- **Automatic Migration:** v2.x → v3.0.0 runs on startup
+- Creates all 7 task tables, 1 view, 3 triggers
+- Seeds 6 task statuses and 3 config keys
+- Transaction-based with rollback on failure
+- Zero data loss for existing decisions, messages, files, constraints
+
+### Benefits for AI Agents
+
+1. **Dedicated Task Management:** Proper Kanban lifecycle instead of decision tool misuse
+2. **Token Efficiency:** 70% reduction for task list queries
+3. **Auto-Recovery:** Stale task detection handles interrupts and usage limits
+4. **Status Validation:** Enforced state machine prevents invalid transitions
+5. **Linking:** Connect tasks to relevant decisions, constraints, files
+6. **Batch Operations:** Create multiple tasks efficiently with atomic mode
+7. **Flat Hierarchy:** Simple task-only structure (no subtasks for AI simplicity)
+
+### Real-World Impact
+
+Based on analysis of sample-sqlew.db from 3-day production usage:
+- **Before v3.0.0:** 204 task-like decisions, ~74KB total, ~825 tokens for 10 tasks
+- **After v3.0.0:** Dedicated task system, ~1KB for 10 tasks, 70% token reduction
+- **Auto-stale detection:** Handles interrupted sessions and usage limit scenarios
+- **AI-optimized format:** Metadata-only list queries, full details on demand
+
+### Testing
+
+- ✅ Compilation successful with zero errors
+- ✅ Database migration tested on .claude/docs/sqlew.db
+- ✅ All task tables, views, triggers created successfully
+- ✅ Task statuses and config keys seeded
+- ⏳ MCP Inspector testing pending
+
+### Migration from v2.1.4
+
+**Automatic migration on startup:**
+- Creates all task tables, view, triggers if not exist
+- Seeds task statuses and config keys
+- No breaking changes for existing tools
+- New `task` tool available immediately
+
+**Recommended workflow:**
+1. Upgrade to v3.0.0
+2. Create tasks using `task` tool instead of `decision` tool
+3. Optional: Migrate existing task-like decisions to tasks (manual or scripted)
+
+### Documentation
+
+- **README:** Updated with task tool examples and quick reference
+- **TASK_SYSTEM.md:** Comprehensive task management guide (NEW)
+- **CHANGELOG:** This entry
+- **CLAUDE.md:** Updated with v3.0.0 status
+
 ## [2.1.4] - 2025-10-15
 
 ### Changed

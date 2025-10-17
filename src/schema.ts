@@ -125,16 +125,19 @@ export function verifySchemaIntegrity(db: Database): {
 
   const requiredTables = [
     'm_agents', 'm_files', 'm_context_keys', 'm_constraint_categories',
-    'm_layers', 'm_tags', 'm_scopes', 'm_config',
+    'm_layers', 'm_tags', 'm_scopes', 'm_config', 'm_task_statuses',
     't_decisions', 't_decisions_numeric', 't_decision_history',
     't_decision_tags', 't_decision_scopes',
     't_agent_messages', 't_file_changes', 't_constraints', 't_constraint_tags',
     't_activity_log', 't_decision_templates',
+    't_tasks', 't_task_details', 't_task_tags', 't_task_decision_links',
+    't_task_constraint_links', 't_task_file_links',
   ];
 
   const requiredViews = [
     'v_tagged_decisions', 'v_active_context', 'v_layer_summary',
     'v_unread_messages_by_priority', 'v_recent_file_changes', 'v_tagged_constraints',
+    'v_task_board',
   ];
 
   const requiredTriggers = [
@@ -143,6 +146,9 @@ export function verifySchemaIntegrity(db: Database): {
     'trg_log_decision_update',
     'trg_log_message_send',
     'trg_log_file_record',
+    'trg_log_task_create',
+    'trg_log_task_status_change',
+    'trg_update_task_timestamp',
   ];
 
   try {
@@ -202,8 +208,14 @@ export function verifySchemaIntegrity(db: Database): {
     }
 
     const configCount = (db.prepare('SELECT COUNT(*) as count FROM m_config').get() as { count: number }).count;
-    if (configCount < 3) {
-      result.errors.push(`Expected 3 m_config entries, found ${configCount}`);
+    if (configCount < 6) {
+      result.errors.push(`Expected 6 m_config entries, found ${configCount}`);
+      result.valid = false;
+    }
+
+    const taskStatusCount = (db.prepare('SELECT COUNT(*) as count FROM m_task_statuses').get() as { count: number }).count;
+    if (taskStatusCount < 6) {
+      result.errors.push(`Expected 6 task statuses, found ${taskStatusCount}`);
       result.valid = false;
     }
 

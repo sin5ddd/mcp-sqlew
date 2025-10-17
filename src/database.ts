@@ -10,12 +10,7 @@ import { initializeSchema, isSchemaInitialized, verifySchemaIntegrity } from './
 import { DEFAULT_DB_PATH, DB_BUSY_TIMEOUT } from './constants.js';
 import type { Database as DatabaseType } from './types.js';
 import { performAutoCleanup } from './utils/cleanup.js';
-import { needsMigration, runMigration, getMigrationInfo } from './migrations/add-table-prefixes.js';
-import {
-  needsMigration as needsV21Migration,
-  runMigration as runV21Migration,
-  getMigrationInfo as getV21MigrationInfo
-} from './migrations/add-v2.1.0-features.js';
+import { runAllMigrations, needsAnyMigrations } from './migrations/index.js';
 
 let dbInstance: DatabaseType | null = null;
 
@@ -62,53 +57,34 @@ export function initializeDatabase(dbPath?: string): DatabaseType {
 
     console.log(`✓ Connected to database: ${absolutePath}`);
 
-    // Check if migration is needed (v1.2.0 -> v1.3.0: table prefixes)
-    if (needsMigration(db)) {
-      console.log('→ Migration required: Adding table prefixes (v1.2.0 -> v1.3.0)');
-      console.log(getMigrationInfo());
-
-      const migrationResult = runMigration(db);
-
-      if (!migrationResult.success) {
-        console.error('\n❌ ERROR: Migration failed!');
-        console.error(migrationResult.message);
-        db.close();
-        process.exit(1);
-      }
-
-      console.log('✓ Migration completed successfully');
-      if (migrationResult.details && migrationResult.details.length > 0) {
-        migrationResult.details.forEach(detail => console.log(`  - ${detail}`));
-      }
-
-      // After migration, run schema initialization to create new views/triggers
-      // (tables already exist, CREATE TABLE IF NOT EXISTS will skip them)
-      console.log('→ Creating views and triggers for new schema...');
-      initializeSchema(db);
-    }
-
     // Check if database has existing schema
     const schemaExists = isSchemaInitialized(db);
 
     if (schemaExists) {
-      // Check if v2.1.0 migration is needed BEFORE validation
-      // This allows v2.0.0 databases to be migrated before validation expects v2.1.0 components
-      if (needsV21Migration(db)) {
-        console.log('→ Migration required: Adding v2.1.0 features (v2.0.0 -> v2.1.0)');
-        console.log(getV21MigrationInfo());
+      // Run all pending migrations using orchestrator
+      // This handles upgrades from any version (v1.0.0, v1.1.x, v2.0.0, v2.1.x) to latest
+      if (needsAnyMigrations(db)) {
+        const migrationResults = runAllMigrations(db);
 
-        const v21MigrationResult = runV21Migration(db);
-
-        if (!v21MigrationResult.success) {
-          console.error('\n❌ ERROR: v2.1.0 Migration failed!');
-          console.error(v21MigrationResult.message);
+        // Check if any migration failed
+        const failed = migrationResults.find(r => !r.success);
+        if (failed) {
+          console.error('\n❌ ERROR: Migration failed!');
+          console.error(failed.message);
           db.close();
           process.exit(1);
         }
 
-        console.log('✓ v2.1.0 Migration completed successfully');
-        if (v21MigrationResult.details && v21MigrationResult.details.length > 0) {
-          v21MigrationResult.details.forEach(detail => console.log(`  - ${detail}`));
+        // After table prefix migration, run schema initialization to create views/triggers
+        // (tables already exist, CREATE TABLE IF NOT EXISTS will skip them)
+        const hadPrefixMigration = migrationResults.some(r =>
+          r.message.toLowerCase().includes('table prefix') ||
+          r.message.toLowerCase().includes('prefix')
+        );
+
+        if (hadPrefixMigration) {
+          console.log('\n→ Creating views and triggers for new schema...');
+          initializeSchema(db);
         }
       }
 

@@ -1,5 +1,5 @@
 -- MCP Shared Context Server - Database Schema
--- Version: 2.1.0 (with activity log, smart defaults, batch ops, templates, CLI, subscriptions)
+-- Version: 3.0.0 (with Kanban Task Watcher, activity log, smart defaults, batch ops, templates)
 
 -- ============================================================================
 -- Master Tables (Normalization)
@@ -167,6 +167,67 @@ CREATE TABLE IF NOT EXISTS t_decision_templates (
 );
 
 -- ============================================================================
+-- Kanban Task Watcher (v3.0.0)
+-- ============================================================================
+
+-- Master table for task statuses
+CREATE TABLE IF NOT EXISTS m_task_statuses (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL
+);
+
+-- Task core data (token-efficient: no large text here)
+CREATE TABLE IF NOT EXISTS t_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    status_id INTEGER NOT NULL REFERENCES m_task_statuses(id),
+    priority INTEGER DEFAULT 2,
+    assigned_agent_id INTEGER REFERENCES m_agents(id),
+    created_by_agent_id INTEGER REFERENCES m_agents(id),
+    layer_id INTEGER REFERENCES m_layers(id),
+    created_ts INTEGER DEFAULT (unixepoch()),
+    updated_ts INTEGER DEFAULT (unixepoch()),
+    completed_ts INTEGER
+);
+
+-- Task details (large text stored separately)
+CREATE TABLE IF NOT EXISTS t_task_details (
+    task_id INTEGER PRIMARY KEY REFERENCES t_tasks(id) ON DELETE CASCADE,
+    description TEXT,
+    acceptance_criteria TEXT,
+    notes TEXT
+);
+
+-- Task tags (many-to-many)
+CREATE TABLE IF NOT EXISTS t_task_tags (
+    task_id INTEGER REFERENCES t_tasks(id) ON DELETE CASCADE,
+    tag_id INTEGER REFERENCES m_tags(id),
+    PRIMARY KEY (task_id, tag_id)
+);
+
+-- Task-decision links
+CREATE TABLE IF NOT EXISTS t_task_decision_links (
+    task_id INTEGER REFERENCES t_tasks(id) ON DELETE CASCADE,
+    decision_key_id INTEGER REFERENCES m_context_keys(id),
+    link_type TEXT DEFAULT 'implements',
+    PRIMARY KEY (task_id, decision_key_id)
+);
+
+-- Task-constraint links
+CREATE TABLE IF NOT EXISTS t_task_constraint_links (
+    task_id INTEGER REFERENCES t_tasks(id) ON DELETE CASCADE,
+    constraint_id INTEGER REFERENCES t_constraints(id),
+    PRIMARY KEY (task_id, constraint_id)
+);
+
+-- Task-file links
+CREATE TABLE IF NOT EXISTS t_task_file_links (
+    task_id INTEGER REFERENCES t_tasks(id) ON DELETE CASCADE,
+    file_id INTEGER REFERENCES m_files(id),
+    PRIMARY KEY (task_id, file_id)
+);
+
+-- ============================================================================
 -- Indexes
 -- ============================================================================
 
@@ -186,6 +247,9 @@ CREATE INDEX IF NOT EXISTS idx_decision_scopes_scope ON t_decision_scopes(scope_
 CREATE INDEX IF NOT EXISTS idx_activity_log_ts ON t_activity_log(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_log_agent ON t_activity_log(agent_id);
 CREATE INDEX IF NOT EXISTS idx_activity_log_action ON t_activity_log(action_type);
+CREATE INDEX IF NOT EXISTS idx_task_status ON t_tasks(status_id);
+CREATE INDEX IF NOT EXISTS idx_task_updated ON t_tasks(updated_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_task_assignee ON t_tasks(assigned_agent_id);
 
 -- ============================================================================
 -- Views (Token Efficiency)
@@ -289,6 +353,27 @@ LEFT JOIN m_agents a ON c.created_by = a.id
 WHERE c.active = 1
 ORDER BY c.priority DESC, cc.name, c.ts DESC;
 
+-- Task Board View (Token-efficient)
+CREATE VIEW IF NOT EXISTS v_task_board AS
+SELECT
+    t.id,
+    t.title,
+    s.name as status,
+    t.priority,
+    a.name as assigned_to,
+    l.name as layer,
+    t.created_ts,
+    t.updated_ts,
+    t.completed_ts,
+    GROUP_CONCAT(DISTINCT tg.name, ', ') as tags
+FROM t_tasks t
+LEFT JOIN m_task_statuses s ON t.status_id = s.id
+LEFT JOIN m_agents a ON t.assigned_agent_id = a.id
+LEFT JOIN m_layers l ON t.layer_id = l.id
+LEFT JOIN t_task_tags tt ON t.id = tt.task_id
+LEFT JOIN m_tags tg ON tt.tag_id = tg.id
+GROUP BY t.id;
+
 -- ============================================================================
 -- Triggers (Automatic Processing)
 -- ============================================================================
@@ -356,6 +441,38 @@ BEGIN
         json_object('change_type', NEW.change_type, 'description', NEW.description);
 END;
 
+-- Task Activity Log Triggers
+CREATE TRIGGER IF NOT EXISTS trg_log_task_create
+AFTER INSERT ON t_tasks
+BEGIN
+    INSERT INTO t_activity_log (agent_id, action_type, target, layer_id, details)
+    SELECT
+        COALESCE(NEW.created_by_agent_id, (SELECT id FROM m_agents WHERE name = 'system' LIMIT 1)),
+        'task_create',
+        'task_id:' || NEW.id,
+        NEW.layer_id,
+        json_object('title', NEW.title, 'status_id', NEW.status_id, 'priority', NEW.priority);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_log_task_status_change
+AFTER UPDATE OF status_id ON t_tasks
+WHEN OLD.status_id != NEW.status_id
+BEGIN
+    INSERT INTO t_activity_log (agent_id, action_type, target, layer_id, details)
+    SELECT
+        COALESCE(NEW.assigned_agent_id, (SELECT id FROM m_agents WHERE name = 'system' LIMIT 1)),
+        'task_status_change',
+        'task_id:' || NEW.id,
+        NEW.layer_id,
+        json_object('old_status', OLD.status_id, 'new_status', NEW.status_id);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_update_task_timestamp
+AFTER UPDATE ON t_tasks
+BEGIN
+    UPDATE t_tasks SET updated_ts = unixepoch() WHERE id = NEW.id;
+END;
+
 -- ============================================================================
 -- Initial Data
 -- ============================================================================
@@ -391,12 +508,24 @@ INSERT OR IGNORE INTO m_tags (name) VALUES
 INSERT OR IGNORE INTO m_config (key, value) VALUES
     ('autodelete_ignore_weekend', '0'),
     ('autodelete_message_hours', '24'),
-    ('autodelete_file_history_days', '7');
+    ('autodelete_file_history_days', '7'),
+    ('task_stale_hours_in_progress', '2'),
+    ('task_stale_hours_waiting_review', '24'),
+    ('task_auto_stale_enabled', '1');
+
+-- Task Statuses (1=todo, 2=in_progress, 3=waiting_review, 4=blocked, 5=done, 6=archived)
+INSERT OR IGNORE INTO m_task_statuses (id, name) VALUES
+    (1, 'todo'),
+    (2, 'in_progress'),
+    (3, 'waiting_review'),
+    (4, 'blocked'),
+    (5, 'done'),
+    (6, 'archived');
 
 -- Built-in Templates (Built-in Decision Templates - FR-006)
 INSERT OR IGNORE INTO t_decision_templates (name, defaults, required_fields, created_by, ts) VALUES
     ('breaking_change', '{"layer":"business","status":"active","tags":["breaking"]}', NULL, NULL, unixepoch()),
-    ('security_vulnerability', '{"layer":"infrastructure","status":"active","tags":["security","vulnerability"]}', '["cve_id","severity"]', NULL, unixepoch()),
+    ('security_vulnerability', '{"layer":"infrastructure","status":"active","tags":["security","vulnerability"]}', '["cve_id","severity"]', NULL, NULL, unixepoch()),
     ('performance_optimization', '{"layer":"business","status":"active","tags":["performance","optimization"]}', NULL, NULL, unixepoch()),
     ('deprecation', '{"layer":"business","status":"active","tags":["deprecation"]}', NULL, NULL, unixepoch()),
     ('architecture_decision', '{"layer":"infrastructure","status":"active","tags":["architecture","adr"]}', NULL, NULL, unixepoch());

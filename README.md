@@ -10,7 +10,7 @@
 
 **sqlew** is a Model Context Protocol (MCP) server that enables efficient context sharing between multiple Claude Code agents through a SQLite-backed database. It dramatically reduces token consumption while providing structured data management through metadata-driven organization.
 
-**Current Version:** 2.1.1
+**Current Version:** 3.0.0
 
 ## Benefits
 
@@ -100,6 +100,7 @@
 - **Constraint Management** - Track performance, architecture, and security constraints
 - **Activity Logging** - Automatic tracking of all agent actions (v2.1.0)
 - **Weekend-Aware Auto-Cleanup** - Smart retention policies that pause during weekends
+- **Kanban Task Watcher** - AI-optimized task management with auto-stale detection (v3.0.0)
 
 ### Advanced Features (v2.1.0)
 - **Smart Defaults** - Auto-infer layer and tags from file paths (60% token reduction)
@@ -109,13 +110,14 @@
 - **Templates** - 5 built-in templates + custom template support
 - **CLI Tool** - Standalone query commands without MCP server
 
-### 6 Consolidated Tools (26 Actions)
+### 7 Consolidated Tools (35 Actions)
 1. **`decision`** (13 actions) - Context management with metadata
 2. **`message`** (4 actions) - Agent-to-agent messaging
 3. **`file`** (4 actions) - File change tracking
 4. **`constraint`** (3 actions) - Constraint management
 5. **`stats`** (4 actions) - Statistics and cleanup
 6. **`config`** (2 actions) - Configuration management
+7. **`task`** (9 actions) - Kanban task management (v3.0.0)
 
 ## Installation
 
@@ -216,6 +218,7 @@ Every tool requires an `action` parameter. Use `{action: "help"}` on any tool fo
 | **constraint** | add, get, deactivate | add: category, constraint_text |
 | **stats** | layer_summary, db_stats, clear | (no additional required) |
 | **config** | get, update | (no additional required) |
+| **task** | create, update, get, list, move | create: title |
 
 ### Common Errors & Quick Fixes
 
@@ -543,6 +546,101 @@ Manage auto-deletion and retention settings.
   fileHistoryRetentionDays: 10
 }
 ```
+
+### 7. `task` - Kanban Task Watcher (v3.0.0)
+
+AI-optimized task management with automatic stale task detection.
+
+**Actions:** `create`, `update`, `get`, `list`, `move`, `link`, `archive`, `batch_create`, `help`
+
+**Examples:**
+
+```typescript
+// Create task
+{
+  action: "create",
+  title: "Implement authentication",
+  description: "Add JWT-based authentication to API",
+  status: "todo",
+  priority: "high",
+  assignee: "auth-agent",
+  tags: ["security", "api"],
+  layer: "business"
+}
+
+// Update task
+{
+  action: "update",
+  task_id: 1,
+  status: "in_progress",
+  description: "Updated with new requirements"
+}
+
+// Get task
+{
+  action: "get",
+  task_id: 1
+}
+
+// List tasks (metadata only for token efficiency)
+{
+  action: "list",
+  status: "in_progress",
+  assignee: "auth-agent",
+  tags: ["security"]
+}
+
+// Move task (with status validation)
+{
+  action: "move",
+  task_id: 1,
+  new_status: "waiting_review"
+}
+
+// Link task to decision/constraint/file
+{
+  action: "link",
+  task_id: 1,
+  link_type: "decision",
+  link_key: "auth_method"
+}
+
+// Archive completed task
+{
+  action: "archive",
+  task_id: 1
+}
+
+// Batch create tasks
+{
+  action: "batch_create",
+  tasks: [
+    { title: "Task 1", status: "todo" },
+    { title: "Task 2", status: "todo" }
+  ],
+  atomic: false
+}
+```
+
+**Key Features:**
+
+- **Auto-Stale Detection:** Tasks automatically transition based on time thresholds
+  - `in_progress` >2h → `waiting_review`
+  - `waiting_review` >24h → `todo`
+- **Token Efficiency:** 70% reduction via metadata-only list queries
+- **Status Validation:** Enforces valid Kanban state machine transitions
+- **Linking:** Connect tasks to decisions, constraints, and files
+- **Flat Hierarchy:** Simple task-only structure (no subtasks)
+
+**Status Lifecycle:**
+
+```
+todo → in_progress → waiting_review → done → archived
+         ↓              ↓
+      blocked ────────┘
+```
+
+See [TASK_SYSTEM.md](TASK_SYSTEM.md) for comprehensive task management guide.
 
 ## CLI Tool (v2.1.0)
 

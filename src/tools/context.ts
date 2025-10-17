@@ -34,7 +34,9 @@ import type {
   ListTemplatesParams,
   ListTemplatesResponse,
   HasUpdatesParams,
-  HasUpdatesResponse
+  HasUpdatesResponse,
+  HardDeleteDecisionParams,
+  HardDeleteDecisionResponse
 } from '../types.js';
 
 /**
@@ -1245,5 +1247,82 @@ export function listTemplates(params: ListTemplatesParams = {}): ListTemplatesRe
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to list templates: ${message}`);
+  }
+}
+
+/**
+ * Permanently delete a decision and all related data (hard delete)
+ * Unlike soft delete (status=deprecated), this removes all records from database
+ *
+ * Use cases:
+ * - Manual cleanup after decision-to-task migration
+ * - Remove test/debug decisions that are no longer needed
+ * - Purge sensitive data that should not be retained
+ *
+ * WARNING: This operation is irreversible. Version history and all relationships
+ * (tags, scopes) will also be deleted due to CASCADE constraints.
+ *
+ * @param params - Decision key to delete
+ * @returns Response with success status
+ */
+export function hardDeleteDecision(params: HardDeleteDecisionParams): HardDeleteDecisionResponse {
+  const db = getDatabase();
+
+  // Validate parameter
+  if (!params.key || params.key.trim() === '') {
+    throw new Error('Parameter "key" is required and cannot be empty');
+  }
+
+  try {
+    return transaction(db, () => {
+      // Get key_id
+      const keyResult = db.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
+
+      if (!keyResult) {
+        // Key doesn't exist - still return success (idempotent)
+        return {
+          success: true,
+          key: params.key,
+          message: `Decision "${params.key}" not found (already deleted or never existed)`
+        };
+      }
+
+      const keyId = keyResult.id;
+
+      // Delete from t_decisions (if exists)
+      const deletedString = db.prepare('DELETE FROM t_decisions WHERE key_id = ?').run(keyId);
+
+      // Delete from t_decisions_numeric (if exists)
+      const deletedNumeric = db.prepare('DELETE FROM t_decisions_numeric WHERE key_id = ?').run(keyId);
+
+      // Delete from t_decision_history (CASCADE should handle this, but explicit for clarity)
+      const deletedHistory = db.prepare('DELETE FROM t_decision_history WHERE key_id = ?').run(keyId);
+
+      // Delete from t_decision_tags (CASCADE should handle this)
+      const deletedTags = db.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
+
+      // Delete from t_decision_scopes (CASCADE should handle this)
+      const deletedScopes = db.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
+
+      // Calculate total deleted records
+      const totalDeleted = deletedString.changes + deletedNumeric.changes + deletedHistory.changes + deletedTags.changes + deletedScopes.changes;
+
+      if (totalDeleted === 0) {
+        return {
+          success: true,
+          key: params.key,
+          message: `Decision "${params.key}" not found (already deleted or never existed)`
+        };
+      }
+
+      return {
+        success: true,
+        key: params.key,
+        message: `Decision "${params.key}" permanently deleted (${totalDeleted} record${totalDeleted === 1 ? '' : 's'})`
+      };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to hard delete decision: ${message}`);
   }
 }

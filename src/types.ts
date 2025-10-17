@@ -285,6 +285,10 @@ export interface GetDecisionParams {
   key: string;
 }
 
+export interface HardDeleteDecisionParams {
+  key: string;
+}
+
 export interface SearchByTagsParams {
   tags: string[];
   match_mode?: 'AND' | 'OR';
@@ -497,6 +501,12 @@ export interface GetContextResponse {
 export interface GetDecisionResponse {
   found: boolean;
   decision?: TaggedDecision;
+}
+
+export interface HardDeleteDecisionResponse {
+  success: boolean;
+  key: string;
+  message?: string;
 }
 
 export interface SearchByTagsResponse {
