@@ -1,0 +1,44 @@
+// Test script to add task-like decisions via MCP tools
+const decisions = [
+  {
+    key: "task_implement_authentication",
+    value: "TODO: Implement JWT authentication for API endpoints",
+    layer: "business",
+    tags: ["task", "high", "security"],
+    agent: "test-agent"
+  },
+  {
+    key: "todo_refactor_database",
+    value: "Status: in_progress - Refactoring database schema for better performance",
+    layer: "data",
+    tags: ["todo", "in_progress", "database"],
+    agent: "test-agent"
+  },
+  {
+    key: "wip_add_logging",
+    value: "WIP: Adding structured logging to all services",
+    layer: "infrastructure",
+    tags: ["wip", "logging"],
+    agent: "test-agent"
+  },
+  {
+    key: "task_user_profiles",
+    value: "[x] Implement user profile management",
+    layer: "presentation",
+    tags: ["task", "done"],
+    agent: "test-agent"
+  },
+  {
+    key: "implement_password_reset",
+    value: "[ ] Add password reset functionality via email",
+    layer: "business",
+    tags: ["task", "todo"],
+    agent: "test-agent"
+  }
+];
+
+console.log(JSON.stringify({
+  action: "set_batch",
+  decisions: decisions,
+  atomic: false
+}));

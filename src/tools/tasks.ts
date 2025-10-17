@@ -935,6 +935,15 @@ export function taskHelp(): any {
       2: 'medium (default)',
       3: 'high',
       4: 'critical'
+    },
+    documentation: {
+      task_overview: 'docs/TASK_OVERVIEW.md - Lifecycle, status transitions, auto-stale detection (363 lines, ~10k tokens)',
+      task_actions: 'docs/TASK_ACTIONS.md - All action references with examples (854 lines, ~21k tokens)',
+      task_linking: 'docs/TASK_LINKING.md - Link tasks to decisions/constraints/files (729 lines, ~18k tokens)',
+      task_migration: 'docs/TASK_MIGRATION.md - Migrate from decision-based tracking (701 lines, ~18k tokens)',
+      tool_selection: 'docs/TOOL_SELECTION.md - Task vs decision vs constraint comparison (236 lines, ~12k tokens)',
+      workflows: 'docs/WORKFLOWS.md - Multi-agent task coordination workflows (602 lines, ~30k tokens)',
+      shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (status/priority), atomic mode (339 lines, ~17k tokens)'
     }
   };
 }

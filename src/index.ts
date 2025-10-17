@@ -598,6 +598,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               create_template: '{ action: "create_template", name: "bug_fix", defaults: {"layer":"business","tags":["bug","fix"],"status":"active"}, created_by: "my-agent" }',
               list_templates: '{ action: "list_templates" }',
               hard_delete: '{ action: "hard_delete", key: "task_old_authentication_refactor" }'
+            },
+            documentation: {
+              tool_selection: 'docs/TOOL_SELECTION.md - Decision tree, tool comparison, when to use each tool (236 lines, ~12k tokens)',
+              tool_reference: 'docs/TOOL_REFERENCE.md - Parameter requirements, batch operations, templates (471 lines, ~24k tokens)',
+              workflows: 'docs/WORKFLOWS.md - Multi-step workflow examples, multi-agent coordination (602 lines, ~30k tokens)',
+              best_practices: 'docs/BEST_PRACTICES.md - Common errors, best practices, troubleshooting (345 lines, ~17k tokens)',
+              shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (status/layer/priority), atomic mode (339 lines, ~17k tokens)'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -624,6 +631,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               get: '{ action: "get", agent_name: "bot1", unread_only: true }',
               mark_read: '{ action: "mark_read", agent_name: "bot1", message_ids: [1, 2, 3] }',
               send_batch: '{ action: "send_batch", messages: [{"from_agent": "bot1", "msg_type": "info", "message": "Task 1 done"}, {"from_agent": "bot1", "msg_type": "info", "message": "Task 2 done"}], atomic: true }'
+            },
+            documentation: {
+              workflows: 'docs/WORKFLOWS.md - Multi-agent coordination, messaging patterns, cross-session handoffs (602 lines, ~30k tokens)',
+              tool_reference: 'docs/TOOL_REFERENCE.md - Message tool parameters, batch operations (471 lines, ~24k tokens)',
+              shared_concepts: 'docs/SHARED_CONCEPTS.md - Enum values (msg_type/priority), atomic mode (339 lines, ~17k tokens)',
+              best_practices: 'docs/BEST_PRACTICES.md - Common errors, messaging best practices (345 lines, ~17k tokens)'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -650,6 +663,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               get: '{ action: "get", agent_name: "refactor-bot", layer: "infrastructure", limit: 10 }',
               check_lock: '{ action: "check_lock", file_path: "src/index.ts", lock_duration: 300 }',
               record_batch: '{ action: "record_batch", file_changes: [{"file_path": "src/types.ts", "agent_name": "bot1", "change_type": "modified", "layer": "data"}, {"file_path": "src/index.ts", "agent_name": "bot1", "change_type": "modified", "layer": "infrastructure"}], atomic: true }'
+            },
+            documentation: {
+              workflows: 'docs/WORKFLOWS.md - File locking patterns, concurrent file access workflows (602 lines, ~30k tokens)',
+              tool_reference: 'docs/TOOL_REFERENCE.md - File tool parameters, batch operations (471 lines, ~24k tokens)',
+              shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (change_type), atomic mode (339 lines, ~17k tokens)',
+              best_practices: 'docs/BEST_PRACTICES.md - File tracking best practices (345 lines, ~17k tokens)'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -673,6 +692,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               add: '{ action: "add", category: "performance", constraint_text: "API response time <100ms", priority: "high", tags: ["api"] }',
               get: '{ action: "get", category: "performance", active_only: true }',
               deactivate: '{ action: "deactivate", constraint_id: 5 }'
+            },
+            documentation: {
+              tool_selection: 'docs/TOOL_SELECTION.md - Decision tree, constraint vs decision comparison (236 lines, ~12k tokens)',
+              workflows: 'docs/WORKFLOWS.md - Constraint validation workflows, requirement tracking (602 lines, ~30k tokens)',
+              shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (category/priority) (339 lines, ~17k tokens)',
+              best_practices: 'docs/BEST_PRACTICES.md - When to use constraints, common patterns (345 lines, ~17k tokens)'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -707,6 +732,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               clear: '{ action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14 }',
               activity_log: '{ action: "activity_log", since: "1h", agent_names: ["bot1", "bot2"], limit: 50 }',
               flush: '{ action: "flush" }'
+            },
+            documentation: {
+              workflows: 'docs/WORKFLOWS.md - Activity monitoring, automatic cleanup workflows (602 lines, ~30k tokens)',
+              best_practices: 'docs/BEST_PRACTICES.md - Database health, cleanup strategies (345 lines, ~17k tokens)',
+              shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions for layer_summary (339 lines, ~17k tokens)',
+              architecture: 'docs/ARCHITECTURE.md - Database schema, views, statistics tables'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
@@ -727,6 +758,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             examples: {
               get: '{ action: "get" }',
               update: '{ action: "update", ignoreWeekend: true, messageRetentionHours: 48 }'
+            },
+            documentation: {
+              shared_concepts: 'docs/SHARED_CONCEPTS.md - Weekend-aware retention behavior explained (339 lines, ~17k tokens)',
+              best_practices: 'docs/BEST_PRACTICES.md - Retention strategies, cleanup timing (345 lines, ~17k tokens)',
+              architecture: 'docs/ARCHITECTURE.md - Auto-cleanup architecture, configuration system'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);
