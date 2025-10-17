@@ -16,7 +16,7 @@ import { setDecision, getContext, getDecision, searchByTags, getVersions, search
 import { sendMessage, getMessages, markRead, sendMessageBatch } from './tools/messaging.js';
 import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch } from './tools/files.js';
 import { addConstraint, getConstraints, deactivateConstraint } from './tools/constraints.js';
-import { getLayerSummary, clearOldData, getStats, getActivityLog } from './tools/utils.js';
+import { getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL } from './tools/utils.js';
 import { getConfig, updateConfig } from './tools/config.js';
 import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, taskHelp } from './tools/tasks.js';
 
@@ -356,13 +356,14 @@ Use action: "help" for detailed documentation.`,
         name: 'stats',
         description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
 
-Statistics & Utilities - View stats, activity logs, and manage data cleanup
+Statistics & Utilities - View stats, activity logs, manage data cleanup, and WAL checkpoints
 
 ## Quick Examples
 - Layer summary: {action: "layer_summary"}
 - DB statistics: {action: "db_stats"}
 - Clear old data: {action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14}
 - Activity log: {action: "activity_log", since: "1h", agent_names: ["bot1"], limit: 50}
+- Flush WAL: {action: "flush"}
 
 ## Parameter Requirements by Action
 
@@ -372,6 +373,7 @@ Statistics & Utilities - View stats, activity logs, and manage data cleanup
 | db_stats | action | - |
 | clear | action | messages_older_than_hours, file_changes_older_than_days |
 | activity_log | action | since, agent_names, actions, limit |
+| flush | action | - |
 
 ## Common Errors & Fixes
 - "Unknown action: undefined" → Add action parameter (REQUIRED!)
@@ -386,11 +388,16 @@ Statistics & Utilities - View stats, activity logs, and manage data cleanup
 - **Without parameters**: Uses config-based weekend-aware retention
 - **With parameters**: Overrides config, no weekend-awareness
 
+## Flush Action Behavior
+- Forces WAL checkpoint using TRUNCATE mode
+- Flushes all pending transactions to main database file
+- Useful before git commits to ensure database file is up-to-date
+
 Use action: "help" for detailed documentation.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'help'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'flush', 'help'] },
             messages_older_than_hours: { type: 'number' },
             file_changes_older_than_days: { type: 'number' },
             since: { type: 'string', description: 'Time filter (e.g., "5m", "1h", "2d" or ISO timestamp)' },
@@ -683,20 +690,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             actions: params.actions,
             limit: params.limit,
           }); break;
+          case 'flush': result = flushWAL(); break;
           case 'help': result = {
             tool: 'stats',
-            description: 'View database statistics, activity logs, and manage data cleanup',
+            description: 'View database statistics, activity logs, manage data cleanup, and WAL checkpoints',
             actions: {
               layer_summary: 'Get summary by layer. No params required',
               db_stats: 'Get database statistics. No params required',
               clear: 'Clear old data. Params: messages_older_than_hours, file_changes_older_than_days',
-              activity_log: 'Get activity log (v3.0.0). Params: since (e.g., "5m", "1h", "2d"), agent_names (array or ["*"]), actions (filter by action types), limit (default: 100)'
+              activity_log: 'Get activity log (v3.0.0). Params: since (e.g., "5m", "1h", "2d"), agent_names (array or ["*"]), actions (filter by action types), limit (default: 100)',
+              flush: 'Force WAL checkpoint to flush pending transactions to main database file. No params required. Uses TRUNCATE mode for complete flush. Useful before git commits to ensure database file is up-to-date.'
             },
             examples: {
               layer_summary: '{ action: "layer_summary" }',
               db_stats: '{ action: "db_stats" }',
               clear: '{ action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14 }',
-              activity_log: '{ action: "activity_log", since: "1h", agent_names: ["bot1", "bot2"], limit: 50 }'
+              activity_log: '{ action: "activity_log", since: "1h", agent_names: ["bot1", "bot2"], limit: 50 }',
+              flush: '{ action: "flush" }'
             }
           }; break;
           default: throw new Error(`Unknown action: ${params.action}`);

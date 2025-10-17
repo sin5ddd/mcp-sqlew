@@ -110,12 +110,12 @@
 - **Templates** - 5 built-in templates + custom template support
 - **CLI Tool** - Standalone query commands without MCP server
 
-### 7 Consolidated Tools (35 Actions)
+### 7 Consolidated Tools (36 Actions)
 1. **`decision`** (13 actions) - Context management with metadata
 2. **`message`** (4 actions) - Agent-to-agent messaging
 3. **`file`** (4 actions) - File change tracking
 4. **`constraint`** (3 actions) - Constraint management
-5. **`stats`** (4 actions) - Statistics and cleanup
+5. **`stats`** (5 actions) - Statistics and cleanup
 6. **`config`** (2 actions) - Configuration management
 7. **`task`** (9 actions) - Kanban task management (v3.0.0)
 
@@ -497,9 +497,9 @@ Manage architectural, performance, and security constraints.
 
 ### 5. `stats` - Statistics & Utilities
 
-Get database statistics and manage data cleanup.
+Get database statistics, manage data cleanup, and WAL checkpoints.
 
-**Actions:** `layer_summary`, `db_stats`, `clear`, `activity_log`, `help`
+**Actions:** `layer_summary`, `db_stats`, `clear`, `activity_log`, `flush`, `help`
 
 **Examples:**
 
@@ -524,6 +524,10 @@ Get database statistics and manage data cleanup.
   messages_older_than_hours: 48,
   file_changes_older_than_days: 14
 }
+
+// Flush WAL checkpoint (v3.0.0) - useful before git commits
+{ action: "flush" }
+// Returns: { success: true, mode: "TRUNCATE", pages_flushed: N, message: "..." }
 ```
 
 ### 6. `config` - Configuration

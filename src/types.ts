@@ -626,6 +626,13 @@ export interface GetStatsResponse {
   layers: number;
 }
 
+export interface FlushWALResponse {
+  success: boolean;
+  mode: string;  // 'TRUNCATE'
+  pages_flushed: number;
+  message: string;
+}
+
 export interface ActivityLogEntry {
   id: number;
   timestamp: string;  // ISO 8601

@@ -50,6 +50,12 @@ Real-world usage showed AI agents were misusing the `decision` tool for task/tod
   - `batch_create` - Create multiple tasks atomically or best-effort
   - `help` - Comprehensive on-demand documentation
 
+- **Enhanced `stats` Tool (4 → 5 Actions):**
+  - `flush` - Force WAL checkpoint to flush pending transactions to main database file
+  - Uses `PRAGMA wal_checkpoint(TRUNCATE)` for complete flush
+  - Useful before git commits to ensure database file is up-to-date
+  - Returns checkpoint statistics (success, mode, pages_flushed, message)
+
 - **Auto-Stale Detection:**
   - `detectAndTransitionStaleTasks()` utility function
   - Configurable thresholds via `m_config` table

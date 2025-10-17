@@ -13,6 +13,7 @@ import type {
   GetActivityLogResponse,
   ActivityLogEntry,
   LayerSummary,
+  FlushWALResponse,
   Database,
 } from '../types.js';
 import { calculateMessageCutoff, calculateFileChangeCutoff } from '../utils/retention.js';
@@ -316,5 +317,37 @@ export function getActivityLog(params?: GetActivityLogParams): GetActivityLogRes
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to get activity log: ${message}`);
+  }
+}
+
+/**
+ * Force WAL checkpoint to flush pending transactions to main database file
+ * Uses TRUNCATE mode for complete flush - useful before git commits
+ *
+ * @returns Checkpoint result with pages flushed
+ */
+export function flushWAL(): FlushWALResponse {
+  const db = getDatabase();
+
+  try {
+    // Execute TRUNCATE checkpoint - most aggressive mode
+    // Blocks until complete, ensures all WAL data written to main DB file
+    // Returns array: [busy, log, checkpointed]
+    // - busy: number of frames not checkpointed due to locks
+    // - log: total number of frames in WAL file
+    // - checkpointed: number of frames checkpointed
+    const result = db.pragma('wal_checkpoint(TRUNCATE)', { simple: true }) as number[] | undefined;
+
+    const pagesFlushed = result?.[2] || 0;
+
+    return {
+      success: true,
+      mode: 'TRUNCATE',
+      pages_flushed: pagesFlushed,
+      message: `WAL checkpoint completed successfully. ${pagesFlushed} pages flushed to main database file.`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to flush WAL: ${message}`);
   }
 }
