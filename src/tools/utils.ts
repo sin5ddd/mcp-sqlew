@@ -178,6 +178,28 @@ export function getStats(): GetStatsResponse {
     const scopes = getCount('m_scopes');
     const layers = getCount('m_layers');
 
+    // Task statistics (v3.x)
+    const total_tasks = getCount('t_tasks');
+    const active_tasks = getCount('t_tasks', 'status_id NOT IN (5, 6)'); // Exclude done and archived
+
+    // Tasks by status (1=todo, 2=in_progress, 3=waiting_review, 4=blocked, 5=done, 6=archived)
+    const tasks_by_status = {
+      todo: getCount('t_tasks', 'status_id = 1'),
+      in_progress: getCount('t_tasks', 'status_id = 2'),
+      waiting_review: getCount('t_tasks', 'status_id = 3'),
+      blocked: getCount('t_tasks', 'status_id = 4'),
+      done: getCount('t_tasks', 'status_id = 5'),
+      archived: getCount('t_tasks', 'status_id = 6'),
+    };
+
+    // Tasks by priority (1=low, 2=medium, 3=high, 4=critical)
+    const tasks_by_priority = {
+      low: getCount('t_tasks', 'priority = 1'),
+      medium: getCount('t_tasks', 'priority = 2'),
+      high: getCount('t_tasks', 'priority = 3'),
+      critical: getCount('t_tasks', 'priority = 4'),
+    };
+
     return {
       agents,
       files,
@@ -191,6 +213,10 @@ export function getStats(): GetStatsResponse {
       tags,
       scopes,
       layers,
+      total_tasks,
+      active_tasks,
+      tasks_by_status,
+      tasks_by_priority,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

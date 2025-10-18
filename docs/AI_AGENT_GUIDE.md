@@ -1243,12 +1243,34 @@ async function pollForUpdates() {
 
 // Response:
 // {
+//   agents: 5,
+//   files: 42,
+//   context_keys: 156,
+//   active_decisions: 312,
 //   total_decisions: 342,
-//   total_messages: 1203,
-//   total_file_changes: 589,
+//   messages: 1203,
+//   file_changes: 589,
+//   active_constraints: 12,
 //   total_constraints: 15,
+//   tags: 10,
+//   scopes: 8,
+//   layers: 5,
 //   total_tasks: 47,
-//   db_size_kb: 1024
+//   active_tasks: 23,  // Excludes done and archived
+//   tasks_by_status: {
+//     todo: 15,
+//     in_progress: 5,
+//     waiting_review: 3,
+//     blocked: 0,
+//     done: 20,
+//     archived: 4
+//   },
+//   tasks_by_priority: {
+//     low: 10,
+//     medium: 25,
+//     high: 10,
+//     critical: 2
+//   }
 // }
 
 // If database too large, trigger cleanup

@@ -645,6 +645,23 @@ export interface GetStatsResponse {
   tags: number;
   scopes: number;
   layers: number;
+  // Task statistics (v3.x)
+  total_tasks: number;
+  active_tasks: number;  // Excludes archived and done
+  tasks_by_status: {
+    todo: number;
+    in_progress: number;
+    waiting_review: number;
+    blocked: number;
+    done: number;
+    archived: number;
+  };
+  tasks_by_priority: {
+    low: number;      // priority = 1
+    medium: number;   // priority = 2
+    high: number;     // priority = 3
+    critical: number; // priority = 4
+  };
 }
 
 export interface FlushWALResponse {
