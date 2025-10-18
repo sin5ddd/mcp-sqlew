@@ -131,7 +131,7 @@ export function verifySchemaIntegrity(db: Database): {
     't_agent_messages', 't_file_changes', 't_constraints', 't_constraint_tags',
     't_activity_log', 't_decision_templates',
     't_tasks', 't_task_details', 't_task_tags', 't_task_decision_links',
-    't_task_constraint_links', 't_task_file_links',
+    't_task_constraint_links', 't_task_file_links', 't_task_dependencies',
   ];
 
   const requiredViews = [

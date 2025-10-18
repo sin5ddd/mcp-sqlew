@@ -18,7 +18,7 @@ import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch 
 import { addConstraint, getConstraints, deactivateConstraint } from './tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL } from './tools/utils.js';
 import { getConfig, updateConfig } from './tools/config.js';
-import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, taskHelp } from './tools/tasks.js';
+import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, taskHelp } from './tools/tasks.js';
 import { FileWatcher } from './watcher/index.js';
 
 // Parse command-line arguments
@@ -1257,6 +1257,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'link': result = linkTask(params); break;
           case 'archive': result = archiveTask(params); break;
           case 'batch_create': result = batchCreateTasks({ tasks: params.tasks, atomic: params.atomic }); break;
+          case 'add_dependency': result = addDependency(params); break;
+          case 'remove_dependency': result = removeDependency(params); break;
+          case 'get_dependencies': result = getDependencies(params); break;
           case 'help': result = taskHelp(); break;
           case 'example': result = {
             tool: 'task',

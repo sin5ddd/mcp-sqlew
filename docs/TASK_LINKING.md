@@ -1,7 +1,7 @@
 # Task Linking Guide
 
-**Version:** 3.0.0
-**Last Updated:** 2025-10-17
+**Version:** 3.2.0
+**Last Updated:** 2025-10-18
 
 ## Table of Contents
 
@@ -10,17 +10,19 @@
 3. [Decision Links](#decision-links)
 4. [Constraint Links](#constraint-links)
 5. [File Links](#file-links)
-6. [Querying Links](#querying-links)
-7. [Linking Strategies](#linking-strategies)
-8. [Best Practices](#best-practices)
-9. [Related Documentation](#related-documentation)
+6. [Task-to-Task Dependencies](#task-to-task-dependencies) (NEW in 3.2.0)
+7. [Querying Links](#querying-links)
+8. [Linking Strategies](#linking-strategies)
+9. [Best Practices](#best-practices)
+10. [Related Documentation](#related-documentation)
 
 ## Overview
 
-Tasks can be linked to three types of entities to establish context and relationships:
+Tasks can be linked to multiple types of entities to establish context and relationships:
 - **Decisions:** Track which architectural decisions relate to this task
 - **Constraints:** Associate performance/security/architecture constraints
 - **Files:** Connect to modified files for context
+- **Task Dependencies:** Blocking relationships between tasks (NEW in 3.2.0)
 
 **Benefits of Linking:**
 - **Context Preservation:** See related decisions/constraints/files when viewing task
@@ -401,6 +403,183 @@ Link tasks to files when:
 }
 ```
 
+## Task-to-Task Dependencies
+
+**NEW in v3.2.0:** Task dependencies are fundamentally different from other link types. While decision/constraint/file links provide **reference context**, task dependencies enforce **blocking relationships** for workflow coordination.
+
+### Key Differences
+
+| Aspect | Decision/Constraint/File Links | Task Dependencies |
+|--------|-------------------------------|-------------------|
+| **Purpose** | Reference context | Workflow coordination |
+| **Relationship** | Informational | Blocking (enforced) |
+| **Action Used** | `link` | `add_dependency` / `remove_dependency` |
+| **Direction** | One-way reference | Directional blocking |
+| **Validation** | Entity existence | Circular detection, archived check |
+| **Query Method** | Via `get` action | Via `get_dependencies` action |
+
+### When to Use Dependencies vs Links
+
+**Use Task Dependencies For:**
+- Sequential technical requirements (DB schema before ORM)
+- Ordered feature rollout (API before UI)
+- Hard blockers (auth must complete before protected routes)
+- Cross-layer dependencies (data → business → presentation)
+
+**Use Decision/Constraint/File Links For:**
+- Documenting architectural decisions related to task
+- Associating performance/security requirements
+- Tracking modified files for context
+- Reference material (not blocking)
+
+### Dependency Examples
+
+**Creating Dependencies:**
+```javascript
+// Task #1: Implement authentication
+{action: "create", title: "Implement JWT auth"}
+// Returns: {task_id: 1}
+
+// Task #2: Add user profile (depends on auth)
+{action: "create", title: "Add user profile page"}
+// Returns: {task_id: 2}
+
+// Add dependency (auth blocks profile)
+{
+  action: "add_dependency",
+  blocker_task_id: 1,
+  blocked_task_id: 2
+}
+// Task #2 cannot proceed until Task #1 is done
+```
+
+**Combining Dependencies with Links:**
+```javascript
+// Create infrastructure task
+{action: "create", title: "Setup PostgreSQL", layer: "data"}
+// Returns: {task_id: 10}
+
+// Link to decision (context)
+{
+  action: "link",
+  task_id: 10,
+  link_type: "decision",
+  link_key: "database_choice"
+}
+
+// Create dependent task
+{action: "create", title: "Create user schema", layer: "data"}
+// Returns: {task_id: 11}
+
+// Add dependency (PostgreSQL must be setup first)
+{
+  action: "add_dependency",
+  blocker_task_id: 10,
+  blocked_task_id: 11
+}
+
+// Result:
+// - Task #11 has context link to "database_choice" decision
+// - Task #11 is blocked by Task #10 (cannot start until DB setup)
+```
+
+**Querying Dependencies:**
+```javascript
+// Get what's blocking a task
+{
+  action: "get_dependencies",
+  task_id: 2
+}
+// Returns:
+// {
+//   task_id: 2,
+//   blockers: [1],    // Task #1 blocks this
+//   blocking: []      // This doesn't block anything
+// }
+
+// Get full task with all links AND dependencies
+{
+  action: "get",
+  task_id: 2,
+  include_dependencies: true
+}
+// Returns:
+// {
+//   task_id: 2,
+//   title: "Add user profile page",
+//   // ... other fields ...
+//   dependencies: {
+//     blockers: [1],
+//     blocking: []
+//   },
+//   decision_links: ["auth_method"],
+//   constraint_links: [],
+//   file_links: []
+// }
+```
+
+### Validation Rules
+
+Task dependencies have strict validation to prevent workflow deadlocks:
+
+1. **No Self-Dependencies**: Task cannot block itself
+2. **No Circular Dependencies**: Direct or transitive cycles rejected
+3. **Both Tasks Exist**: Blocker and blocked tasks must exist
+4. **Neither Archived**: Archived tasks cannot participate in dependencies
+
+**Example: Circular Detection**
+```javascript
+// Existing: Task #1 blocks Task #2
+// Existing: Task #2 blocks Task #3
+
+// ❌ Invalid (creates cycle)
+{
+  action: "add_dependency",
+  blocker_task_id: 3,
+  blocked_task_id: 1
+}
+// Error: "Circular dependency detected: Task #3 → 1 → 2 → 3"
+```
+
+### CASCADE Deletion
+
+When a task is deleted, all its dependencies are automatically removed:
+
+```javascript
+// Before:
+// Task #1 blocks Task #2
+// Task #1 blocks Task #3
+
+// Delete Task #1
+{action: "archive", task_id: 1}
+
+// After:
+// Dependencies automatically removed
+// Task #2 and #3 are now unblocked
+```
+
+### Best Practices
+
+**DO:**
+- Use dependencies for hard technical blockers
+- Keep dependency chains short (2-5 levels)
+- Use `get_dependencies` to visualize chains before adding
+- Combine with decision/constraint links for full context
+
+**DON'T:**
+- Use dependencies for organizational preferences
+- Create dense dependency graphs (many-to-many)
+- Use dependencies for parallel/independent features
+- Forget to remove dependencies when tasks complete
+
+### For More Details
+
+See **[TASK_DEPENDENCIES.md](TASK_DEPENDENCIES.md)** for comprehensive dependency management documentation including:
+- Circular dependency detection algorithm
+- Token efficiency strategies
+- Complete usage examples
+- Workflow coordination patterns
+
 ## Querying Links
 
 ### Get Task with Links
@@ -718,12 +897,13 @@ WHERE tcl.constraint_id = 5;
 
 - **[TASK_OVERVIEW.md](TASK_OVERVIEW.md)** - Task system overview and core concepts
 - **[TASK_ACTIONS.md](TASK_ACTIONS.md)** - Complete action reference with examples
+- **[TASK_DEPENDENCIES.md](TASK_DEPENDENCIES.md)** - Dependency management (NEW in 3.2.0)
 - **[TASK_MIGRATION.md](TASK_MIGRATION.md)** - Migrating from decision-based task tracking
 - **[TASK_SYSTEM.md](TASK_SYSTEM.md)** - Complete documentation (original)
 - **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Comprehensive AI agent guide
 
 ---
 
-**Version:** 3.0.0
+**Version:** 3.2.0
 **Last Updated:** 2025-10-17
 **Author:** sin5ddd

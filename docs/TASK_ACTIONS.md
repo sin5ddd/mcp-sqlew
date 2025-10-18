@@ -1,7 +1,7 @@
 # Task Actions Reference
 
-**Version:** 3.0.0
-**Last Updated:** 2025-10-17
+**Version:** 3.2.0
+**Last Updated:** 2025-10-18
 
 ## Table of Contents
 
@@ -14,14 +14,19 @@
 7. [Action: link](#action-link)
 8. [Action: archive](#action-archive)
 9. [Action: batch_create](#action-batch_create)
-10. [Action: help](#action-help)
-11. [Best Practices](#best-practices)
-12. [Common Errors](#common-errors)
-13. [Related Documentation](#related-documentation)
+10. [Action: add_dependency](#action-add_dependency) (NEW in 3.2.0)
+11. [Action: remove_dependency](#action-remove_dependency) (NEW in 3.2.0)
+12. [Action: get_dependencies](#action-get_dependencies) (NEW in 3.2.0)
+13. [Action: help](#action-help)
+14. [Best Practices](#best-practices)
+15. [Common Errors](#common-errors)
+16. [Related Documentation](#related-documentation)
 
 ## Overview
 
-The `task` MCP tool provides 9 actions for managing tasks in the Kanban Task Watcher system. All actions require the `action` parameter.
+The `task` MCP tool provides 12 actions for managing tasks in the Kanban Task Watcher system. All actions require the `action` parameter.
+
+**NEW in v3.2.0:** Task Dependencies - Manage blocking relationships between tasks with circular dependency detection.
 
 **Action-Based API Pattern:**
 ```javascript
@@ -179,8 +184,12 @@ Get single task with full details.
 - `action`: "get"
 - `task_id`: Task ID (number)
 
-### Example
+**Optional (NEW in 3.2.0):**
+- `include_dependencies`: Include dependency arrays (boolean) - default: false
 
+### Examples
+
+**Basic Get:**
 ```javascript
 {
   action: "get",
@@ -188,8 +197,18 @@ Get single task with full details.
 }
 ```
 
+**Get with Dependencies:**
+```javascript
+{
+  action: "get",
+  task_id: 1,
+  include_dependencies: true
+}
+```
+
 ### Response
 
+**Without Dependencies:**
 ```javascript
 {
   task_id: 1,
@@ -202,6 +221,23 @@ Get single task with full details.
   tags: ["security", "authentication"],
   created_ts: 1697545200,
   updated_ts: 1697545800,
+  decision_links: ["auth_method", "jwt_secret"],
+  constraint_links: [5],
+  file_links: ["/src/auth/jwt.ts", "/src/auth/middleware.ts"]
+}
+```
+
+**With Dependencies (NEW in 3.2.0):**
+```javascript
+{
+  task_id: 1,
+  title: "Implement JWT authentication",
+  description: "Add JWT-based authentication with refresh tokens",
+  // ... other fields ...
+  dependencies: {
+    blockers: [3, 5],    // Tasks blocking this task
+    blocking: [2, 7]     // Tasks this task blocks
+  },
   decision_links: ["auth_method", "jwt_secret"],
   constraint_links: [5],
   file_links: ["/src/auth/jwt.ts", "/src/auth/middleware.ts"]
@@ -229,6 +265,7 @@ List tasks with filtering (metadata only, no descriptions).
 - `tags`: Filter by tags (string[])
 - `layer`: Filter by layer (string)
 - `limit`: Maximum results (number) - default: 100
+- `include_dependency_counts`: Include dependency counts (boolean) - default: false (NEW in 3.2.0)
 
 ### Examples
 
@@ -275,8 +312,18 @@ List tasks with filtering (metadata only, no descriptions).
 }
 ```
 
+**With Dependency Counts (NEW in 3.2.0):**
+```javascript
+{
+  action: "list",
+  status: "in_progress",
+  include_dependency_counts: true
+}
+```
+
 ### Response
 
+**Without Dependency Counts:**
 ```javascript
 {
   tasks: [
@@ -301,6 +348,42 @@ List tasks with filtering (metadata only, no descriptions).
       tags: "security,oauth2",
       created_ts: 1697545300,
       updated_ts: 1697545900
+    }
+  ],
+  count: 2,
+  stale_tasks_transitioned: 0
+}
+```
+
+**With Dependency Counts (NEW in 3.2.0):**
+```javascript
+{
+  tasks: [
+    {
+      task_id: 1,
+      title: "Implement JWT authentication",
+      status_name: "in_progress",
+      priority_name: "high",
+      assignee: "auth-agent",
+      layer_name: "business",
+      tags: "security,authentication",
+      created_ts: 1697545200,
+      updated_ts: 1697545800,
+      blocked_by_count: 0,    // Nothing blocks this task
+      blocking_count: 2       // This blocks 2 tasks
+    },
+    {
+      task_id: 2,
+      title: "Setup OAuth2 provider",
+      status_name: "in_progress",
+      priority_name: "high",
+      assignee: "auth-agent",
+      layer_name: "business",
+      tags: "security,oauth2",
+      created_ts: 1697545300,
+      updated_ts: 1697545900,
+      blocked_by_count: 1,    // 1 task blocks this
+      blocking_count: 0       // This doesn't block anything
     }
   ],
   count: 2,
@@ -623,6 +706,223 @@ Create multiple tasks atomically or best-effort.
 - **Best-effort mode (false):** Partial success allowed (recommended for AI)
 - Each task follows same schema as `create` action
 
+## Action: add_dependency
+
+Add a blocking relationship between two tasks (NEW in 3.2.0).
+
+### Parameters
+
+**Required:**
+- `action`: "add_dependency"
+- `blocker_task_id`: Task ID that blocks (number)
+- `blocked_task_id`: Task ID that is blocked (number)
+
+### Validations
+
+- No self-dependencies (task cannot block itself)
+- No circular dependencies (direct or transitive)
+- Both tasks must exist
+- Neither task can be archived
+
+### Examples
+
+**Basic Dependency:**
+```javascript
+{
+  action: "add_dependency",
+  blocker_task_id: 1,
+  blocked_task_id: 2
+}
+```
+
+**Sequential Workflow:**
+```javascript
+// Task #1: Implement auth (must complete first)
+// Task #2: Add profile page (depends on auth)
+
+{
+  action: "add_dependency",
+  blocker_task_id: 1,
+  blocked_task_id: 2
+}
+```
+
+### Response
+
+```javascript
+{
+  success: true,
+  message: "Dependency added: Task #1 blocks Task #2"
+}
+```
+
+### Error Examples
+
+**Self-Dependency:**
+```javascript
+{
+  action: "add_dependency",
+  blocker_task_id: 1,
+  blocked_task_id: 1
+}
+// Error: "Self-dependency not allowed"
+```
+
+**Circular Dependency:**
+```javascript
+// Existing: Task #1 blocks Task #2
+
+{
+  action: "add_dependency",
+  blocker_task_id: 2,
+  blocked_task_id: 1
+}
+// Error: "Circular dependency detected: Task #2 already blocks Task #1"
+```
+
+**Archived Task:**
+```javascript
+{
+  action: "add_dependency",
+  blocker_task_id: 10,  // archived
+  blocked_task_id: 2
+}
+// Error: "Cannot add dependency: Task #10 is archived"
+```
+
+### Notes
+
+- Uses recursive CTE for transitive cycle detection
+- Depth limit: 100 levels
+- CASCADE deletion: Dependencies auto-delete when tasks are deleted
+
+## Action: remove_dependency
+
+Remove a blocking relationship between two tasks (NEW in 3.2.0).
+
+### Parameters
+
+**Required:**
+- `action`: "remove_dependency"
+- `blocker_task_id`: Task ID that blocks (number)
+- `blocked_task_id`: Task ID that is blocked (number)
+
+### Example
+
+```javascript
+{
+  action: "remove_dependency",
+  blocker_task_id: 1,
+  blocked_task_id: 2
+}
+```
+
+### Response
+
+```javascript
+{
+  success: true,
+  message: "Dependency removed: Task #1 no longer blocks Task #2"
+}
+```
+
+### Notes
+
+- Idempotent: Succeeds silently if dependency doesn't exist
+- Use when task completed early or requirements changed
+- Unblocks dependent tasks
+
+## Action: get_dependencies
+
+Query dependencies for a task bidirectionally (NEW in 3.2.0).
+
+### Parameters
+
+**Required:**
+- `action`: "get_dependencies"
+- `task_id`: Task to query dependencies for (number)
+
+**Optional:**
+- `include_details`: Include full task metadata (boolean) - default: false
+
+### Examples
+
+**Metadata-Only (Recommended):**
+```javascript
+{
+  action: "get_dependencies",
+  task_id: 2
+}
+```
+
+**With Full Details:**
+```javascript
+{
+  action: "get_dependencies",
+  task_id: 2,
+  include_details: true
+}
+```
+
+### Response
+
+**Metadata-Only:**
+```javascript
+{
+  task_id: 2,
+  blockers: [1, 3],    // Task IDs only (~30 bytes)
+  blocking: [5, 7]
+}
+```
+
+**With Details:**
+```javascript
+{
+  task_id: 2,
+  blockers: [
+    {
+      task_id: 1,
+      title: "Implement JWT authentication",
+      status: "in_progress",
+      priority: "high"
+    },
+    {
+      task_id: 3,
+      title: "Design user schema",
+      status: "done",
+      priority: "medium"
+    }
+  ],
+  blocking: [
+    {
+      task_id: 5,
+      title: "Add profile page",
+      status: "todo",
+      priority: "medium"
+    },
+    {
+      task_id: 7,
+      title: "Add settings page",
+      status: "todo",
+      priority: "low"
+    }
+  ]
+}
+```
+
+### Token Efficiency
+
+- **Metadata-only:** ~30 bytes (IDs only)
+- **With details:** ~250 bytes per task
+- **Savings:** ~88% token reduction with metadata approach
+
+### Use Cases
+
+- Find what's blocking a task (`blockers`)
+- Find what's waiting for a task (`blocking`)
+- Identify bottlenecks (high `blocking` count)
+- Plan work order
+
 ## Action: help
 
 Get comprehensive on-demand documentation.
@@ -843,12 +1143,13 @@ link({
 
 - **[TASK_OVERVIEW.md](TASK_OVERVIEW.md)** - Task system overview and core concepts
 - **[TASK_LINKING.md](TASK_LINKING.md)** - Linking tasks to decisions/constraints/files
+- **[TASK_DEPENDENCIES.md](TASK_DEPENDENCIES.md)** - Dependency management (NEW in 3.2.0)
 - **[TASK_MIGRATION.md](TASK_MIGRATION.md)** - Migrating from decision-based task tracking
 - **[TASK_SYSTEM.md](TASK_SYSTEM.md)** - Complete documentation (original)
 - **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Comprehensive AI agent guide
 
 ---
 
-**Version:** 3.0.0
-**Last Updated:** 2025-10-17
+**Version:** 3.2.0
+**Last Updated:** 2025-10-18
 **Author:** sin5ddd

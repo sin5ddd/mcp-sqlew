@@ -413,9 +413,69 @@ export function updateTask(params: {
 }
 
 /**
+ * Internal helper: Query task dependencies (used by getTask and getDependencies)
+ */
+function queryTaskDependencies(db: Database, taskId: number, includeDetails: boolean = false): { blockers: any[], blocking: any[] } {
+  // Build query based on include_details flag
+  let selectFields: string;
+  if (includeDetails) {
+    // Include description from t_task_details
+    selectFields = `
+      t.id,
+      t.title,
+      s.name as status,
+      t.priority,
+      aa.name as assigned_to,
+      t.created_ts,
+      t.updated_ts,
+      td.description
+    `;
+  } else {
+    // Metadata only (token-efficient)
+    selectFields = `
+      t.id,
+      t.title,
+      s.name as status,
+      t.priority
+    `;
+  }
+
+  // Get blockers (tasks that block this task)
+  const blockersQuery = `
+    SELECT ${selectFields}
+    FROM t_tasks t
+    JOIN t_task_dependencies d ON t.id = d.blocker_task_id
+    LEFT JOIN m_task_statuses s ON t.status_id = s.id
+    LEFT JOIN m_agents aa ON t.assigned_agent_id = aa.id
+    ${includeDetails ? 'LEFT JOIN t_task_details td ON t.id = td.task_id' : ''}
+    WHERE d.blocked_task_id = ?
+  `;
+
+  const blockers = db.prepare(blockersQuery).all(taskId);
+
+  // Get blocking (tasks this task blocks)
+  const blockingQuery = `
+    SELECT ${selectFields}
+    FROM t_tasks t
+    JOIN t_task_dependencies d ON t.id = d.blocked_task_id
+    LEFT JOIN m_task_statuses s ON t.status_id = s.id
+    LEFT JOIN m_agents aa ON t.assigned_agent_id = aa.id
+    ${includeDetails ? 'LEFT JOIN t_task_details td ON t.id = td.task_id' : ''}
+    WHERE d.blocker_task_id = ?
+  `;
+
+  const blocking = db.prepare(blockingQuery).all(taskId);
+
+  return { blockers, blocking };
+}
+
+/**
  * Get full task details
  */
-export function getTask(params: { task_id: number }): any {
+export function getTask(params: {
+  task_id: number;
+  include_dependencies?: boolean;
+}): any {
   const db = getDatabase();
 
   if (!params.task_id) {
@@ -493,7 +553,8 @@ export function getTask(params: { task_id: number }): any {
     `);
     const files = filesStmt.all(params.task_id).map((row: any) => row.path);
 
-    return {
+    // Build result
+    const result: any = {
       found: true,
       task: {
         ...task,
@@ -503,6 +564,17 @@ export function getTask(params: { task_id: number }): any {
         linked_files: files
       }
     };
+
+    // Include dependencies if requested (token-efficient, metadata-only)
+    if (params.include_dependencies) {
+      const deps = queryTaskDependencies(db, params.task_id, false);
+      result.task.dependencies = {
+        blockers: deps.blockers,
+        blocking: deps.blocking
+      };
+    }
+
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to get task: ${message}`);
@@ -519,6 +591,7 @@ export function listTasks(params: {
   tags?: string[];
   limit?: number;
   offset?: number;
+  include_dependency_counts?: boolean;
 } = {}): any {
   const db = getDatabase();
 
@@ -526,8 +599,33 @@ export function listTasks(params: {
     // Run auto-stale detection before listing
     const transitionCount = detectAndTransitionStaleTasks(db);
 
-    // Build query
-    let query = 'SELECT * FROM v_task_board WHERE 1=1';
+    // Build query with optional dependency counts
+    let query: string;
+    if (params.include_dependency_counts) {
+      // Include dependency counts with LEFT JOINs
+      query = `
+        SELECT
+          vt.*,
+          COALESCE(blockers.blocked_by_count, 0) as blocked_by_count,
+          COALESCE(blocking.blocking_count, 0) as blocking_count
+        FROM v_task_board vt
+        LEFT JOIN (
+          SELECT blocked_task_id, COUNT(*) as blocked_by_count
+          FROM t_task_dependencies
+          GROUP BY blocked_task_id
+        ) blockers ON vt.id = blockers.blocked_task_id
+        LEFT JOIN (
+          SELECT blocker_task_id, COUNT(*) as blocking_count
+          FROM t_task_dependencies
+          GROUP BY blocker_task_id
+        ) blocking ON vt.id = blocking.blocker_task_id
+        WHERE 1=1
+      `;
+    } else {
+      // Standard query without dependency counts
+      query = 'SELECT * FROM v_task_board WHERE 1=1';
+    }
+
     const queryParams: any[] = [];
 
     // Filter by status
@@ -535,32 +633,32 @@ export function listTasks(params: {
       if (!STATUS_TO_ID[params.status]) {
         throw new Error(`Invalid status: ${params.status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
       }
-      query += ' AND status = ?';
+      query += params.include_dependency_counts ? ' AND vt.status = ?' : ' AND status = ?';
       queryParams.push(params.status);
     }
 
     // Filter by assigned agent
     if (params.assigned_agent) {
-      query += ' AND assigned_to = ?';
+      query += params.include_dependency_counts ? ' AND vt.assigned_to = ?' : ' AND assigned_to = ?';
       queryParams.push(params.assigned_agent);
     }
 
     // Filter by layer
     if (params.layer) {
-      query += ' AND layer = ?';
+      query += params.include_dependency_counts ? ' AND vt.layer = ?' : ' AND layer = ?';
       queryParams.push(params.layer);
     }
 
     // Filter by tags
     if (params.tags && params.tags.length > 0) {
       for (const tag of params.tags) {
-        query += ' AND tags LIKE ?';
+        query += params.include_dependency_counts ? ' AND vt.tags LIKE ?' : ' AND tags LIKE ?';
         queryParams.push(`%${tag}%`);
       }
     }
 
     // Order by updated timestamp (most recent first)
-    query += ' ORDER BY updated_ts DESC';
+    query += params.include_dependency_counts ? ' ORDER BY vt.updated_ts DESC' : ' ORDER BY updated_ts DESC';
 
     // Pagination
     const limit = params.limit !== undefined ? params.limit : 50;
@@ -834,6 +932,202 @@ export function archiveTask(params: { task_id: number }): any {
 }
 
 /**
+ * Add dependency (blocking relationship) between tasks
+ */
+export function addDependency(params: {
+  blocker_task_id: number;
+  blocked_task_id: number;
+}): any {
+  const db = getDatabase();
+
+  if (!params.blocker_task_id) {
+    throw new Error('Parameter "blocker_task_id" is required');
+  }
+
+  if (!params.blocked_task_id) {
+    throw new Error('Parameter "blocked_task_id" is required');
+  }
+
+  try {
+    return transaction(db, () => {
+      // Validation 1: No self-dependencies
+      if (params.blocker_task_id === params.blocked_task_id) {
+        throw new Error('Self-dependency not allowed');
+      }
+
+      // Validation 2: Both tasks must exist and check if archived
+      const blockerTask = db.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocker_task_id) as { id: number; status_id: number } | undefined;
+      const blockedTask = db.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocked_task_id) as { id: number; status_id: number } | undefined;
+
+      if (!blockerTask) {
+        throw new Error(`Blocker task #${params.blocker_task_id} not found`);
+      }
+
+      if (!blockedTask) {
+        throw new Error(`Blocked task #${params.blocked_task_id} not found`);
+      }
+
+      // Validation 3: Neither task is archived
+      if (blockerTask.status_id === TASK_STATUS.ARCHIVED) {
+        throw new Error(`Cannot add dependency: Task #${params.blocker_task_id} is archived`);
+      }
+
+      if (blockedTask.status_id === TASK_STATUS.ARCHIVED) {
+        throw new Error(`Cannot add dependency: Task #${params.blocked_task_id} is archived`);
+      }
+
+      // Validation 4: No direct circular (reverse relationship)
+      const reverseExists = db.prepare(`
+        SELECT 1 FROM t_task_dependencies
+        WHERE blocker_task_id = ? AND blocked_task_id = ?
+      `).get(params.blocked_task_id, params.blocker_task_id);
+
+      if (reverseExists) {
+        throw new Error(`Circular dependency detected: Task #${params.blocked_task_id} already blocks Task #${params.blocker_task_id}`);
+      }
+
+      // Validation 5: No transitive circular (check if adding this would create a cycle)
+      const cycleCheck = db.prepare(`
+        WITH RECURSIVE dependency_chain AS (
+          -- Start from the task that would be blocked
+          SELECT blocked_task_id as task_id, 1 as depth
+          FROM t_task_dependencies
+          WHERE blocker_task_id = ?
+
+          UNION ALL
+
+          -- Follow the chain of dependencies
+          SELECT d.blocked_task_id, dc.depth + 1
+          FROM t_task_dependencies d
+          JOIN dependency_chain dc ON d.blocker_task_id = dc.task_id
+          WHERE dc.depth < 100
+        )
+        SELECT task_id FROM dependency_chain WHERE task_id = ?
+      `).get(params.blocked_task_id, params.blocker_task_id) as { task_id: number } | undefined;
+
+      if (cycleCheck) {
+        // Build cycle path for error message
+        const cyclePathResult = db.prepare(`
+          WITH RECURSIVE dependency_chain AS (
+            SELECT blocked_task_id as task_id, 1 as depth,
+                   CAST(blocked_task_id AS TEXT) as path
+            FROM t_task_dependencies
+            WHERE blocker_task_id = ?
+
+            UNION ALL
+
+            SELECT d.blocked_task_id, dc.depth + 1,
+                   dc.path || ' → ' || d.blocked_task_id
+            FROM t_task_dependencies d
+            JOIN dependency_chain dc ON d.blocker_task_id = dc.task_id
+            WHERE dc.depth < 100
+          )
+          SELECT path FROM dependency_chain WHERE task_id = ? ORDER BY depth DESC LIMIT 1
+        `).get(params.blocked_task_id, params.blocker_task_id) as { path: string } | undefined;
+
+        const cyclePath = cyclePathResult?.path || `#${params.blocked_task_id} → ... → #${params.blocker_task_id}`;
+        throw new Error(`Circular dependency detected: Task #${params.blocker_task_id} → #${cyclePath} → #${params.blocker_task_id}`);
+      }
+
+      // All validations passed - insert dependency
+      const insertStmt = db.prepare(`
+        INSERT INTO t_task_dependencies (blocker_task_id, blocked_task_id)
+        VALUES (?, ?)
+      `);
+
+      insertStmt.run(params.blocker_task_id, params.blocked_task_id);
+
+      return {
+        success: true,
+        message: `Dependency added: Task #${params.blocker_task_id} blocks Task #${params.blocked_task_id}`
+      };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Don't wrap error messages that are already descriptive
+    if (message.includes('not found') || message.includes('not allowed') || message.includes('Circular dependency') || message.includes('Cannot add dependency')) {
+      throw new Error(message);
+    }
+    throw new Error(`Failed to add dependency: ${message}`);
+  }
+}
+
+/**
+ * Remove dependency between tasks
+ */
+export function removeDependency(params: {
+  blocker_task_id: number;
+  blocked_task_id: number;
+}): any {
+  const db = getDatabase();
+
+  if (!params.blocker_task_id) {
+    throw new Error('Parameter "blocker_task_id" is required');
+  }
+
+  if (!params.blocked_task_id) {
+    throw new Error('Parameter "blocked_task_id" is required');
+  }
+
+  try {
+    const deleteStmt = db.prepare(`
+      DELETE FROM t_task_dependencies
+      WHERE blocker_task_id = ? AND blocked_task_id = ?
+    `);
+
+    deleteStmt.run(params.blocker_task_id, params.blocked_task_id);
+
+    return {
+      success: true,
+      message: `Dependency removed: Task #${params.blocker_task_id} no longer blocks Task #${params.blocked_task_id}`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to remove dependency: ${message}`);
+  }
+}
+
+/**
+ * Get dependencies for a task (bidirectional: what blocks this task, what this task blocks)
+ */
+export function getDependencies(params: {
+  task_id: number;
+  include_details?: boolean;
+}): any {
+  const db = getDatabase();
+
+  if (!params.task_id) {
+    throw new Error('Parameter "task_id" is required');
+  }
+
+  const includeDetails = params.include_details || false;
+
+  try {
+    // Check if task exists
+    const taskExists = db.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+    if (!taskExists) {
+      throw new Error(`Task with id ${params.task_id} not found`);
+    }
+
+    // Use the shared helper function
+    const deps = queryTaskDependencies(db, params.task_id, includeDetails);
+
+    return {
+      task_id: params.task_id,
+      blockers: deps.blockers,
+      blocking: deps.blocking
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Don't wrap error messages that are already descriptive
+    if (message.includes('not found')) {
+      throw new Error(message);
+    }
+    throw new Error(`Failed to get dependencies: ${message}`);
+  }
+}
+
+/**
  * Create multiple tasks atomically
  */
 export function batchCreateTasks(params: {
@@ -991,6 +1285,47 @@ export function taskHelp(): any {
           ],
           atomic: true
         }
+      },
+      add_dependency: {
+        description: 'Add blocking relationship between tasks',
+        required_params: ['blocker_task_id', 'blocked_task_id'],
+        validations: [
+          'No self-dependencies',
+          'No circular dependencies (direct or transitive)',
+          'Both tasks must exist',
+          'Neither task can be archived'
+        ],
+        example: {
+          action: 'add_dependency',
+          blocker_task_id: 1,
+          blocked_task_id: 2
+        },
+        note: 'Task #1 must be completed before Task #2 can start'
+      },
+      remove_dependency: {
+        description: 'Remove blocking relationship between tasks',
+        required_params: ['blocker_task_id', 'blocked_task_id'],
+        example: {
+          action: 'remove_dependency',
+          blocker_task_id: 1,
+          blocked_task_id: 2
+        },
+        note: 'Silently succeeds even if dependency does not exist'
+      },
+      get_dependencies: {
+        description: 'Query task dependencies (bidirectional)',
+        required_params: ['task_id'],
+        optional_params: ['include_details'],
+        returns: {
+          blockers: 'Array of tasks that block this task',
+          blocking: 'Array of tasks this task blocks'
+        },
+        example: {
+          action: 'get_dependencies',
+          task_id: 2,
+          include_details: true
+        },
+        note: 'Defaults to metadata-only (token-efficient). Set include_details=true for full task details.'
       },
       help: {
         description: 'Return this help documentation',

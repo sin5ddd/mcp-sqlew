@@ -5,6 +5,41 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2025-10-18
+
+### Added
+- **Task Dependency Management** (GitHub Issue #16)
+  - New `add_dependency` action: Add blocking relationships between tasks
+  - New `remove_dependency` action: Remove blocking relationships
+  - New `get_dependencies` action: Query task dependencies bidirectionally
+  - Circular dependency detection (direct and transitive) using recursive CTE
+  - Enhanced `list` action with `include_dependency_counts` parameter
+  - Enhanced `get` action with `include_dependencies` parameter
+  - Database schema: New `t_task_dependencies` table with CASCADE deletion
+  - Migration script for existing databases (v3.1.x → v3.2.0)
+  - Comprehensive validation: self-dependency, circular, archived task checks
+  - New documentation: `docs/TASK_DEPENDENCIES.md`
+
+### Changed
+- Task system now supports workflow dependencies and blocking relationships
+- Database schema version bumped to v3.2.0
+- `list` action returns dependency counts when `include_dependency_counts: true`
+- `get` action includes dependency arrays when `include_dependencies: true`
+
+### Documentation
+- Added `docs/TASK_DEPENDENCIES.md` - Focused guide for dependency management (500+ lines)
+- Updated `docs/TASK_ACTIONS.md` - Documented 3 new dependency actions and enhanced parameters
+- Updated `docs/TASK_LINKING.md` - Added task-to-task dependency section explaining differences
+- Updated `README.md` - Mentioned dependency feature in task system highlights
+
+### Technical Details
+- **Circular Detection Algorithm**: Recursive CTE with 100-level depth limit
+- **Validation Rules**: 5 comprehensive checks (self-dep, circular, existence, archived)
+- **Token Efficiency**: Metadata-only queries by default (~88% reduction vs full details)
+- **CASCADE Deletion**: Dependencies auto-remove when tasks are deleted
+- **Index Support**: `idx_task_deps_blocked` for efficient reverse queries
+- **Bidirectional Queries**: Find blockers and blocking tasks in single call
+
 ## [3.1.2] - 2025-10-18
 
 ### Added

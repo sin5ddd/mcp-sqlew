@@ -228,6 +228,14 @@ CREATE TABLE IF NOT EXISTS t_task_file_links (
     PRIMARY KEY (task_id, file_id)
 );
 
+-- Task dependencies (blocking relationships)
+CREATE TABLE IF NOT EXISTS t_task_dependencies (
+    blocker_task_id INTEGER REFERENCES t_tasks(id) ON DELETE CASCADE,
+    blocked_task_id INTEGER REFERENCES t_tasks(id) ON DELETE CASCADE,
+    created_ts INTEGER DEFAULT (unixepoch()),
+    PRIMARY KEY (blocker_task_id, blocked_task_id)
+);
+
 -- ============================================================================
 -- Indexes
 -- ============================================================================
@@ -251,6 +259,7 @@ CREATE INDEX IF NOT EXISTS idx_activity_log_action ON t_activity_log(action_type
 CREATE INDEX IF NOT EXISTS idx_task_status ON t_tasks(status_id);
 CREATE INDEX IF NOT EXISTS idx_task_updated ON t_tasks(updated_ts DESC);
 CREATE INDEX IF NOT EXISTS idx_task_assignee ON t_tasks(assigned_agent_id);
+CREATE INDEX IF NOT EXISTS idx_task_deps_blocked ON t_task_dependencies(blocked_task_id);
 
 -- ============================================================================
 -- Views (Token Efficiency)

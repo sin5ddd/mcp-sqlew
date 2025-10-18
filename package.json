@@ -1,6 +1,6 @@
 {
   "name": "sqlew",
-  "version": "3.1.2",
+  "version": "3.2.0",
   "description": "MCP server for efficient context sharing between Claude Code sub-agents with Kanban Task Watcher, auto-file-tracking, and 97% token reduction",
   "main": "dist/index.js",
   "type": "module",
@@ -26,6 +26,8 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "rebuild": "npm run clean && npm run build",
+    "test": "npm run build && node --test dist/tests/tasks.dependencies.test.js",
+    "test:migrations": "npm run build && node dist/tests/migrations/test-v3.2-migration.js",
     "prepublishOnly": "npm run rebuild"
   },
   "engines": {

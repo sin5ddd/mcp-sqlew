@@ -59,6 +59,10 @@ Traditional code only tells you **WHAT** and **HOW**. sqlew adds **WHY**:
 ### 🎯 Key Features
 - **7 Specialized Tools**: decisions, messages, tasks, files, constraints, stats, config
 - **Metadata-Driven**: Tag, layer, scope, and version everything
+- **Task Dependencies** (v3.2.0): Blocking relationships with circular detection
+  - Sequential workflow management (API before UI, DB before ORM)
+  - Bidirectional queries (find blockers and blocking tasks)
+  - Token-efficient metadata-only queries (~88% reduction)
 - **Auto-File Tracking** (v3.0.2): Zero-token task management via automatic file watching
   - Auto-transition: `todo` → `in_progress` on file edit
   - Auto-complete: `in_progress` → `done` when acceptance criteria pass
@@ -195,8 +199,9 @@ Each tool supports `action: "help"` for full documentation and `action: "example
 
 **Task System:**
 - 📋 **[Task Overview](docs/TASK_OVERVIEW.md)** - Lifecycle, status transitions, auto-stale (363 lines, ~10k tokens)
-- ⚙️ **[Task Actions](docs/TASK_ACTIONS.md)** - All actions with examples (854 lines, ~21k tokens)
-- 🔗 **[Task Linking](docs/TASK_LINKING.md)** - Link tasks to decisions/constraints/files (729 lines, ~18k tokens)
+- ⚙️ **[Task Actions](docs/TASK_ACTIONS.md)** - All actions with examples (1,100+ lines, ~28k tokens)
+- 🔗 **[Task Dependencies](docs/TASK_DEPENDENCIES.md)** - Blocking relationships, circular detection (500+ lines, ~13k tokens) **NEW v3.2.0**
+- 🔗 **[Task Linking](docs/TASK_LINKING.md)** - Link tasks to decisions/constraints/files/tasks (900+ lines, ~23k tokens)
 - 🔄 **[Task Migration](docs/TASK_MIGRATION.md)** - Migrate from decision-based tracking (701 lines, ~18k tokens)
 
 **Auto File Tracking (v3.0.2):**
