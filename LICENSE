@@ -1,21 +1,52 @@
-MIT License
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
 
 Copyright (c) 2025 sin5ddd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+================================================================================
+IMPORTANT NOTICE - FREE TO USE
+================================================================================
+
+This software is FREE to use for any purpose, including commercial use.
+
+FREE USE EXAMPLES (no open-source requirement):
+✅ Using sqlew in your development workflow
+✅ Installing sqlew in Claude Desktop for personal/commercial projects
+✅ Using sqlew to manage context for your AI agents
+✅ Running sqlew as-is without modifications
+
+OPEN-SOURCE REQUIREMENT (AGPLv3 applies):
+When you embed, modify, or distribute this software, you MUST open-source your code:
+
+⚠️  If you EMBED this software into your own application:
+    Example: You include sqlew's database code in your proprietary app
+    → You MUST release your app's source code under AGPLv3
+
+⚠️  If you MODIFY this software and distribute it:
+    Example: You fork sqlew, add features, and share it
+    → You MUST release your modified version under AGPLv3
+
+⚠️  If you offer this as a NETWORK SERVICE:
+    Example: You run sqlew on a server and users access it remotely
+    → You MUST provide source code access to your users
+
+REQUIREMENTS when AGPLv3 applies:
+1. Release your complete source code under AGPLv3
+2. Provide access to source code to users of your application
+3. Include this license notice and copyright in your software
+4. State any changes you made to the original software
+
+For the full license text, see: https://www.gnu.org/licenses/agpl-3.0.html

@@ -2,7 +2,7 @@
 ![sqlew_logo](assets/sqlew-logo.png)
 
 [![npm version](https://img.shields.io/npm/v/sqlew.svg)](https://www.npmjs.com/package/sqlew)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 > **SQL Efficient Workflow** - MCP server for efficient context sharing between Claude Code sub-agents
 
@@ -275,6 +275,21 @@ Each tool supports `action: "help"` for full documentation and `action: "example
 - **Storage efficiency**: ~140 bytes per decision
 - **Token savings**: 60-75% in typical projects
 
+## 💖 Support sqlew
+
+### One-time Support
+Perfect for trying out sponsorship!
+- ☕ $5 - Buy me a coffee
+- 🍕 $10 - Buy me a pizza
+
+### Monthly Support
+For ongoing development support:
+- ⭐ $1/month - Support Continual Development
+- 🚀 $5/month - Active support for Request
+- 💼 $10/month - Buy me more AI tokens
+
+on [GitHub Sponsors](https://github.com/sponsors/sin5ddd)
+
 ## Version
 
 Current version: **3.0.0**
@@ -282,7 +297,19 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 
-MIT - see [LICENSE](LICENSE) file
+AGPLv3 - **Free to use**, open-source required when embedding/modifying.
+
+See [LICENSE](LICENSE) file for details.
+
+**Free to use for:**
+- Personal and commercial projects
+- Using sqlew as-is in Claude Desktop
+- Managing AI agent context
+
+**Open-source required when:**
+- Embedding sqlew into your application
+- Modifying and distributing sqlew
+- Offering sqlew as a network service
 
 ## Links
 
