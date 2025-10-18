@@ -526,7 +526,7 @@ INSERT OR IGNORE INTO m_task_statuses (id, name) VALUES
 -- Built-in Templates (Built-in Decision Templates - FR-006)
 INSERT OR IGNORE INTO t_decision_templates (name, defaults, required_fields, created_by, ts) VALUES
     ('breaking_change', '{"layer":"business","status":"active","tags":["breaking"]}', NULL, NULL, unixepoch()),
-    ('security_vulnerability', '{"layer":"infrastructure","status":"active","tags":["security","vulnerability"]}', '["cve_id","severity"]', NULL, NULL, unixepoch()),
+    ('security_vulnerability', '{"layer":"infrastructure","status":"active","tags":["security","vulnerability"]}', '["cve_id","severity"]', NULL, unixepoch()),
     ('performance_optimization', '{"layer":"business","status":"active","tags":["performance","optimization"]}', NULL, NULL, unixepoch()),
     ('deprecation', '{"layer":"business","status":"active","tags":["deprecation"]}', NULL, NULL, unixepoch()),
     ('architecture_decision', '{"layer":"infrastructure","status":"active","tags":["architecture","adr"]}', NULL, NULL, unixepoch());

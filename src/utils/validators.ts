@@ -62,12 +62,12 @@ export function validateLayer(db: Database, layer: string): number {
   if (!validLayers.includes(layer)) {
     throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
   }
-  
-  const result = db.prepare('SELECT layer_id FROM m_layers WHERE layer_name = ?').get(layer) as { layer_id: number } | undefined;
+
+  const result = db.prepare('SELECT id FROM m_layers WHERE name = ?').get(layer) as { id: number } | undefined;
   if (!result) {
     throw new Error(`Layer not found in database: ${layer}`);
   }
-  return result.layer_id;
+  return result.id;
 }
 
 /**

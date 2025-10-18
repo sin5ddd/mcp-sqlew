@@ -5,6 +5,28 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2025-10-18
+
+### Fixed
+- **Critical Bug: Layer parameter causing 'no such column: layer_id' error** (Issue #15)
+  - Fixed incorrect column names in `validateLayer()` function (`src/utils/validators.ts:66`)
+  - Changed SQL query from `SELECT layer_id FROM m_layers WHERE layer_name = ?` to `SELECT id FROM m_layers WHERE name = ?`
+  - Affected actions now working correctly:
+    - `decision.set` with layer parameter
+    - `decision.quick_set` with layer parameter
+    - `decision.set_from_template` (templates with layer defaults)
+  - Fixed schema bug in `assets/schema.sql:529` (extra NULL in decision_templates INSERT statement)
+
+### Impact
+- All decision-related actions can now properly use the `layer` parameter
+- Templates with layer defaults (breaking_change, security_vulnerability, etc.) now work correctly
+- Layer-based architectural organization fully functional for decision management
+
+### Technical Details
+- Root cause: Mismatch between `m_layers` table schema (id, name) and query column names (layer_id, layer_name)
+- Bug was specific to decision tool validation; other tools (task, file, constraint) were unaffected
+- Comprehensive testing confirms layer parameter works end-to-end
+
 ## [3.0.2] - 2025-10-17
 
 ### Added
