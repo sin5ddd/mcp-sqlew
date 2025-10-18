@@ -51,7 +51,7 @@
     "shared-context"
   ],
   "author": "sin5ddd",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "dependencies": {
     "better-sqlite3": "^11.0.0",
     "@modelcontextprotocol/sdk": "latest",
