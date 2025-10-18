@@ -891,6 +891,7 @@ export function taskHelp(): any {
   return {
     tool: 'task',
     description: 'Kanban Task Watcher for managing tasks with AI-optimized lifecycle states',
+    note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all task actions.',
     actions: {
       create: {
         description: 'Create a new task',

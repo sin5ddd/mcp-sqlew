@@ -5,6 +5,23 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2] - 2025-10-18
+
+### Added
+- **Help action discoverability improvement**
+  - Added prominent note in all 7 tool help actions: "💡 TIP: Use action: \"example\" to see comprehensive usage scenarios and real-world examples"
+  - Helps AI agents discover the `example` action which was previously missed
+  - Improves UX by making it clear that comprehensive examples are available beyond basic help
+
+### Changed
+- Enhanced help response format for all tools (decision, message, file, constraint, stats, config, task)
+- Added `note` field to help output highlighting example action availability
+
+### Impact
+- AI agents will now be more aware of the `example` action
+- Reduces confusion when agents need detailed usage scenarios
+- Better guidance for discovering comprehensive documentation
+
 ## [3.1.1] - 2025-10-18
 
 ### Fixed

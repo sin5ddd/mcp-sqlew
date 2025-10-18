@@ -366,6 +366,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'help': result = {
             tool: 'decision',
             description: 'Manage decisions with metadata (tags, layers, versions, scopes)',
+            note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all decision actions.',
             purpose: {
               title: '⚠️ CRITICAL: Store WHY and REASON, Not WHAT',
               principle: 'Decisions table is for ARCHITECTURAL CONTEXT and REASONING, NOT implementation logs or task completion status',
@@ -592,6 +593,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'help': result = {
             tool: 'message',
             description: 'Send and retrieve messages between agents with priority levels',
+            note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all message actions.',
             actions: {
               send: 'Send message. Params: from_agent (required), msg_type (required), message (required), to_agent, priority, payload',
               get: 'Get messages for agent. Params: agent_name (required), unread_only, priority_filter, msg_type_filter, limit',
@@ -725,6 +727,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'help': result = {
             tool: 'file',
             description: 'Track file changes across agents with layer classification',
+            note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all file tracking actions.',
             actions: {
               record: 'Record file change. Params: file_path (required), agent_name (required), change_type (required), layer, description',
               get: 'Get file changes. Params: file_path, agent_name, layer, change_type, since, limit',
@@ -848,6 +851,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'help': result = {
             tool: 'constraint',
             description: 'Manage project constraints (performance, architecture, security)',
+            note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all constraint actions.',
             actions: {
               add: 'Add constraint. Params: category (required), constraint_text (required), priority, layer, tags, created_by',
               get: 'Get constraints. Params: category, layer, priority, tags, active_only, limit',
@@ -1018,6 +1022,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'help': result = {
             tool: 'stats',
             description: 'View database statistics, activity logs, manage data cleanup, and WAL checkpoints',
+            note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all stats actions.',
             actions: {
               layer_summary: 'Get summary by layer. No params required',
               db_stats: 'Get database statistics. No params required',
@@ -1148,6 +1153,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'help': result = {
             tool: 'config',
             description: 'Manage auto-deletion configuration (weekend-aware retention)',
+            note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all config actions.',
             actions: {
               get: 'Get current config. No params required',
               update: 'Update config. Params: ignoreWeekend, messageRetentionHours (1-168), fileHistoryRetentionDays (1-90)'
