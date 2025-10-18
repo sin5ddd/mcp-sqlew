@@ -522,6 +522,16 @@ export interface GetContextResponse {
 export interface GetDecisionResponse {
   found: boolean;
   decision?: TaggedDecision;
+  context?: Array<{
+    id: number;
+    rationale: string;
+    alternatives_considered: any;
+    tradeoffs: any;
+    decided_by: string | null;
+    decision_date: string;
+    related_task_id: number | null;
+    related_constraint_id: number | null;
+  }>;
 }
 
 export interface HardDeleteDecisionResponse {

@@ -127,7 +127,7 @@ export function verifySchemaIntegrity(db: Database): {
     'm_agents', 'm_files', 'm_context_keys', 'm_constraint_categories',
     'm_layers', 'm_tags', 'm_scopes', 'm_config', 'm_task_statuses',
     't_decisions', 't_decisions_numeric', 't_decision_history',
-    't_decision_tags', 't_decision_scopes',
+    't_decision_tags', 't_decision_scopes', 't_decision_context',
     't_agent_messages', 't_file_changes', 't_constraints', 't_constraint_tags',
     't_activity_log', 't_decision_templates',
     't_tasks', 't_task_details', 't_task_tags', 't_task_decision_links',

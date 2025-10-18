@@ -17,6 +17,7 @@ import * as tablePrefixes from './add-table-prefixes.js';
 import * as v210Features from './add-v2.1.0-features.js';
 import * as taskTables from './add-task-tables.js';
 import * as taskDependencies from './add-task-dependencies.js';
+import * as decisionContext from './add-decision-context.js';
 
 export interface MigrationResult {
   success: boolean;
@@ -69,6 +70,14 @@ const MIGRATIONS: MigrationInfo[] = [
     runMigration: taskDependencies.migrateToTaskDependencies,
     getMigrationInfo: taskDependencies.getTaskDependenciesMigrationInfo,
   },
+  {
+    name: 'add-decision-context',
+    fromVersion: '3.2.0',
+    toVersion: '3.2.2',
+    needsMigration: decisionContext.needsDecisionContextMigration,
+    runMigration: decisionContext.migrateToDecisionContext,
+    getMigrationInfo: decisionContext.getDecisionContextMigrationInfo,
+  },
 ];
 
 /**
@@ -80,13 +89,23 @@ const MIGRATIONS: MigrationInfo[] = [
  * - v2.0.0: Has t_activity_log but no m_task_statuses
  * - v2.1.0: Has t_activity_log but no m_task_statuses
  * - v3.0.0: Has m_task_statuses but no t_task_dependencies
- * - v3.2.0: Has t_task_dependencies
+ * - v3.2.0: Has t_task_dependencies but no t_decision_context
+ * - v3.2.2: Has t_decision_context
  *
  * @param db - Database connection
  * @returns Detected version string
  */
 export function detectDatabaseVersion(db: Database): string {
   try {
+    // Check for decision context table (v3.2.2)
+    const hasDecisionContext = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='t_decision_context'"
+    ).get();
+
+    if (hasDecisionContext) {
+      return '3.2.2';
+    }
+
     // Check for task dependencies table (v3.2.0)
     const hasTaskDependencies = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='t_task_dependencies'"

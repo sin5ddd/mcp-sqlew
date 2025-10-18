@@ -411,3 +411,283 @@ export function transaction<T>(db: DatabaseType, fn: () => T): T {
     throw error;
   }
 }
+
+// ============================================================================
+// Decision Context Management (v3.2.2)
+// ============================================================================
+
+/**
+ * Validate JSON structure for alternatives array
+ * @param alternatives - JSON string or null
+ * @throws Error if JSON is invalid or not an array
+ */
+function validateAlternativesJson(alternatives: string | null): void {
+  if (alternatives === null || alternatives === undefined) return;
+
+  try {
+    const parsed = JSON.parse(alternatives);
+    if (!Array.isArray(parsed)) {
+      throw new Error('alternatives_considered must be a JSON array');
+    }
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error('alternatives_considered contains invalid JSON');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Validate JSON structure for tradeoffs object
+ * @param tradeoffs - JSON string or null
+ * @throws Error if JSON is invalid or doesn't have pros/cons structure
+ */
+function validateTradeoffsJson(tradeoffs: string | null): void {
+  if (tradeoffs === null || tradeoffs === undefined) return;
+
+  try {
+    const parsed = JSON.parse(tradeoffs);
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('tradeoffs must be a JSON object');
+    }
+    // Optional: Check for pros/cons keys if provided
+    if (parsed.pros !== undefined && !Array.isArray(parsed.pros)) {
+      throw new Error('tradeoffs.pros must be an array');
+    }
+    if (parsed.cons !== undefined && !Array.isArray(parsed.cons)) {
+      throw new Error('tradeoffs.cons must be an array');
+    }
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error('tradeoffs contains invalid JSON');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Add decision context to a decision
+ *
+ * @param db - Database instance
+ * @param decisionKey - Decision key to attach context to
+ * @param rationale - Rationale for the decision (required)
+ * @param alternatives - JSON array of alternatives considered (optional)
+ * @param tradeoffs - JSON object with pros/cons (optional)
+ * @param decidedBy - Agent name who decided (optional)
+ * @param relatedTaskId - Related task ID (optional)
+ * @param relatedConstraintId - Related constraint ID (optional)
+ * @returns Context ID
+ */
+export function addDecisionContext(
+  db: DatabaseType,
+  decisionKey: string,
+  rationale: string,
+  alternatives: string | null = null,
+  tradeoffs: string | null = null,
+  decidedBy: string | null = null,
+  relatedTaskId: number | null = null,
+  relatedConstraintId: number | null = null
+): number {
+  // Validate JSON inputs
+  validateAlternativesJson(alternatives);
+  validateTradeoffsJson(tradeoffs);
+
+  // Get decision key ID
+  const keyId = getOrCreateContextKey(db, decisionKey);
+
+  // Get agent ID if provided
+  let agentId: number | null = null;
+  if (decidedBy) {
+    agentId = getOrCreateAgent(db, decidedBy);
+  }
+
+  // Insert context
+  const result = db.prepare(`
+    INSERT INTO t_decision_context (
+      decision_key_id,
+      rationale,
+      alternatives_considered,
+      tradeoffs,
+      decided_by_agent_id,
+      related_task_id,
+      related_constraint_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(keyId, rationale, alternatives, tradeoffs, agentId, relatedTaskId, relatedConstraintId);
+
+  return result.lastInsertRowid as number;
+}
+
+/**
+ * Get decision with context
+ *
+ * @param db - Database instance
+ * @param decisionKey - Decision key
+ * @returns Decision with context or null if not found
+ */
+export function getDecisionWithContext(db: DatabaseType, decisionKey: string): {
+  key: string;
+  value: string;
+  version: string;
+  status: string;
+  layer: string | null;
+  decided_by: string | null;
+  updated: string;
+  context: {
+    id: number;
+    rationale: string;
+    alternatives_considered: string | null;
+    tradeoffs: string | null;
+    decided_by: string | null;
+    decision_date: string;
+    related_task_id: number | null;
+    related_constraint_id: number | null;
+  }[];
+} | null {
+  // First get the decision
+  const decision = db.prepare(`
+    SELECT
+      k.key,
+      d.value,
+      d.version,
+      CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' ELSE 'draft' END as status,
+      l.name as layer,
+      a.name as decided_by,
+      datetime(d.ts, 'unixepoch') as updated
+    FROM t_decisions d
+    JOIN m_context_keys k ON d.key_id = k.id
+    LEFT JOIN m_layers l ON d.layer_id = l.id
+    LEFT JOIN m_agents a ON d.agent_id = a.id
+    WHERE k.key = ?
+  `).get(decisionKey) as {
+    key: string;
+    value: string;
+    version: string;
+    status: string;
+    layer: string | null;
+    decided_by: string | null;
+    updated: string;
+  } | undefined;
+
+  if (!decision) return null;
+
+  // Get all contexts for this decision
+  const contexts = db.prepare(`
+    SELECT
+      dc.id,
+      dc.rationale,
+      dc.alternatives_considered,
+      dc.tradeoffs,
+      a.name as decided_by,
+      datetime(dc.decision_date, 'unixepoch') as decision_date,
+      dc.related_task_id,
+      dc.related_constraint_id
+    FROM t_decision_context dc
+    JOIN m_context_keys k ON dc.decision_key_id = k.id
+    LEFT JOIN m_agents a ON dc.decided_by_agent_id = a.id
+    WHERE k.key = ?
+    ORDER BY dc.decision_date DESC
+  `).all(decisionKey) as Array<{
+    id: number;
+    rationale: string;
+    alternatives_considered: string | null;
+    tradeoffs: string | null;
+    decided_by: string | null;
+    decision_date: string;
+    related_task_id: number | null;
+    related_constraint_id: number | null;
+  }>;
+
+  return {
+    ...decision,
+    context: contexts,
+  };
+}
+
+/**
+ * List decision contexts with optional filters
+ *
+ * @param db - Database instance
+ * @param filters - Optional filters
+ * @returns Array of decision contexts
+ */
+export function listDecisionContexts(db: DatabaseType, filters?: {
+  decisionKey?: string;
+  relatedTaskId?: number;
+  relatedConstraintId?: number;
+  decidedBy?: string;
+  limit?: number;
+  offset?: number;
+}): Array<{
+  id: number;
+  decision_key: string;
+  rationale: string;
+  alternatives_considered: string | null;
+  tradeoffs: string | null;
+  decided_by: string | null;
+  decision_date: string;
+  related_task_id: number | null;
+  related_constraint_id: number | null;
+}> {
+  let query = `
+    SELECT
+      dc.id,
+      k.key as decision_key,
+      dc.rationale,
+      dc.alternatives_considered,
+      dc.tradeoffs,
+      a.name as decided_by,
+      datetime(dc.decision_date, 'unixepoch') as decision_date,
+      dc.related_task_id,
+      dc.related_constraint_id
+    FROM t_decision_context dc
+    JOIN m_context_keys k ON dc.decision_key_id = k.id
+    LEFT JOIN m_agents a ON dc.decided_by_agent_id = a.id
+    WHERE 1=1
+  `;
+
+  const params: any[] = [];
+
+  if (filters?.decisionKey) {
+    query += ' AND k.key = ?';
+    params.push(filters.decisionKey);
+  }
+
+  if (filters?.relatedTaskId !== undefined) {
+    query += ' AND dc.related_task_id = ?';
+    params.push(filters.relatedTaskId);
+  }
+
+  if (filters?.relatedConstraintId !== undefined) {
+    query += ' AND dc.related_constraint_id = ?';
+    params.push(filters.relatedConstraintId);
+  }
+
+  if (filters?.decidedBy) {
+    query += ' AND a.name = ?';
+    params.push(filters.decidedBy);
+  }
+
+  query += ' ORDER BY dc.decision_date DESC';
+
+  if (filters?.limit) {
+    query += ' LIMIT ?';
+    params.push(filters.limit);
+  }
+
+  if (filters?.offset) {
+    query += ' OFFSET ?';
+    params.push(filters.offset);
+  }
+
+  return db.prepare(query).all(...params) as Array<{
+    id: number;
+    decision_key: string;
+    rationale: string;
+    alternatives_considered: string | null;
+    tradeoffs: string | null;
+    decided_by: string | null;
+    decision_date: string;
+    related_task_id: number | null;
+    related_constraint_id: number | null;
+  }>;
+}

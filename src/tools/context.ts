@@ -3,7 +3,7 @@
  * Implements set_decision, get_context, and get_decision tools
  */
 
-import { getDatabase, getOrCreateAgent, getOrCreateContextKey, getOrCreateTag, getOrCreateScope, getLayerId, transaction } from '../database.js';
+import { getDatabase, getOrCreateAgent, getOrCreateContextKey, getOrCreateTag, getOrCreateScope, getLayerId, transaction, addDecisionContext as dbAddDecisionContext, getDecisionWithContext as dbGetDecisionWithContext, listDecisionContexts as dbListDecisionContexts } from '../database.js';
 import { STRING_TO_STATUS, STATUS_TO_STRING, DEFAULT_VERSION, DEFAULT_STATUS } from '../constants.js';
 import { processBatch } from '../utils/batch.js';
 import { validateRequired, validateStatus, validateLayer } from '../utils/validators.js';
@@ -251,11 +251,12 @@ export function getContext(params: GetContextParams = {}): GetContextResponse {
 /**
  * Get a specific decision by key
  * Returns full metadata including tags, layer, scopes, version
+ * Optionally includes decision context (v3.2.2)
  *
- * @param params - Decision key
+ * @param params - Decision key and optional include_context flag
  * @returns Decision details or not found
  */
-export function getDecision(params: GetDecisionParams): GetDecisionResponse {
+export function getDecision(params: GetDecisionParams & { include_context?: boolean }): GetDecisionResponse {
   const db = getDatabase();
 
   // Validate parameter
@@ -264,7 +265,39 @@ export function getDecision(params: GetDecisionParams): GetDecisionResponse {
   }
 
   try {
-    // Query v_tagged_decisions view
+    // If include_context is true, use the context-aware function
+    if (params.include_context) {
+      const result = dbGetDecisionWithContext(db, params.key);
+
+      if (!result) {
+        return {
+          found: false
+        };
+      }
+
+      return {
+        found: true,
+        decision: {
+          key: result.key,
+          value: result.value,
+          version: result.version,
+          status: result.status as 'active' | 'deprecated' | 'draft',
+          layer: result.layer,
+          decided_by: result.decided_by,
+          updated: result.updated,
+          tags: null,  // Not included in getDecisionWithContext
+          scopes: null  // Not included in getDecisionWithContext
+        },
+        context: result.context.map(ctx => ({
+          ...ctx,
+          // Parse JSON fields
+          alternatives_considered: ctx.alternatives_considered ? JSON.parse(ctx.alternatives_considered) : null,
+          tradeoffs: ctx.tradeoffs ? JSON.parse(ctx.tradeoffs) : null
+        }))
+      };
+    }
+
+    // Standard query without context (backward compatible)
     const stmt = db.prepare('SELECT * FROM v_tagged_decisions WHERE key = ?');
     const row = stmt.get(params.key) as TaggedDecision | undefined;
 
@@ -1263,5 +1296,100 @@ export function hardDeleteDecision(params: HardDeleteDecisionParams): HardDelete
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to hard delete decision: ${message}`);
+  }
+}
+
+// ============================================================================
+// Decision Context Actions (v3.2.2)
+// ============================================================================
+
+/**
+ * Add decision context action
+ * Adds rich context (rationale, alternatives, tradeoffs) to a decision
+ *
+ * @param params - Context parameters
+ * @returns Response with success status
+ */
+export function addDecisionContextAction(params: any): any {
+  const db = getDatabase();
+
+  // Validate required parameters
+  if (!params.key || params.key.trim() === '') {
+    throw new Error('Parameter "key" is required and cannot be empty');
+  }
+
+  if (!params.rationale || params.rationale.trim() === '') {
+    throw new Error('Parameter "rationale" is required and cannot be empty');
+  }
+
+  try {
+    // Parse JSON if provided as strings
+    let alternatives = params.alternatives_considered || null;
+    let tradeoffs = params.tradeoffs || null;
+
+    // If already objects, stringify them
+    if (alternatives && typeof alternatives === 'object') {
+      alternatives = JSON.stringify(alternatives);
+    }
+    if (tradeoffs && typeof tradeoffs === 'object') {
+      tradeoffs = JSON.stringify(tradeoffs);
+    }
+
+    const contextId = dbAddDecisionContext(
+      db,
+      params.key,
+      params.rationale,
+      alternatives,
+      tradeoffs,
+      params.decided_by || null,
+      params.related_task_id || null,
+      params.related_constraint_id || null
+    );
+
+    return {
+      success: true,
+      context_id: contextId,
+      decision_key: params.key,
+      message: `Decision context added successfully to "${params.key}"`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to add decision context: ${message}`);
+  }
+}
+
+/**
+ * List decision contexts action
+ * Query decision contexts with optional filters
+ *
+ * @param params - Filter parameters
+ * @returns Array of decision contexts
+ */
+export function listDecisionContextsAction(params: any): any {
+  const db = getDatabase();
+
+  try {
+    const contexts = dbListDecisionContexts(db, {
+      decisionKey: params.decision_key,
+      relatedTaskId: params.related_task_id,
+      relatedConstraintId: params.related_constraint_id,
+      decidedBy: params.decided_by,
+      limit: params.limit || 50,
+      offset: params.offset || 0
+    });
+
+    return {
+      success: true,
+      contexts: contexts.map(ctx => ({
+        ...ctx,
+        // Parse JSON fields for display
+        alternatives_considered: ctx.alternatives_considered ? JSON.parse(ctx.alternatives_considered) : null,
+        tradeoffs: ctx.tradeoffs ? JSON.parse(ctx.tradeoffs) : null
+      })),
+      count: contexts.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to list decision contexts: ${message}`);
   }
 }

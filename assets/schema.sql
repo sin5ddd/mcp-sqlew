@@ -1,5 +1,5 @@
 -- MCP Shared Context Server - Database Schema
--- Version: 3.0.0 (with Kanban Task Watcher, activity log, smart defaults, batch ops, templates)
+-- Version: 3.3.0 (with Decision Context, Kanban Task Watcher, activity log, smart defaults, batch ops, templates)
 
 -- ============================================================================
 -- Master Tables (Normalization)
@@ -166,6 +166,21 @@ CREATE TABLE IF NOT EXISTS t_decision_templates (
     ts INTEGER DEFAULT (unixepoch())
 );
 
+-- Decision Context (v3.3.0 - Rich Decision Documentation)
+CREATE TABLE IF NOT EXISTS t_decision_context (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    decision_key_id INTEGER NOT NULL REFERENCES m_context_keys(id) ON DELETE CASCADE,
+    rationale TEXT NOT NULL,
+    alternatives_considered TEXT,  -- JSON array: ["Alternative 1", "Alternative 2"]
+    tradeoffs TEXT,  -- JSON object: {"pros": ["Pro 1"], "cons": ["Con 1"]}
+    decided_by_agent_id INTEGER REFERENCES m_agents(id),
+    decision_date INTEGER DEFAULT (unixepoch()),
+    related_task_id INTEGER REFERENCES t_tasks(id) ON DELETE SET NULL,
+    related_constraint_id INTEGER REFERENCES t_constraints(id) ON DELETE SET NULL,
+    ts INTEGER DEFAULT (unixepoch()),
+    UNIQUE(decision_key_id, id)
+);
+
 -- ============================================================================
 -- Kanban Task Watcher (v3.0.0)
 -- ============================================================================
@@ -260,6 +275,9 @@ CREATE INDEX IF NOT EXISTS idx_task_status ON t_tasks(status_id);
 CREATE INDEX IF NOT EXISTS idx_task_updated ON t_tasks(updated_ts DESC);
 CREATE INDEX IF NOT EXISTS idx_task_assignee ON t_tasks(assigned_agent_id);
 CREATE INDEX IF NOT EXISTS idx_task_deps_blocked ON t_task_dependencies(blocked_task_id);
+CREATE INDEX IF NOT EXISTS idx_decision_context_key ON t_decision_context(decision_key_id, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_decision_context_task ON t_decision_context(related_task_id);
+CREATE INDEX IF NOT EXISTS idx_decision_context_constraint ON t_decision_context(related_constraint_id);
 
 -- ============================================================================
 -- Views (Token Efficiency)

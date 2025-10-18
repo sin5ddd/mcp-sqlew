@@ -12,7 +12,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { initializeDatabase, closeDatabase, setConfigValue, getAllConfig } from './database.js';
 import { CONFIG_KEYS } from './constants.js';
-import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer, quickSetDecision, searchAdvanced, setDecisionBatch, hasUpdates, setFromTemplate, createTemplate, listTemplates, hardDeleteDecision } from './tools/context.js';
+import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer, quickSetDecision, searchAdvanced, setDecisionBatch, hasUpdates, setFromTemplate, createTemplate, listTemplates, hardDeleteDecision, addDecisionContextAction, listDecisionContextsAction } from './tools/context.js';
 import { sendMessage, getMessages, markRead, sendMessageBatch } from './tools/messaging.js';
 import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch } from './tools/files.js';
 import { addConstraint, getConstraints, deactivateConstraint } from './tools/constraints.js';
@@ -93,7 +93,7 @@ try {
 const server = new Server(
   {
     name: 'mcp-sqlew',
-    version: '3.0.0',
+    version: '3.2.2',
   },
   {
     capabilities: {
@@ -120,7 +120,7 @@ Use action: "example" for comprehensive usage examples.`,
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'help', 'example']
+              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'add_decision_context', 'list_decision_contexts', 'help', 'example']
             },
             key: { type: 'string' },
             value: { type: ['string', 'number'] },
@@ -155,6 +155,13 @@ Use action: "example" for comprehensive usage examples.`,
             defaults: { type: 'object' },
             required_fields: { type: 'array', items: { type: 'string' } },
             created_by: { type: 'string' },
+            rationale: { type: 'string' },
+            alternatives_considered: { type: ['array', 'string'] },
+            tradeoffs: { type: ['object', 'string'] },
+            decision_key: { type: 'string' },
+            related_task_id: { type: 'number' },
+            related_constraint_id: { type: 'number' },
+            include_context: { type: 'boolean' },
           },
           required: ['action'],
         },
@@ -363,6 +370,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'create_template': result = createTemplate(params); break;
           case 'list_templates': result = listTemplates(params); break;
           case 'hard_delete': result = hardDeleteDecision(params); break;
+          case 'add_decision_context': result = addDecisionContextAction(params); break;
+          case 'list_decision_contexts': result = listDecisionContextsAction(params); break;
           case 'help': result = {
             tool: 'decision',
             description: 'Manage decisions with metadata (tags, layers, versions, scopes)',
@@ -415,7 +424,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
             actions: {
               set: 'Set/update a decision. Params: key (required), value (required), agent, layer, version, status, tags, scopes',
-              get: 'Get specific decision by key. Params: key (required)',
+              get: 'Get specific decision by key. Params: key (required), include_context (optional, boolean, default: false). When include_context=true, returns decision with attached context (rationale, alternatives, tradeoffs). Backward compatible - omitting flag returns standard decision format.',
               list: 'List/filter decisions. Params: status, layer, tags, scope, tag_match',
               search_tags: 'Search decisions by tags. Params: tags (required), match_mode, status, layer',
               search_layer: 'Search decisions by layer. Params: layer (required), status, include_tags',
@@ -427,7 +436,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               set_from_template: 'Set decision using template (FR-006). Params: template (required, template name), key (required), value (required), agent, layer (override), version, status (override), tags (override), scopes, plus any template-required fields. Applies template defaults (layer, status, tags) while allowing overrides. Validates required fields if specified by template. Returns: {success, key, key_id, version, template_used, applied_defaults, message}. Built-in templates: breaking_change, security_vulnerability, performance_optimization, deprecation, architecture_decision.',
               create_template: 'Create new decision template (FR-006). Params: name (required, unique), defaults (required, object with layer/status/tags/priority), required_fields (optional, array of field names), created_by (optional, agent name). Returns: {success, template_id, template_name, message}. Example defaults: {"layer":"business","status":"active","tags":["breaking"]}. Validates layer/status values.',
               list_templates: 'List all decision templates (FR-006). No params required. Returns: {templates: [{id, name, defaults, required_fields, created_by, created_at}], count}. Shows both built-in and custom templates.',
-              hard_delete: 'Permanently delete a decision (hard delete). Params: key (required). WARNING: IRREVERSIBLE - removes all records including version history, tags, scopes. Use cases: manual cleanup after decision-to-task migration, remove test/debug decisions, purge sensitive data. Unlike soft delete (status=deprecated), this completely removes from database. Idempotent - safe to call even if already deleted. Returns: {success, key, message}.'
+              hard_delete: 'Permanently delete a decision (hard delete). Params: key (required). WARNING: IRREVERSIBLE - removes all records including version history, tags, scopes. Use cases: manual cleanup after decision-to-task migration, remove test/debug decisions, purge sensitive data. Unlike soft delete (status=deprecated), this completely removes from database. Idempotent - safe to call even if already deleted. Returns: {success, key, message}.',
+              add_decision_context: 'Add rich context to a decision (v3.2.2). Params: key (required), rationale (required), alternatives_considered (optional, JSON array), tradeoffs (optional, JSON object with pros/cons), decided_by (optional), related_task_id (optional), related_constraint_id (optional). Use to document WHY decisions were made, what alternatives were considered, and trade-offs. Multiple contexts can be attached to the same decision over time. Returns: {success, context_id, decision_key, message}.',
+              list_decision_contexts: 'List decision contexts with filters (v3.2.2). Params: decision_key (optional), related_task_id (optional), related_constraint_id (optional), decided_by (optional), limit (default: 50), offset (default: 0). Returns: {success, contexts: [{id, decision_key, rationale, alternatives_considered, tradeoffs, decided_by, decision_date, related_task_id, related_constraint_id}], count}. JSON fields (alternatives, tradeoffs) are automatically parsed.'
             },
             examples: {
               set: '{ action: "set", key: "auth_method", value: "jwt", tags: ["security"] }',

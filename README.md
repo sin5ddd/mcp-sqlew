@@ -59,6 +59,11 @@ Traditional code only tells you **WHAT** and **HOW**. sqlew adds **WHY**:
 ### 🎯 Key Features
 - **7 Specialized Tools**: decisions, messages, tasks, files, constraints, stats, config
 - **Metadata-Driven**: Tag, layer, scope, and version everything
+- **Decision Context** (v3.2.2): Rich decision documentation with rationale and trade-offs
+  - Document **WHY** decisions were made, not just **WHAT**
+  - Store alternatives considered and pros/cons analysis
+  - Perfect for multi-session AI development and team handoffs
+  - Link decisions to tasks and constraints for full traceability
 - **Task Dependencies** (v3.2.0): Blocking relationships with circular detection
   - Sequential workflow management (API before UI, DB before ORM)
   - Bidirectional queries (find blockers and blocking tasks)

@@ -5,6 +5,54 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2] - 2025-10-18
+
+### Added
+- **Decision Context - Rich Decision Documentation** (GitHub Discussion #9)
+  - New `add_decision_context` action: Attach rationale, alternatives, and trade-offs to decisions
+  - New `list_decision_contexts` action: Query decision contexts with flexible filters
+  - Enhanced `get` action with `include_context` parameter to retrieve decision with full context
+  - Database schema: New `t_decision_context` table with relationships to decisions, tasks, and constraints
+  - Migration script for existing databases (v3.2.0 → v3.2.2)
+  - Comprehensive documentation: `docs/DECISION_CONTEXT.md` (500+ lines with real-world scenarios)
+
+### Features
+- **Rich Context Storage:**
+  - `rationale` (required): Explanation of WHY a decision was made
+  - `alternatives_considered` (optional): JSON array of rejected alternatives with reasons
+  - `tradeoffs` (optional): JSON object with pros/cons analysis
+  - `decided_by` (optional): Agent who made the decision
+  - `related_task_id` (optional): Link to implementation task
+  - `related_constraint_id` (optional): Link to system constraint
+
+### Use Cases (from DECISION_CONTEXT.md)
+- **Multi-Session AI Development**: Preserve decision rationale across days/weeks of development
+- **Architecture Reviews & Team Handoffs**: Explain non-standard choices to future developers
+- **Breaking Changes & Deprecations**: Document migration requirements and timelines
+- **Performance Optimization Trade-offs**: Prevent future "optimizations" that regress quality
+
+### Documentation
+- Added `docs/DECISION_CONTEXT.md` - Comprehensive guide with 4 detailed scenarios:
+  - Scenario 1: Multi-Session AI Development (auth token storage example)
+  - Scenario 2: Architecture Reviews (SQLite vs PostgreSQL example)
+  - Scenario 3: Breaking Changes (API versioning example)
+  - Scenario 4: Performance Optimization (caching strategy example)
+- Includes best practices, token efficiency guidelines, and migration patterns
+- API reference with all parameters and examples
+
+### Technical Details
+- **Backward Compatible**: Zero breaking changes - new feature is completely optional
+- **Migration Safety**: CREATE TABLE IF NOT EXISTS pattern ensures idempotent migration
+- **Token Efficiency**: Optional feature - only add context when decision rationale is critical
+- **Indexes**: 3 optimized indexes for key-based, task-based, and constraint-based queries
+- **CASCADE Deletion**: Contexts are deleted when parent decision is removed
+- **SET NULL**: Task/constraint links remain even if linked resources are deleted
+
+### Changed
+- Database schema version bumped to v3.2.2
+- MCP server version updated to 3.2.2
+- Enhanced `decision` tool with 2 new actions (total: 17 actions)
+
 ## [3.2.0] - 2025-10-18
 
 ### Added
