@@ -59,6 +59,10 @@ Traditional code only tells you **WHAT** and **HOW**. sqlew adds **WHY**:
 ### 🎯 Key Features
 - **7 Specialized Tools**: decisions, messages, tasks, files, constraints, stats, config
 - **Metadata-Driven**: Tag, layer, scope, and version everything
+- **Auto-File Tracking** (v3.0.2): Zero-token task management via automatic file watching
+  - Auto-transition: `todo` → `in_progress` on file edit
+  - Auto-complete: `in_progress` → `done` when acceptance criteria pass
+  - 97% token reduction (4,650 tokens saved per 6-task session)
 - **Auto-Stale Detection**: Tasks automatically transition when idle
 - **Weekend-Aware Cleanup**: Smart retention that pauses during weekends
 - **Batch Operations**: Process up to 50 items atomically
@@ -194,6 +198,10 @@ Each tool supports `action: "help"` for full documentation and `action: "example
 - ⚙️ **[Task Actions](docs/TASK_ACTIONS.md)** - All actions with examples (854 lines, ~21k tokens)
 - 🔗 **[Task Linking](docs/TASK_LINKING.md)** - Link tasks to decisions/constraints/files (729 lines, ~18k tokens)
 - 🔄 **[Task Migration](docs/TASK_MIGRATION.md)** - Migrate from decision-based tracking (701 lines, ~18k tokens)
+
+**Auto File Tracking (v3.0.2):**
+- 🤖 **[Auto File Tracking](docs/AUTO_FILE_TRACKING.md)** - Zero-token task management, setup, troubleshooting
+- ✅ **[Acceptance Criteria](docs/ACCEPTANCE_CRITERIA.md)** - All check types (tests_pass, code_removed, code_contains, file_exists)
 
 **Shared References:**
 - 📘 **[Shared Concepts](docs/SHARED_CONCEPTS.md)** - Layer definitions, enum values, atomic mode (339 lines, ~17k tokens)

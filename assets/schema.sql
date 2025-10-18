@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS t_task_details (
     task_id INTEGER PRIMARY KEY REFERENCES t_tasks(id) ON DELETE CASCADE,
     description TEXT,
     acceptance_criteria TEXT,
+    acceptance_criteria_json TEXT,  -- JSON array: [{"type": "tests_pass", "command": "npm test", "expected_pattern": "passing"}]
     notes TEXT
 );
 

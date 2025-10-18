@@ -14,6 +14,7 @@ import {
 } from '../database.js';
 import { detectAndTransitionStaleTasks } from '../utils/task-stale-detection.js';
 import { processBatch } from '../utils/batch.js';
+import { FileWatcher } from '../watcher/index.js';
 import {
   validatePriorityRange,
   validateLength,
@@ -77,7 +78,7 @@ const VALID_TRANSITIONS: Record<number, number[]> = {
 function createTaskInternal(params: {
   title: string;
   description?: string;
-  acceptance_criteria?: string;
+  acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
   priority?: number;
   assigned_agent?: string;
@@ -134,17 +135,52 @@ function createTaskInternal(params: {
 
   const taskId = taskResult.lastInsertRowid as number;
 
+  // Process acceptance_criteria (can be string, JSON string, or array)
+  let acceptanceCriteriaString: string | null = null;
+  let acceptanceCriteriaJson: string | null = null;
+
+  if (params.acceptance_criteria) {
+    if (Array.isArray(params.acceptance_criteria)) {
+      // Array format - store as JSON in acceptance_criteria_json
+      acceptanceCriteriaJson = JSON.stringify(params.acceptance_criteria);
+      // Also create human-readable summary in acceptance_criteria
+      acceptanceCriteriaString = params.acceptance_criteria
+        .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
+        .join('\n');
+    } else if (typeof params.acceptance_criteria === 'string') {
+      // Try to parse as JSON first
+      try {
+        const parsed = JSON.parse(params.acceptance_criteria);
+        if (Array.isArray(parsed)) {
+          // It's a JSON array string - store in JSON field
+          acceptanceCriteriaJson = params.acceptance_criteria;
+          // Also create human-readable summary
+          acceptanceCriteriaString = parsed
+            .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
+            .join('\n');
+        } else {
+          // Valid JSON but not an array - store as plain text
+          acceptanceCriteriaString = params.acceptance_criteria;
+        }
+      } catch {
+        // Not valid JSON - store as plain text
+        acceptanceCriteriaString = params.acceptance_criteria;
+      }
+    }
+  }
+
   // Insert task details if provided
-  if (params.description || params.acceptance_criteria || params.notes) {
+  if (params.description || acceptanceCriteriaString || acceptanceCriteriaJson || params.notes) {
     const insertDetailsStmt = db.prepare(`
-      INSERT INTO t_task_details (task_id, description, acceptance_criteria, notes)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO t_task_details (task_id, description, acceptance_criteria, acceptance_criteria_json, notes)
+      VALUES (?, ?, ?, ?, ?)
     `);
 
     insertDetailsStmt.run(
       taskId,
       params.description || null,
-      params.acceptance_criteria || null,
+      acceptanceCriteriaString,
+      acceptanceCriteriaJson,
       params.notes || null
     );
   }
@@ -177,7 +213,7 @@ function createTaskInternal(params: {
 export function createTask(params: {
   title: string;
   description?: string;
-  acceptance_criteria?: string;
+  acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
   priority?: number;
   assigned_agent?: string;
@@ -215,7 +251,7 @@ export function updateTask(params: {
   assigned_agent?: string;
   layer?: string;
   description?: string;
-  acceptance_criteria?: string;
+  acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
 }): any {
   const db = getDatabase();
@@ -279,6 +315,42 @@ export function updateTask(params: {
 
       // Update t_task_details if any detail fields provided
       if (params.description !== undefined || params.acceptance_criteria !== undefined || params.notes !== undefined) {
+        // Process acceptance_criteria (can be string or array)
+        let acceptanceCriteriaString: string | null | undefined = undefined;
+        let acceptanceCriteriaJson: string | null | undefined = undefined;
+
+        if (params.acceptance_criteria !== undefined) {
+          if (Array.isArray(params.acceptance_criteria)) {
+            // Array format - store as JSON in acceptance_criteria_json
+            acceptanceCriteriaJson = JSON.stringify(params.acceptance_criteria);
+            // Also create human-readable summary in acceptance_criteria
+            acceptanceCriteriaString = params.acceptance_criteria
+              .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
+              .join('\n');
+          } else if (typeof params.acceptance_criteria === 'string') {
+            // Try to parse as JSON first
+            try {
+              const parsed = JSON.parse(params.acceptance_criteria);
+              if (Array.isArray(parsed)) {
+                // It's a JSON array string - store in JSON field
+                acceptanceCriteriaJson = params.acceptance_criteria;
+                // Also create human-readable summary
+                acceptanceCriteriaString = parsed
+                  .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
+                  .join('\n');
+              } else {
+                // Valid JSON but not an array - store as plain text
+                acceptanceCriteriaString = params.acceptance_criteria || null;
+                acceptanceCriteriaJson = null;
+              }
+            } catch {
+              // Not valid JSON - store as plain text
+              acceptanceCriteriaString = params.acceptance_criteria || null;
+              acceptanceCriteriaJson = null;
+            }
+          }
+        }
+
         // Check if details exist
         const detailsExist = db.prepare('SELECT task_id FROM t_task_details WHERE task_id = ?').get(params.task_id);
 
@@ -291,9 +363,13 @@ export function updateTask(params: {
             detailUpdates.push('description = ?');
             detailParams.push(params.description || null);
           }
-          if (params.acceptance_criteria !== undefined) {
+          if (acceptanceCriteriaString !== undefined) {
             detailUpdates.push('acceptance_criteria = ?');
-            detailParams.push(params.acceptance_criteria || null);
+            detailParams.push(acceptanceCriteriaString);
+          }
+          if (acceptanceCriteriaJson !== undefined) {
+            detailUpdates.push('acceptance_criteria_json = ?');
+            detailParams.push(acceptanceCriteriaJson);
           }
           if (params.notes !== undefined) {
             detailUpdates.push('notes = ?');
@@ -311,13 +387,14 @@ export function updateTask(params: {
         } else {
           // Insert new details
           const insertDetailsStmt = db.prepare(`
-            INSERT INTO t_task_details (task_id, description, acceptance_criteria, notes)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO t_task_details (task_id, description, acceptance_criteria, acceptance_criteria_json, notes)
+            VALUES (?, ?, ?, ?, ?)
           `);
           insertDetailsStmt.run(
             params.task_id,
             params.description || null,
-            params.acceptance_criteria || null,
+            acceptanceCriteriaString !== undefined ? acceptanceCriteriaString : null,
+            acceptanceCriteriaJson !== undefined ? acceptanceCriteriaJson : null,
             params.notes || null
           );
         }
@@ -565,6 +642,16 @@ export function moveTask(params: {
 
       updateStmt.run(newStatusId, newStatusId, params.task_id);
 
+      // Update watcher if moving to done or archived (stop watching)
+      if (params.new_status === 'done' || params.new_status === 'archived') {
+        try {
+          const watcher = FileWatcher.getInstance();
+          watcher.unregisterTask(params.task_id);
+        } catch (error) {
+          // Watcher may not be initialized, ignore
+        }
+      }
+
       return {
         success: true,
         task_id: params.task_id,
@@ -663,6 +750,24 @@ export function linkTask(params: {
         `);
         stmt.run(params.task_id, fileId);
 
+        // Register file with watcher for auto-tracking
+        try {
+          const taskData = db.prepare(`
+            SELECT t.title, s.name as status
+            FROM t_tasks t
+            JOIN m_task_statuses s ON t.status_id = s.id
+            WHERE t.id = ?
+          `).get(params.task_id) as { title: string; status: string } | undefined;
+
+          if (taskData) {
+            const watcher = FileWatcher.getInstance();
+            watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+          }
+        } catch (error) {
+          // Watcher may not be initialized yet, ignore
+          console.error('Warning: Could not register file with watcher:', error);
+        }
+
         return {
           success: true,
           task_id: params.task_id,
@@ -707,6 +812,14 @@ export function archiveTask(params: { task_id: number }): any {
       // Update to archived
       const updateStmt = db.prepare('UPDATE t_tasks SET status_id = ? WHERE id = ?');
       updateStmt.run(TASK_STATUS.ARCHIVED, params.task_id);
+
+      // Unregister from file watcher (archived tasks don't need tracking)
+      try {
+        const watcher = FileWatcher.getInstance();
+        watcher.unregisterTask(params.task_id);
+      } catch (error) {
+        // Watcher may not be initialized, ignore
+      }
 
       return {
         success: true,

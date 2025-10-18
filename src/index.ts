@@ -19,6 +19,7 @@ import { addConstraint, getConstraints, deactivateConstraint } from './tools/con
 import { getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL } from './tools/utils.js';
 import { getConfig, updateConfig } from './tools/config.js';
 import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, taskHelp } from './tools/tasks.js';
+import { FileWatcher } from './watcher/index.js';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
@@ -1441,14 +1442,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 // Handle graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.error('\n✓ Shutting down MCP server...');
+  try {
+    const watcher = FileWatcher.getInstance();
+    await watcher.stop();
+  } catch (error) {
+    // Ignore watcher errors during shutdown
+  }
   closeDatabase();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.error('\n✓ Shutting down MCP server...');
+  try {
+    const watcher = FileWatcher.getInstance();
+    await watcher.stop();
+  } catch (error) {
+    // Ignore watcher errors during shutdown
+  }
   closeDatabase();
   process.exit(0);
 });
@@ -1458,6 +1471,15 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('✓ MCP Shared Context Server running on stdio');
+
+  // Start file watcher for auto-task-tracking
+  try {
+    const watcher = FileWatcher.getInstance();
+    await watcher.start();
+  } catch (error) {
+    console.error('⚠ Failed to start file watcher:', error);
+    console.error('  (Auto task tracking will be disabled)');
+  }
 }
 
 main().catch((error) => {

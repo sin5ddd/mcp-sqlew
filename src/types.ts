@@ -415,6 +415,27 @@ export interface GetActivityLogParams {
 }
 
 // ============================================================================
+// Task Acceptance Criteria Types (v3.0.2 - File Watcher)
+// ============================================================================
+
+/**
+ * Acceptance check types for automated task validation
+ */
+export type AcceptanceCheckType = 'tests_pass' | 'code_removed' | 'code_contains' | 'file_exists';
+
+/**
+ * Acceptance check definition
+ */
+export interface AcceptanceCheck {
+  type: AcceptanceCheckType;
+  command?: string;           // For tests_pass: shell command to execute
+  expected_pattern?: string;  // For tests_pass: pattern to match in output
+  file?: string;              // For code_* and file_exists: target file path
+  pattern?: string;           // For code_removed/code_contains: regex pattern
+  timeout?: number;           // Optional timeout in seconds (default: 60)
+}
+
+// ============================================================================
 // Batch Operation Parameter Types (FR-005)
 // ============================================================================
 
