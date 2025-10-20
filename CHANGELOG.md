@@ -5,6 +5,41 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.3] - 2025-10-20
+
+### Changed
+- **Code Organization - Major Refactoring**
+  - Reduced `src/index.ts` from 1,534 lines to 525 lines (66% reduction)
+  - Extracted 1,009 lines of help/example documentation to respective tool files
+  - Moved help/example functions to 7 tool files: `context.ts`, `messaging.ts`, `files.ts`, `constraints.ts`, `utils.ts`, `config.ts`, `tasks.ts`
+  - Improved maintainability: Help/example documentation now co-located with tool implementations
+  - Zero API changes: All 14 help/example actions remain fully backward compatible
+
+- **File Watcher Documentation Updates**
+  - Corrected token savings claims: Changed "97% token reduction" to "save 300 tokens per file compared to registering watchers manually"
+  - Updated claims in 5 locations across `taskHelp()` and `taskExample()` functions
+  - Added best practice recommendation: "Except in exceptional cases, it is recommended to set up file watchers for all tasks that involve code changes"
+  - Clarified automatic file watching benefits with accurate token efficiency metrics
+
+- **Package Description Update**
+  - Updated description from "97% token reduction" to "96% token efficiency through API consolidation"
+  - More accurately reflects the token savings from v2.0 action-based API consolidation
+
+### Technical Details
+- **Files Modified:**
+  - `src/index.ts`: Simplified to pure routing logic (525 lines)
+  - `src/tools/context.ts`: Added `decisionHelp()`, `decisionExample()` (+217 lines)
+  - `src/tools/messaging.ts`: Added `messageHelp()`, `messageExample()` (+136 lines)
+  - `src/tools/files.ts`: Added `fileHelp()`, `fileExample()` (+127 lines)
+  - `src/tools/constraints.ts`: Added `constraintHelp()`, `constraintExample()` (+169 lines)
+  - `src/tools/utils.ts`: Added `statsHelp()`, `statsExample()` (+137 lines)
+  - `src/tools/config.ts`: Added `configHelp()`, `configExample()` (+107 lines)
+  - `src/tools/tasks.ts`: Added `taskExample()` (+200 lines, `taskHelp()` already existed)
+
+- **Pattern Applied:** Extract inline switch case blocks to exported functions in tool files
+- **Backward Compatibility:** 100% maintained - all existing MCP tool calls work identically
+- **Build:** TypeScript compilation successful with zero errors
+
 ## [3.2.2] - 2025-10-18
 
 ### Added
