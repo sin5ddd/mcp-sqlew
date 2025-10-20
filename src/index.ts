@@ -18,7 +18,7 @@ import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch 
 import { addConstraint, getConstraints, deactivateConstraint } from './tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL } from './tools/utils.js';
 import { getConfig, updateConfig } from './tools/config.js';
-import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, taskHelp } from './tools/tasks.js';
+import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, taskHelp, watcherStatus } from './tools/tasks.js';
 import { FileWatcher } from './watcher/index.js';
 
 // Parse command-line arguments
@@ -1271,6 +1271,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'add_dependency': result = addDependency(params); break;
           case 'remove_dependency': result = removeDependency(params); break;
           case 'get_dependencies': result = getDependencies(params); break;
+          case 'watcher': result = watcherStatus(params); break;
           case 'help': result = taskHelp(); break;
           case 'example': result = {
             tool: 'task',
@@ -1370,7 +1371,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   {
                     scenario: 'Link task to file',
                     request: '{ action: "link", task_id: 5, link_type: "file", target_id: "src/api/auth.ts", link_relation: "modifies" }',
-                    explanation: 'Indicate which files the task will modify'
+                    explanation: 'Activates automatic file watching for the task (97% token reduction vs manual tracking)',
+                    behavior: 'File watcher monitors linked files and validates acceptance criteria when files change'
                   }
                 ]
               },
@@ -1401,6 +1403,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     scenario: 'View infrastructure layer tasks',
                     request: '{ action: "list", layer: "infrastructure" }',
                     explanation: 'See all DevOps/config related tasks'
+                  }
+                ]
+              },
+              file_watcher_status: {
+                title: 'File Watcher Status Queries',
+                examples: [
+                  {
+                    scenario: 'Check if file watcher is running',
+                    request: '{ action: "watcher", subaction: "status" }',
+                    explanation: 'Returns running status, files watched count, tasks monitored count',
+                    response: '{ running: true, files_watched: 5, tasks_monitored: 3 }'
+                  },
+                  {
+                    scenario: 'List all files being watched',
+                    request: '{ action: "watcher", subaction: "list_files" }',
+                    explanation: 'Shows file paths and which tasks are watching them',
+                    response: '{ files: [{ file_path: "src/api/auth.ts", tasks: [{ task_id: 5, title: "...", status: "in_progress" }] }] }'
+                  },
+                  {
+                    scenario: 'List tasks with active file watchers',
+                    request: '{ action: "watcher", subaction: "list_tasks" }',
+                    explanation: 'Shows tasks and which files they are watching',
+                    response: '{ tasks: [{ task_id: 5, title: "...", files: ["src/api/auth.ts", "src/api/middleware.ts"] }] }'
                   }
                 ]
               }

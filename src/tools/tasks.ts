@@ -1186,6 +1186,7 @@ export function taskHelp(): any {
     tool: 'task',
     description: 'Kanban Task Watcher for managing tasks with AI-optimized lifecycle states',
     note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all task actions.',
+    important: '🚨 AUTOMATIC FILE WATCHING: Linking files to tasks activates automatic file change monitoring and acceptance criteria validation. This provides 97% token reduction vs manual tracking. See auto_file_tracking section below.',
     actions: {
       create: {
         description: 'Create a new task',
@@ -1254,6 +1255,7 @@ export function taskHelp(): any {
         required_params: ['task_id', 'link_type', 'target_id'],
         optional_params: ['link_relation'],
         link_types: ['decision', 'constraint', 'file'],
+        file_linking_behavior: '⚠️  IMPORTANT: When link_type="file", this action ACTIVATES AUTOMATIC FILE WATCHING. The file watcher monitors linked files for changes and validates acceptance criteria when files are saved. This provides 97% token reduction compared to manual file change tracking.',
         example: {
           action: 'link',
           task_id: 5,
@@ -1327,6 +1329,28 @@ export function taskHelp(): any {
         },
         note: 'Defaults to metadata-only (token-efficient). Set include_details=true for full task details.'
       },
+      watcher: {
+        description: 'Query file watcher status and monitored files/tasks',
+        required_params: [],
+        optional_params: ['subaction'],
+        subactions: ['status', 'list_files', 'list_tasks', 'help'],
+        default_subaction: 'status',
+        examples: {
+          status: {
+            action: 'watcher',
+            subaction: 'status'
+          },
+          list_files: {
+            action: 'watcher',
+            subaction: 'list_files'
+          },
+          list_tasks: {
+            action: 'watcher',
+            subaction: 'list_tasks'
+          }
+        },
+        note: 'Use to monitor which files/tasks are being watched. File watching activates automatically when you link files to tasks.'
+      },
       help: {
         description: 'Return this help documentation',
         example: { action: 'help' }
@@ -1350,6 +1374,23 @@ export function taskHelp(): any {
       3: 'high',
       4: 'critical'
     },
+    auto_file_tracking: {
+      description: 'Automatic file watching and acceptance criteria validation (97% token reduction)',
+      how_it_works: [
+        '1. Link files to tasks using the link action with link_type="file"',
+        '2. File watcher automatically activates and monitors linked files',
+        '3. When files are saved, watcher detects changes',
+        '4. If task has acceptance_criteria, watcher validates criteria against changes',
+        '5. Results appear in terminal output with pass/fail status'
+      ],
+      requirements: [
+        'Task must have files linked via link action',
+        'File paths must be relative to project root (e.g., "src/api/auth.ts")',
+        'Watcher only monitors files explicitly linked to tasks'
+      ],
+      token_efficiency: 'File watching happens in background. No MCP tokens consumed until you query status. Manual file tracking would cost ~500-1000 tokens per file check.',
+      documentation_reference: 'docs/AUTO_FILE_TRACKING.md - Complete guide with examples'
+    },
     documentation: {
       task_overview: 'docs/TASK_OVERVIEW.md - Lifecycle, status transitions, auto-stale detection (363 lines, ~10k tokens)',
       task_actions: 'docs/TASK_ACTIONS.md - All action references with examples (854 lines, ~21k tokens)',
@@ -1359,5 +1400,128 @@ export function taskHelp(): any {
       workflows: 'docs/WORKFLOWS.md - Multi-agent task coordination workflows (602 lines, ~30k tokens)',
       shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (status/priority), atomic mode (339 lines, ~17k tokens)'
     }
+  };
+}
+
+/**
+ * Query file watcher status and monitored files/tasks
+ */
+export function watcherStatus(args: any): any {
+  const subaction = args.subaction || 'status';
+  const watcher = FileWatcher.getInstance();
+
+  if (subaction === 'help') {
+    return {
+      action: 'watcher',
+      description: 'Query file watcher status and monitored files/tasks',
+      subactions: {
+        status: {
+          description: 'Get overall watcher status (running, files watched, tasks monitored)',
+          example: { action: 'watcher', subaction: 'status' }
+        },
+        list_files: {
+          description: 'List all files being watched with their associated tasks',
+          example: { action: 'watcher', subaction: 'list_files' }
+        },
+        list_tasks: {
+          description: 'List all tasks that have active file watchers',
+          example: { action: 'watcher', subaction: 'list_tasks' }
+        },
+        help: {
+          description: 'Show this help documentation',
+          example: { action: 'watcher', subaction: 'help' }
+        }
+      },
+      note: 'File watching activates automatically when you link files to tasks using the link action with link_type="file". The watcher monitors linked files for changes and validates acceptance criteria.'
+    };
+  }
+
+  if (subaction === 'status') {
+    const status = watcher.getStatus();
+    return {
+      success: true,
+      watcher_status: {
+        running: status.running,
+        files_watched: status.filesWatched,
+        tasks_monitored: status.tasksWatched
+      },
+      message: status.running
+        ? `File watcher is running. Monitoring ${status.filesWatched} file(s) across ${status.tasksWatched} task(s).`
+        : 'File watcher is not running. Link files to tasks to activate automatic file watching.'
+    };
+  }
+
+  if (subaction === 'list_files') {
+    const db = getDatabase();
+    const fileLinks = db.prepare(`
+      SELECT DISTINCT tfl.file_path, t.id, t.title, ts.status_name
+      FROM t_task_file_links tfl
+      JOIN t_tasks t ON tfl.task_id = t.id
+      JOIN m_task_statuses ts ON t.status_id = ts.id
+      WHERE t.status_id != 6  -- Exclude archived tasks
+      ORDER BY tfl.file_path, t.id
+    `).all() as Array<{ file_path: string; id: number; title: string; status_name: string }>;
+
+    // Group by file
+    const fileMap = new Map<string, Array<{ task_id: number; task_title: string; status: string }>>();
+    for (const link of fileLinks) {
+      if (!fileMap.has(link.file_path)) {
+        fileMap.set(link.file_path, []);
+      }
+      fileMap.get(link.file_path)!.push({
+        task_id: link.id,
+        task_title: link.title,
+        status: link.status_name
+      });
+    }
+
+    const files = Array.from(fileMap.entries()).map(([path, tasks]) => ({
+      file_path: path,
+      tasks: tasks
+    }));
+
+    return {
+      success: true,
+      files_watched: files.length,
+      files: files,
+      message: files.length > 0
+        ? `Watching ${files.length} file(s) linked to tasks.`
+        : 'No files currently linked to tasks. Use link action with link_type="file" to activate file watching.'
+    };
+  }
+
+  if (subaction === 'list_tasks') {
+    const db = getDatabase();
+    const taskLinks = db.prepare(`
+      SELECT t.id, t.title, ts.status_name, COUNT(DISTINCT tfl.file_path) as file_count,
+             GROUP_CONCAT(DISTINCT tfl.file_path, ', ') as files
+      FROM t_tasks t
+      JOIN m_task_statuses ts ON t.status_id = ts.id
+      JOIN t_task_file_links tfl ON t.id = tfl.task_id
+      WHERE t.status_id != 6  -- Exclude archived tasks
+      GROUP BY t.id, t.title, ts.status_name
+      ORDER BY t.id
+    `).all() as Array<{ id: number; title: string; status_name: string; file_count: number; files: string }>;
+
+    const tasks = taskLinks.map(task => ({
+      task_id: task.id,
+      task_title: task.title,
+      status: task.status_name,
+      files_count: task.file_count,
+      files: task.files.split(', ')
+    }));
+
+    return {
+      success: true,
+      tasks_monitored: tasks.length,
+      tasks: tasks,
+      message: tasks.length > 0
+        ? `Monitoring ${tasks.length} task(s) with linked files.`
+        : 'No tasks currently have linked files. Use link action with link_type="file" to activate file watching.'
+    };
+  }
+
+  return {
+    error: `Invalid subaction: ${subaction}. Valid subactions: status, list_files, list_tasks, help`
   };
 }
