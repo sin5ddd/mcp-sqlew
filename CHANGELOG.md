@@ -5,7 +5,17 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.3] - 2025-10-20
+## [3.2.4] - 2025-10-20
+
+### Fixed
+- **Package Description Correction**
+  - Fixed incorrect token efficiency claim in package.json
+  - Changed from "96% token efficiency through API consolidation" to "60-75% token reduction in multi-session projects"
+  - The 60-75% reflects real-world usage across multi-session projects (as documented in README.md)
+  - Note: 96% refers specifically to v2.0 API consolidation (tool definitions only), not real-world usage
+  - v3.2.3 deprecated due to misleading description
+
+## [3.2.3] - 2025-10-20 [DEPRECATED]
 
 ### Changed
 - **Code Organization - Major Refactoring**
