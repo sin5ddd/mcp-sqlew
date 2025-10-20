@@ -317,3 +317,130 @@ export function recordFileChangeBatch(params: RecordFileChangeBatchParams): Reco
     }))
   };
 }
+
+/**
+ * Help action for file tool
+ */
+export function fileHelp(): any {
+  return {
+    tool: 'file',
+    description: 'Track file changes across agents with layer classification',
+    note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all file tracking actions.',
+    actions: {
+      record: 'Record file change. Params: file_path (required), agent_name (required), change_type (required), layer, description',
+      get: 'Get file changes. Params: file_path, agent_name, layer, change_type, since, limit',
+      check_lock: 'Check if file locked. Params: file_path (required), lock_duration',
+      record_batch: 'Batch record file changes (FR-005). Params: file_changes (required, array of RecordFileChangeParams, max: 50), atomic (optional, boolean, default: true). Returns: {success, inserted, failed, results}. ATOMIC MODE (atomic: true): All file changes succeed or all fail as a single transaction. IF ANY record fails, entire batch is rolled back and error is thrown. NON-ATOMIC MODE (atomic: false): Each file change is processed independently. If some fail, others still succeed. Returns partial results with per-item success/error status. RECOMMENDATION FOR AI AGENTS: Use atomic:false by default for best-effort recording. Use atomic:true only when all-or-nothing guarantee is required. 52% token reduction vs individual calls.'
+    },
+    examples: {
+      record: '{ action: "record", file_path: "src/index.ts", agent_name: "refactor-bot", change_type: "modified", layer: "infrastructure" }',
+      get: '{ action: "get", agent_name: "refactor-bot", layer: "infrastructure", limit: 10 }',
+      check_lock: '{ action: "check_lock", file_path: "src/index.ts", lock_duration: 300 }',
+      record_batch: '{ action: "record_batch", file_changes: [{"file_path": "src/types.ts", "agent_name": "bot1", "change_type": "modified", "layer": "data"}, {"file_path": "src/index.ts", "agent_name": "bot1", "change_type": "modified", "layer": "infrastructure"}], atomic: true }'
+    },
+    documentation: {
+      workflows: 'docs/WORKFLOWS.md - File locking patterns, concurrent file access workflows (602 lines, ~30k tokens)',
+      tool_reference: 'docs/TOOL_REFERENCE.md - File tool parameters, batch operations (471 lines, ~24k tokens)',
+      shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (change_type), atomic mode (339 lines, ~17k tokens)',
+      best_practices: 'docs/BEST_PRACTICES.md - File tracking best practices (345 lines, ~17k tokens)'
+    }
+  };
+}
+
+/**
+ * Example action for file tool
+ */
+export function fileExample(): any {
+  return {
+    tool: 'file',
+    description: 'Comprehensive file tracking examples for multi-agent coordination',
+    scenarios: {
+      basic_tracking: {
+        title: 'Basic File Change Tracking',
+        examples: [
+          {
+            scenario: 'Record file modification',
+            request: '{ action: "record", file_path: "src/api/users.ts", agent_name: "refactor-agent", change_type: "modified", layer: "business", description: "Added email validation" }',
+            explanation: 'Track changes with layer and description'
+          },
+          {
+            scenario: 'Get recent changes by agent',
+            request: '{ action: "get", agent_name: "refactor-agent", limit: 10 }',
+            explanation: 'View what an agent has been working on'
+          },
+          {
+            scenario: 'Track changes to specific file',
+            request: '{ action: "get", file_path: "src/api/users.ts" }',
+            explanation: 'See all modifications to a particular file'
+          }
+        ]
+      },
+      file_locking: {
+        title: 'Concurrent Access Prevention',
+        workflow: [
+          {
+            step: 1,
+            action: 'Check if file is locked',
+            request: '{ action: "check_lock", file_path: "src/database/schema.sql", lock_duration: 300 }',
+            result: '{ locked: false } or { locked: true, locked_by: "agent-name", locked_at: "timestamp" }'
+          },
+          {
+            step: 2,
+            action: 'If not locked, record change (creates lock)',
+            request: '{ action: "record", file_path: "src/database/schema.sql", agent_name: "migration-agent", change_type: "modified" }'
+          },
+          {
+            step: 3,
+            action: 'Lock expires after 5 minutes (default) or specified duration'
+          }
+        ]
+      },
+      layer_organization: {
+        title: 'Tracking by Architecture Layer',
+        examples: [
+          {
+            scenario: 'Get all presentation layer changes',
+            request: '{ action: "get", layer: "presentation", limit: 20 }',
+            explanation: 'View frontend/UI changes across agents'
+          },
+          {
+            scenario: 'Track infrastructure changes',
+            request: '{ action: "get", layer: "infrastructure", change_type: "modified" }',
+            explanation: 'Monitor config and deployment file changes'
+          }
+        ]
+      },
+      batch_tracking: {
+        title: 'Batch File Operations',
+        examples: [
+          {
+            scenario: 'Record multiple file changes atomically',
+            request: '{ action: "record_batch", file_changes: [{"file_path": "src/api.ts", "agent_name": "bot1", "change_type": "modified", "layer": "presentation"}, {"file_path": "src/types.ts", "agent_name": "bot1", "change_type": "modified", "layer": "data"}], atomic: true }',
+            explanation: 'All changes recorded or none (transaction)'
+          }
+        ]
+      }
+    },
+    best_practices: {
+      change_tracking: [
+        'Always specify layer for better organization',
+        'Include description for non-obvious changes',
+        'Use check_lock before modifying shared files',
+        'Track both creation and deletion of files'
+      ],
+      lock_management: [
+        'Default lock duration is 300 seconds (5 minutes)',
+        'Locks prevent concurrent modifications',
+        'Locks auto-expire - no manual unlock needed',
+        'Use appropriate lock_duration for operation complexity'
+      ],
+      layer_assignment: [
+        'presentation: UI components, API controllers',
+        'business: Services, domain logic',
+        'data: Models, repositories, migrations',
+        'infrastructure: Config, deployment, CI/CD',
+        'cross-cutting: Utilities used across layers'
+      ]
+    }
+  };
+}

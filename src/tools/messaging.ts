@@ -277,3 +277,139 @@ export function sendMessageBatch(params: SendMessageBatchParams): SendMessageBat
     }))
   };
 }
+
+/**
+ * Help action for message tool
+ */
+export function messageHelp(): any {
+  return {
+    tool: 'message',
+    description: 'Send and retrieve messages between agents with priority levels',
+    note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all message actions.',
+    actions: {
+      send: 'Send message. Params: from_agent (required), msg_type (required), message (required), to_agent, priority, payload',
+      get: 'Get messages for agent. Params: agent_name (required), unread_only, priority_filter, msg_type_filter, limit',
+      mark_read: 'Mark messages as read. Params: agent_name (required), message_ids (required)',
+      send_batch: 'Batch send messages (FR-005). Params: messages (required, array of SendMessageParams, max: 50), atomic (optional, boolean, default: true). Returns: {success, inserted, failed, results}. ATOMIC MODE (atomic: true): All messages succeed or all fail as a single transaction. If ANY message fails, entire batch is rolled back and error is thrown. NON-ATOMIC MODE (atomic: false): Each message is processed independently. If some fail, others still succeed. Returns partial results with per-item success/error status. RECOMMENDATION FOR AI AGENTS: Use atomic:false by default for best-effort delivery. Use atomic:true only when all-or-nothing guarantee is required. 52% token reduction vs individual calls.'
+    },
+    examples: {
+      send: '{ action: "send", from_agent: "bot1", msg_type: "info", message: "Task complete", priority: "high" }',
+      get: '{ action: "get", agent_name: "bot1", unread_only: true }',
+      mark_read: '{ action: "mark_read", agent_name: "bot1", message_ids: [1, 2, 3] }',
+      send_batch: '{ action: "send_batch", messages: [{"from_agent": "bot1", "msg_type": "info", "message": "Task 1 done"}, {"from_agent": "bot1", "msg_type": "info", "message": "Task 2 done"}], atomic: true }'
+    },
+    documentation: {
+      workflows: 'docs/WORKFLOWS.md - Multi-agent coordination, messaging patterns, cross-session handoffs (602 lines, ~30k tokens)',
+      tool_reference: 'docs/TOOL_REFERENCE.md - Message tool parameters, batch operations (471 lines, ~24k tokens)',
+      shared_concepts: 'docs/SHARED_CONCEPTS.md - Enum values (msg_type/priority), atomic mode (339 lines, ~17k tokens)',
+      best_practices: 'docs/BEST_PRACTICES.md - Common errors, messaging best practices (345 lines, ~17k tokens)'
+    }
+  };
+}
+
+/**
+ * Example action for message tool
+ */
+export function messageExample(): any {
+  return {
+    tool: 'message',
+    description: 'Comprehensive messaging examples for multi-agent coordination',
+    scenarios: {
+      basic_messaging: {
+        title: 'Basic Agent Communication',
+        examples: [
+          {
+            scenario: 'Send info message between agents',
+            request: '{ action: "send", from_agent: "backend-agent", to_agent: "frontend-agent", msg_type: "info", message: "API endpoint /users is ready" }',
+            explanation: 'Direct message from one agent to another'
+          },
+          {
+            scenario: 'Broadcast message to all agents',
+            request: '{ action: "send", from_agent: "coordinator", to_agent: null, msg_type: "info", message: "Deployment starting in 5 minutes", priority: "high" }',
+            explanation: 'null to_agent broadcasts to all agents'
+          },
+          {
+            scenario: 'Get unread messages',
+            request: '{ action: "get", agent_name: "frontend-agent", unread_only: true }',
+            explanation: 'Retrieve only unread messages for an agent'
+          }
+        ]
+      },
+      priority_messaging: {
+        title: 'Priority-Based Communication',
+        examples: [
+          {
+            scenario: 'Critical error notification',
+            request: '{ action: "send", from_agent: "monitoring-agent", msg_type: "warning", message: "Database connection lost", priority: "critical" }',
+            explanation: 'High-priority messages for urgent issues'
+          },
+          {
+            scenario: 'Filter by priority',
+            request: '{ action: "get", agent_name: "ops-agent", priority_filter: "critical" }',
+            explanation: 'Get only critical priority messages'
+          }
+        ]
+      },
+      workflow_coordination: {
+        title: 'Multi-Step Workflow',
+        steps: [
+          {
+            step: 1,
+            action: 'Agent A requests work from Agent B',
+            request: '{ action: "send", from_agent: "agent-a", to_agent: "agent-b", msg_type: "request", message: "Please process user data batch-123" }'
+          },
+          {
+            step: 2,
+            action: 'Agent B checks messages',
+            request: '{ action: "get", agent_name: "agent-b", msg_type_filter: "request", unread_only: true }'
+          },
+          {
+            step: 3,
+            action: 'Agent B marks as read and processes',
+            request: '{ action: "mark_read", agent_name: "agent-b", message_ids: [123] }'
+          },
+          {
+            step: 4,
+            action: 'Agent B sends completion notification',
+            request: '{ action: "send", from_agent: "agent-b", to_agent: "agent-a", msg_type: "info", message: "Batch-123 processing complete" }'
+          }
+        ]
+      },
+      batch_messaging: {
+        title: 'Batch Message Operations',
+        examples: [
+          {
+            scenario: 'Send multiple status updates atomically',
+            request: '{ action: "send_batch", messages: [{"from_agent": "worker-1", "msg_type": "info", "message": "Task 1 done"}, {"from_agent": "worker-1", "msg_type": "info", "message": "Task 2 done"}], atomic: true }',
+            explanation: 'All messages sent or none (atomic mode)'
+          },
+          {
+            scenario: 'Best-effort batch sending',
+            request: '{ action: "send_batch", messages: [{...}, {...}], atomic: false }',
+            explanation: 'Each message sent independently - partial success allowed'
+          }
+        ]
+      }
+    },
+    best_practices: {
+      message_types: [
+        'Use "decision" for recording important choices',
+        'Use "warning" for errors or issues requiring attention',
+        'Use "request" for work requests between agents',
+        'Use "info" for status updates and notifications'
+      ],
+      priority_usage: [
+        'critical: System failures, data loss, security breaches',
+        'high: Important but not emergency (deployment notifications)',
+        'medium: Regular coordination messages (default)',
+        'low: Optional information, logging'
+      ],
+      coordination_patterns: [
+        'Always mark messages as read after processing',
+        'Use broadcast (to_agent=null) for system-wide announcements',
+        'Filter by msg_type when checking for specific message categories',
+        'Include context in message text or payload for debugging'
+      ]
+    }
+  };
+}

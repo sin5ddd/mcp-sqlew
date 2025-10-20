@@ -377,3 +377,140 @@ export function flushWAL(): FlushWALResponse {
     throw new Error(`Failed to flush WAL: ${message}`);
   }
 }
+
+/**
+ * Get help documentation for stats tool
+ * @returns Help documentation object
+ */
+export function statsHelp(): any {
+  return {
+    tool: 'stats',
+    description: 'View database statistics, activity logs, manage data cleanup, and WAL checkpoints',
+    note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all stats actions.',
+    actions: {
+      layer_summary: 'Get summary by layer. No params required',
+      db_stats: 'Get database statistics. No params required',
+      clear: 'Clear old data. Params: messages_older_than_hours, file_changes_older_than_days',
+      activity_log: 'Get activity log (v3.0.0). Params: since (e.g., "5m", "1h", "2d"), agent_names (array or ["*"]), actions (filter by action types), limit (default: 100)',
+      flush: 'Force WAL checkpoint to flush pending transactions to main database file. No params required. Uses TRUNCATE mode for complete flush. Useful before git commits to ensure database file is up-to-date.'
+    },
+    examples: {
+      layer_summary: '{ action: "layer_summary" }',
+      db_stats: '{ action: "db_stats" }',
+      clear: '{ action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14 }',
+      activity_log: '{ action: "activity_log", since: "1h", agent_names: ["bot1", "bot2"], limit: 50 }',
+      flush: '{ action: "flush" }'
+    },
+    documentation: {
+      workflows: 'docs/WORKFLOWS.md - Activity monitoring, automatic cleanup workflows (602 lines, ~30k tokens)',
+      best_practices: 'docs/BEST_PRACTICES.md - Database health, cleanup strategies (345 lines, ~17k tokens)',
+      shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions for layer_summary (339 lines, ~17k tokens)',
+      architecture: 'docs/ARCHITECTURE.md - Database schema, views, statistics tables'
+    }
+  };
+}
+
+/**
+ * Get comprehensive examples for stats tool
+ * @returns Examples documentation object
+ */
+export function statsExample(): any {
+  return {
+    tool: 'stats',
+    description: 'Database statistics and maintenance examples',
+    scenarios: {
+      layer_analysis: {
+        title: 'Architecture Layer Summary',
+        example: {
+          request: '{ action: "layer_summary" }',
+          response_structure: '{ layer: string, decision_count: number, file_changes: number, active_constraints: number }[]',
+          use_case: 'Understand which layers have most activity and decisions'
+        }
+      },
+      database_health: {
+        title: 'Database Statistics',
+        example: {
+          request: '{ action: "db_stats" }',
+          response_structure: '{ decisions: N, messages: N, file_changes: N, constraints: N, db_size_mb: N }',
+          use_case: 'Monitor database growth and table sizes'
+        }
+      },
+      activity_monitoring: {
+        title: 'Activity Log Queries',
+        examples: [
+          {
+            scenario: 'Recent activity (last hour)',
+            request: '{ action: "activity_log", since: "1h", limit: 50 }',
+            explanation: 'View all agent activity in the past hour'
+          },
+          {
+            scenario: 'Specific agent activity',
+            request: '{ action: "activity_log", since: "24h", agent_names: ["backend-agent", "frontend-agent"] }',
+            explanation: 'Track what specific agents have been doing'
+          },
+          {
+            scenario: 'Filter by action type',
+            request: '{ action: "activity_log", since: "2d", actions: ["set_decision", "create_task"] }',
+            explanation: 'See only specific types of actions'
+          }
+        ]
+      },
+      data_cleanup: {
+        title: 'Maintenance and Cleanup',
+        examples: [
+          {
+            scenario: 'Manual cleanup with specific retention',
+            request: '{ action: "clear", messages_older_than_hours: 48, file_changes_older_than_days: 14 }',
+            explanation: 'Override config and delete old data'
+          },
+          {
+            scenario: 'Config-based automatic cleanup',
+            request: '{ action: "clear" }',
+            explanation: 'Use configured retention settings (respects weekend-aware mode)'
+          }
+        ]
+      },
+      wal_management: {
+        title: 'WAL Checkpoint (Git Workflow)',
+        workflow: [
+          {
+            step: 1,
+            action: 'Make changes to context (decisions, tasks, etc.)',
+            explanation: 'SQLite WAL mode keeps changes in separate file'
+          },
+          {
+            step: 2,
+            action: 'Before git commit, flush WAL',
+            request: '{ action: "flush" }',
+            explanation: 'Merges WAL changes into main .db file'
+          },
+          {
+            step: 3,
+            action: 'Commit database file',
+            explanation: 'Database file now contains all changes for version control'
+          }
+        ]
+      }
+    },
+    best_practices: {
+      monitoring: [
+        'Check layer_summary regularly to identify hotspots',
+        'Monitor db_stats to prevent database bloat',
+        'Use activity_log for debugging multi-agent issues',
+        'Set appropriate retention periods based on project needs'
+      ],
+      cleanup: [
+        'Run periodic cleanup to manage database size',
+        'Use weekend-aware mode for business hour retention',
+        'Consider longer retention for important decisions',
+        'Test cleanup with manual parameters before automating'
+      ],
+      wal_checkpoints: [
+        'Always flush before git commits for clean diffs',
+        'WAL mode improves concurrent access performance',
+        'Checkpoint automatically happens on shutdown',
+        'Manual flush ensures immediate persistence'
+      ]
+    }
+  };
+}

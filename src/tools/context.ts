@@ -1393,3 +1393,234 @@ export function listDecisionContextsAction(params: any): any {
     throw new Error(`Failed to list decision contexts: ${message}`);
   }
 }
+
+/**
+ * Help action for decision tool
+ */
+export function decisionHelp(): any {
+  return {
+    tool: 'decision',
+    description: 'Manage decisions with metadata (tags, layers, versions, scopes)',
+    note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all decision actions.',
+    purpose: {
+      title: '⚠️ CRITICAL: Store WHY and REASON, Not WHAT',
+      principle: 'Decisions table is for ARCHITECTURAL CONTEXT and REASONING, NOT implementation logs or task completion status',
+      what_to_store: {
+        correct: [
+          'WHY a design choice was made (e.g., "Chose JWT over sessions because stateless auth scales better for our microservice architecture")',
+          'REASONING behind architecture decisions (e.g., "Moved oscillator_type to MonophonicSynthConfig to separate synthesis methods - FM operators use different config")',
+          'PROBLEM ANALYSIS and solution rationale (e.g., "Nested transaction bug: setDecision wraps in transaction, batch also wraps → solution: extract internal helper without transaction wrapper")',
+          'DESIGN TRADE-OFFS and alternatives considered (e.g., "Query builder limited to simple filters, kept domain-specific logic inline for maintainability")',
+          'CONSTRAINTS and requirements reasoning (e.g., "API response must be <100ms because mobile clients timeout at 200ms")',
+          'BREAKING CHANGES with migration rationale (e.g., "Removed /v1/users endpoint - clients must use /v2/users with pagination for scalability")'
+        ],
+        incorrect: [
+          '❌ Task completion logs (e.g., "Task 5 completed", "Refactoring done", "Tests passing") → Use tasks tool instead',
+          '❌ Implementation status (e.g., "Added validators.ts", "Fixed bug in batch_create", "Updated README") → These are WHAT, not WHY',
+          '❌ Test results (e.g., "All tests passing", "Integration tests complete", "v3.0.2 testing verified") → Temporary status, not architectural context',
+          '❌ Git commit summaries (e.g., "Released v3.0.2", "Created git commit 2bf55a0") → Belongs in git history',
+          '❌ Documentation updates (e.g., "README reorganized", "Help actions enhanced") → Implementation logs, not decisions',
+          '❌ Build status (e.g., "Build succeeded", "TypeScript compiled with zero errors") → Temporary status'
+        ]
+      },
+      analogy: {
+        git_history: 'WHAT changed (files, lines, commits)',
+        code_comments: 'HOW it works (implementation details, algorithms)',
+        sqlew_decisions: 'WHY it was changed (reasoning, trade-offs, context)',
+        sqlew_tasks: 'WHAT needs to be done (work items, status, completion)'
+      },
+      examples: [
+        {
+          key: 'api/auth/jwt-choice',
+          value: 'Chose JWT over session-based auth because: (1) Stateless design scales horizontally, (2) Mobile clients can cache tokens, (3) Microservice architecture requires distributed auth. Trade-off: Revocation requires token blacklist, but acceptable for 15-min token lifetime.',
+          explanation: 'Explains WHY JWT was chosen, considers trade-offs, provides architectural context'
+        },
+        {
+          key: 'database/postgresql-choice',
+          value: 'Selected PostgreSQL over MongoDB because: (1) Complex relational queries required for reporting, (2) ACID compliance critical for financial data, (3) Team has strong SQL expertise. Trade-off: Less flexible schema, but data integrity more important than schema flexibility for our use case.',
+          explanation: 'Documents database choice with reasoning, alternatives considered, and trade-offs'
+        },
+        {
+          key: 'security/encryption-at-rest',
+          value: 'Implementing AES-256 encryption for all PII in database because: (1) GDPR compliance requires encryption at rest, (2) Recent security audit identified unencrypted sensitive data, (3) Performance impact <5ms per query acceptable. Alternative considered: Database-level encryption rejected due to backup/restore complexity.',
+          explanation: 'Explains security decision with compliance reasoning and performance considerations'
+        }
+      ],
+      cleanup_rule: 'Delete decisions that start with "COMPLETED:", contain task status, test results, or implementation logs. Keep only architectural reasoning and design rationale.'
+    },
+    actions: {
+      set: 'Set/update a decision. Params: key (required), value (required), agent, layer, version, status, tags, scopes',
+      get: 'Get specific decision by key. Params: key (required), include_context (optional, boolean, default: false). When include_context=true, returns decision with attached context (rationale, alternatives, tradeoffs). Backward compatible - omitting flag returns standard decision format.',
+      list: 'List/filter decisions. Params: status, layer, tags, scope, tag_match',
+      search_tags: 'Search decisions by tags. Params: tags (required), match_mode, status, layer',
+      search_layer: 'Search decisions by layer. Params: layer (required), status, include_tags',
+      versions: 'Get version history for a decision. Params: key (required)',
+      quick_set: 'Quick set with smart defaults (FR-002). Params: key (required), value (required), agent, layer, version, status, tags, scopes. Auto-infers layer from key prefix (api/*→presentation, db/*→data, service/*→business, config/*→infrastructure), tags from key hierarchy, scope from parent path. Defaults: status=active, version=1.0.0. All inferred fields can be overridden.',
+      search_advanced: 'Advanced query with complex filtering (FR-004). Params: layers (OR), tags_all (AND), tags_any (OR), exclude_tags, scopes (wildcards), updated_after/before (ISO or relative like "7d"), decided_by, statuses, search_text, sort_by (updated/key/version), sort_order (asc/desc), limit (default:20, max:1000), offset (default:0). Returns decisions with total_count for pagination. All filters use parameterized queries (SQL injection protection).',
+      set_batch: 'Batch set decisions (FR-005). Params: decisions (required, array of SetDecisionParams, max: 50), atomic (optional, boolean, default: true). Returns: {success, inserted, failed, results}. ATOMIC MODE BEHAVIOR (atomic: true): All decisions succeed or all fail as a single transaction. If ANY decision fails, entire batch is rolled back and error is thrown. Use for critical operations requiring consistency. NON-ATOMIC MODE (atomic: false): Each decision is processed independently. If some fail, others still succeed. Returns partial results with per-item success/error status. Use for best-effort batch operations or when individual failures are acceptable. RECOMMENDATION FOR AI AGENTS: Use atomic:false by default to avoid transaction failures from validation errors or malformed data. Only use atomic:true when all-or-nothing guarantee is required. 52% token reduction vs individual calls.',
+      has_updates: 'Check for updates since timestamp (FR-003 Phase A - Lightweight Polling). Params: agent_name (required), since_timestamp (required, ISO 8601 format like "2025-10-14T08:00:00Z"). Returns: {has_updates: boolean, counts: {decisions: N, messages: N, files: N}}. Token cost: ~5-10 tokens per check. Uses COUNT queries on t_decisions, t_agent_messages, t_file_changes with timestamp filtering. Enables efficient polling without full data retrieval.',
+      set_from_template: 'Set decision using template (FR-006). Params: template (required, template name), key (required), value (required), agent, layer (override), version, status (override), tags (override), scopes, plus any template-required fields. Applies template defaults (layer, status, tags) while allowing overrides. Validates required fields if specified by template. Returns: {success, key, key_id, version, template_used, applied_defaults, message}. Built-in templates: breaking_change, security_vulnerability, performance_optimization, deprecation, architecture_decision.',
+      create_template: 'Create new decision template (FR-006). Params: name (required, unique), defaults (required, object with layer/status/tags/priority), required_fields (optional, array of field names), created_by (optional, agent name). Returns: {success, template_id, template_name, message}. Example defaults: {"layer":"business","status":"active","tags":["breaking"]}. Validates layer/status values.',
+      list_templates: 'List all decision templates (FR-006). No params required. Returns: {templates: [{id, name, defaults, required_fields, created_by, created_at}], count}. Shows both built-in and custom templates.',
+      hard_delete: 'Permanently delete a decision (hard delete). Params: key (required). WARNING: IRREVERSIBLE - removes all records including version history, tags, scopes. Use cases: manual cleanup after decision-to-task migration, remove test/debug decisions, purge sensitive data. Unlike soft delete (status=deprecated), this completely removes from database. Idempotent - safe to call even if already deleted. Returns: {success, key, message}.',
+      add_decision_context: 'Add rich context to a decision (v3.2.2). Params: key (required), rationale (required), alternatives_considered (optional, JSON array), tradeoffs (optional, JSON object with pros/cons), decided_by (optional), related_task_id (optional), related_constraint_id (optional). Use to document WHY decisions were made, what alternatives were considered, and trade-offs. Multiple contexts can be attached to the same decision over time. Returns: {success, context_id, decision_key, message}.',
+      list_decision_contexts: 'List decision contexts with filters (v3.2.2). Params: decision_key (optional), related_task_id (optional), related_constraint_id (optional), decided_by (optional), limit (default: 50), offset (default: 0). Returns: {success, contexts: [{id, decision_key, rationale, alternatives_considered, tradeoffs, decided_by, decision_date, related_task_id, related_constraint_id}], count}. JSON fields (alternatives, tradeoffs) are automatically parsed.'
+    },
+    examples: {
+      set: '{ action: "set", key: "auth_method", value: "jwt", tags: ["security"] }',
+      get: '{ action: "get", key: "auth_method" }',
+      list: '{ action: "list", status: "active", layer: "infrastructure" }',
+      search_tags: '{ action: "search_tags", tags: ["security", "api"] }',
+      quick_set: '{ action: "quick_set", key: "api/instruments/oscillator-refactor", value: "Moved oscillator_type to MonophonicSynthConfig" }',
+      search_advanced: '{ action: "search_advanced", layers: ["business", "data"], tags_all: ["breaking", "v0.3.3"], tags_any: ["api", "synthesis"], exclude_tags: ["deprecated"], scopes: ["api/instruments/*"], updated_after: "2025-10-01", statuses: ["active", "draft"], search_text: "oscillator", sort_by: "updated", sort_order: "desc", limit: 20, offset: 0 }',
+      set_batch: '{ action: "set_batch", decisions: [{"key": "feat-1", "value": "...", "layer": "business"}, {"key": "feat-2", "value": "...", "layer": "data"}], atomic: true }',
+      has_updates: '{ action: "has_updates", agent_name: "my-agent", since_timestamp: "2025-10-14T08:00:00Z" }',
+      set_from_template: '{ action: "set_from_template", template: "breaking_change", key: "oscillator-type-moved", value: "oscillator_type moved to MonophonicSynthConfig" }',
+      create_template: '{ action: "create_template", name: "bug_fix", defaults: {"layer":"business","tags":["bug","fix"],"status":"active"}, created_by: "my-agent" }',
+      list_templates: '{ action: "list_templates" }',
+      hard_delete: '{ action: "hard_delete", key: "task_old_authentication_refactor" }'
+    },
+    documentation: {
+      tool_selection: 'docs/TOOL_SELECTION.md - Decision tree, tool comparison, when to use each tool (236 lines, ~12k tokens)',
+      tool_reference: 'docs/TOOL_REFERENCE.md - Parameter requirements, batch operations, templates (471 lines, ~24k tokens)',
+      workflows: 'docs/WORKFLOWS.md - Multi-step workflow examples, multi-agent coordination (602 lines, ~30k tokens)',
+      best_practices: 'docs/BEST_PRACTICES.md - Common errors, best practices, troubleshooting (345 lines, ~17k tokens)',
+      shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values (status/layer/priority), atomic mode (339 lines, ~17k tokens)'
+    }
+  };
+}
+
+/**
+ * Example action for decision tool
+ */
+export function decisionExample(): any {
+  return {
+    tool: 'decision',
+    description: 'Comprehensive decision tool examples without needing WebFetch access',
+    scenarios: {
+      basic_usage: {
+        title: 'Basic Decision Management',
+        examples: [
+          {
+            scenario: 'Record API design decision',
+            request: '{ action: "set", key: "api_auth_method", value: "JWT with refresh tokens", layer: "business", tags: ["api", "security", "authentication"] }',
+            explanation: 'Documents the choice of authentication method for the API'
+          },
+          {
+            scenario: 'Retrieve a decision',
+            request: '{ action: "get", key: "api_auth_method" }',
+            response_structure: '{ key, value, layer, status, version, tags, scopes, decided_by, updated_at }'
+          },
+          {
+            scenario: 'List all active decisions',
+            request: '{ action: "list", status: "active", limit: 20 }',
+            explanation: 'Returns active decisions with metadata for browsing'
+          }
+        ]
+      },
+      advanced_filtering: {
+        title: 'Advanced Search and Filtering',
+        examples: [
+          {
+            scenario: 'Find all security-related decisions in business layer',
+            request: '{ action: "search_advanced", layers: ["business"], tags_any: ["security", "authentication"], status: ["active"], sort_by: "updated", sort_order: "desc" }',
+            explanation: 'Combines layer filtering, tag matching, and sorting'
+          },
+          {
+            scenario: 'Search within API scope with multiple tags',
+            request: '{ action: "search_advanced", scopes: ["api/*"], tags_all: ["breaking", "v2.0"], updated_after: "2025-01-01" }',
+            explanation: 'Uses scope wildcards and timestamp filtering for recent breaking changes'
+          }
+        ]
+      },
+      versioning_workflow: {
+        title: 'Version Management',
+        steps: [
+          {
+            step: 1,
+            action: 'Create initial decision',
+            request: '{ action: "set", key: "database_choice", value: "PostgreSQL", layer: "data", version: "1.0.0", tags: ["database"] }'
+          },
+          {
+            step: 2,
+            action: 'Update decision (creates new version)',
+            request: '{ action: "set", key: "database_choice", value: "PostgreSQL with read replicas", layer: "data", version: "1.1.0", tags: ["database", "scaling"] }'
+          },
+          {
+            step: 3,
+            action: 'View version history',
+            request: '{ action: "versions", key: "database_choice" }',
+            result: 'Returns all versions with timestamps and changes'
+          }
+        ]
+      },
+      batch_operations: {
+        title: 'Batch Decision Management',
+        examples: [
+          {
+            scenario: 'Record multiple related decisions atomically',
+            request: '{ action: "set_batch", decisions: [{"key": "cache_layer", "value": "Redis", "layer": "infrastructure"}, {"key": "cache_ttl", "value": "3600", "layer": "infrastructure"}], atomic: true }',
+            explanation: 'All decisions succeed or all fail together (atomic mode)'
+          },
+          {
+            scenario: 'Best-effort batch insert',
+            request: '{ action: "set_batch", decisions: [{...}, {...}, {...}], atomic: false }',
+            explanation: 'Each decision processed independently - partial success allowed'
+          }
+        ]
+      },
+      templates: {
+        title: 'Using Decision Templates',
+        examples: [
+          {
+            scenario: 'Use built-in breaking_change template',
+            request: '{ action: "set_from_template", template: "breaking_change", key: "api_remove_legacy_endpoint", value: "Removed /v1/users endpoint - migrate to /v2/users" }',
+            explanation: 'Automatically applies layer=business, tags=["breaking"], status=active'
+          },
+          {
+            scenario: 'Create custom template',
+            request: '{ action: "create_template", name: "feature_flag", defaults: {"layer": "presentation", "tags": ["feature-flag"], "status": "draft"}, created_by: "backend-team" }',
+            explanation: 'Define reusable templates for common decision patterns'
+          }
+        ]
+      },
+      quick_set_inference: {
+        title: 'Quick Set with Smart Defaults',
+        examples: [
+          {
+            scenario: 'Auto-infer layer from key prefix',
+            request: '{ action: "quick_set", key: "api/instruments/oscillator-refactor", value: "Moved oscillator_type to MonophonicSynthConfig" }',
+            inferred: 'layer=presentation (from api/*), tags=["instruments", "oscillator-refactor"], scope=api/instruments'
+          },
+          {
+            scenario: 'Database decision with auto-inference',
+            request: '{ action: "quick_set", key: "db/users/add-email-index", value: "Added index on email column" }',
+            inferred: 'layer=data (from db/*), tags=["users", "add-email-index"]'
+          }
+        ]
+      }
+    },
+    best_practices: {
+      key_naming: [
+        'Use hierarchical keys: "api/users/authentication"',
+        'Prefix with layer hint: api/* → presentation, db/* → data, service/* → business',
+        'Use descriptive names that explain the decision context'
+      ],
+      tagging: [
+        'Tag with relevant categories: security, performance, breaking, etc.',
+        'Include version tags for release-specific decisions',
+        'Use consistent tag naming conventions across team'
+      ],
+      versioning: [
+        'Use semantic versioning: 1.0.0, 1.1.0, 2.0.0',
+        'Increment major version for breaking changes',
+        'Document rationale in decision value text'
+      ],
+      cleanup: [
+        'Mark deprecated decisions with status="deprecated"',
+        'Use hard_delete only for sensitive data or migration cleanup',
+        'Link related decisions using scopes'
+      ]
+    }
+  };
+}
