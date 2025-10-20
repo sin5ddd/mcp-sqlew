@@ -87,7 +87,7 @@
 | Action | Required | Optional |
 |--------|----------|----------|
 | **set** | action, key, value, layer | agent, version, status, tags, scopes |
-| **get** | action, key | version |
+| **get** | action, key | version, include_context |
 | **list** | action | status, layer, tags, scope, tag_match, limit, offset |
 | **search_tags** | action, tags | match_mode, status, layer |
 | **search_layer** | action, layer | status, include_tags |
@@ -99,6 +99,8 @@
 | **set_from_template** | action, template, key, value, layer | agent, version, status, tags, scopes |
 | **create_template** | action, name, defaults | required_fields, created_by |
 | **list_templates** | action | - |
+| **add_decision_context** | action, key, rationale | alternatives_considered, tradeoffs, decided_by, related_task_id, related_constraint_id |
+| **list_decision_contexts** | action | decision_key, related_task_id, related_constraint_id, decided_by, limit, offset |
 
 ### `message` Tool
 
@@ -318,6 +320,161 @@
 - **Maximum items per batch**: 50
 - **Recommended batch size**: 10-20 (for readability and debugging)
 - **Token savings**: ~52% vs individual calls
+
+---
+
+## Decision Context System (v3.2.2)
+
+### What is Decision Context?
+
+Decision Context allows you to attach rich documentation to decisions, including:
+- **Rationale**: WHY the decision was made
+- **Alternatives Considered**: What options were evaluated and rejected
+- **Tradeoffs**: Pros and cons analysis
+
+### Key Features
+
+- **Multi-Session Development**: Preserve decision reasoning across days/weeks
+- **Architecture Reviews**: Document non-standard choices for future developers
+- **Team Handoffs**: Transfer knowledge with full context
+- **Linked Relationships**: Connect contexts to tasks and constraints
+
+### Adding Decision Context
+
+```javascript
+{
+  action: "add_decision_context",
+  key: "database_choice",
+  rationale: "Selected PostgreSQL because: (1) Complex relational queries required for reporting, (2) ACID compliance critical for financial data, (3) Team has strong SQL expertise",
+  alternatives_considered: [
+    {
+      option: "MongoDB",
+      reason: "Rejected due to weak consistency guarantees for financial data"
+    },
+    {
+      option: "MySQL",
+      reason: "Rejected due to limited JSON support needed for metadata"
+    }
+  ],
+  tradeoffs: {
+    pros: ["Strong consistency", "Complex queries", "Team expertise"],
+    cons: ["Less flexible schema", "Vertical scaling limitations"]
+  },
+  decided_by: "backend-team",
+  related_task_id: 42
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "context_id": 1,
+  "decision_key": "database_choice",
+  "message": "Decision context added successfully"
+}
+```
+
+### Retrieving Decision with Context
+
+```javascript
+// Standard get (backward compatible)
+{
+  action: "get",
+  key: "database_choice"
+}
+// → Returns: { key, value, layer, status, version, tags, ... }
+
+// Get with context
+{
+  action: "get",
+  key: "database_choice",
+  include_context: true
+}
+// → Returns: { key, value, ..., contexts: [{rationale, alternatives_considered, tradeoffs, ...}] }
+```
+
+### Listing Decision Contexts
+
+```javascript
+// List all contexts
+{
+  action: "list_decision_contexts",
+  limit: 50
+}
+
+// Filter by decision key
+{
+  action: "list_decision_contexts",
+  decision_key: "database_choice"
+}
+
+// Filter by related task
+{
+  action: "list_decision_contexts",
+  related_task_id: 42
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "contexts": [
+    {
+      "id": 1,
+      "decision_key": "database_choice",
+      "rationale": "Selected PostgreSQL because...",
+      "alternatives_considered": [...],
+      "tradeoffs": {...},
+      "decided_by": "backend-team",
+      "decision_date": "2025-10-18T06:48:00Z",
+      "related_task_id": 42,
+      "related_constraint_id": null
+    }
+  ],
+  "count": 1
+}
+```
+
+### Parameter Details
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| **key** | string | ✅ | Decision key to attach context to |
+| **rationale** | string | ✅ | WHY the decision was made |
+| **alternatives_considered** | JSON array | ❌ | List of {option, reason} objects |
+| **tradeoffs** | JSON object | ❌ | {pros: [...], cons: [...]} analysis |
+| **decided_by** | string | ❌ | Agent/team who made the decision |
+| **related_task_id** | number | ❌ | Link to implementation task |
+| **related_constraint_id** | number | ❌ | Link to system constraint |
+
+### When to Use Decision Context
+
+✅ **Use for:**
+- Architectural decisions with multiple viable options
+- Non-obvious implementation choices
+- Breaking changes that need justification
+- Security/performance trade-off analysis
+- Cross-team collaboration documentation
+
+❌ **Don't use for:**
+- Routine implementation details
+- Temporary decisions
+- Obvious or standard choices
+
+### Best Practices
+
+1. **Be Specific**: "Chose X because Y" not "Chose X"
+2. **Document Alternatives**: Show what was considered and rejected
+3. **Quantify Tradeoffs**: "5ms overhead acceptable for security" not "minor overhead"
+4. **Link to Tasks**: Connect decision context to implementation tasks
+5. **Update Over Time**: Add new contexts as decisions evolve
+
+### See Also
+
+- **[Decision Context Guide](DECISION_CONTEXT.md)** - Comprehensive examples and workflows (500+ lines)
+- **[Workflows](WORKFLOWS.md)** - Multi-step decision context workflows
 
 ---
 

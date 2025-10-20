@@ -209,6 +209,9 @@ Each tool supports `action: "help"` for full documentation and `action: "example
 - 🔗 **[Task Linking](docs/TASK_LINKING.md)** - Link tasks to decisions/constraints/files/tasks (900+ lines, ~23k tokens)
 - 🔄 **[Task Migration](docs/TASK_MIGRATION.md)** - Migrate from decision-based tracking (701 lines, ~18k tokens)
 
+**Decision Context (v3.2.2):**
+- 📝 **[Decision Context](docs/DECISION_CONTEXT.md)** - Rich decision documentation with rationale, alternatives, and tradeoffs (500+ lines, ~15k tokens) **NEW v3.2.2**
+
 **Auto File Tracking (v3.0.2):**
 - 🤖 **[Auto File Tracking](docs/AUTO_FILE_TRACKING.md)** - Zero-token task management, setup, troubleshooting
 - ✅ **[Acceptance Criteria](docs/ACCEPTANCE_CRITERIA.md)** - All check types (tests_pass, code_removed, code_contains, file_exists)
@@ -267,6 +270,48 @@ Each tool supports `action: "help"` for full documentation and `action: "example
 }
 ```
 
+### Decision Context (v3.2.2)
+
+```javascript
+// Record a decision with rich context
+{
+  action: "set",
+  key: "database_choice",
+  value: "PostgreSQL over MongoDB",
+  layer: "data",
+  tags: ["architecture", "database"]
+}
+
+// Add rationale and tradeoffs
+{
+  action: "add_decision_context",
+  key: "database_choice",
+  rationale: "Selected PostgreSQL because: (1) Complex relational queries required for reporting, (2) ACID compliance critical for financial data, (3) Team has strong SQL expertise",
+  alternatives_considered: [
+    {
+      option: "MongoDB",
+      reason: "Rejected due to weak consistency guarantees for financial data"
+    },
+    {
+      option: "MySQL",
+      reason: "Rejected due to limited JSON support needed for metadata"
+    }
+  ],
+  tradeoffs: {
+    pros: ["Strong consistency", "Complex queries", "Team expertise"],
+    cons: ["Less flexible schema", "Vertical scaling limitations"]
+  }
+}
+
+// Retrieve decision with full context
+{
+  action: "get",
+  key: "database_choice",
+  include_context: true
+}
+// → Returns decision + rationale + alternatives + tradeoffs
+```
+
 ### Session Continuity
 
 ```javascript
@@ -310,7 +355,7 @@ on [GitHub Sponsors](https://github.com/sponsors/sin5ddd)
 
 ## Version
 
-Current version: **3.0.0**
+Current version: **3.2.2**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
