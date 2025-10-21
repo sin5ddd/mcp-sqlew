@@ -113,10 +113,10 @@ function createTaskInternal(params: {
     assignedAgentId = getOrCreateAgent(db, params.assigned_agent);
   }
 
-  let createdByAgentId: number | null = null;
-  if (params.created_by_agent) {
-    createdByAgentId = getOrCreateAgent(db, params.created_by_agent);
-  }
+  // Default to 'system' if no created_by_agent provided
+  // This ensures the activity log trigger has a valid agent_id
+  const createdBy = params.created_by_agent || 'system';
+  const createdByAgentId = getOrCreateAgent(db, createdBy);
 
   // Insert task
   const insertTaskStmt = db.prepare(`

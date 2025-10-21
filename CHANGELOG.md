@@ -5,6 +5,28 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.6] - 2025-10-21
+
+### Fixed
+
+#### Critical Bug Fix: Task Creation with Missing Agent
+- **Issue**: "NOT NULL constraint failed: t_activity_log.agent_id" error when creating tasks
+- **Root Cause**: `createTaskInternal()` function allowed NULL `created_by_agent_id`, but activity log trigger required valid agent_id
+- **Bug**: When task created without `created_by_agent` parameter, `created_by_agent_id` was NULL, causing trigger to fail
+- **Impact**: All task creations without explicit `created_by_agent` parameter would fail
+- **Solution**: Default to 'system' agent when no `created_by_agent` provided, ensuring valid agent_id always exists
+- **File**: `src/tools/tasks.ts:116-119`
+
+### Technical Details
+- Activity log trigger `trg_log_task_create` requires non-NULL agent_id
+- Trigger uses COALESCE to fall back to 'system' agent, but 'system' may not exist on first use
+- If both `created_by_agent_id` is NULL AND no 'system' agent exists, trigger fails with NOT NULL constraint
+- Fix: Always create/use 'system' agent as default when no `created_by_agent` provided
+- Now all tasks have a valid creator agent (explicit or 'system' default)
+- Task creation now works with or without `created_by_agent` parameter
+- All tests pass (19/19)
+- Backward compatible
+
 ## [3.2.5] - 2025-10-21
 
 ### Fixed
@@ -29,19 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **After**: `key is required` (clear validation message)
 
 ### Technical Details
-
-**Constraint Bug:**
-- Schema-code mismatch - code was referencing non-existent columns
-- `m_constraint_categories` has `id` and `name` columns
-- Applied standard `INSERT OR IGNORE` + `SELECT` pattern consistent with other helper functions
-
-**Validator Bug:**
-- TypeScript type system doesn't prevent undefined at runtime for parameters from JSON/user input
-- Added defensive checks: undefined, null, type validation, then trim
-- Now provides helpful error messages for all invalid parameter scenarios
-- All validation errors are now user-friendly instead of JavaScript runtime errors
-
-**Testing:**
+- Schema-code mismatch fixed in constraint creation
+- TypeScript runtime safety added to validator
 - Both fixes verified with comprehensive test scripts
 - All existing tests pass (19/19)
 - Backward compatible - only fixes broken functionality
