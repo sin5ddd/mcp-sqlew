@@ -8,22 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.2.5] - 2025-10-21
 
 ### Fixed
-- **Critical Bug Fix: Constraint Creation**
-  - Fixed "no such column: category_id" error when adding constraints
-  - Bug was in `getOrCreateCategoryId()` function in `src/database.ts`
-  - Function was using incorrect column names (`category_id`, `category_name`) instead of correct schema columns (`id`, `name`)
-  - This bug prevented all constraint additions from working properly
-  - Impact: All users attempting to use the `constraint` tool's `add` action would fail
-  - Solution: Updated function to use correct column names matching `m_constraint_categories` table schema
-  - File: `src/database.ts:282-294`
+
+#### 1. Critical Bug Fix: Constraint Creation
+- **Issue**: "no such column: category_id" error when adding constraints
+- **Root Cause**: `getOrCreateCategoryId()` function in `src/database.ts` was using incorrect column names
+- **Bug**: Function was using `category_id`, `category_name` instead of correct schema columns `id`, `name`
+- **Impact**: All users attempting to use the `constraint` tool's `add` action would fail
+- **Solution**: Updated function to use correct column names matching `m_constraint_categories` table schema
+- **File**: `src/database.ts:282-294`
+
+#### 2. Critical Bug Fix: Decision Creation with Undefined Parameters
+- **Issue**: "Cannot read properties of undefined (reading 'trim')" error when setting decisions
+- **Root Cause**: `validateRequired()` function in `src/utils/validators.ts` called `.trim()` on undefined/null values
+- **Bug**: Function assumed `value` parameter was always a string, but at runtime could be undefined/null from user input
+- **Impact**: All decision operations with missing/undefined parameters would crash with cryptic error instead of helpful validation message
+- **Solution**: Added null/undefined checks before calling `.trim()`, plus type validation
+- **File**: `src/utils/validators.ts:13-31`
+- **Error Behavior Change**:
+  - **Before**: `Cannot read properties of undefined (reading 'trim')` (unhelpful)
+  - **After**: `key is required` (clear validation message)
 
 ### Technical Details
-- **Root Cause**: Schema-code mismatch - code was referencing non-existent columns
-- **Schema Columns**: `m_constraint_categories` has `id` and `name` columns
-- **Bug Location**: `getOrCreateCategoryId()` was using `category_id` and `category_name`
-- **Fix Pattern**: Applied standard `INSERT OR IGNORE` + `SELECT` pattern consistent with other helper functions
-- **Testing**: Verified fix with test script - constraints now add successfully
-- **Backward Compatible**: No breaking changes - only fixes broken functionality
+
+**Constraint Bug:**
+- Schema-code mismatch - code was referencing non-existent columns
+- `m_constraint_categories` has `id` and `name` columns
+- Applied standard `INSERT OR IGNORE` + `SELECT` pattern consistent with other helper functions
+
+**Validator Bug:**
+- TypeScript type system doesn't prevent undefined at runtime for parameters from JSON/user input
+- Added defensive checks: undefined, null, type validation, then trim
+- Now provides helpful error messages for all invalid parameter scenarios
+- All validation errors are now user-friendly instead of JavaScript runtime errors
+
+**Testing:**
+- Both fixes verified with comprehensive test scripts
+- All existing tests pass (19/19)
+- Backward compatible - only fixes broken functionality
 
 ## [3.2.4] - 2025-10-20
 

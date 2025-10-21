@@ -8,13 +8,25 @@ import type { Database } from '../types.js';
 
 /**
  * Validates required string parameter (trim and check non-empty)
- * @throws Error if value is empty or whitespace-only
+ * @throws Error if value is undefined, null, empty, or whitespace-only
  */
-export function validateRequired(value: string, paramName: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) {
+export function validateRequired(value: any, paramName: string): string {
+  // Check for undefined or null first (before calling .trim())
+  if (value === undefined || value === null) {
     throw new Error(`${paramName} is required`);
   }
+
+  // Check type
+  if (typeof value !== 'string') {
+    throw new Error(`${paramName} must be a string`);
+  }
+
+  // Now safe to call .trim()
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    throw new Error(`${paramName} is required`);
+  }
+
   return trimmed;
 }
 
