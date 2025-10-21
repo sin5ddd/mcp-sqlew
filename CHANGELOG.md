@@ -5,6 +5,26 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.5] - 2025-10-21
+
+### Fixed
+- **Critical Bug Fix: Constraint Creation**
+  - Fixed "no such column: category_id" error when adding constraints
+  - Bug was in `getOrCreateCategoryId()` function in `src/database.ts`
+  - Function was using incorrect column names (`category_id`, `category_name`) instead of correct schema columns (`id`, `name`)
+  - This bug prevented all constraint additions from working properly
+  - Impact: All users attempting to use the `constraint` tool's `add` action would fail
+  - Solution: Updated function to use correct column names matching `m_constraint_categories` table schema
+  - File: `src/database.ts:282-294`
+
+### Technical Details
+- **Root Cause**: Schema-code mismatch - code was referencing non-existent columns
+- **Schema Columns**: `m_constraint_categories` has `id` and `name` columns
+- **Bug Location**: `getOrCreateCategoryId()` was using `category_id` and `category_name`
+- **Fix Pattern**: Applied standard `INSERT OR IGNORE` + `SELECT` pattern consistent with other helper functions
+- **Testing**: Verified fix with test script - constraints now add successfully
+- **Backward Compatible**: No breaking changes - only fixes broken functionality
+
 ## [3.2.4] - 2025-10-20
 
 ### Fixed

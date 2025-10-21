@@ -280,13 +280,17 @@ export function getOrCreateScope(db: DatabaseType, name: string): number {
  * @returns Category ID
  */
 export function getOrCreateCategoryId(db: DatabaseType, category: string): number {
-  const existing = db.prepare('SELECT category_id FROM m_constraint_categories WHERE category_name = ?').get(category) as { category_id: number } | undefined;
-  if (existing) {
-    return existing.category_id;
+  // Use INSERT OR IGNORE for idempotent operation
+  db.prepare('INSERT OR IGNORE INTO m_constraint_categories (name) VALUES (?)').run(category);
+
+  // Get the ID
+  const result = db.prepare('SELECT id FROM m_constraint_categories WHERE name = ?').get(category) as { id: number } | undefined;
+
+  if (!result) {
+    throw new Error(`Failed to get or create category: ${category}`);
   }
-  
-  const result = db.prepare('INSERT INTO m_constraint_categories (category_name) VALUES (?)').run(category);
-  return result.lastInsertRowid as number;
+
+  return result.id;
 }
 
 /**
