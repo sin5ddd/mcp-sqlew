@@ -176,10 +176,10 @@ export function autoArchiveOldDoneTasks(db: Database): number {
 }
 
 /**
- * Detect and complete tasks in waiting_review when all watched files are committed
+ * Detect and complete tasks in waiting_review or in_progress when all watched files are committed
  *
- * VCS-aware auto-complete strategy (v3.4.0):
- * - Find all tasks in `waiting_review` status with watched files
+ * VCS-aware auto-complete strategy (v3.4.0+):
+ * - Find all tasks in `waiting_review` or `in_progress` status with watched files
  * - For each task, check if ALL watched files have been committed since task creation
  * - Query VCS history to determine committed files
  * - If all files committed → transition to `done` (VCS commit = implicit approval)
@@ -198,13 +198,13 @@ export async function detectAndCompleteReviewedTasks(db: Database): Promise<numb
 
   const requireAllFilesCommitted = getConfigBool(db, CONFIG_KEYS.REQUIRE_ALL_FILES_COMMITTED, true);
 
-  // 2. Find all waiting_review tasks
+  // 2. Find all waiting_review and in_progress tasks
   const candidateTasks = db.prepare(`
-    SELECT t.id, t.created_ts
+    SELECT t.id, t.created_ts, s.name as status_name
     FROM t_tasks t
     JOIN m_task_statuses s ON t.status_id = s.id
-    WHERE s.name = 'waiting_review'
-  `).all() as Array<{ id: number; created_ts: number }>;
+    WHERE s.name IN ('waiting_review', 'in_progress')
+  `).all() as Array<{ id: number; created_ts: number; status_name: string }>;
 
   if (candidateTasks.length === 0) {
     return 0;
@@ -279,7 +279,7 @@ export async function detectAndCompleteReviewedTasks(db: Database): Promise<numb
 
         completed++;
 
-        console.error(`  ✓ Task #${task.id}: waiting_review → done (all ${filePaths.length} watched files committed)`);
+        console.error(`  ✓ Task #${task.id}: ${task.status_name} → done (all ${filePaths.length} watched files committed)`);
       } else if (uncommittedFiles.length > 0) {
         console.error(`  ⏸ Task #${task.id}: ${uncommittedFiles.length} of ${filePaths.length} files not yet committed`);
       }
