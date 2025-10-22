@@ -18,6 +18,7 @@ import * as v210Features from './add-v2.1.0-features.js';
 import * as taskTables from './add-task-tables.js';
 import * as taskDependencies from './add-task-dependencies.js';
 import * as decisionContext from './add-decision-context.js';
+import * as prunedFiles from './add-v3.5.0-pruned-files.js';
 
 export interface MigrationResult {
   success: boolean;
@@ -78,6 +79,14 @@ const MIGRATIONS: MigrationInfo[] = [
     runMigration: decisionContext.migrateToDecisionContext,
     getMigrationInfo: decisionContext.getDecisionContextMigrationInfo,
   },
+  {
+    name: 'add-v3.5.0-pruned-files',
+    fromVersion: '3.4.x',
+    toVersion: '3.5.0',
+    needsMigration: prunedFiles.needsPrunedFilesMigration,
+    runMigration: prunedFiles.migrateToPrunedFiles,
+    getMigrationInfo: prunedFiles.getPrunedFilesMigrationInfo,
+  },
 ];
 
 /**
@@ -90,13 +99,23 @@ const MIGRATIONS: MigrationInfo[] = [
  * - v2.1.0: Has t_activity_log but no m_task_statuses
  * - v3.0.0: Has m_task_statuses but no t_task_dependencies
  * - v3.2.0: Has t_task_dependencies but no t_decision_context
- * - v3.2.2: Has t_decision_context
+ * - v3.2.2: Has t_decision_context but no t_task_pruned_files
+ * - v3.5.0: Has t_task_pruned_files
  *
  * @param db - Database connection
  * @returns Detected version string
  */
 export function detectDatabaseVersion(db: Database): string {
   try {
+    // Check for pruned files table (v3.5.0)
+    const hasPrunedFiles = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='t_task_pruned_files'"
+    ).get();
+
+    if (hasPrunedFiles) {
+      return '3.5.0';
+    }
+
     // Check for decision context table (v3.2.2)
     const hasDecisionContext = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='t_decision_context'"

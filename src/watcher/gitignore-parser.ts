@@ -145,6 +145,11 @@ export class GitIgnoreParser {
     // Convert Windows backslashes to forward slashes
     relativePath = relativePath.replace(/\\/g, '/');
 
+    // Handle empty path (project root itself) - never ignore it
+    if (!relativePath || relativePath === '') {
+      return false;
+    }
+
     // Check if path is ignored
     return this.ig.ignores(relativePath);
   }

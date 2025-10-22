@@ -157,15 +157,16 @@ function setDecisionInternal(params: SetDecisionParams, db: Database): SetDecisi
  * Supports tags, layers, scopes, and version tracking
  *
  * @param params - Decision parameters
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status and metadata
  */
-export function setDecision(params: SetDecisionParams): SetDecisionResponse {
-  const db = getDatabase();
+export function setDecision(params: SetDecisionParams, db?: Database): SetDecisionResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Use transaction for atomicity
-    return transaction(db, () => {
-      return setDecisionInternal(params, db);
+    return transaction(actualDb, () => {
+      return setDecisionInternal(params, actualDb);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -179,10 +180,11 @@ export function setDecision(params: SetDecisionParams): SetDecisionResponse {
  * Supports filtering by status, layer, tags, and scope
  *
  * @param params - Filter parameters
+ * @param db - Optional database instance (for testing)
  * @returns Array of t_decisions with metadata
  */
-export function getContext(params: GetContextParams = {}): GetContextResponse {
-  const db = getDatabase();
+export function getContext(params: GetContextParams = {}, db?: Database): GetContextResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Build query dynamically based on filters
@@ -235,7 +237,7 @@ export function getContext(params: GetContextParams = {}): GetContextResponse {
     query += ' ORDER BY updated DESC';
 
     // Execute query
-    const stmt = db.prepare(query);
+    const stmt = actualDb.prepare(query);
     const rows = stmt.all(...queryParams) as TaggedDecision[];
 
     return {
@@ -254,10 +256,11 @@ export function getContext(params: GetContextParams = {}): GetContextResponse {
  * Optionally includes decision context (v3.2.2)
  *
  * @param params - Decision key and optional include_context flag
+ * @param db - Optional database instance (for testing)
  * @returns Decision details or not found
  */
-export function getDecision(params: GetDecisionParams & { include_context?: boolean }): GetDecisionResponse {
-  const db = getDatabase();
+export function getDecision(params: GetDecisionParams & { include_context?: boolean }, db?: Database): GetDecisionResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate parameter
   if (!params.key || params.key.trim() === '') {
@@ -267,7 +270,7 @@ export function getDecision(params: GetDecisionParams & { include_context?: bool
   try {
     // If include_context is true, use the context-aware function
     if (params.include_context) {
-      const result = dbGetDecisionWithContext(db, params.key);
+      const result = dbGetDecisionWithContext(actualDb, params.key);
 
       if (!result) {
         return {
@@ -298,7 +301,7 @@ export function getDecision(params: GetDecisionParams & { include_context?: bool
     }
 
     // Standard query without context (backward compatible)
-    const stmt = db.prepare('SELECT * FROM v_tagged_decisions WHERE key = ?');
+    const stmt = actualDb.prepare('SELECT * FROM v_tagged_decisions WHERE key = ?');
     const row = stmt.get(params.key) as TaggedDecision | undefined;
 
     if (!row) {
@@ -322,10 +325,11 @@ export function getDecision(params: GetDecisionParams & { include_context?: bool
  * Provides flexible tag-based filtering with status and layer support
  *
  * @param params - Search parameters (tags, match_mode, status, layer)
+ * @param db - Optional database instance (for testing)
  * @returns Array of t_decisions matching tag criteria
  */
-export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
-  const db = getDatabase();
+export function searchByTags(params: SearchByTagsParams, db?: Database): SearchByTagsResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.tags || params.tags.length === 0) {
@@ -367,7 +371,7 @@ export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
     // Optional layer filter
     if (params.layer) {
       // Validate layer exists
-      const layerId = getLayerId(db, params.layer);
+      const layerId = getLayerId(actualDb, params.layer);
       if (layerId === null) {
         throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
       }
@@ -379,7 +383,7 @@ export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
     query += ' ORDER BY updated DESC';
 
     // Execute query
-    const stmt = db.prepare(query);
+    const stmt = actualDb.prepare(query);
     const rows = stmt.all(...queryParams) as TaggedDecision[];
 
     return {
@@ -397,10 +401,11 @@ export function searchByTags(params: SearchByTagsParams): SearchByTagsResponse {
  * Returns all historical versions ordered by timestamp (newest first)
  *
  * @param params - Decision key to get history for
+ * @param db - Optional database instance (for testing)
  * @returns Array of historical versions with metadata
  */
-export function getVersions(params: GetVersionsParams): GetVersionsResponse {
-  const db = getDatabase();
+export function getVersions(params: GetVersionsParams, db?: Database): GetVersionsResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameter
   if (!params.key || params.key.trim() === '') {
@@ -409,7 +414,7 @@ export function getVersions(params: GetVersionsParams): GetVersionsResponse {
 
   try {
     // Get key_id for the decision
-    const keyResult = db.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
+    const keyResult = actualDb.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
 
     if (!keyResult) {
       // Key doesn't exist, return empty history
@@ -423,7 +428,7 @@ export function getVersions(params: GetVersionsParams): GetVersionsResponse {
     const keyId = keyResult.id;
 
     // Query t_decision_history with agent join
-    const stmt = db.prepare(`
+    const stmt = actualDb.prepare(`
       SELECT
         dh.version,
         dh.value,
@@ -466,10 +471,11 @@ export function getVersions(params: GetVersionsParams): GetVersionsResponse {
  * Supports status filtering and optional tag inclusion
  *
  * @param params - Layer name, optional status and include_tags
+ * @param db - Optional database instance (for testing)
  * @returns Array of t_decisions in the specified layer
  */
-export function searchByLayer(params: SearchByLayerParams): SearchByLayerResponse {
-  const db = getDatabase();
+export function searchByLayer(params: SearchByLayerParams, db?: Database): SearchByLayerResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameter
   if (!params.layer || params.layer.trim() === '') {
@@ -478,7 +484,7 @@ export function searchByLayer(params: SearchByLayerParams): SearchByLayerRespons
 
   try {
     // Validate layer exists
-    const layerId = getLayerId(db, params.layer);
+    const layerId = getLayerId(actualDb, params.layer);
     if (layerId === null) {
       throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
     }
@@ -554,7 +560,7 @@ export function searchByLayer(params: SearchByLayerParams): SearchByLayerRespons
     }
 
     // Execute query
-    const stmt = db.prepare(query);
+    const stmt = actualDb.prepare(query);
     const rows = stmt.all(...queryParams) as TaggedDecision[];
 
     return {
@@ -593,9 +599,10 @@ export function searchByLayer(params: SearchByLayerParams): SearchByLayerRespons
  * All inferred fields can be overridden via optional parameters.
  *
  * @param params - Quick set parameters (key and value required)
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status and inferred metadata
  */
-export function quickSetDecision(params: QuickSetDecisionParams): QuickSetDecisionResponse {
+export function quickSetDecision(params: QuickSetDecisionParams, db?: Database): QuickSetDecisionResponse {
   // Validate required parameters
   if (!params.key || params.key.trim() === '') {
     throw new Error('Parameter "key" is required and cannot be empty');
@@ -667,8 +674,8 @@ export function quickSetDecision(params: QuickSetDecisionParams): QuickSetDecisi
     scopes: inferredScopes
   };
 
-  // Call setDecision with full params
-  const result = setDecision(fullParams);
+  // Call setDecision with full params (pass db if provided)
+  const result = setDecision(fullParams, db);
 
   // Return response with inferred metadata
   return {
@@ -697,10 +704,11 @@ export function quickSetDecision(params: QuickSetDecisionParams): QuickSetDecisi
  * - search_text: Full-text search in value field
  *
  * @param params - Advanced search parameters with filtering, sorting, pagination
+ * @param db - Optional database instance (for testing)
  * @returns Filtered decisions with total count for pagination
  */
-export function searchAdvanced(params: SearchAdvancedParams = {}): SearchAdvancedResponse {
-  const db = getDatabase();
+export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database): SearchAdvancedResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Parse relative time to Unix timestamp
@@ -825,7 +833,7 @@ export function searchAdvanced(params: SearchAdvancedParams = {}): SearchAdvance
 
     // Count total matching records (before pagination)
     const countQuery = query.replace('SELECT * FROM', 'SELECT COUNT(*) as total FROM');
-    const countStmt = db.prepare(countQuery);
+    const countStmt = actualDb.prepare(countQuery);
     const countResult = countStmt.get(...queryParams) as { total: number };
     const totalCount = countResult.total;
 
@@ -859,7 +867,7 @@ export function searchAdvanced(params: SearchAdvancedParams = {}): SearchAdvance
     queryParams.push(limit, offset);
 
     // Execute query
-    const stmt = db.prepare(query);
+    const stmt = actualDb.prepare(query);
     const rows = stmt.all(...queryParams) as TaggedDecision[];
 
     return {
@@ -879,10 +887,11 @@ export function searchAdvanced(params: SearchAdvancedParams = {}): SearchAdvance
  * Limit: 50 items per batch (constraint #3)
  *
  * @param params - Batch parameters with array of decisions and atomic flag
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status and detailed results for each item
  */
-export function setDecisionBatch(params: SetDecisionBatchParams): SetDecisionBatchResponse {
-  const db = getDatabase();
+export function setDecisionBatch(params: SetDecisionBatchParams, db?: Database): SetDecisionBatchResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.decisions || !Array.isArray(params.decisions)) {
@@ -893,7 +902,7 @@ export function setDecisionBatch(params: SetDecisionBatchParams): SetDecisionBat
 
   // Use processBatch utility
   const batchResult = processBatch(
-    db,
+    actualDb,
     params.decisions,
     (decision, db) => {
       const result = setDecisionInternal(decision, db);
@@ -928,10 +937,11 @@ export function setDecisionBatch(params: SetDecisionBatchParams): SetDecisionBat
  * Token cost: ~5-10 tokens per check
  *
  * @param params - Agent name and since_timestamp (ISO 8601)
+ * @param db - Optional database instance (for testing)
  * @returns Boolean flag and counts for decisions, messages, files
  */
-export function hasUpdates(params: HasUpdatesParams): HasUpdatesResponse {
-  const db = getDatabase();
+export function hasUpdates(params: HasUpdatesParams, db?: Database): HasUpdatesResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.agent_name || params.agent_name.trim() === '') {
@@ -951,7 +961,7 @@ export function hasUpdates(params: HasUpdatesParams): HasUpdatesResponse {
     const sinceTs = Math.floor(sinceDate.getTime() / 1000);
 
     // Count decisions updated since timestamp (both string and numeric tables)
-    const decisionCountStmt = db.prepare(`
+    const decisionCountStmt = actualDb.prepare(`
       SELECT COUNT(*) as count FROM (
         SELECT ts FROM t_decisions WHERE ts > ?
         UNION ALL
@@ -962,13 +972,13 @@ export function hasUpdates(params: HasUpdatesParams): HasUpdatesResponse {
     const decisionsCount = decisionResult.count;
 
     // Get agent_id for the requesting agent
-    const agentResult = db.prepare('SELECT id FROM m_agents WHERE name = ?').get(params.agent_name) as { id: number } | undefined;
+    const agentResult = actualDb.prepare('SELECT id FROM m_agents WHERE name = ?').get(params.agent_name) as { id: number } | undefined;
 
     // Count messages for the agent (received messages - to_agent_id matches OR broadcast messages)
     let messagesCount = 0;
     if (agentResult) {
       const agentId = agentResult.id;
-      const messageCountStmt = db.prepare(`
+      const messageCountStmt = actualDb.prepare(`
         SELECT COUNT(*) as count FROM t_agent_messages
         WHERE ts > ? AND (to_agent_id = ? OR to_agent_id IS NULL)
       `);
@@ -977,7 +987,7 @@ export function hasUpdates(params: HasUpdatesParams): HasUpdatesResponse {
     }
 
     // Count file changes since timestamp
-    const fileCountStmt = db.prepare(`
+    const fileCountStmt = actualDb.prepare(`
       SELECT COUNT(*) as count FROM t_file_changes WHERE ts > ?
     `);
     const fileResult = fileCountStmt.get(sinceTs) as { count: number };
@@ -1006,10 +1016,11 @@ export function hasUpdates(params: HasUpdatesParams): HasUpdatesResponse {
  * Validates required fields if template specifies any
  *
  * @param params - Template name, key, value, and optional overrides
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status and applied defaults metadata
  */
-export function setFromTemplate(params: SetFromTemplateParams): SetFromTemplateResponse {
-  const db = getDatabase();
+export function setFromTemplate(params: SetFromTemplateParams, db?: Database): SetFromTemplateResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.template || params.template.trim() === '') {
@@ -1026,7 +1037,7 @@ export function setFromTemplate(params: SetFromTemplateParams): SetFromTemplateR
 
   try {
     // Get template
-    const templateRow = db.prepare('SELECT * FROM t_decision_templates WHERE name = ?').get(params.template) as {
+    const templateRow = actualDb.prepare('SELECT * FROM t_decision_templates WHERE name = ?').get(params.template) as {
       id: number;
       name: string;
       defaults: string;
@@ -1086,8 +1097,8 @@ export function setFromTemplate(params: SetFromTemplateParams): SetFromTemplateR
       appliedDefaults.status = defaults.status;
     }
 
-    // Call setDecision with merged params
-    const result = setDecision(decisionParams);
+    // Call setDecision with merged params (pass db if provided)
+    const result = setDecision(decisionParams, actualDb);
 
     return {
       success: result.success,
@@ -1109,10 +1120,11 @@ export function setFromTemplate(params: SetFromTemplateParams): SetFromTemplateR
  * Defines reusable defaults and required fields for decisions
  *
  * @param params - Template name, defaults, required fields, and creator
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status and template ID
  */
-export function createTemplate(params: CreateTemplateParams): CreateTemplateResponse {
-  const db = getDatabase();
+export function createTemplate(params: CreateTemplateParams, db?: Database): CreateTemplateResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.name || params.name.trim() === '') {
@@ -1124,10 +1136,10 @@ export function createTemplate(params: CreateTemplateParams): CreateTemplateResp
   }
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Validate layer if provided in defaults
       if (params.defaults.layer) {
-        const layerId = getLayerId(db, params.defaults.layer);
+        const layerId = getLayerId(actualDb, params.defaults.layer);
         if (layerId === null) {
           throw new Error(`Invalid layer in defaults: ${params.defaults.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
         }
@@ -1141,7 +1153,7 @@ export function createTemplate(params: CreateTemplateParams): CreateTemplateResp
       // Get or create agent if creator specified
       let createdById: number | null = null;
       if (params.created_by) {
-        createdById = getOrCreateAgent(db, params.created_by);
+        createdById = getOrCreateAgent(actualDb, params.created_by);
       }
 
       // Serialize defaults and required fields
@@ -1149,7 +1161,7 @@ export function createTemplate(params: CreateTemplateParams): CreateTemplateResp
       const requiredFieldsJson = params.required_fields ? JSON.stringify(params.required_fields) : null;
 
       // Insert template
-      const stmt = db.prepare(`
+      const stmt = actualDb.prepare(`
         INSERT INTO t_decision_templates (name, defaults, required_fields, created_by)
         VALUES (?, ?, ?, ?)
       `);
@@ -1174,13 +1186,14 @@ export function createTemplate(params: CreateTemplateParams): CreateTemplateResp
  * Returns all templates with their defaults and metadata
  *
  * @param params - No parameters required
+ * @param db - Optional database instance (for testing)
  * @returns Array of all templates with parsed JSON fields
  */
-export function listTemplates(params: ListTemplatesParams = {}): ListTemplatesResponse {
-  const db = getDatabase();
+export function listTemplates(params: ListTemplatesParams = {}, db?: Database): ListTemplatesResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
-    const stmt = db.prepare(`
+    const stmt = actualDb.prepare(`
       SELECT
         t.id,
         t.name,
@@ -1235,10 +1248,11 @@ export function listTemplates(params: ListTemplatesParams = {}): ListTemplatesRe
  * (tags, scopes) will also be deleted due to CASCADE constraints.
  *
  * @param params - Decision key to delete
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status
  */
-export function hardDeleteDecision(params: HardDeleteDecisionParams): HardDeleteDecisionResponse {
-  const db = getDatabase();
+export function hardDeleteDecision(params: HardDeleteDecisionParams, db?: Database): HardDeleteDecisionResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate parameter
   if (!params.key || params.key.trim() === '') {
@@ -1246,9 +1260,9 @@ export function hardDeleteDecision(params: HardDeleteDecisionParams): HardDelete
   }
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Get key_id
-      const keyResult = db.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
+      const keyResult = actualDb.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
 
       if (!keyResult) {
         // Key doesn't exist - still return success (idempotent)
@@ -1262,19 +1276,19 @@ export function hardDeleteDecision(params: HardDeleteDecisionParams): HardDelete
       const keyId = keyResult.id;
 
       // Delete from t_decisions (if exists)
-      const deletedString = db.prepare('DELETE FROM t_decisions WHERE key_id = ?').run(keyId);
+      const deletedString = actualDb.prepare('DELETE FROM t_decisions WHERE key_id = ?').run(keyId);
 
       // Delete from t_decisions_numeric (if exists)
-      const deletedNumeric = db.prepare('DELETE FROM t_decisions_numeric WHERE key_id = ?').run(keyId);
+      const deletedNumeric = actualDb.prepare('DELETE FROM t_decisions_numeric WHERE key_id = ?').run(keyId);
 
       // Delete from t_decision_history (CASCADE should handle this, but explicit for clarity)
-      const deletedHistory = db.prepare('DELETE FROM t_decision_history WHERE key_id = ?').run(keyId);
+      const deletedHistory = actualDb.prepare('DELETE FROM t_decision_history WHERE key_id = ?').run(keyId);
 
       // Delete from t_decision_tags (CASCADE should handle this)
-      const deletedTags = db.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
+      const deletedTags = actualDb.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
 
       // Delete from t_decision_scopes (CASCADE should handle this)
-      const deletedScopes = db.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
+      const deletedScopes = actualDb.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
 
       // Calculate total deleted records
       const totalDeleted = deletedString.changes + deletedNumeric.changes + deletedHistory.changes + deletedTags.changes + deletedScopes.changes;
@@ -1308,10 +1322,11 @@ export function hardDeleteDecision(params: HardDeleteDecisionParams): HardDelete
  * Adds rich context (rationale, alternatives, tradeoffs) to a decision
  *
  * @param params - Context parameters
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status
  */
-export function addDecisionContextAction(params: any): any {
-  const db = getDatabase();
+export function addDecisionContextAction(params: any, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.key || params.key.trim() === '') {
@@ -1336,7 +1351,7 @@ export function addDecisionContextAction(params: any): any {
     }
 
     const contextId = dbAddDecisionContext(
-      db,
+      actualDb,
       params.key,
       params.rationale,
       alternatives,
@@ -1363,13 +1378,14 @@ export function addDecisionContextAction(params: any): any {
  * Query decision contexts with optional filters
  *
  * @param params - Filter parameters
+ * @param db - Optional database instance (for testing)
  * @returns Array of decision contexts
  */
-export function listDecisionContextsAction(params: any): any {
-  const db = getDatabase();
+export function listDecisionContextsAction(params: any, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   try {
-    const contexts = dbListDecisionContexts(db, {
+    const contexts = dbListDecisionContexts(actualDb, {
       decisionKey: params.decision_key,
       relatedTaskId: params.related_task_id,
       relatedConstraintId: params.related_constraint_id,

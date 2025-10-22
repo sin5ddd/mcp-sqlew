@@ -1,7 +1,7 @@
 {
   "name": "sqlew",
-  "version": "3.4.1",
-  "description": "MCP server for efficient context sharing between Claude Code sub-agents with Kanban Task Watcher, VCS-aware auto-complete (Git/Mercurial/SVN), Decision Context, auto-file-tracking, and 60-75% token reduction in multi-session projects",
+  "version": "3.5.0",
+  "description": "MCP server for efficient context sharing between Claude Code sub-agents with Kanban Task Watcher, auto-pruning for non-existent files, VCS-aware auto-complete (Git/Mercurial/SVN), Decision Context, auto-file-tracking, and 60-75% token reduction in multi-session projects",
   "main": "dist/index.js",
   "type": "module",
   "bin": {

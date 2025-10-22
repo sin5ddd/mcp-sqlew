@@ -5,6 +5,156 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2025-10-22
+
+### Added - Non-Existent File Auto-Pruning with Audit Trail 🔧
+
+**Major Feature: Automatic removal of non-existent watched files with project archaeology**
+
+Tasks watching planned files that were never created (renamed, deleted, or scope-reduced during implementation) no longer block quality gates. Auto-pruning maintains clean watch lists while preserving complete audit trail for post-mortem analysis and team handoffs.
+
+#### Core Implementation
+
+**1. Database Schema Migration**
+- **New Table**: `t_task_pruned_files` - Audit trail for pruned files
+- **Columns**: id, task_id, file_path, pruned_ts, linked_decision_id
+- **Indexes**: idx_pruned_task, idx_pruned_decision
+- **File**: `src/migrations/add-v3.5.0-pruned-files.ts`
+- **Persistence**: Audit records survive task archival for long-term archaeology
+
+**2. Core Pruning Logic**
+- **Function**: `pruneNonExistentFiles(db, taskId, projectRoot)`
+- **Safety Check**: Blocks transition if ALL files non-existent (prevents zero-work completion)
+- **Behavior**: Partial pruning (removes only non-existent files, keeps existing)
+- **Audit Trail**: Records every pruned file with timestamp
+- **File**: `src/utils/file-pruning.ts`
+
+**3. Integration into Quality Gates**
+- **Trigger Point**: During `in_progress → waiting_review` transition
+- **Timing**: BEFORE quality gate validation (Decision #161)
+- **Process**: Check existence → Prune non-existent → Validate remaining files
+- **File**: `src/utils/task-stale-detection.ts`
+- **Safety**: Cannot complete tasks with no work done (Decision #163)
+
+**4. MCP Actions**
+- **get_pruned_files**: Retrieve audit trail for a task
+  - Parameters: task_id, limit (optional)
+  - Returns: Pruned file records with timestamps and decision links
+- **link_pruned_file**: Attach WHY reasoning to pruned files
+  - Parameters: pruned_file_id, decision_key
+  - Purpose: Project archaeology and team handoffs
+- **File**: `src/tools/tasks.ts`, `src/index.ts`
+
+**5. Documentation**
+- **TASK_PRUNING.md**: Comprehensive 500+ line guide
+  - How it works, safety checks, audit trail
+  - MCP action reference with examples
+  - Use cases, best practices, troubleshooting
+  - Post-mortem analysis queries
+
+#### Problem Solved
+
+**Before v3.5.0:**
+```
+Task watches: ["src/feature-a.ts", "src/feature-b.ts"]
+During implementation: feature-b absorbed into feature-a
+Result: Task stuck in in_progress (file-b.ts doesn't exist)
+Resolution: Manual intervention required ❌
+```
+
+**After v3.5.0:**
+```
+Task watches: ["src/feature-a.ts", "src/feature-b.ts"]
+During implementation: feature-b absorbed into feature-a
+Auto-prune runs: Removes feature-b.ts from watch list
+Audit trail: Records why file-b wasn't created
+Result: Task proceeds to waiting_review ✅
+```
+
+#### Use Cases
+
+**Use Case 1: Endpoint Not Needed**
+- Planned: `/api/v2/users` endpoint
+- Actual: v1 endpoint sufficient
+- Auto-prune: Removes v2 files, links to decision explaining why
+
+**Use Case 2: Feature Absorbed into Existing Code**
+- Planned: `src/utils/new-helper.ts`
+- Actual: Functionality added to existing helper
+- Auto-prune: Removes new-helper.ts, preserves audit trail
+
+**Use Case 3: Test Strategy Changed**
+- Planned: Integration tests
+- Actual: Unit tests sufficient
+- Auto-prune: Removes integration test files, decision linked
+
+#### Safety Checks
+
+**Zero-Work Prevention**:
+```typescript
+// Example: ALL 3 watched files non-existent
+watchedFiles = ["a.ts", "b.ts", "c.ts"]  // all non-existent
+
+// Safety check triggers:
+Error: "Cannot prune files for task #42: ALL 3 watched files
+        are non-existent. This indicates no work was done."
+
+// Task stays in in_progress - manual review required
+```
+
+**Partial Pruning Allowed**:
+```typescript
+// Example: 2 of 3 files exist
+watchedFiles = ["a.ts", "b.ts", "c.ts"]
+// a.ts exists, b.ts exists, c.ts non-existent
+
+// Auto-prune: Removes only c.ts
+// Task continues with a.ts and b.ts
+```
+
+#### Configuration
+
+Auto-pruning works with existing quality gate configuration:
+- `review_idle_minutes`: Time before pruning check (default: 3)
+- `review_require_all_files_modified`: Quality gate for remaining files (default: true)
+
+#### Backward Compatibility
+
+- **Zero Breaking Changes**: Works with existing tasks
+- **Automatic Migration**: Runs on first startup of v3.5.0
+- **Idempotent**: Safe to upgrade and downgrade
+
+#### Token Efficiency
+
+- File paths stored as raw strings (not normalized to m_files)
+- Audit queries paginated with limit parameter
+- No upfront cost - pruning only when needed
+
+### Fixed - File Watcher Architectural Compliance (v3.3.0)
+
+**Critical architectural fix**: File watcher now monitors **all project files** with .gitignore filtering, as originally designed in v3.3.0 decision.
+
+**What Changed:**
+- ✅ Watches entire project root instead of individual files
+- ✅ Automatic monitoring of all files (selective task linking for transitions)
+- ✅ Removed explicit file add/remove operations (simplified architecture)
+- ✅ Better performance (single watch root vs many individual watches)
+
+**Impact:**
+- **Zero breaking changes** - External API unchanged
+- **Better performance** - Single chokidar watch root more efficient than 100+ individual file watches
+- **Automatic discovery** - New files automatically monitored when created
+- **Simpler code** - Removed watch control logic, `watchedFiles` map is now pure lookup
+
+**Technical Details:**
+- Modified `src/watcher/file-watcher.ts` line 80: `chokidar.watch(this.projectRoot)` instead of `chokidar.watch([])`
+- Removed explicit `watcher.add()` calls in `registerFile()` method
+- Removed explicit `watcher.unwatch()` calls in `unregisterFile()` method
+- Global watching with .gitignore filtering (lines 87-94) now fully utilized
+
+**Why This Matters:**
+The v3.3.0 architectural decision mandated "Watch all project files with .gitignore support instead of individual file registration" but the implementation was selective (only task-linked files). This fix ensures compliance with the original design, providing better performance and simpler architecture.
+
 ## [3.4.1] - 2025-10-22
 
 ### Changed - VCS Abstraction Layer Enhancement

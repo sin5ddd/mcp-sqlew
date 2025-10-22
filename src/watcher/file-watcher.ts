@@ -77,7 +77,7 @@ export class FileWatcher {
       this.gitignoreParser = createGitIgnoreParser(this.projectRoot);
 
       // Initialize chokidar with debouncing and gitignore support
-      this.watcher = chokidar.watch([], {
+      this.watcher = chokidar.watch(this.projectRoot, {
         persistent: true,
         ignoreInitial: true, // Don't trigger on startup
         awaitWriteFinish: {
@@ -184,18 +184,6 @@ export class FileWatcher {
     // Add to watched files map
     if (!this.watchedFiles.has(normalizedPath)) {
       this.watchedFiles.set(normalizedPath, []);
-
-      // Check if file exists
-      if (existsSync(normalizedPath)) {
-        // File exists - watch it directly
-        this.watcher.add(normalizedPath);
-        console.error(`  Watching file: ${basename(normalizedPath)} for task #${taskId}`);
-      } else {
-        // File doesn't exist - watch parent directory
-        const parentDir = dirname(normalizedPath);
-        this.watcher.add(parentDir);
-        console.error(`  Watching directory: ${parentDir} for task #${taskId} (file doesn't exist yet)`);
-      }
     }
 
     const mappings = this.watchedFiles.get(normalizedPath)!;
@@ -229,10 +217,7 @@ export class FileWatcher {
     if (filtered.length === 0) {
       // No more tasks watching this file
       this.watchedFiles.delete(normalizedPath);
-      if (this.watcher) {
-        this.watcher.unwatch(normalizedPath);
-      }
-      console.error(`  Stopped watching: ${basename(normalizedPath)}`);
+      console.error(`  Removed task mapping for: ${basename(normalizedPath)}`);
     } else {
       this.watchedFiles.set(normalizedPath, filtered);
     }

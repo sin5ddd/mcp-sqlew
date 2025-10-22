@@ -18,7 +18,7 @@ import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch,
 import { addConstraint, getConstraints, deactivateConstraint, constraintHelp, constraintExample } from './tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL, statsHelp, statsExample } from './tools/utils.js';
 import { getConfig, updateConfig, configHelp, configExample } from './tools/config.js';
-import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, watchFiles, taskHelp, taskExample, watcherStatus } from './tools/tasks.js';
+import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, watchFiles, getPrunedFiles, linkPrunedFile, taskHelp, taskExample, watcherStatus } from './tools/tasks.js';
 import { FileWatcher } from './watcher/index.js';
 
 // Parse command-line arguments
@@ -464,6 +464,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'remove_dependency': result = removeDependency(params); break;
           case 'get_dependencies': result = getDependencies(params); break;
           case 'watch_files': result = watchFiles(params); break;
+          case 'get_pruned_files': result = getPrunedFiles(params); break;
+          case 'link_pruned_file': result = linkPrunedFile(params); break;
           case 'watcher': result = watcherStatus(params); break;
           case 'help': result = taskHelp(); break;
           case 'example': result = taskExample(); break;

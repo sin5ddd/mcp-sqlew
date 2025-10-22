@@ -7,7 +7,8 @@ import { Database } from '../types.js';
 import { getConfigBool, getConfigInt } from '../database.js';
 import { calculateTaskArchiveCutoff } from './retention.js';
 import { checkReadyForReview } from './quality-checks.js';
-import { statSync } from 'fs';
+import { pruneNonExistentFiles } from './file-pruning.js';
+import { statSync, existsSync } from 'fs';
 import { join } from 'path';
 import { detectVCS } from './vcs-adapter.js';
 
@@ -351,7 +352,50 @@ export async function detectAndTransitionToReview(db: Database): Promise<number>
         continue; // Skip tasks with no watched files
       }
 
-      const filePaths = watchedFiles.map(f => f.path);
+      // AUTO-PRUNING (v3.5.0): Remove non-existent watched files
+      // This happens BEFORE quality gate checks to ensure clean watch lists
+      try {
+        const pruneResult = pruneNonExistentFiles(db, task.id, projectRoot);
+
+        if (pruneResult.prunedCount > 0) {
+          console.error(`    🔧 Auto-pruned ${pruneResult.prunedCount} non-existent files (${pruneResult.remainingCount} remaining)`);
+          pruneResult.prunedPaths.forEach(path => {
+            console.error(`       - ${path}`);
+          });
+
+          // If no files remain after pruning, skip this task
+          if (pruneResult.remainingCount === 0) {
+            console.error(`    ⏸ Skipping (no files remaining after auto-prune)`);
+            continue;
+          }
+
+          // Re-fetch watched files after pruning
+          const updatedWatchedFiles = db.prepare(`
+            SELECT f.path
+            FROM t_task_file_links tfl
+            JOIN m_files f ON tfl.file_id = f.id
+            WHERE tfl.task_id = ?
+          `).all(task.id) as Array<{ path: string }>;
+
+          const filePaths = updatedWatchedFiles.map(f => f.path);
+          console.error(`    → Updated watch list: ${filePaths.length} files`);
+        }
+      } catch (error) {
+        // Safety check triggered: ALL files were non-existent
+        if (error instanceof Error && error.message.includes('ALL')) {
+          console.error(`    ✗ ${error.message}`);
+          continue; // Skip this task - cannot transition with no work done
+        }
+        // Other errors - log and continue
+        console.error(`    ⚠ Auto-prune error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // Get final file paths (after pruning)
+      const filePaths = watchedFiles.map(f => f.path).filter(path => {
+        // Filter out any paths that were pruned
+        const fullPath = join(projectRoot, path);
+        return existsSync(fullPath);
+      });
 
       // Determine which files have been modified since task creation
       // by checking file system timestamps

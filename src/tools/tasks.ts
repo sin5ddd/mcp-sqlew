@@ -278,8 +278,8 @@ export function createTask(params: {
   tags?: string[];
   status?: string;
   watch_files?: string[];  // Array of file paths to watch (v3.4.1)
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.title || params.title.trim() === '') {
@@ -289,8 +289,8 @@ export function createTask(params: {
   validateLength(params.title, 'Parameter "title"', 200);
 
   try {
-    return transaction(db, () => {
-      return createTaskInternal(params, db);
+    return transaction(actualDb, () => {
+      return createTaskInternal(params, actualDb);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -311,8 +311,8 @@ export function updateTask(params: {
   acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
   watch_files?: string[];  // Array of file paths to watch (v3.4.1)
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.task_id) {
@@ -320,9 +320,9 @@ export function updateTask(params: {
   }
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Check if task exists
-      const taskExists = db.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+      const taskExists = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
       if (!taskExists) {
         throw new Error(`Task with id ${params.task_id} not found`);
       }
@@ -347,13 +347,13 @@ export function updateTask(params: {
       }
 
       if (params.assigned_agent !== undefined) {
-        const agentId = getOrCreateAgent(db, params.assigned_agent);
+        const agentId = getOrCreateAgent(actualDb, params.assigned_agent);
         updates.push('assigned_agent_id = ?');
         updateParams.push(agentId);
       }
 
       if (params.layer !== undefined) {
-        const layerId = getLayerId(db, params.layer);
+        const layerId = getLayerId(actualDb, params.layer);
         if (layerId === null) {
           throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
         }
@@ -363,7 +363,7 @@ export function updateTask(params: {
 
       // Update t_tasks if any updates
       if (updates.length > 0) {
-        const updateStmt = db.prepare(`
+        const updateStmt = actualDb.prepare(`
           UPDATE t_tasks
           SET ${updates.join(', ')}
           WHERE id = ?
@@ -410,7 +410,7 @@ export function updateTask(params: {
         }
 
         // Check if details exist
-        const detailsExist = db.prepare('SELECT task_id FROM t_task_details WHERE task_id = ?').get(params.task_id);
+        const detailsExist = actualDb.prepare('SELECT task_id FROM t_task_details WHERE task_id = ?').get(params.task_id);
 
         if (detailsExist) {
           // Update existing details
@@ -435,7 +435,7 @@ export function updateTask(params: {
           }
 
           if (detailUpdates.length > 0) {
-            const updateDetailsStmt = db.prepare(`
+            const updateDetailsStmt = actualDb.prepare(`
               UPDATE t_task_details
               SET ${detailUpdates.join(', ')}
               WHERE task_id = ?
@@ -444,7 +444,7 @@ export function updateTask(params: {
           }
         } else {
           // Insert new details
-          const insertDetailsStmt = db.prepare(`
+          const insertDetailsStmt = actualDb.prepare(`
             INSERT INTO t_task_details (task_id, description, acceptance_criteria, acceptance_criteria_json, notes)
             VALUES (?, ?, ?, ?, ?)
           `);
@@ -489,19 +489,19 @@ export function updateTask(params: {
           throw new Error('Parameter "watch_files" must be a string or array');
         }
 
-        const insertFileLinkStmt = db.prepare(`
+        const insertFileLinkStmt = actualDb.prepare(`
           INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
           VALUES (?, ?)
         `);
 
         for (const filePath of watchFilesParsed) {
-          const fileId = getOrCreateFile(db, filePath);
+          const fileId = getOrCreateFile(actualDb, filePath);
           insertFileLinkStmt.run(params.task_id, fileId);
         }
 
         // Register files with watcher for auto-tracking
         try {
-          const taskData = db.prepare(`
+          const taskData = actualDb.prepare(`
             SELECT t.title, s.name as status
             FROM t_tasks t
             JOIN m_task_statuses s ON t.status_id = s.id
@@ -595,8 +595,8 @@ function queryTaskDependencies(db: Database, taskId: number, includeDetails: boo
 export function getTask(params: {
   task_id: number;
   include_dependencies?: boolean;
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -604,7 +604,7 @@ export function getTask(params: {
 
   try {
     // Get task with details
-    const stmt = db.prepare(`
+    const stmt = actualDb.prepare(`
       SELECT
         t.id,
         t.title,
@@ -638,7 +638,7 @@ export function getTask(params: {
     }
 
     // Get tags
-    const tagsStmt = db.prepare(`
+    const tagsStmt = actualDb.prepare(`
       SELECT tg.name
       FROM t_task_tags tt
       JOIN m_tags tg ON tt.tag_id = tg.id
@@ -647,7 +647,7 @@ export function getTask(params: {
     const tags = tagsStmt.all(params.task_id).map((row: any) => row.name);
 
     // Get decision links
-    const decisionsStmt = db.prepare(`
+    const decisionsStmt = actualDb.prepare(`
       SELECT ck.key, tdl.link_type
       FROM t_task_decision_links tdl
       JOIN m_context_keys ck ON tdl.decision_key_id = ck.id
@@ -656,7 +656,7 @@ export function getTask(params: {
     const decisions = decisionsStmt.all(params.task_id);
 
     // Get constraint links
-    const constraintsStmt = db.prepare(`
+    const constraintsStmt = actualDb.prepare(`
       SELECT c.id, c.constraint_text
       FROM t_task_constraint_links tcl
       JOIN t_constraints c ON tcl.constraint_id = c.id
@@ -665,7 +665,7 @@ export function getTask(params: {
     const constraints = constraintsStmt.all(params.task_id);
 
     // Get file links
-    const filesStmt = db.prepare(`
+    const filesStmt = actualDb.prepare(`
       SELECT f.path
       FROM t_task_file_links tfl
       JOIN m_files f ON tfl.file_id = f.id
@@ -687,7 +687,7 @@ export function getTask(params: {
 
     // Include dependencies if requested (token-efficient, metadata-only)
     if (params.include_dependencies) {
-      const deps = queryTaskDependencies(db, params.task_id, false);
+      const deps = queryTaskDependencies(actualDb, params.task_id, false);
       result.task.dependencies = {
         blockers: deps.blockers,
         blocking: deps.blocking
@@ -712,14 +712,14 @@ export async function listTasks(params: {
   limit?: number;
   offset?: number;
   include_dependency_counts?: boolean;
-} = {}): Promise<any> {
-  const db = getDatabase();
+} = {}, db?: Database): Promise<any> {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Run auto-stale detection, git-aware completion, and auto-archive before listing
-    const transitionCount = detectAndTransitionStaleTasks(db);
-    const gitCompletedCount = await detectAndCompleteReviewedTasks(db);
-    const archiveCount = autoArchiveOldDoneTasks(db);
+    const transitionCount = detectAndTransitionStaleTasks(actualDb);
+    const gitCompletedCount = await detectAndCompleteReviewedTasks(actualDb);
+    const archiveCount = autoArchiveOldDoneTasks(actualDb);
 
     // Build query with optional dependency counts
     let query: string;
@@ -793,7 +793,7 @@ export async function listTasks(params: {
     queryParams.push(limit, offset);
 
     // Execute query
-    const stmt = db.prepare(query);
+    const stmt = actualDb.prepare(query);
     const rows = stmt.all(...queryParams);
 
     return {
@@ -815,8 +815,8 @@ export async function listTasks(params: {
 export function moveTask(params: {
   task_id: number;
   new_status: string;
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -828,12 +828,12 @@ export function moveTask(params: {
 
   try {
     // Run auto-stale detection and auto-archive before move
-    detectAndTransitionStaleTasks(db);
-    autoArchiveOldDoneTasks(db);
+    detectAndTransitionStaleTasks(actualDb);
+    autoArchiveOldDoneTasks(actualDb);
 
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Get current status
-      const taskRow = db.prepare('SELECT status_id FROM t_tasks WHERE id = ?').get(params.task_id) as { status_id: number } | undefined;
+      const taskRow = actualDb.prepare('SELECT status_id FROM t_tasks WHERE id = ?').get(params.task_id) as { status_id: number } | undefined;
 
       if (!taskRow) {
         throw new Error(`Task with id ${params.task_id} not found`);
@@ -856,7 +856,7 @@ export function moveTask(params: {
       }
 
       // Update status
-      const updateStmt = db.prepare(`
+      const updateStmt = actualDb.prepare(`
         UPDATE t_tasks
         SET status_id = ?,
             completed_ts = CASE WHEN ? = 5 THEN unixepoch() ELSE completed_ts END
@@ -897,8 +897,8 @@ export function linkTask(params: {
   link_type: 'decision' | 'constraint' | 'file';
   target_id: string | number;
   link_relation?: string;
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -913,19 +913,19 @@ export function linkTask(params: {
   }
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Check if task exists
-      const taskExists = db.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+      const taskExists = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
       if (!taskExists) {
         throw new Error(`Task with id ${params.task_id} not found`);
       }
 
       if (params.link_type === 'decision') {
         const decisionKey = String(params.target_id);
-        const keyId = getOrCreateContextKey(db, decisionKey);
+        const keyId = getOrCreateContextKey(actualDb, decisionKey);
         const linkRelation = params.link_relation || 'implements';
 
-        const stmt = db.prepare(`
+        const stmt = actualDb.prepare(`
           INSERT OR REPLACE INTO t_task_decision_links (task_id, decision_key_id, link_type)
           VALUES (?, ?, ?)
         `);
@@ -944,12 +944,12 @@ export function linkTask(params: {
         const constraintId = Number(params.target_id);
 
         // Check if constraint exists
-        const constraintExists = db.prepare('SELECT id FROM t_constraints WHERE id = ?').get(constraintId);
+        const constraintExists = actualDb.prepare('SELECT id FROM t_constraints WHERE id = ?').get(constraintId);
         if (!constraintExists) {
           throw new Error(`Constraint with id ${constraintId} not found`);
         }
 
-        const stmt = db.prepare(`
+        const stmt = actualDb.prepare(`
           INSERT OR IGNORE INTO t_task_constraint_links (task_id, constraint_id)
           VALUES (?, ?)
         `);
@@ -970,9 +970,9 @@ export function linkTask(params: {
         console.warn(`   Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
 
         const filePath = String(params.target_id);
-        const fileId = getOrCreateFile(db, filePath);
+        const fileId = getOrCreateFile(actualDb, filePath);
 
-        const stmt = db.prepare(`
+        const stmt = actualDb.prepare(`
           INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
           VALUES (?, ?)
         `);
@@ -980,7 +980,7 @@ export function linkTask(params: {
 
         // Register file with watcher for auto-tracking
         try {
-          const taskData = db.prepare(`
+          const taskData = actualDb.prepare(`
             SELECT t.title, s.name as status
             FROM t_tasks t
             JOIN m_task_statuses s ON t.status_id = s.id
@@ -1018,17 +1018,17 @@ export function linkTask(params: {
 /**
  * Archive completed task
  */
-export function archiveTask(params: { task_id: number }): any {
-  const db = getDatabase();
+export function archiveTask(params: { task_id: number }, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
   }
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Check if task is in 'done' status
-      const taskRow = db.prepare('SELECT status_id FROM t_tasks WHERE id = ?').get(params.task_id) as { status_id: number } | undefined;
+      const taskRow = actualDb.prepare('SELECT status_id FROM t_tasks WHERE id = ?').get(params.task_id) as { status_id: number } | undefined;
 
       if (!taskRow) {
         throw new Error(`Task with id ${params.task_id} not found`);
@@ -1039,7 +1039,7 @@ export function archiveTask(params: { task_id: number }): any {
       }
 
       // Update to archived
-      const updateStmt = db.prepare('UPDATE t_tasks SET status_id = ? WHERE id = ?');
+      const updateStmt = actualDb.prepare('UPDATE t_tasks SET status_id = ? WHERE id = ?');
       updateStmt.run(TASK_STATUS.ARCHIVED, params.task_id);
 
       // Unregister from file watcher (archived tasks don't need tracking)
@@ -1068,8 +1068,8 @@ export function archiveTask(params: { task_id: number }): any {
 export function addDependency(params: {
   blocker_task_id: number;
   blocked_task_id: number;
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.blocker_task_id) {
     throw new Error('Parameter "blocker_task_id" is required');
@@ -1080,15 +1080,15 @@ export function addDependency(params: {
   }
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Validation 1: No self-dependencies
       if (params.blocker_task_id === params.blocked_task_id) {
         throw new Error('Self-dependency not allowed');
       }
 
       // Validation 2: Both tasks must exist and check if archived
-      const blockerTask = db.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocker_task_id) as { id: number; status_id: number } | undefined;
-      const blockedTask = db.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocked_task_id) as { id: number; status_id: number } | undefined;
+      const blockerTask = actualDb.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocker_task_id) as { id: number; status_id: number } | undefined;
+      const blockedTask = actualDb.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocked_task_id) as { id: number; status_id: number } | undefined;
 
       if (!blockerTask) {
         throw new Error(`Blocker task #${params.blocker_task_id} not found`);
@@ -1108,7 +1108,7 @@ export function addDependency(params: {
       }
 
       // Validation 4: No direct circular (reverse relationship)
-      const reverseExists = db.prepare(`
+      const reverseExists = actualDb.prepare(`
         SELECT 1 FROM t_task_dependencies
         WHERE blocker_task_id = ? AND blocked_task_id = ?
       `).get(params.blocked_task_id, params.blocker_task_id);
@@ -1118,7 +1118,7 @@ export function addDependency(params: {
       }
 
       // Validation 5: No transitive circular (check if adding this would create a cycle)
-      const cycleCheck = db.prepare(`
+      const cycleCheck = actualDb.prepare(`
         WITH RECURSIVE dependency_chain AS (
           -- Start from the task that would be blocked
           SELECT blocked_task_id as task_id, 1 as depth
@@ -1138,7 +1138,7 @@ export function addDependency(params: {
 
       if (cycleCheck) {
         // Build cycle path for error message
-        const cyclePathResult = db.prepare(`
+        const cyclePathResult = actualDb.prepare(`
           WITH RECURSIVE dependency_chain AS (
             SELECT blocked_task_id as task_id, 1 as depth,
                    CAST(blocked_task_id AS TEXT) as path
@@ -1161,7 +1161,7 @@ export function addDependency(params: {
       }
 
       // All validations passed - insert dependency
-      const insertStmt = db.prepare(`
+      const insertStmt = actualDb.prepare(`
         INSERT INTO t_task_dependencies (blocker_task_id, blocked_task_id)
         VALUES (?, ?)
       `);
@@ -1189,8 +1189,8 @@ export function addDependency(params: {
 export function removeDependency(params: {
   blocker_task_id: number;
   blocked_task_id: number;
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.blocker_task_id) {
     throw new Error('Parameter "blocker_task_id" is required');
@@ -1201,7 +1201,7 @@ export function removeDependency(params: {
   }
 
   try {
-    const deleteStmt = db.prepare(`
+    const deleteStmt = actualDb.prepare(`
       DELETE FROM t_task_dependencies
       WHERE blocker_task_id = ? AND blocked_task_id = ?
     `);
@@ -1224,8 +1224,8 @@ export function removeDependency(params: {
 export function getDependencies(params: {
   task_id: number;
   include_details?: boolean;
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -1235,13 +1235,13 @@ export function getDependencies(params: {
 
   try {
     // Check if task exists
-    const taskExists = db.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+    const taskExists = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
     if (!taskExists) {
       throw new Error(`Task with id ${params.task_id} not found`);
     }
 
     // Use the shared helper function
-    const deps = queryTaskDependencies(db, params.task_id, includeDetails);
+    const deps = queryTaskDependencies(actualDb, params.task_id, includeDetails);
 
     return {
       task_id: params.task_id,
@@ -1271,8 +1271,8 @@ export function batchCreateTasks(params: {
     tags?: string[];
   }>;
   atomic?: boolean;
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.tasks || !Array.isArray(params.tasks)) {
     throw new Error('Parameter "tasks" is required and must be an array');
@@ -1282,10 +1282,10 @@ export function batchCreateTasks(params: {
 
   // Use processBatch utility
   const batchResult = processBatch(
-    db,
+    actualDb,
     params.tasks,
-    (task, db) => {
-      const result = createTaskInternal(task, db);
+    (task, actualDb) => {
+      const result = createTaskInternal(task, actualDb);
       return {
         title: task.title,
         task_id: result.task_id
@@ -1317,8 +1317,8 @@ export function watchFiles(params: {
   task_id: number;
   action: 'watch' | 'unwatch' | 'list';
   file_paths?: string[];
-}): any {
-  const db = getDatabase();
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -1329,9 +1329,9 @@ export function watchFiles(params: {
   }
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       // Check if task exists
-      const taskData = db.prepare(`
+      const taskData = actualDb.prepare(`
         SELECT t.id, t.title, s.name as status
         FROM t_tasks t
         JOIN m_task_statuses s ON t.status_id = s.id
@@ -1347,14 +1347,14 @@ export function watchFiles(params: {
           throw new Error('Parameter "file_paths" is required for watch action');
         }
 
-        const insertFileLinkStmt = db.prepare(`
+        const insertFileLinkStmt = actualDb.prepare(`
           INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
           VALUES (?, ?)
         `);
 
         const addedFiles: string[] = [];
         for (const filePath of params.file_paths) {
-          const fileId = getOrCreateFile(db, filePath);
+          const fileId = getOrCreateFile(actualDb, filePath);
           const result = insertFileLinkStmt.run(params.task_id, fileId);
 
           // Check if row was actually inserted (changes > 0)
@@ -1388,7 +1388,7 @@ export function watchFiles(params: {
           throw new Error('Parameter "file_paths" is required for unwatch action');
         }
 
-        const deleteFileLinkStmt = db.prepare(`
+        const deleteFileLinkStmt = actualDb.prepare(`
           DELETE FROM t_task_file_links
           WHERE task_id = ? AND file_id = (SELECT id FROM m_files WHERE path = ?)
         `);
@@ -1425,7 +1425,7 @@ export function watchFiles(params: {
         };
 
       } else if (params.action === 'list') {
-        const filesStmt = db.prepare(`
+        const filesStmt = actualDb.prepare(`
           SELECT f.path
           FROM t_task_file_links tfl
           JOIN m_files f ON tfl.file_id = f.id
@@ -1449,6 +1449,133 @@ export function watchFiles(params: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to ${params.action} files: ${message}`);
+  }
+}
+
+/**
+ * Get pruned files for a task (v3.5.0 Auto-Pruning)
+ * Returns audit trail of files that were auto-pruned as non-existent
+ */
+export function getPrunedFiles(params: {
+  task_id: number;
+  limit?: number;
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
+
+  try {
+
+    // Validate task_id
+    if (!params.task_id || typeof params.task_id !== 'number') {
+      throw new Error('task_id is required and must be a number');
+    }
+
+    // Validate task exists
+    const task = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+    if (!task) {
+      throw new Error(`Task not found: ${params.task_id}`);
+    }
+
+    // Get pruned files
+    const limit = params.limit || 100;
+    const rows = actualDb.prepare(`
+      SELECT
+        tpf.id,
+        tpf.file_path,
+        datetime(tpf.pruned_ts, 'unixepoch') as pruned_at,
+        k.key as linked_decision
+      FROM t_task_pruned_files tpf
+      LEFT JOIN m_context_keys k ON tpf.linked_decision_key_id = k.id
+      WHERE tpf.task_id = ?
+      ORDER BY tpf.pruned_ts DESC
+      LIMIT ?
+    `).all(params.task_id, limit) as Array<{
+      id: number;
+      file_path: string;
+      pruned_at: string;
+      linked_decision: string | null;
+    }>;
+
+    return {
+      success: true,
+      task_id: params.task_id,
+      pruned_files: rows,
+      count: rows.length,
+      message: rows.length > 0
+        ? `Found ${rows.length} pruned file(s) for task ${params.task_id}`
+        : `No pruned files for task ${params.task_id}`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to get pruned files: ${message}`);
+  }
+}
+
+/**
+ * Link a pruned file to a decision (v3.5.0 Auto-Pruning)
+ * Attaches WHY reasoning to pruned files for project archaeology
+ */
+export function linkPrunedFile(params: {
+  pruned_file_id: number;
+  decision_key: string;
+}, db?: Database): any {
+  const actualDb = db ?? getDatabase();
+
+  try {
+
+    // Validate pruned_file_id
+    if (!params.pruned_file_id || typeof params.pruned_file_id !== 'number') {
+      throw new Error('pruned_file_id is required and must be a number');
+    }
+
+    // Validate decision_key
+    if (!params.decision_key || typeof params.decision_key !== 'string') {
+      throw new Error('decision_key is required and must be a string');
+    }
+
+    // Get decision key_id
+    const decision = actualDb.prepare(`
+      SELECT k.id as key_id
+      FROM m_context_keys k
+      WHERE k.key = ? AND EXISTS (
+        SELECT 1 FROM t_decisions d WHERE d.key_id = k.id
+      )
+    `).get(params.decision_key) as { key_id: number } | undefined;
+
+    if (!decision) {
+      throw new Error(`Decision not found: ${params.decision_key}`);
+    }
+
+    // Check if pruned file exists
+    const prunedFile = actualDb.prepare(`
+      SELECT id, task_id, file_path FROM t_task_pruned_files WHERE id = ?
+    `).get(params.pruned_file_id) as { id: number; task_id: number; file_path: string } | undefined;
+
+    if (!prunedFile) {
+      throw new Error(`Pruned file record not found: ${params.pruned_file_id}`);
+    }
+
+    // Update the link
+    const result = actualDb.prepare(`
+      UPDATE t_task_pruned_files
+      SET linked_decision_key_id = ?
+      WHERE id = ?
+    `).run(decision.key_id, params.pruned_file_id);
+
+    if (result.changes === 0) {
+      throw new Error(`Failed to link pruned file #${params.pruned_file_id} to decision ${params.decision_key}`);
+    }
+
+    return {
+      success: true,
+      pruned_file_id: params.pruned_file_id,
+      decision_key: params.decision_key,
+      task_id: prunedFile.task_id,
+      file_path: prunedFile.file_path,
+      message: `Linked pruned file "${prunedFile.file_path}" to decision "${params.decision_key}"`
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to link pruned file: ${message}`);
   }
 }
 
@@ -1714,7 +1841,8 @@ export function taskHelp(): any {
 /**
  * Query file watcher status and monitored files/tasks
  */
-export function watcherStatus(args: any): any {
+export function watcherStatus(args: any, db?: Database): any {
+  const actualDb = db ?? getDatabase();
   const subaction = args.subaction || 'status';
   const watcher = FileWatcher.getInstance();
 
@@ -1760,8 +1888,7 @@ export function watcherStatus(args: any): any {
   }
 
   if (subaction === 'list_files') {
-    const db = getDatabase();
-    const fileLinks = db.prepare(`
+    const fileLinks = actualDb.prepare(`
       SELECT DISTINCT tfl.file_path, t.id, t.title, ts.status_name
       FROM t_task_file_links tfl
       JOIN t_tasks t ON tfl.task_id = t.id
@@ -1799,8 +1926,7 @@ export function watcherStatus(args: any): any {
   }
 
   if (subaction === 'list_tasks') {
-    const db = getDatabase();
-    const taskLinks = db.prepare(`
+    const taskLinks = actualDb.prepare(`
       SELECT t.id, t.title, ts.status_name, COUNT(DISTINCT tfl.file_path) as file_count,
              GROUP_CONCAT(DISTINCT tfl.file_path, ', ') as files
       FROM t_tasks t
