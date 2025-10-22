@@ -188,7 +188,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
         linkPrunedFile({
           pruned_file_id: prunedFileId,
           decision_key: 'does-not-exist'
-        });
+        }, testDb);
       },
       /Decision not found: does-not-exist/,
       'Should throw error for non-existent decision'
@@ -201,7 +201,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
       key: 'test-decision',
       value: 'Test decision value',
       status: 'active'
-    });
+    }, testDb);
 
     // Attempt to link non-existent pruned file
     assert.throws(
@@ -209,7 +209,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
         linkPrunedFile({
           pruned_file_id: 99999,
           decision_key: 'test-decision'
-        });
+        }, testDb);
       },
       /Pruned file record not found: 99999/,
       'Should throw error for non-existent pruned file'
@@ -223,7 +223,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
         linkPrunedFile({
           pruned_file_id: 0,
           decision_key: 'test'
-        });
+        }, testDb);
       },
       /pruned_file_id is required and must be a number/,
       'Should throw for invalid pruned_file_id'
@@ -235,7 +235,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
         linkPrunedFile({
           pruned_file_id: 1,
           decision_key: ''
-        });
+        }, testDb);
       },
       /decision_key is required and must be a string/,
       'Should throw for empty decision_key'
@@ -248,7 +248,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
       () => {
         getPrunedFiles({
           task_id: 0
-        });
+        }, testDb);
       },
       /task_id is required and must be a number/,
       'Should throw for invalid task_id'
@@ -259,7 +259,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
       () => {
         getPrunedFiles({
           task_id: 99999
-        });
+        }, testDb);
       },
       /Task not found: 99999/,
       'Should throw for non-existent task'
@@ -275,32 +275,32 @@ describe('Auto-pruning: Decision linking workflow', () => {
       key: 'decision-v1',
       value: 'Initial decision',
       status: 'active'
-    });
+    }, testDb);
 
     setDecision({
       key: 'decision-v2',
       value: 'Updated decision',
       status: 'active'
-    });
+    }, testDb);
 
     // Link first decision
     linkPrunedFile({
       pruned_file_id: prunedFileId,
       decision_key: 'decision-v1'
-    });
+    }, testDb);
 
     // Verify first link
-    let getPrunedResult = getPrunedFiles({ task_id: taskId });
+    let getPrunedResult = getPrunedFiles({ task_id: taskId }, testDb);
     assert.strictEqual(getPrunedResult.pruned_files[0].linked_decision, 'decision-v1');
 
     // Update to second decision
     linkPrunedFile({
       pruned_file_id: prunedFileId,
       decision_key: 'decision-v2'
-    });
+    }, testDb);
 
     // Verify updated link
-    getPrunedResult = getPrunedFiles({ task_id: taskId });
+    getPrunedResult = getPrunedFiles({ task_id: taskId }, testDb);
     assert.strictEqual(getPrunedResult.pruned_files[0].linked_decision, 'decision-v2');
   });
 
@@ -316,7 +316,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
     const getPrunedResult = getPrunedFiles({
       task_id: taskId,
       limit: 3
-    });
+    }, testDb);
 
     assert.ok(getPrunedResult.success);
     assert.strictEqual(getPrunedResult.count, 3, 'Should respect limit parameter');
