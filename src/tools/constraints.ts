@@ -33,10 +33,11 @@ import type {
  * Add a constraint with priority, layer, and tags
  *
  * @param params - Constraint parameters
+ * @param db - Optional database instance (for testing)
  * @returns Constraint ID and timestamp
  */
-export function addConstraint(params: AddConstraintParams): AddConstraintResponse {
-  const db = getDatabase();
+export function addConstraint(params: AddConstraintParams, db?: Database): AddConstraintResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Validate required parameters
@@ -59,23 +60,23 @@ export function addConstraint(params: AddConstraintParams): AddConstraintRespons
       if (!validLayers.includes(params.layer)) {
         throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
       }
-      layerId = getLayerId(db, params.layer);
+      layerId = getLayerId(actualDb, params.layer);
       if (!layerId) {
         throw new Error(`Layer not found: ${params.layer}`);
       }
     }
 
     // Use transaction for multi-table insert
-    const result = transaction(db, () => {
+    const result = transaction(actualDb, () => {
       // Get or create category
-      const categoryId = getOrCreateCategoryId(db, params.category);
+      const categoryId = getOrCreateCategoryId(actualDb, params.category);
 
       // Get or create created_by agent
       const createdBy = params.created_by || 'system';
-      const agentId = getOrCreateAgent(db, createdBy);
+      const agentId = getOrCreateAgent(actualDb, createdBy);
 
       // Insert constraint
-      const insertResult = db.prepare(`
+      const insertResult = actualDb.prepare(`
         INSERT INTO t_constraints (category_id, layer_id, constraint_text, priority, active, created_by, ts)
         VALUES (?, ?, ?, ?, ?, ?, unixepoch())
       `).run(categoryId, layerId, params.constraint_text, priority, SQLITE_TRUE, agentId);
@@ -84,10 +85,10 @@ export function addConstraint(params: AddConstraintParams): AddConstraintRespons
 
       // Insert m_tags if provided
       if (params.tags && params.tags.length > 0) {
-        const tagStmt = db.prepare('INSERT INTO t_constraint_tags (constraint_id, tag_id) VALUES (?, ?)');
+        const tagStmt = actualDb.prepare('INSERT INTO t_constraint_tags (constraint_id, tag_id) VALUES (?, ?)');
 
         for (const tagName of params.tags) {
-          const tagId = getOrCreateTag(db, tagName);
+          const tagId = getOrCreateTag(actualDb, tagName);
           tagStmt.run(constraintId, tagId);
         }
       }
@@ -110,10 +111,11 @@ export function addConstraint(params: AddConstraintParams): AddConstraintRespons
  * Uses v_tagged_constraints view for token efficiency
  *
  * @param params - Filter parameters
+ * @param db - Optional database instance (for testing)
  * @returns Array of t_constraints matching filters
  */
-export function getConstraints(params: GetConstraintsParams): GetConstraintsResponse {
-  const db = getDatabase();
+export function getConstraints(params: GetConstraintsParams, db?: Database): GetConstraintsResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Build query conditions
@@ -163,7 +165,7 @@ export function getConstraints(params: GetConstraintsParams): GetConstraintsResp
     values.push(limit);
 
     // Execute query
-    const rows = db.prepare(sql).all(...values) as TaggedConstraint[];
+    const rows = actualDb.prepare(sql).all(...values) as TaggedConstraint[];
 
     // Parse m_tags from comma-separated to array for consistency
     const constraints = rows.map(row => ({
@@ -186,10 +188,11 @@ export function getConstraints(params: GetConstraintsParams): GetConstraintsResp
  * Idempotent - deactivating already-inactive constraint is safe
  *
  * @param params - Constraint ID to deactivate
+ * @param db - Optional database instance (for testing)
  * @returns Success status
  */
-export function deactivateConstraint(params: DeactivateConstraintParams): DeactivateConstraintResponse {
-  const db = getDatabase();
+export function deactivateConstraint(params: DeactivateConstraintParams, db?: Database): DeactivateConstraintResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Validate constraint_id
@@ -198,14 +201,14 @@ export function deactivateConstraint(params: DeactivateConstraintParams): Deacti
     }
 
     // Check if constraint exists
-    const constraint = db.prepare('SELECT id, active FROM t_constraints WHERE id = ?').get(params.constraint_id) as { id: number; active: number } | undefined;
+    const constraint = actualDb.prepare('SELECT id, active FROM t_constraints WHERE id = ?').get(params.constraint_id) as { id: number; active: number } | undefined;
 
     if (!constraint) {
       throw new Error(`Constraint not found: ${params.constraint_id}`);
     }
 
     // Update constraint to inactive (idempotent)
-    db.prepare('UPDATE t_constraints SET active = ? WHERE id = ?').run(SQLITE_FALSE, params.constraint_id);
+    actualDb.prepare('UPDATE t_constraints SET active = ? WHERE id = ?').run(SQLITE_FALSE, params.constraint_id);
 
     return {
       success: true,

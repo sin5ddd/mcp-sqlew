@@ -22,15 +22,16 @@ import { cleanupWithCustomRetention } from '../utils/cleanup.js';
 /**
  * Get summary statistics for all architecture layers
  * Uses the v_layer_summary view for token efficiency
- * 
+ *
+ * @param db - Optional database instance (for testing)
  * @returns Layer summaries for all 5 standard layers
  */
-export function getLayerSummary(): GetLayerSummaryResponse {
-  const db = getDatabase();
+export function getLayerSummary(db?: Database): GetLayerSummaryResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Query the v_layer_summary view for all layers
-    const stmt = db.prepare(`
+    const stmt = actualDb.prepare(`
       SELECT 
         layer,
         decisions_count,
@@ -60,13 +61,14 @@ export function getLayerSummary(): GetLayerSummaryResponse {
  * If parameters are provided, they override m_config settings (no weekend-awareness).
  *
  * @param params - Optional parameters for cleanup thresholds (overrides config)
+ * @param db - Optional database instance (for testing)
  * @returns Counts of deleted records
  */
-export function clearOldData(params?: ClearOldDataParams): ClearOldDataResponse {
-  const db = getDatabase();
+export function clearOldData(params?: ClearOldDataParams, db?: Database): ClearOldDataResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
-    return transaction(db, () => {
+    return transaction(actualDb, () => {
       let messagesThreshold: number;
       let fileChangesThreshold: number;
       let messagesDeleted = 0;
@@ -76,7 +78,7 @@ export function clearOldData(params?: ClearOldDataParams): ClearOldDataResponse 
       if (params?.messages_older_than_hours !== undefined || params?.file_changes_older_than_days !== undefined) {
         // Parameters provided: use custom retention (no weekend-awareness)
         const result = cleanupWithCustomRetention(
-          db,
+          actualDb,
           params.messages_older_than_hours,
           params.file_changes_older_than_days
         );
@@ -85,37 +87,37 @@ export function clearOldData(params?: ClearOldDataParams): ClearOldDataResponse 
         activityLogsDeleted = result.activityLogsDeleted;
       } else {
         // No parameters: use config-based weekend-aware retention
-        messagesThreshold = calculateMessageCutoff(db);
-        fileChangesThreshold = calculateFileChangeCutoff(db);
+        messagesThreshold = calculateMessageCutoff(actualDb);
+        fileChangesThreshold = calculateFileChangeCutoff(actualDb);
 
         // Count and delete messages
-        const messagesCount = db.prepare(
+        const messagesCount = actualDb.prepare(
           'SELECT COUNT(*) as count FROM t_agent_messages WHERE ts < ?'
         ).get(messagesThreshold) as { count: number };
 
-        const deleteMessages = db.prepare(
+        const deleteMessages = actualDb.prepare(
           'DELETE FROM t_agent_messages WHERE ts < ?'
         );
         deleteMessages.run(messagesThreshold);
         messagesDeleted = messagesCount.count;
 
         // Count and delete file changes
-        const fileChangesCount = db.prepare(
+        const fileChangesCount = actualDb.prepare(
           'SELECT COUNT(*) as count FROM t_file_changes WHERE ts < ?'
         ).get(fileChangesThreshold) as { count: number };
 
-        const deleteFileChanges = db.prepare(
+        const deleteFileChanges = actualDb.prepare(
           'DELETE FROM t_file_changes WHERE ts < ?'
         );
         deleteFileChanges.run(fileChangesThreshold);
         fileChangesDeleted = fileChangesCount.count;
 
         // Count and delete activity logs (uses same threshold as messages per constraint #4)
-        const activityLogsCount = db.prepare(
+        const activityLogsCount = actualDb.prepare(
           'SELECT COUNT(*) as count FROM t_activity_log WHERE ts < ?'
         ).get(messagesThreshold) as { count: number };
 
-        const deleteActivityLogs = db.prepare(
+        const deleteActivityLogs = actualDb.prepare(
           'DELETE FROM t_activity_log WHERE ts < ?'
         );
         deleteActivityLogs.run(messagesThreshold);
@@ -138,19 +140,20 @@ export function clearOldData(params?: ClearOldDataParams): ClearOldDataResponse 
 /**
  * Get comprehensive database statistics
  * Returns counts for all major tables and database health metrics
- * 
+ *
+ * @param db - Optional database instance (for testing)
  * @returns Complete database statistics
  */
-export function getStats(): GetStatsResponse {
-  const db = getDatabase();
+export function getStats(db?: Database): GetStatsResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Helper to get count from a table
     const getCount = (table: string, where?: string): number => {
-      const query = where 
+      const query = where
         ? `SELECT COUNT(*) as count FROM ${table} WHERE ${where}`
         : `SELECT COUNT(*) as count FROM ${table}`;
-      const result = db.prepare(query).get() as { count: number };
+      const result = actualDb.prepare(query).get() as { count: number };
       return result.count;
     };
 
@@ -237,10 +240,11 @@ export function getStats(): GetStatsResponse {
  * Supports time-based filtering (relative or absolute) and agent/action filtering
  *
  * @param params - Filter parameters (since, agent_names, actions, limit)
+ * @param db - Optional database instance (for testing)
  * @returns Activity log entries with parsed details
  */
-export function getActivityLog(params?: GetActivityLogParams): GetActivityLogResponse {
-  const db = getDatabase();
+export function getActivityLog(params?: GetActivityLogParams, db?: Database): GetActivityLogResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Parse 'since' parameter to get timestamp
@@ -322,7 +326,7 @@ export function getActivityLog(params?: GetActivityLogParams): GetActivityLogRes
     queryParams.push(limit);
 
     // Execute query
-    const stmt = db.prepare(query);
+    const stmt = actualDb.prepare(query);
     const rows = stmt.all(...queryParams) as Array<{
       id: number;
       ts: number;
@@ -358,10 +362,11 @@ export function getActivityLog(params?: GetActivityLogParams): GetActivityLogRes
  * Force WAL checkpoint to flush pending transactions to main database file
  * Uses TRUNCATE mode for complete flush - useful before git commits
  *
+ * @param db - Optional database instance (for testing)
  * @returns Checkpoint result with pages flushed
  */
-export function flushWAL(): FlushWALResponse {
-  const db = getDatabase();
+export function flushWAL(db?: Database): FlushWALResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     // Execute TRUNCATE checkpoint - most aggressive mode
@@ -370,7 +375,7 @@ export function flushWAL(): FlushWALResponse {
     // - busy: number of frames not checkpointed due to locks
     // - log: total number of frames in WAL file
     // - checkpointed: number of frames checkpointed
-    const result = db.pragma('wal_checkpoint(TRUNCATE)', { simple: true }) as number[] | undefined;
+    const result = actualDb.pragma('wal_checkpoint(TRUNCATE)', { simple: true }) as number[] | undefined;
 
     const pagesFlushed = result?.[2] || 0;
 

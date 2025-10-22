@@ -9,18 +9,19 @@ import { CONFIG_KEYS } from '../constants.js';
 /**
  * Get current configuration settings
  *
+ * @param db - Optional database instance (for testing)
  * @returns Current configuration values
  */
-export function getConfig(): {
+export function getConfig(db?: import('../types.js').Database): {
   ignoreWeekend: boolean;
   messageRetentionHours: number;
   fileHistoryRetentionDays: number;
 } {
-  const db = getDatabase();
+  const actualDb = db ?? getDatabase();
 
-  const ignoreWeekend = getConfigBool(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
-  const messageRetentionHours = getConfigInt(db, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, 24);
-  const fileHistoryRetentionDays = getConfigInt(db, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, 7);
+  const ignoreWeekend = getConfigBool(actualDb, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
+  const messageRetentionHours = getConfigInt(actualDb, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, 24);
+  const fileHistoryRetentionDays = getConfigInt(actualDb, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, 7);
 
   return {
     ignoreWeekend,
@@ -34,13 +35,14 @@ export function getConfig(): {
  * Validates values before updating
  *
  * @param params - Configuration parameters to update
+ * @param db - Optional database instance (for testing)
  * @returns Updated configuration
  */
 export function updateConfig(params: {
   ignoreWeekend?: boolean;
   messageRetentionHours?: number;
   fileHistoryRetentionDays?: number;
-}): {
+}, db?: import('../types.js').Database): {
   success: boolean;
   config: {
     ignoreWeekend: boolean;
@@ -49,7 +51,7 @@ export function updateConfig(params: {
   };
   message: string;
 } {
-  const db = getDatabase();
+  const actualDb = db ?? getDatabase();
 
   // Validate values
   if (params.messageRetentionHours !== undefined) {
@@ -66,19 +68,19 @@ export function updateConfig(params: {
 
   // Update values
   if (params.ignoreWeekend !== undefined) {
-    setConfigValue(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, params.ignoreWeekend ? '1' : '0');
+    setConfigValue(actualDb, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, params.ignoreWeekend ? '1' : '0');
   }
 
   if (params.messageRetentionHours !== undefined) {
-    setConfigValue(db, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, String(params.messageRetentionHours));
+    setConfigValue(actualDb, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, String(params.messageRetentionHours));
   }
 
   if (params.fileHistoryRetentionDays !== undefined) {
-    setConfigValue(db, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(params.fileHistoryRetentionDays));
+    setConfigValue(actualDb, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(params.fileHistoryRetentionDays));
   }
 
   // Get updated config
-  const updatedConfig = getConfig();
+  const updatedConfig = getConfig(actualDb);
 
   return {
     success: true,

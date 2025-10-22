@@ -79,15 +79,16 @@ function sendMessageInternal(params: SendMessageParams, db: Database): SendMessa
  * Supports priority levels and optional JSON payload
  *
  * @param params - Message parameters
+ * @param db - Optional database instance (for testing)
  * @returns Response with message ID and timestamp
  */
-export function sendMessage(params: SendMessageParams): SendMessageResponse & { timestamp: string } {
-  const db = getDatabase();
+export function sendMessage(params: SendMessageParams, db?: Database): SendMessageResponse & { timestamp: string } {
+  const actualDb = db ?? getDatabase();
 
   // Cleanup old messages before inserting new one
-  performAutoCleanup(db);
+  performAutoCleanup(actualDb);
 
-  return sendMessageInternal(params, db);
+  return sendMessageInternal(params, actualDb);
 }
 
 /**
@@ -95,6 +96,7 @@ export function sendMessage(params: SendMessageParams): SendMessageResponse & { 
  * Returns messages addressed to agent or broadcast (to_agent_id IS NULL)
  *
  * @param params - Query parameters
+ * @param db - Optional database instance (for testing)
  * @returns Array of messages with metadata
  */
 export function getMessages(params: {
@@ -103,11 +105,11 @@ export function getMessages(params: {
   priority_filter?: 'low' | 'medium' | 'high' | 'critical';
   msg_type_filter?: 'decision' | 'warning' | 'request' | 'info';
   limit?: number;
-}): GetMessagesResponse {
-  const db = getDatabase();
+}, db?: Database): GetMessagesResponse {
+  const actualDb = db ?? getDatabase();
 
   // Get or create agent to get ID
-  const agentId = getOrCreateAgent(db, params.agent_name);
+  const agentId = getOrCreateAgent(actualDb, params.agent_name);
 
   // Build query dynamically based on filters
   let query = `
@@ -155,7 +157,7 @@ export function getMessages(params: {
   query += ' LIMIT ?';
   queryParams.push(limit);
 
-  const stmt = db.prepare(query);
+  const stmt = actualDb.prepare(query);
   const rows = stmt.all(...queryParams) as Array<{
     id: number;
     from_agent: string;
@@ -188,13 +190,14 @@ export function getMessages(params: {
  * Only marks messages addressed to the specified agent (security check)
  *
  * @param params - Message IDs and agent name
+ * @param db - Optional database instance (for testing)
  * @returns Success status and count of marked messages
  */
 export function markRead(params: {
   message_ids: number[];
   agent_name: string;
-}): MarkReadResponse & { marked_count: number } {
-  const db = getDatabase();
+}, db?: Database): MarkReadResponse & { marked_count: number } {
+  const actualDb = db ?? getDatabase();
 
   // Validate message_ids array
   if (!params.message_ids || params.message_ids.length === 0) {
@@ -202,14 +205,14 @@ export function markRead(params: {
   }
 
   // Get agent ID
-  const agentId = getOrCreateAgent(db, params.agent_name);
+  const agentId = getOrCreateAgent(actualDb, params.agent_name);
 
   // Build placeholders for IN clause
   const placeholders = params.message_ids.map(() => '?').join(',');
 
   // Update only messages addressed to this agent (security check)
   // Also allow broadcast messages (to_agent_id IS NULL)
-  const stmt = db.prepare(`
+  const stmt = actualDb.prepare(`
     UPDATE t_agent_messages
     SET read = 1
     WHERE id IN (${placeholders})
@@ -230,10 +233,11 @@ export function markRead(params: {
  * Limit: 50 items per batch (constraint #3)
  *
  * @param params - Batch parameters with array of messages and atomic flag
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status and detailed results for each item
  */
-export function sendMessageBatch(params: SendMessageBatchParams): SendMessageBatchResponse {
-  const db = getDatabase();
+export function sendMessageBatch(params: SendMessageBatchParams, db?: Database): SendMessageBatchResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.messages || !Array.isArray(params.messages)) {
@@ -241,13 +245,13 @@ export function sendMessageBatch(params: SendMessageBatchParams): SendMessageBat
   }
 
   // Cleanup old messages before processing batch
-  performAutoCleanup(db);
+  performAutoCleanup(actualDb);
 
   const atomic = params.atomic !== undefined ? params.atomic : true;
 
   // Use processBatch utility
   const batchResult = processBatch(
-    db,
+    actualDb,
     params.messages,
     (message, db) => {
       const result = sendMessageInternal(message, db);

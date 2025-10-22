@@ -88,16 +88,17 @@ function recordFileChangeInternal(params: RecordFileChangeParams, db: Database):
  * Auto-registers the file and agent if they don't exist.
  *
  * @param params - File change parameters
+ * @param db - Optional database instance (for testing)
  * @returns Success response with change ID and timestamp
  */
-export function recordFileChange(params: RecordFileChangeParams): RecordFileChangeResponse {
-  const db = getDatabase();
+export function recordFileChange(params: RecordFileChangeParams, db?: Database): RecordFileChangeResponse {
+  const actualDb = db ?? getDatabase();
 
   // Cleanup old file changes before inserting new one
-  performAutoCleanup(db);
+  performAutoCleanup(actualDb);
 
   try {
-    return recordFileChangeInternal(params, db);
+    return recordFileChangeInternal(params, actualDb);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to record file change: ${message}`);
@@ -109,10 +110,11 @@ export function recordFileChange(params: RecordFileChangeParams): RecordFileChan
  * Uses token-efficient view when no specific filters are applied.
  *
  * @param params - Filter parameters
+ * @param db - Optional database instance (for testing)
  * @returns Array of file changes with metadata
  */
-export function getFileChanges(params: GetFileChangesParams): GetFileChangesResponse {
-  const db = getDatabase();
+export function getFileChanges(params: GetFileChangesParams, db?: Database): GetFileChangesResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     const limit = params.limit || DEFAULT_QUERY_LIMIT;
@@ -152,7 +154,7 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
 
     // Use view if no specific filters (token efficient)
     if (filterConditions.length === 0) {
-      const stmt = db.prepare(`
+      const stmt = actualDb.prepare(`
         SELECT * FROM v_recent_file_changes
         LIMIT ?
       `);
@@ -168,7 +170,7 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
     // Build WHERE clause using query builder
     const { whereClause, params: queryParams } = buildWhereClause(filterConditions);
 
-    const stmt = db.prepare(`
+    const stmt = actualDb.prepare(`
       SELECT
         f.path,
         a.name as changed_by,
@@ -208,10 +210,11 @@ export function getFileChanges(params: GetFileChangesParams): GetFileChangesResp
  * Useful to prevent concurrent edits by multiple agents.
  *
  * @param params - File path and lock duration
+ * @param db - Optional database instance (for testing)
  * @returns Lock status with details
  */
-export function checkFileLock(params: CheckFileLockParams): CheckFileLockResponse {
-  const db = getDatabase();
+export function checkFileLock(params: CheckFileLockParams, db?: Database): CheckFileLockResponse {
+  const actualDb = db ?? getDatabase();
 
   try {
     const lockDuration = params.lock_duration || 300; // Default 5 minutes
@@ -219,7 +222,7 @@ export function checkFileLock(params: CheckFileLockParams): CheckFileLockRespons
     const lockThreshold = currentTime - lockDuration;
 
     // Get the most recent change to this file
-    const stmt = db.prepare(`
+    const stmt = actualDb.prepare(`
       SELECT
         a.name as agent,
         fc.change_type,
@@ -272,10 +275,11 @@ export function checkFileLock(params: CheckFileLockParams): CheckFileLockRespons
  * Limit: 50 items per batch (constraint #3)
  *
  * @param params - Batch parameters with array of file changes and atomic flag
+ * @param db - Optional database instance (for testing)
  * @returns Response with success status and detailed results for each item
  */
-export function recordFileChangeBatch(params: RecordFileChangeBatchParams): RecordFileChangeBatchResponse {
-  const db = getDatabase();
+export function recordFileChangeBatch(params: RecordFileChangeBatchParams, db?: Database): RecordFileChangeBatchResponse {
+  const actualDb = db ?? getDatabase();
 
   // Validate required parameters
   if (!params.file_changes || !Array.isArray(params.file_changes)) {
@@ -283,13 +287,13 @@ export function recordFileChangeBatch(params: RecordFileChangeBatchParams): Reco
   }
 
   // Cleanup old file changes before processing batch
-  performAutoCleanup(db);
+  performAutoCleanup(actualDb);
 
   const atomic = params.atomic !== undefined ? params.atomic : true;
 
   // Use processBatch utility
   const batchResult = processBatch(
-    db,
+    actualDb,
     params.file_changes,
     (fileChange, db) => {
       const result = recordFileChangeInternal(fileChange, db);
