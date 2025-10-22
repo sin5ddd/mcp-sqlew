@@ -149,18 +149,18 @@
 
 | Action | Required | Optional |
 |--------|----------|----------|
-| **create** | action, title | description, acceptance_criteria, notes, priority, assigned_agent, created_by_agent, layer, tags, status, **watch_files** (v3.3.0) |
-| **update** | action, task_id | title, priority, assigned_agent, layer, description, acceptance_criteria, notes, **watch_files** (v3.3.0) |
+| **create** | action, title | description, acceptance_criteria, notes, priority, assigned_agent, created_by_agent, layer, tags, status, **watch_files** (v3.4.1) |
+| **update** | action, task_id | title, priority, assigned_agent, layer, description, acceptance_criteria, notes, **watch_files** (v3.4.1) |
 | **get** | action, task_id | include_dependencies |
 | **list** | action | status, assigned_agent, layer, tags, limit, offset, include_dependency_counts |
 | **move** | action, task_id, new_status | - |
-| **link** | action, task_id, link_type, target_id | link_relation (⚠️ link_type="file" deprecated in v3.3.0) |
+| **link** | action, task_id, link_type, target_id | link_relation (⚠️ link_type="file" deprecated in v3.4.1) |
 | **archive** | action, task_id | - |
 | **batch_create** | action, tasks | atomic |
 | **add_dependency** | action, blocker_task_id, blocked_task_id | - |
 | **remove_dependency** | action, blocker_task_id, blocked_task_id | - |
 | **get_dependencies** | action, task_id | include_details |
-| **watch_files** (v3.3.0) | action, task_id, action (watch/unwatch/list) | file_paths |
+| **watch_files** (v3.4.1) | action, task_id, action (watch/unwatch/list) | file_paths |
 | **watcher** | action | subaction (status/list_files/list_tasks/help) |
 
 ---
@@ -328,11 +328,11 @@
 
 ---
 
-## File Watching with Tasks (v3.3.0)
+## File Watching with Tasks (v3.4.1)
 
 ### New: watch_files Parameter
 
-**Replaces:** `task.link(link_type="file")` (deprecated in v3.3.0)
+**Replaces:** `task.link(link_type="file")` (deprecated in v3.4.1)
 
 Create tasks with automatic file monitoring in one step:
 
@@ -397,7 +397,7 @@ Manage file watches dynamically:
 {action: "link", task_id: 123, link_type: "file", target_id: "src/file2.ts"}
 ```
 
-**After (v3.3.0):**
+**After (v3.4.1):**
 ```javascript
 // Create task with files in one call
 {

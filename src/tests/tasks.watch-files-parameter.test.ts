@@ -1,5 +1,5 @@
 /**
- * Unit tests for Task watch_files parameter feature (v3.3.0)
+ * Unit tests for Task watch_files parameter feature (v3.4.1)
  * Tests the new watch_files parameter in createTask and updateTask actions
  */
 

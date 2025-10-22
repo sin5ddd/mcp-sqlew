@@ -905,4 +905,4 @@ See `.sqlew/config.toml.example` in project root for complete annotated example.
 
 ---
 
-**Last Updated:** v3.3.0 (2025-10-22)
+**Last Updated:** v3.4.1 (2025-10-22)

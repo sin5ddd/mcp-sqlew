@@ -2,7 +2,7 @@
  * File Watcher - Auto-tracking file changes linked to tasks
  * Monitors files and auto-transitions task status on file modification
  *
- * Features (v3.3.0):
+ * Features (v3.4.1):
  * - chokidar-based file watching with debouncing
  * - Project root watching with .gitignore support
  * - Dynamic file registration (add/remove files at runtime)
@@ -64,7 +64,7 @@ export class FileWatcher {
   }
 
   /**
-   * Initialize and start the file watcher (v3.3.0)
+   * Initialize and start the file watcher (v3.4.1)
    */
   public async start(): Promise<void> {
     if (this.isRunning) {

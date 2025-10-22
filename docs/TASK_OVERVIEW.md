@@ -92,7 +92,7 @@ Every task has:
 - Active work happening
 - Should have assignee
 - Auto-transitions to `waiting_review` via:
-  - Smart quality gates (v3.3.0): All files modified, tests pass, TypeScript compiles, 3min idle (default)
+  - Smart quality gates (v3.4.1): All files modified, tests pass, TypeScript compiles, 3min idle (default)
   - Time-based stale detection: 2 hours idle (fallback)
 
 **`waiting_review`:**
@@ -148,10 +148,10 @@ todo → in_progress → done → archived
 | From Status | To Status(es) | Rationale |
 |-------------|--------------|-----------|
 | `todo` | `in_progress`, `blocked` | Start work or discover blocker |
-| `in_progress` | `waiting_review`, `blocked`, `done` | Quality gates met (v3.3.0), need review, hit blocker, or complete |
+| `in_progress` | `waiting_review`, `blocked`, `done` | Quality gates met (v3.4.1), need review, hit blocker, or complete |
 | `waiting_review` | `in_progress`, `todo`, `done` | Resume work, reset to backlog, or approve |
 | `blocked` | `todo`, `in_progress` | Blocker resolved, resume or reset |
-| `done` | `archived` | Archive completed work (auto after 48h in v3.3.0) |
+| `done` | `archived` | Archive completed work (auto after 48h in v3.4.1) |
 | `archived` | *(terminal state)* | No transitions allowed |
 
 ### Complete Transition Matrix
@@ -200,7 +200,7 @@ Auto-stale detection automatically transitions idle tasks to prevent them from g
 
 ### Detection Rules
 
-**v3.3.0+: Smart Quality-Based Detection (Primary)**
+**v3.4.1+: Smart Quality-Based Detection (Primary)**
 
 1. **`in_progress` → `waiting_review`** (quality gates met)
    - All watched files modified at least once
@@ -220,7 +220,7 @@ Auto-stale detection automatically transitions idle tasks to prevent them from g
    - Rationale: Review not happening, reset to backlog
    - Check: `updated_ts` older than 24 hours
 
-4. **`done` → `archived`** (>48 hours idle) - **Auto-Archive (v3.3.0)**
+4. **`done` → `archived`** (>48 hours idle) - **Auto-Archive (v3.4.1)**
    - Rationale: Completed tasks should be archived automatically
    - Check: `updated_ts` older than 48 hours (2 days)
    - Weekend-aware: Task done Friday → archives Tuesday (skips Sat/Sun)

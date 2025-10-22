@@ -72,7 +72,7 @@ Traditional code only tells you **WHAT** and **HOW**. sqlew adds **WHY**:
   - Auto-transition: `todo` → `in_progress` on file edit
   - Auto-complete: `in_progress` → `done` when acceptance criteria pass
   - 97% token reduction (4,650 tokens saved per 6-task session)
-- **Smart Review Detection** (v3.3.0): Quality-based auto-transition to `waiting_review`
+- **Smart Review Detection** (v3.4.1): Quality-based auto-transition to `waiting_review`
   - All watched files modified + TypeScript compiles + Tests pass + 15min idle
   - Purely algorithmic - no AI instructions needed
   - Configurable quality gates via `.sqlew/config.toml`
@@ -267,7 +267,7 @@ Each tool supports `action: "help"` for full documentation and `action: "example
 
 **Shared References:**
 - 📘 **[Shared Concepts](docs/SHARED_CONCEPTS.md)** - Layer definitions, enum values, atomic mode (339 lines, ~17k tokens)
-- ⚙️ **[Configuration](docs/CONFIGURATION.md)** - Config file setup, all options, validation rules (800+ lines, ~20k tokens) **NEW v3.3.0**
+- ⚙️ **[Configuration](docs/CONFIGURATION.md)** - Config file setup, all options, validation rules (800+ lines, ~20k tokens) **NEW v3.4.1**
 - 🏗️ **[Architecture](docs/ARCHITECTURE.md)** - Technical architecture and database schema
 
 ### For Developers

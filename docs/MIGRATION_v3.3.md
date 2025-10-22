@@ -1,4 +1,4 @@
-# Migration Guide: v3.2.x → v3.3.0
+# Migration Guide: v3.2.x → v3.4.1
 
 **Major Updates** - File Watcher Redesign + TOML Configuration Support
 
@@ -33,7 +33,7 @@ Optional configuration file (`.sqlew/config.toml`) for persistent settings.
 Continue using your existing code. When creating new tasks, use the new API:
 
 ```typescript
-// New tasks (v3.3.0 style)
+// New tasks (v3.4.1 style)
 task action=create
   title: "New feature"
   watch_files: ["src/feature.ts"]
@@ -53,7 +53,7 @@ Update all file watching code to use the new API. See detailed migration steps b
 
 ### Quick Start with TOML Config
 
-v3.3.0 adds optional configuration file support. This is **completely optional** - sqlew works without it.
+v3.4.1 adds optional configuration file support. This is **completely optional** - sqlew works without it.
 
 **Setup:**
 ```bash
@@ -112,7 +112,7 @@ auto_stale_enabled = true           # Enable auto-stale detection
 }
 ```
 
-**After (v3.3.0 with config file):**
+**After (v3.4.1 with config file):**
 ```json
 {
   "mcpServers": {
@@ -160,7 +160,7 @@ task action=link task_id=123 link_type=file target_id="src/auth.test.ts"
 task action=link task_id=123 link_type=file target_id="src/middleware/jwt.ts"
 ```
 
-**After (v3.3.0):**
+**After (v3.4.1):**
 ```typescript
 // Create task with files in one call
 task action=create
@@ -193,7 +193,7 @@ task action=update
 task action=link task_id=123 link_type=file target_id="src/utils/crypto.ts"
 ```
 
-**After (v3.3.0):**
+**After (v3.4.1):**
 ```typescript
 // Update task with files in one call
 task action=update
@@ -214,7 +214,7 @@ task action=get task_id=123
 // No way to unwatch files without unlinking
 ```
 
-**After (v3.3.0):**
+**After (v3.4.1):**
 ```typescript
 // List files being watched
 task action=watch_files
@@ -253,7 +253,7 @@ task action=link task_id=102 link_type=file target_id="src/task2.ts"
 task action=link task_id=103 link_type=file target_id="src/task3.ts"
 ```
 
-**After (v3.3.0):**
+**After (v3.4.1):**
 ```typescript
 // Create tasks with files in batch
 task action=batch_create
@@ -269,7 +269,7 @@ task action=batch_create
 
 ### Creating Tasks with Files
 
-| v3.2.x | v3.3.0 | Improvement |
+| v3.2.x | v3.4.1 | Improvement |
 |--------|--------|-------------|
 | 4 MCP calls | 1 MCP call | 75% reduction |
 | ~1,400 tokens | ~900 tokens | 35% reduction |
@@ -278,7 +278,7 @@ task action=batch_create
 
 ### Managing File Watches
 
-| Operation | v3.2.x | v3.3.0 |
+| Operation | v3.2.x | v3.4.1 |
 |-----------|--------|--------|
 | List watched files | `task.get` (parse response) | `watch_files action=list` |
 | Add files | `task.link(file)` × N | `watch_files action=watch` (batch) |
@@ -293,7 +293,7 @@ task action=batch_create
 - [ ] Identify opportunities to consolidate with `task.create`
 - [ ] Update task creation to use `watch_files` parameter
 - [ ] Replace file linking loops with batch operations
-- [ ] Update documentation/examples to use v3.3.0 API
+- [ ] Update documentation/examples to use v3.4.1 API
 - [ ] Test file watcher still works after migration
 - [ ] (Optional) Replace deprecated calls with new API
 
@@ -392,7 +392,7 @@ task action=link
   target_id: "src/auth.ts"
 
 // Console output:
-// ⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.3.0.
+// ⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.
 //    Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead.
 ```
 
@@ -425,7 +425,7 @@ The `task.link(link_type="file")` response now includes a deprecation warning:
 }
 ```
 
-**After (v3.3.0):**
+**After (v3.4.1):**
 ```json
 {
   "success": true,
@@ -541,7 +541,7 @@ task action=get task_id=Y
 **Creating 10 tasks with 3 files each:**
 
 - **v3.2.x**: 10 creates + 30 links = 40 MCP calls (~14,000 tokens)
-- **v3.3.0**: 10 creates with `watch_files` = 10 MCP calls (~9,000 tokens)
+- **v3.4.1**: 10 creates with `watch_files` = 10 MCP calls (~9,000 tokens)
 - **Savings**: 75% fewer calls, 35% fewer tokens
 
 ### Memory Impact
@@ -550,32 +550,32 @@ No change. Both APIs use the same underlying database schema and file watcher.
 
 ### Watcher Performance
 
-No change. File watching behavior is identical between v3.2.x and v3.3.0.
+No change. File watching behavior is identical between v3.2.x and v3.4.1.
 
 ## Rollback Plan
 
 If you need to rollback to v3.2.x behavior:
 
-1. **Database is compatible** - No schema changes in v3.3.0
+1. **Database is compatible** - No schema changes in v3.4.1
 2. **Simply avoid new API** - Don't use `watch_files` parameter/action
 3. **Use task.link** - Continue using `task.link(link_type="file")`
 
-All data created with v3.3.0 API is accessible from v3.2.x.
+All data created with v3.4.1 API is accessible from v3.2.x.
 
 ## Timeline for Deprecation
 
 | Version | Status | Notes |
 |---------|--------|-------|
-| v3.3.0 | Deprecation warning | `task.link(file)` shows console warning |
+| v3.4.1 | Deprecation warning | `task.link(file)` shows console warning |
 | v3.4.x | Deprecation warning | No changes, backward compatibility maintained |
 | v3.5.x | Deprecation warning | No changes, backward compatibility maintained |
 | v4.0.0 | Removal (planned) | `task.link(file)` may be removed in v4.0.0 |
 
-**Recommendation**: Migrate to v3.3.0 API before v4.0.0 release.
+**Recommendation**: Migrate to v3.4.1 API before v4.0.0 release.
 
 ## Summary
 
-✅ **Benefits of v3.3.0:**
+✅ **Benefits of v3.4.1:**
 - Cleaner, more intuitive API
 - Fewer MCP calls (75% reduction)
 - Token savings (35% reduction)
@@ -584,7 +584,7 @@ All data created with v3.3.0 API is accessible from v3.2.x.
 - Full backward compatibility
 
 ✅ **Migration is optional:**
-- All v3.2.x code works in v3.3.0
+- All v3.2.x code works in v3.4.1
 - Deprecation warnings guide you
 - Migrate at your own pace
 
@@ -599,4 +599,4 @@ All data created with v3.3.0 API is accessible from v3.2.x.
 - [AUTO_FILE_TRACKING.md](./AUTO_FILE_TRACKING.md) - Complete file watching guide
 - [TOOL_REFERENCE.md](./TOOL_REFERENCE.md) - API reference
 - [TASK_ACTIONS.md](./TASK_ACTIONS.md) - All task actions
-- [CHANGELOG.md](../CHANGELOG.md) - Full v3.3.0 changelog
+- [CHANGELOG.md](../CHANGELOG.md) - Full v3.4.1 changelog

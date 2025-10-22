@@ -5,55 +5,55 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.4.0] - 2025-10-22
+## [3.4.1] - 2025-10-22
 
-### Added - VCS-Aware Auto-Complete 🎯
+### Changed - VCS Abstraction Layer Enhancement
 
-**Major Feature: Automatic Task Completion via Version Control Commits**
+Extended v3.4.0 Git-aware auto-complete to support multiple version control systems through adapter pattern.
 
-Replace flawed auto-revert logic with intelligent VCS-commit-based task completion. When ALL watched files for a task are committed to version control (Git, Mercurial, or SVN), the task automatically transitions from `waiting_review` → `done`. VCS commits serve as implicit review approval.
-
-**Supported VCS Systems:**
-- ✅ **Git** - Full support with `.git/index` watching
+**New VCS Support:**
 - ✅ **Mercurial (hg)** - Full support with `.hg/dirstate` watching
 - ✅ **SVN (Subversion)** - Periodic check support (no local index file)
-- 🔮 **Perforce** - Planned for future release (see [#19](https://github.com/sin5ddd/mcp-sqlew/issues/19))
-- 🔮 **Plastic SCM** - Planned for future release (see [#19](https://github.com/sin5ddd/mcp-sqlew/issues/19))
+
+**Implementation:**
+- Created VCS adapter interface (`src/utils/vcs-adapter.ts`)
+- Implemented GitAdapter, MercurialAdapter, SVNAdapter
+- Auto-detection logic with priority: Git → Mercurial → SVN
+- Refactored `detectAndCompleteReviewedTasks()` to use VCS abstraction
+- Enhanced file watcher to support multiple VCS index files
+
+**Backward Compatible:** No breaking changes - fully compatible with Git-only workflows.
+
+**Future Support:** Perforce and Plastic SCM planned (see [#19](https://github.com/sin5ddd/mcp-sqlew/issues/19))
+
+## [3.4.0] - 2025-10-22
+
+### Added - Git-Aware Auto-Complete 🎯
+
+**Major Feature: Automatic Task Completion via Git Commits**
+
+Replace flawed auto-revert logic with intelligent git-commit-based task completion. When ALL watched files for a task are committed to Git, the task automatically transitions from `waiting_review` → `done`. Git commits serve as implicit review approval.
 
 #### Core Implementation
 
-**1. VCS Adapter Interface (`src/utils/vcs-adapter.ts`)**
-- **New abstraction layer** supporting multiple version control systems
-- Interface: `VCSAdapter` with methods: `isRepository()`, `getCommittedFilesSince()`, `getVCSType()`
-- **Adapters implemented:**
-  - `GitAdapter` - Uses `git log --since` for commit history
-  - `MercurialAdapter` - Uses `hg log -d` for commit history
-  - `SVNAdapter` - Uses `svn log --xml` for commit history
-- **Auto-detection**: `detectVCS()` automatically detects VCS type (Git → Mercurial → SVN)
-- **Token Efficiency**: Zero token cost - uses local VCS commands
-
-**2. `detectAndCompleteReviewedTasks()` Function**
-- Refactored to use VCS adapter abstraction layer
-- Auto-detects VCS type at runtime (no configuration required)
+**1. `detectAndCompleteReviewedTasks()` Function**
+- New core function for git-aware auto-complete detection
+- Uses `git log --since="@<task.created_ts>" --name-only` to query commit history
 - Validates ALL watched files are committed (configurable)
-- Gracefully handles non-VCS repositories (skips auto-complete)
+- Gracefully handles non-git repositories (skips auto-complete)
 - **File**: `src/utils/task-stale-detection.ts`
-- **Supported**: Git, Mercurial, SVN
+- **Token Efficiency**: Zero token cost - uses local git commands
 
-**3. Real-Time VCS Index Watching**
-- File watcher monitors VCS index files for changes:
-  - Git: `.git/index` (commit operations)
-  - Mercurial: `.hg/dirstate` (commit operations)
-  - SVN: No local index (commits are remote)
-- Detects VCS operations in real-time
-- Triggers `detectAndCompleteReviewedTasks()` automatically on VCS commits
+**2. Real-Time Git Index Watching**
+- File watcher monitors `.git/index` for changes
+- Detects `git add` and `git commit` operations in real-time
+- Triggers `detectAndCompleteReviewedTasks()` automatically on git operations
 - **Files**: `src/watcher/file-watcher.ts`, `src/watcher/index.ts`
 - **Benefit**: Immediate task completion without manual intervention
 
-**4. Periodic VCS Checks**
+**3. Periodic Git Checks**
 - `task.list()` action now checks for committed files before returning
 - Ensures eventual task completion even if file watcher missed events
-- Works with all VCS systems (Git, Mercurial, SVN)
 - **File**: `src/tools/tasks.ts`
 - **Response Fields**: `git_auto_completed` (count of auto-completed tasks)
 
@@ -170,7 +170,7 @@ task action=list
 
 ### Migration
 
-**From v3.3.0 to v3.4.0:**
+**From v3.4.1 to v3.4.0:**
 - **Automatic**: Config keys auto-added on database initialization
 - **Breaking Change**: None - fully backward compatible
 - **Behavior Change**: Tasks in `waiting_review` no longer auto-revert to `todo`
@@ -190,7 +190,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 
 ---
 
-## [3.3.0] - 2025-10-22
+## [3.4.1] - 2025-10-22
 
 ### Added - File Watcher Redesign & Smart Filtering
 
@@ -247,7 +247,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 **4. Updated Help Documentation**
 - `task.help()` now documents new `watch_files` parameter and action
 - Deprecation notices for `task.link(link_type="file")`
-- Updated examples to use v3.3.0 API
+- Updated examples to use v3.4.1 API
 - **Files Modified**: `src/tools/tasks.ts` (taskHelp function)
 
 **5. Auto-Archive for Done Tasks**
@@ -396,7 +396,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 - Backward compatible - no breaking changes
 - Example warning:
   ```
-  ⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.3.0.
+  ⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.
      Use task.create(watch_files=[...]) or watch_files action instead.
   ```
 - **Files Modified**: `src/tools/tasks.ts` (linkTask function)
@@ -404,7 +404,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 ### Documentation
 
 **1. NEW: `docs/MIGRATION_v3.3.md`**
-- Comprehensive migration guide from v3.2.x to v3.3.0
+- Comprehensive migration guide from v3.2.x to v3.4.1
 - Step-by-step migration instructions
 - API comparison tables
 - Common migration patterns
@@ -419,18 +419,18 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 - Setup instructions and best practices
 - Common configurations (development, production, weekend-aware)
 - Troubleshooting section
-- Created by subagent during v3.3.0 development
+- Created by subagent during v3.4.1 development
 
 **3. Updated: `docs/AUTO_FILE_TRACKING.md`**
 - Restructured with Quick Start section first (67% token reduction for new users)
-- All examples updated to use v3.3.0 API
-- New "API Changes (v3.3.0)" section
+- All examples updated to use v3.4.1 API
+- New "API Changes (v3.4.1)" section
 - Migration guidance for v3.2.x users
 - Deprecation notices throughout
 
 **4. Updated: `docs/TOOL_REFERENCE.md`**
 - Task tool parameter table updated with `watch_files`
-- New section: "File Watching with Tasks (v3.3.0)"
+- New section: "File Watching with Tasks (v3.4.1)"
 - watch_files action documented
 - Migration examples
 - Deprecation notices
@@ -454,7 +454,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 - CONFIGURATION.md reference in documentation section
 
 **9. Updated: `CHANGELOG.md`**
-- This entry documenting v3.3.0 changes
+- This entry documenting v3.4.1 changes
 
 ### Technical Details
 
@@ -464,7 +464,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 - `updateTask()`: Added watch_files parameter to public API
 - `watchFiles()`: New exported function handling watch/unwatch/list actions
 - `linkTask()`: Added deprecation warning for link_type="file"
-- `taskHelp()`: Updated documentation with v3.3.0 APIs
+- `taskHelp()`: Updated documentation with v3.4.1 APIs
 
 **Backward Compatibility:**
 - ✅ All v3.2.x code works without changes
@@ -486,7 +486,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 
 **Option 1: Gradual Migration (Recommended)**
 - Continue using existing v3.2.x code
-- Use v3.3.0 API for new tasks
+- Use v3.4.1 API for new tasks
 - Both APIs work simultaneously
 
 **Option 2: Full Migration**
@@ -495,7 +495,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 - See `docs/MIGRATION_v3.3.md` for detailed steps
 
 **Timeline:**
-- v3.3.0: Deprecation warning only
+- v3.4.1: Deprecation warning only
 - v3.4.x-v3.5.x: Backward compatibility maintained
 - v4.0.0: `task.link(file)` may be removed (planned)
 
@@ -506,7 +506,7 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 - `src/config/loader.ts` - Config loading, flattening, validation (173 lines)
 - `.sqlew/config.toml.example` - Comprehensive example config with documentation (87 lines)
 - `src/watcher/gitignore-parser.ts` - GitIgnore parsing module
-- `docs/MIGRATION_v3.3.md` - Migration guide for v3.2.x → v3.3.0
+- `docs/MIGRATION_v3.3.md` - Migration guide for v3.2.x → v3.4.1
 - `docs/CONFIGURATION.md` - Complete configuration guide (800+ lines)
 
 **Modified Code Files:**
@@ -522,13 +522,13 @@ review_idle_minutes = 3                   # Changed from 15 to 3
 - `package.json` - Added smol-toml dependency, version bump
 
 **Modified Documentation Files:**
-- `docs/AUTO_FILE_TRACKING.md` - Restructured with Quick Start, v3.3.0 API examples
+- `docs/AUTO_FILE_TRACKING.md` - Restructured with Quick Start, v3.4.1 API examples
 - `docs/TOOL_REFERENCE.md` - Updated task tool parameter tables and examples
 - `docs/TASK_OVERVIEW.md` - Auto-archive documentation
 - `docs/TASK_ACTIONS.md` - Auto-archive behavior in list/move actions
 - `docs/ARCHITECTURE.md` - Configuration system architecture
 - `README.md` - Configuration section, auto-stale updates, CONFIGURATION.md reference
-- `CHANGELOG.md` - This comprehensive v3.3.0 changelog entry
+- `CHANGELOG.md` - This comprehensive v3.4.1 changelog entry
 
 **Total Lines Changed:**
 - New Code: ~348 lines (config system)

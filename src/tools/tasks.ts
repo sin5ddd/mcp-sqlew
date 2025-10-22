@@ -86,7 +86,7 @@ function createTaskInternal(params: {
   layer?: string;
   tags?: string[];
   status?: string;
-  watch_files?: string[];  // Array of file paths to watch (v3.3.0)
+  watch_files?: string[];  // Array of file paths to watch (v3.4.1)
 }, db: Database): any {
   // Validate priority
   const priority = params.priority !== undefined ? params.priority : 2;
@@ -199,7 +199,7 @@ function createTaskInternal(params: {
     }
   }
 
-  // Link files and register with watcher if watch_files provided (v3.3.0)
+  // Link files and register with watcher if watch_files provided (v3.4.1)
   if (params.watch_files && params.watch_files.length > 0) {
     // Parse watch_files - handle MCP SDK converting JSON string to char array
     let watchFilesParsed: string[];
@@ -277,7 +277,7 @@ export function createTask(params: {
   layer?: string;
   tags?: string[];
   status?: string;
-  watch_files?: string[];  // Array of file paths to watch (v3.3.0)
+  watch_files?: string[];  // Array of file paths to watch (v3.4.1)
 }): any {
   const db = getDatabase();
 
@@ -310,7 +310,7 @@ export function updateTask(params: {
   description?: string;
   acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
-  watch_files?: string[];  // Array of file paths to watch (v3.3.0)
+  watch_files?: string[];  // Array of file paths to watch (v3.4.1)
 }): any {
   const db = getDatabase();
 
@@ -458,7 +458,7 @@ export function updateTask(params: {
         }
       }
 
-      // Handle watch_files if provided (v3.3.0)
+      // Handle watch_files if provided (v3.4.1)
       if (params.watch_files && params.watch_files.length > 0) {
         // Parse watch_files - handle MCP SDK converting JSON string to char array
         let watchFilesParsed: string[];
@@ -964,8 +964,8 @@ export function linkTask(params: {
         };
 
       } else if (params.link_type === 'file') {
-        // Deprecation warning (v3.3.0)
-        console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.3.0.`);
+        // Deprecation warning (v3.4.1)
+        console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.`);
         console.warn(`   Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead.`);
         console.warn(`   Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
 
@@ -1310,7 +1310,7 @@ export function batchCreateTasks(params: {
 }
 
 /**
- * Watch/unwatch files for a task (v3.3.0)
+ * Watch/unwatch files for a task (v3.4.1)
  * Replaces the need to use task.link(file) for file watching
  */
 export function watchFiles(params: {
@@ -1466,7 +1466,7 @@ export function taskHelp(): any {
         description: 'Create a new task',
         required_params: ['title'],
         optional_params: ['description', 'acceptance_criteria', 'notes', 'priority', 'assigned_agent', 'created_by_agent', 'layer', 'tags', 'status', 'watch_files'],
-        watch_files_param: '⭐ NEW in v3.3.0: Pass watch_files array to automatically link and watch files (replaces task.link(file))',
+        watch_files_param: '⭐ NEW in v3.4.1: Pass watch_files array to automatically link and watch files (replaces task.link(file))',
         example: {
           action: 'create',
           title: 'Implement authentication endpoint',
@@ -1482,7 +1482,7 @@ export function taskHelp(): any {
         description: 'Update task metadata',
         required_params: ['task_id'],
         optional_params: ['title', 'priority', 'assigned_agent', 'layer', 'description', 'acceptance_criteria', 'notes', 'watch_files'],
-        watch_files_param: '⭐ NEW in v3.3.0: Pass watch_files array to add files to watch list',
+        watch_files_param: '⭐ NEW in v3.4.1: Pass watch_files array to add files to watch list',
         example: {
           action: 'update',
           task_id: 5,
@@ -1533,7 +1533,7 @@ export function taskHelp(): any {
         required_params: ['task_id', 'link_type', 'target_id'],
         optional_params: ['link_relation'],
         link_types: ['decision', 'constraint', 'file'],
-        file_linking_behavior: '⚠️  DEPRECATED in v3.3.0: link_type="file" is deprecated. Use watch_files action or watch_files parameter instead.',
+        file_linking_behavior: '⚠️  DEPRECATED in v3.4.1: link_type="file" is deprecated. Use watch_files action or watch_files parameter instead.',
         deprecation_note: 'For file watching, use: (1) watch_files parameter in create/update, or (2) watch_files action with watch/unwatch/list',
         example: {
           action: 'link',
@@ -1544,7 +1544,7 @@ export function taskHelp(): any {
         }
       },
       watch_files: {
-        description: '⭐ NEW in v3.3.0: Watch/unwatch files for a task (replaces task.link(file))',
+        description: '⭐ NEW in v3.4.1: Watch/unwatch files for a task (replaces task.link(file))',
         required_params: ['task_id', 'action'],
         optional_params: ['file_paths'],
         actions: ['watch', 'unwatch', 'list'],

@@ -4,7 +4,7 @@
 
 ## Quick Start
 
-### Basic Usage (v3.3.0+)
+### Basic Usage (v3.4.1+)
 
 Create a task with automatic file watching in one step:
 
@@ -60,7 +60,7 @@ The Auto File Tracking system monitors files linked to tasks and automatically m
 
 ### Step 1: Create Task with Files
 
-**Method 1: Using watch_files parameter (v3.3.0+, Recommended)**
+**Method 1: Using watch_files parameter (v3.4.1+, Recommended)**
 
 ```typescript
 task action=create
@@ -74,7 +74,7 @@ task action=create
   status: "todo"
 ```
 
-**Method 2: Using watch_files action (v3.3.0+)**
+**Method 2: Using watch_files action (v3.4.1+)**
 
 ```typescript
 // Create task first
@@ -140,7 +140,7 @@ After the file change, FileWatcher checks acceptance criteria:
   🎉 Task #123 "Implement user authentication": in_progress → done (all checks passed!)
 ```
 
-## Smart Review Detection (v3.3.0)
+## Smart Review Detection (v3.4.1)
 
 ### Overview
 
@@ -262,7 +262,7 @@ todo → in_progress → done
           met
 ```
 
-## API Changes (v3.3.0)
+## API Changes (v3.4.1)
 
 ### New: watch_files Parameter
 
@@ -366,7 +366,7 @@ CREATE TABLE t_task_file_links (
 );
 ```
 
-## Smart File Filtering (v3.3.0)
+## Smart File Filtering (v3.4.1)
 
 ### GitIgnore Support
 
@@ -609,7 +609,7 @@ For 6 tasks: **4,800 tokens saved** (97% reduction in status management overhead
 
 ## Best Practices
 
-### 1. Use watch_files Parameter for New Tasks (v3.3.0+)
+### 1. Use watch_files Parameter for New Tasks (v3.4.1+)
 
 ```typescript
 // GOOD: Create task with files in one step
@@ -708,7 +708,7 @@ acceptance_criteria: [
 Link multiple files to a single task:
 
 ```typescript
-// Using watch_files parameter (v3.3.0+)
+// Using watch_files parameter (v3.4.1+)
 task action=create
   title: "Implement authentication"
   watch_files: ["src/auth.ts", "src/auth.test.ts", "docs/auth.md"]
@@ -736,7 +736,7 @@ acceptance_criteria: [
 
 ## Examples
 
-### Example 1: Simple Bug Fix (v3.3.0)
+### Example 1: Simple Bug Fix (v3.4.1)
 
 ```typescript
 // Create task with file watching
@@ -752,7 +752,7 @@ task action=create
 // Tests pass → auto-completes to done
 ```
 
-### Example 2: Feature Implementation (v3.3.0)
+### Example 2: Feature Implementation (v3.4.1)
 
 ```typescript
 // Create task with multiple files
@@ -766,7 +766,7 @@ task action=create
   ]
 ```
 
-### Example 3: Refactoring Task (v3.3.0)
+### Example 3: Refactoring Task (v3.4.1)
 
 ```typescript
 // Create task
@@ -802,7 +802,7 @@ task action=watch_files
   file_paths: ["src/api/legacy.ts"]
 ```
 
-## Migration from v3.2.x to v3.3.0
+## Migration from v3.2.x to v3.4.1
 
 ### Before (v3.2.x)
 
@@ -815,7 +815,7 @@ task action=link task_id=123 link_type=file target_id="src/auth.ts"
 task action=link task_id=123 link_type=file target_id="src/auth.test.ts"
 ```
 
-### After (v3.3.0)
+### After (v3.4.1)
 
 ```typescript
 // Create task with files in one call
@@ -837,4 +837,4 @@ task action=create
 - [WORKFLOWS.md](./WORKFLOWS.md) - Multi-agent coordination patterns
 - [BEST_PRACTICES.md](./BEST_PRACTICES.md) - Common errors and solutions
 - [TASK_MIGRATION.md](./TASK_MIGRATION.md) - Migrate from decision-based tracking
-- [MIGRATION_v3.3.md](./MIGRATION_v3.3.md) - Migration guide from v3.2.x to v3.3.0
+- [MIGRATION_v3.3.md](./MIGRATION_v3.3.md) - Migration guide from v3.2.x to v3.4.1

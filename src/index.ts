@@ -319,7 +319,7 @@ Use action: "example" for comprehensive usage examples.`,
             link_relation: { type: 'string' },
             limit: { type: 'number', default: 50 },
             offset: { type: 'number', default: 0 },
-            // watch_files parameters (v3.3.0)
+            // watch_files parameters (v3.4.1)
             watch_files: { type: 'array', items: { type: 'string' }, description: 'Array of file paths to watch for auto-tracking' },
             file_path: { type: 'string', description: 'Single file path (for watch_files action)' },
             file_paths: { type: 'array', items: { type: 'string' }, description: 'Array of file paths (for watch_files action)' },

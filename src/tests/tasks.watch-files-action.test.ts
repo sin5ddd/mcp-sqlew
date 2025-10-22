@@ -1,5 +1,5 @@
 /**
- * Unit tests for Task watch_files action (v3.3.0)
+ * Unit tests for Task watch_files action (v3.4.1)
  * Tests the new watch_files action: watch, unwatch, list
  */
 

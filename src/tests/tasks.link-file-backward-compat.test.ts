@@ -1,5 +1,5 @@
 /**
- * Unit tests for backward compatibility of deprecated task.link(link_type="file") (v3.3.0)
+ * Unit tests for backward compatibility of deprecated task.link(link_type="file") (v3.4.1)
  * Tests that the deprecated API still works while showing deprecation warnings
  */
 
@@ -61,8 +61,8 @@ function linkTaskFile(db: DatabaseType, params: {
     throw new Error(`Task with id ${params.task_id} not found`);
   }
 
-  // Deprecation warning (v3.3.0) - would appear in console
-  // console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.3.0.`);
+  // Deprecation warning (v3.4.1) - would appear in console
+  // console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.`);
 
   const filePath = String(params.target_id);
   const fileId = getOrCreateFile(db, filePath);

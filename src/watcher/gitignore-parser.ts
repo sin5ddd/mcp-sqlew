@@ -1,5 +1,5 @@
 /**
- * GitIgnore Parser Module (v3.3.0)
+ * GitIgnore Parser Module (v3.4.1)
  * Parses .gitignore files and provides file filtering functionality
  *
  * Features:
@@ -14,7 +14,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 /**
- * Built-in patterns to always ignore (v3.3.0)
+ * Built-in patterns to always ignore (v3.4.1)
  * These are common patterns that should be ignored regardless of .gitignore
  */
 export const BUILT_IN_IGNORE_PATTERNS = [
