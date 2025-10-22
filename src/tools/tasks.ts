@@ -12,7 +12,7 @@ import {
   getOrCreateFile,
   transaction
 } from '../database.js';
-import { detectAndTransitionStaleTasks } from '../utils/task-stale-detection.js';
+import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndCompleteReviewedTasks } from '../utils/task-stale-detection.js';
 import { processBatch } from '../utils/batch.js';
 import { FileWatcher } from '../watcher/index.js';
 import {
@@ -86,6 +86,7 @@ function createTaskInternal(params: {
   layer?: string;
   tags?: string[];
   status?: string;
+  watch_files?: string[];  // Array of file paths to watch (v3.3.0)
 }, db: Database): any {
   // Validate priority
   const priority = params.priority !== undefined ? params.priority : 2;
@@ -198,6 +199,61 @@ function createTaskInternal(params: {
     }
   }
 
+  // Link files and register with watcher if watch_files provided (v3.3.0)
+  if (params.watch_files && params.watch_files.length > 0) {
+    // Parse watch_files - handle MCP SDK converting JSON string to char array
+    let watchFilesParsed: string[];
+
+    if (typeof params.watch_files === 'string') {
+      // String - try to parse as JSON
+      try {
+        watchFilesParsed = JSON.parse(params.watch_files);
+      } catch {
+        // If not valid JSON, treat as single file path
+        watchFilesParsed = [params.watch_files];
+      }
+    } else if (Array.isArray(params.watch_files)) {
+      // Check if it's an array of single characters (MCP SDK bug)
+      // Example: ['[', '"', 'f', 'i', 'l', 'e', '.', 't', 'x', 't', '"', ']']
+      if (params.watch_files.every((item: any) => typeof item === 'string' && item.length === 1)) {
+        // Join characters back into string and parse JSON
+        const jsonString = params.watch_files.join('');
+        try {
+          watchFilesParsed = JSON.parse(jsonString);
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          throw new Error(`Invalid watch_files format: ${jsonString}. ${errMsg}`);
+        }
+      } else {
+        // Normal array of file paths
+        watchFilesParsed = params.watch_files;
+      }
+    } else {
+      throw new Error('Parameter "watch_files" must be a string or array');
+    }
+
+    const insertFileLinkStmt = db.prepare(`
+      INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
+      VALUES (?, ?)
+    `);
+
+    for (const filePath of watchFilesParsed) {
+      const fileId = getOrCreateFile(db, filePath);
+      insertFileLinkStmt.run(taskId, fileId);
+    }
+
+    // Register files with watcher for auto-tracking
+    try {
+      const watcher = FileWatcher.getInstance();
+      for (const filePath of watchFilesParsed) {
+        watcher.registerFile(filePath, taskId, params.title, status);
+      }
+    } catch (error) {
+      // Watcher may not be initialized yet, ignore
+      console.error('Warning: Could not register files with watcher:', error);
+    }
+  }
+
   return {
     success: true,
     task_id: taskId,
@@ -221,6 +277,7 @@ export function createTask(params: {
   layer?: string;
   tags?: string[];
   status?: string;
+  watch_files?: string[];  // Array of file paths to watch (v3.3.0)
 }): any {
   const db = getDatabase();
 
@@ -253,6 +310,7 @@ export function updateTask(params: {
   description?: string;
   acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
+  watch_files?: string[];  // Array of file paths to watch (v3.3.0)
 }): any {
   const db = getDatabase();
 
@@ -397,6 +455,68 @@ export function updateTask(params: {
             acceptanceCriteriaJson !== undefined ? acceptanceCriteriaJson : null,
             params.notes || null
           );
+        }
+      }
+
+      // Handle watch_files if provided (v3.3.0)
+      if (params.watch_files && params.watch_files.length > 0) {
+        // Parse watch_files - handle MCP SDK converting JSON string to char array
+        let watchFilesParsed: string[];
+
+        if (typeof params.watch_files === 'string') {
+          // String - try to parse as JSON
+          try {
+            watchFilesParsed = JSON.parse(params.watch_files);
+          } catch {
+            // If not valid JSON, treat as single file path
+            watchFilesParsed = [params.watch_files];
+          }
+        } else if (Array.isArray(params.watch_files)) {
+          // Check if it's an array of single characters (MCP SDK bug)
+          if (params.watch_files.every((item: any) => typeof item === 'string' && item.length === 1)) {
+            // Join characters back into string and parse JSON
+            const jsonString = params.watch_files.join('');
+            try {
+              watchFilesParsed = JSON.parse(jsonString);
+            } catch {
+              throw new Error(`Invalid watch_files format: ${jsonString}`);
+            }
+          } else {
+            // Normal array of file paths
+            watchFilesParsed = params.watch_files;
+          }
+        } else {
+          throw new Error('Parameter "watch_files" must be a string or array');
+        }
+
+        const insertFileLinkStmt = db.prepare(`
+          INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
+          VALUES (?, ?)
+        `);
+
+        for (const filePath of watchFilesParsed) {
+          const fileId = getOrCreateFile(db, filePath);
+          insertFileLinkStmt.run(params.task_id, fileId);
+        }
+
+        // Register files with watcher for auto-tracking
+        try {
+          const taskData = db.prepare(`
+            SELECT t.title, s.name as status
+            FROM t_tasks t
+            JOIN m_task_statuses s ON t.status_id = s.id
+            WHERE t.id = ?
+          `).get(params.task_id) as { title: string; status: string } | undefined;
+
+          if (taskData) {
+            const watcher = FileWatcher.getInstance();
+            for (const filePath of watchFilesParsed) {
+              watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+            }
+          }
+        } catch (error) {
+          // Watcher may not be initialized yet, ignore
+          console.error('Warning: Could not register files with watcher:', error);
         }
       }
 
@@ -584,7 +704,7 @@ export function getTask(params: {
 /**
  * List tasks (token-efficient, no descriptions)
  */
-export function listTasks(params: {
+export async function listTasks(params: {
   status?: string;
   assigned_agent?: string;
   layer?: string;
@@ -592,12 +712,14 @@ export function listTasks(params: {
   limit?: number;
   offset?: number;
   include_dependency_counts?: boolean;
-} = {}): any {
+} = {}): Promise<any> {
   const db = getDatabase();
 
   try {
-    // Run auto-stale detection before listing
+    // Run auto-stale detection, git-aware completion, and auto-archive before listing
     const transitionCount = detectAndTransitionStaleTasks(db);
+    const gitCompletedCount = await detectAndCompleteReviewedTasks(db);
+    const archiveCount = autoArchiveOldDoneTasks(db);
 
     // Build query with optional dependency counts
     let query: string;
@@ -677,7 +799,9 @@ export function listTasks(params: {
     return {
       tasks: rows,
       count: rows.length,
-      stale_tasks_transitioned: transitionCount
+      stale_tasks_transitioned: transitionCount,
+      git_auto_completed: gitCompletedCount,
+      archived_tasks: archiveCount
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -703,8 +827,9 @@ export function moveTask(params: {
   }
 
   try {
-    // Run auto-stale detection before move
+    // Run auto-stale detection and auto-archive before move
     detectAndTransitionStaleTasks(db);
+    autoArchiveOldDoneTasks(db);
 
     return transaction(db, () => {
       // Get current status
@@ -839,6 +964,11 @@ export function linkTask(params: {
         };
 
       } else if (params.link_type === 'file') {
+        // Deprecation warning (v3.3.0)
+        console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.3.0.`);
+        console.warn(`   Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead.`);
+        console.warn(`   Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
+
         const filePath = String(params.target_id);
         const fileId = getOrCreateFile(db, filePath);
 
@@ -871,7 +1001,8 @@ export function linkTask(params: {
           task_id: params.task_id,
           linked_to: 'file',
           target: filePath,
-          message: `Task ${params.task_id} linked to file "${filePath}"`
+          deprecation_warning: 'task.link(link_type="file") is deprecated. Use task.create/update(watch_files) or watch_files action instead.',
+          message: `Task ${params.task_id} linked to file "${filePath}" (DEPRECATED API - use watch_files instead)`
         };
 
       } else {
@@ -1179,6 +1310,149 @@ export function batchCreateTasks(params: {
 }
 
 /**
+ * Watch/unwatch files for a task (v3.3.0)
+ * Replaces the need to use task.link(file) for file watching
+ */
+export function watchFiles(params: {
+  task_id: number;
+  action: 'watch' | 'unwatch' | 'list';
+  file_paths?: string[];
+}): any {
+  const db = getDatabase();
+
+  if (!params.task_id) {
+    throw new Error('Parameter "task_id" is required');
+  }
+
+  if (!params.action) {
+    throw new Error('Parameter "action" is required (watch, unwatch, or list)');
+  }
+
+  try {
+    return transaction(db, () => {
+      // Check if task exists
+      const taskData = db.prepare(`
+        SELECT t.id, t.title, s.name as status
+        FROM t_tasks t
+        JOIN m_task_statuses s ON t.status_id = s.id
+        WHERE t.id = ?
+      `).get(params.task_id) as { id: number; title: string; status: string } | undefined;
+
+      if (!taskData) {
+        throw new Error(`Task with id ${params.task_id} not found`);
+      }
+
+      if (params.action === 'watch') {
+        if (!params.file_paths || params.file_paths.length === 0) {
+          throw new Error('Parameter "file_paths" is required for watch action');
+        }
+
+        const insertFileLinkStmt = db.prepare(`
+          INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
+          VALUES (?, ?)
+        `);
+
+        const addedFiles: string[] = [];
+        for (const filePath of params.file_paths) {
+          const fileId = getOrCreateFile(db, filePath);
+          const result = insertFileLinkStmt.run(params.task_id, fileId);
+
+          // Check if row was actually inserted (changes > 0)
+          if (result.changes > 0) {
+            addedFiles.push(filePath);
+          }
+        }
+
+        // Register files with watcher
+        try {
+          const watcher = FileWatcher.getInstance();
+          for (const filePath of addedFiles) {
+            watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+          }
+        } catch (error) {
+          // Watcher may not be initialized yet, ignore
+          console.error('Warning: Could not register files with watcher:', error);
+        }
+
+        return {
+          success: true,
+          task_id: params.task_id,
+          action: 'watch',
+          files_added: addedFiles.length,
+          files: addedFiles,
+          message: `Watching ${addedFiles.length} file(s) for task ${params.task_id}`
+        };
+
+      } else if (params.action === 'unwatch') {
+        if (!params.file_paths || params.file_paths.length === 0) {
+          throw new Error('Parameter "file_paths" is required for unwatch action');
+        }
+
+        const deleteFileLinkStmt = db.prepare(`
+          DELETE FROM t_task_file_links
+          WHERE task_id = ? AND file_id = (SELECT id FROM m_files WHERE path = ?)
+        `);
+
+        const removedFiles: string[] = [];
+        for (const filePath of params.file_paths) {
+          const result = deleteFileLinkStmt.run(params.task_id, filePath);
+
+          // Check if row was actually deleted (changes > 0)
+          if (result.changes > 0) {
+            removedFiles.push(filePath);
+          }
+        }
+
+        // Unregister files from watcher
+        try {
+          const watcher = FileWatcher.getInstance();
+          for (const filePath of removedFiles) {
+            // Note: FileWatcher.unregisterFile doesn't exist in current API
+            // The watcher will handle cleanup when task moves to done/archived
+            // For now, we just remove the DB link
+          }
+        } catch (error) {
+          // Watcher may not be initialized, ignore
+        }
+
+        return {
+          success: true,
+          task_id: params.task_id,
+          action: 'unwatch',
+          files_removed: removedFiles.length,
+          files: removedFiles,
+          message: `Stopped watching ${removedFiles.length} file(s) for task ${params.task_id}`
+        };
+
+      } else if (params.action === 'list') {
+        const filesStmt = db.prepare(`
+          SELECT f.path
+          FROM t_task_file_links tfl
+          JOIN m_files f ON tfl.file_id = f.id
+          WHERE tfl.task_id = ?
+        `);
+        const files = filesStmt.all(params.task_id).map((row: any) => row.path);
+
+        return {
+          success: true,
+          task_id: params.task_id,
+          action: 'list',
+          files_count: files.length,
+          files: files,
+          message: `Task ${params.task_id} is watching ${files.length} file(s)`
+        };
+
+      } else {
+        throw new Error(`Invalid action: ${params.action}. Must be one of: watch, unwatch, list`);
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to ${params.action} files: ${message}`);
+  }
+}
+
+/**
  * Return comprehensive help documentation
  */
 export function taskHelp(): any {
@@ -1191,7 +1465,8 @@ export function taskHelp(): any {
       create: {
         description: 'Create a new task',
         required_params: ['title'],
-        optional_params: ['description', 'acceptance_criteria', 'notes', 'priority', 'assigned_agent', 'created_by_agent', 'layer', 'tags', 'status'],
+        optional_params: ['description', 'acceptance_criteria', 'notes', 'priority', 'assigned_agent', 'created_by_agent', 'layer', 'tags', 'status', 'watch_files'],
+        watch_files_param: '⭐ NEW in v3.3.0: Pass watch_files array to automatically link and watch files (replaces task.link(file))',
         example: {
           action: 'create',
           title: 'Implement authentication endpoint',
@@ -1199,18 +1474,21 @@ export function taskHelp(): any {
           priority: 3,
           assigned_agent: 'backend-agent',
           layer: 'presentation',
-          tags: ['api', 'authentication']
+          tags: ['api', 'authentication'],
+          watch_files: ['src/api/auth.ts', 'src/middleware/jwt.ts']
         }
       },
       update: {
         description: 'Update task metadata',
         required_params: ['task_id'],
-        optional_params: ['title', 'priority', 'assigned_agent', 'layer', 'description', 'acceptance_criteria', 'notes'],
+        optional_params: ['title', 'priority', 'assigned_agent', 'layer', 'description', 'acceptance_criteria', 'notes', 'watch_files'],
+        watch_files_param: '⭐ NEW in v3.3.0: Pass watch_files array to add files to watch list',
         example: {
           action: 'update',
           task_id: 5,
           priority: 4,
-          assigned_agent: 'senior-backend-agent'
+          assigned_agent: 'senior-backend-agent',
+          watch_files: ['src/api/users.ts']
         }
       },
       get: {
@@ -1255,7 +1533,8 @@ export function taskHelp(): any {
         required_params: ['task_id', 'link_type', 'target_id'],
         optional_params: ['link_relation'],
         link_types: ['decision', 'constraint', 'file'],
-        file_linking_behavior: '⚠️  IMPORTANT: When link_type="file", this action ACTIVATES AUTOMATIC FILE WATCHING. The file watcher monitors linked files for changes and validates acceptance criteria when files are saved. You can save 300 tokens per file compared to registering watchers manually.',
+        file_linking_behavior: '⚠️  DEPRECATED in v3.3.0: link_type="file" is deprecated. Use watch_files action or watch_files parameter instead.',
+        deprecation_note: 'For file watching, use: (1) watch_files parameter in create/update, or (2) watch_files action with watch/unwatch/list',
         example: {
           action: 'link',
           task_id: 5,
@@ -1263,6 +1542,34 @@ export function taskHelp(): any {
           target_id: 'auth_method',
           link_relation: 'implements'
         }
+      },
+      watch_files: {
+        description: '⭐ NEW in v3.3.0: Watch/unwatch files for a task (replaces task.link(file))',
+        required_params: ['task_id', 'action'],
+        optional_params: ['file_paths'],
+        actions: ['watch', 'unwatch', 'list'],
+        behavior: {
+          watch: 'Add files to watch list and activate file monitoring',
+          unwatch: 'Remove files from watch list',
+          list: 'List all files currently watched by this task'
+        },
+        examples: {
+          watch: {
+            task_id: 5,
+            action: 'watch',
+            file_paths: ['src/api/auth.ts', 'src/middleware/jwt.ts']
+          },
+          unwatch: {
+            task_id: 5,
+            action: 'unwatch',
+            file_paths: ['src/middleware/jwt.ts']
+          },
+          list: {
+            task_id: 5,
+            action: 'list'
+          }
+        },
+        note: 'Preferred over task.link(file) for better clarity and batch operations'
       },
       archive: {
         description: 'Archive completed task (must be in done status)',

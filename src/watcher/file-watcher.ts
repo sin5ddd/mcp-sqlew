@@ -2,19 +2,25 @@
  * File Watcher - Auto-tracking file changes linked to tasks
  * Monitors files and auto-transitions task status on file modification
  *
- * Features:
+ * Features (v3.3.0):
  * - chokidar-based file watching with debouncing
+ * - Project root watching with .gitignore support
  * - Dynamic file registration (add/remove files at runtime)
  * - Auto-transition: todo → in_progress on file change
  * - Maps file paths → task IDs for efficient lookup
+ * - Respects .gitignore patterns and built-in ignore rules
  */
 
 import chokidar, { FSWatcher } from 'chokidar';
-import { getDatabase } from '../database.js';
-import { basename, dirname } from 'path';
+import { getDatabase, getConfigInt, getConfigBool } from '../database.js';
+import { basename, dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { executeAcceptanceCriteria } from './test-executor.js';
 import { AcceptanceCheck } from '../types.js';
+import { GitIgnoreParser, createGitIgnoreParser } from './gitignore-parser.js';
+import { checkReadyForReview } from '../utils/quality-checks.js';
+import { CONFIG_KEYS } from '../constants.js';
+import { detectAndCompleteReviewedTasks } from '../utils/task-stale-detection.js';
 
 /**
  * File-to-task mapping for efficient lookup
@@ -35,9 +41,15 @@ export class FileWatcher {
   private isRunning: boolean = false;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
   private readonly DEBOUNCE_MS = 2000; // Wait 2s after last write
+  private gitignoreParser: GitIgnoreParser | null = null;
+  private projectRoot: string;
+  private lastModifiedTimes: Map<number, number> = new Map(); // taskId -> timestamp
+  private filesModifiedSet: Map<number, Set<string>> = new Map(); // taskId -> modified files
 
   private constructor() {
     // Private constructor for singleton
+    // Determine project root (current working directory)
+    this.projectRoot = process.cwd();
   }
 
   /**
@@ -51,7 +63,7 @@ export class FileWatcher {
   }
 
   /**
-   * Initialize and start the file watcher
+   * Initialize and start the file watcher (v3.3.0)
    */
   public async start(): Promise<void> {
     if (this.isRunning) {
@@ -60,7 +72,10 @@ export class FileWatcher {
     }
 
     try {
-      // Initialize chokidar with debouncing
+      // Initialize gitignore parser
+      this.gitignoreParser = createGitIgnoreParser(this.projectRoot);
+
+      // Initialize chokidar with debouncing and gitignore support
       this.watcher = chokidar.watch([], {
         persistent: true,
         ignoreInitial: true, // Don't trigger on startup
@@ -68,16 +83,33 @@ export class FileWatcher {
           stabilityThreshold: this.DEBOUNCE_MS,
           pollInterval: 100
         },
-        ignored: /(^|[\/\\])\../, // Ignore dotfiles
+        ignored: (path: string) => {
+          // Use gitignore parser to filter files
+          if (this.gitignoreParser) {
+            return this.gitignoreParser.shouldIgnore(path);
+          }
+          // Fallback: ignore dotfiles
+          return /(^|[\/\\])\./.test(path);
+        },
       });
 
       // Set up event handlers
       this.watcher.on('change', (path: string) => {
-        this.handleFileChange(path);
+        // Check if this is the git index file
+        if (path.endsWith('.git/index') || path.endsWith('.git\\index')) {
+          this.handleGitIndexChange(path);
+        } else {
+          this.handleFileChange(path);
+        }
       });
 
       this.watcher.on('add', (path: string) => {
-        this.handleFileChange(path);
+        // Check if this is the git index file
+        if (path.endsWith('.git/index') || path.endsWith('.git\\index')) {
+          this.handleGitIndexChange(path);
+        } else {
+          this.handleFileChange(path);
+        }
       });
 
       this.watcher.on('error', (error: Error) => {
@@ -87,9 +119,22 @@ export class FileWatcher {
       // Load existing task-file links from database
       await this.loadTaskFileLinks();
 
+      // Initialize tracking maps
+      this.lastModifiedTimes.clear();
+      this.filesModifiedSet.clear();
+
+      // Watch .git/index for git commits (v3.4.0 Git-aware auto-complete)
+      const gitIndexPath = join(this.projectRoot, '.git', 'index');
+      if (existsSync(gitIndexPath)) {
+        this.watcher.add(gitIndexPath);
+        console.error('✓ Watching .git/index for git commits (v3.4.0)');
+      }
+
       this.isRunning = true;
       console.error('✓ File watcher started successfully');
+      console.error(`  Project root: ${this.projectRoot}`);
       console.error(`  Watching ${this.watchedFiles.size} files for ${this.getTotalTaskCount()} tasks`);
+      console.error(`  .gitignore patterns loaded: ${existsSync(this.projectRoot + '/.gitignore') ? 'Yes' : 'No'}`);
     } catch (error) {
       console.error('Failed to start file watcher:', error);
       throw error;
@@ -108,6 +153,10 @@ export class FileWatcher {
       // Clear all debounce timers
       this.debounceTimers.forEach(timer => clearTimeout(timer));
       this.debounceTimers.clear();
+
+      // Clear tracking maps
+      this.lastModifiedTimes.clear();
+      this.filesModifiedSet.clear();
 
       // Close watcher
       if (this.watcher) {
@@ -230,6 +279,13 @@ export class FileWatcher {
     for (const mapping of mappings) {
       const { taskId, taskTitle, currentStatus } = mapping;
 
+      // Track file modification
+      this.lastModifiedTimes.set(taskId, Date.now());
+      if (!this.filesModifiedSet.has(taskId)) {
+        this.filesModifiedSet.set(taskId, new Set<string>());
+      }
+      this.filesModifiedSet.get(taskId)!.add(normalizedPath);
+
       // Auto-transition: todo → in_progress
       if (currentStatus === 'todo') {
         try {
@@ -280,9 +336,39 @@ export class FileWatcher {
       // Check acceptance criteria for in_progress tasks
       if (currentStatus === 'in_progress' || mapping.currentStatus === 'in_progress') {
         await this.checkAcceptanceCriteria(taskId, taskTitle, mapping);
+
+        // After debounce period, check if task is ready for review
+        // Use setTimeout to check after idle period
+        const idleMinutes = getConfigInt(db, CONFIG_KEYS.REVIEW_IDLE_MINUTES, 15);
+        setTimeout(async () => {
+          await this.checkAndTransitionToReview(taskId);
+        }, idleMinutes * 60 * 1000);
       } else {
         console.error(`  • Task #${taskId} "${taskTitle}": status ${currentStatus}`);
       }
+    }
+  }
+
+  /**
+   * Handle .git/index changes (v3.4.0 Git-aware auto-complete)
+   * When .git/index is modified (git add/commit), check for tasks ready to auto-complete
+   */
+  private async handleGitIndexChange(filePath: string): Promise<void> {
+    console.error('\n🔄 Git index changed - checking for tasks ready to auto-complete');
+
+    const db = getDatabase();
+
+    try {
+      // Run git-aware auto-complete detection
+      const completedCount = await detectAndCompleteReviewedTasks(db);
+
+      if (completedCount > 0) {
+        console.error(`  ✓ Auto-completed ${completedCount} task(s) from waiting_review → done`);
+      } else {
+        console.error(`  ℹ No tasks ready for auto-completion (all watched files not yet committed)`);
+      }
+    } catch (error) {
+      console.error(`  ✗ Error during git-aware auto-complete:`, error);
     }
   }
 
@@ -442,6 +528,124 @@ export class FileWatcher {
       mappings.forEach(m => taskIds.add(m.taskId));
     });
     return taskIds.size;
+  }
+
+  /**
+   * Check if task is ready for review and transition if conditions met
+   * Quality gates:
+   * - All watched files modified at least once
+   * - TypeScript compiles without errors (if .ts files)
+   * - Tests pass (if test files exist)
+   * - Idle for configured time (default 15 minutes)
+   *
+   * @param taskId - Task ID to check
+   */
+  private async checkAndTransitionToReview(taskId: number): Promise<void> {
+    const db = getDatabase();
+
+    try {
+      // Get current task status
+      const task = db.prepare(`
+        SELECT t.status_id, s.name as status_name, td.acceptance_criteria_json
+        FROM t_tasks t
+        JOIN m_task_statuses s ON s.id = t.status_id
+        LEFT JOIN t_task_details td ON td.task_id = t.id
+        WHERE t.id = ?
+      `).get(taskId) as { status_id: number; status_name: string; acceptance_criteria_json: string | null } | undefined;
+
+      if (!task) {
+        return; // Task not found
+      }
+
+      // Only check for in_progress tasks
+      if (task.status_name !== 'in_progress') {
+        return;
+      }
+
+      // Read configuration
+      const idleMinutes = getConfigInt(db, CONFIG_KEYS.REVIEW_IDLE_MINUTES, 15);
+      const requireAllFilesModified = getConfigBool(db, CONFIG_KEYS.REVIEW_REQUIRE_ALL_FILES_MODIFIED, true);
+      const requireTestsPass = getConfigBool(db, CONFIG_KEYS.REVIEW_REQUIRE_TESTS_PASS, true);
+      const requireCompile = getConfigBool(db, CONFIG_KEYS.REVIEW_REQUIRE_COMPILE, true);
+
+      // Check idle time
+      const lastModified = this.lastModifiedTimes.get(taskId);
+      if (!lastModified) {
+        return; // No modifications tracked yet
+      }
+
+      const idleTimeMs = Date.now() - lastModified;
+      const requiredIdleMs = idleMinutes * 60 * 1000;
+
+      if (idleTimeMs < requiredIdleMs) {
+        return; // Not idle long enough
+      }
+
+      // Get all watched files for this task
+      const filePaths: string[] = [];
+      this.watchedFiles.forEach((mappings, path) => {
+        if (mappings.some(m => m.taskId === taskId)) {
+          filePaths.push(path);
+        }
+      });
+
+      if (filePaths.length === 0) {
+        return; // No files being watched
+      }
+
+      // Get modified files set
+      const modifiedFiles = this.filesModifiedSet.get(taskId) || new Set<string>();
+
+      // Run quality checks
+      const { ready, results } = await checkReadyForReview(
+        db,
+        taskId,
+        filePaths,
+        modifiedFiles,
+        {
+          requireAllFilesModified,
+          requireTestsPass,
+          requireCompile,
+        }
+      );
+
+      if (ready) {
+        // All quality gates passed - transition to waiting_review
+        console.error(`  ✓ Quality checks passed for task #${taskId}`);
+
+        // Log individual results
+        results.forEach(({ check, result }) => {
+          console.error(`    • ${check}: ${result.message}`);
+        });
+
+        // Update task status
+        db.prepare(`
+          UPDATE t_tasks
+          SET status_id = (SELECT id FROM m_task_statuses WHERE name = 'waiting_review'),
+              updated_ts = unixepoch()
+          WHERE id = ?
+        `).run(taskId);
+
+        console.error(`  → Task #${taskId} auto-transitioned to waiting_review`);
+
+        // Clear tracking for this task
+        this.lastModifiedTimes.delete(taskId);
+        this.filesModifiedSet.delete(taskId);
+      } else {
+        // Some checks failed - log details
+        const failedChecks = results.filter(({ result }) => !result.passed);
+        console.error(`  ℹ Task #${taskId} not ready for review (${failedChecks.length} checks failed)`);
+        failedChecks.forEach(({ check, result }) => {
+          console.error(`    • ${check}: ${result.message}`);
+          if (result.details) {
+            console.error(`      ${result.details}`);
+          }
+        });
+      }
+    } catch (error) {
+      // Log error but don't crash the watcher
+      console.error(`Error checking review readiness for task #${taskId}:`, error);
+    }
   }
 
   /**

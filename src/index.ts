@@ -18,7 +18,7 @@ import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch,
 import { addConstraint, getConstraints, deactivateConstraint, constraintHelp, constraintExample } from './tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL, statsHelp, statsExample } from './tools/utils.js';
 import { getConfig, updateConfig, configHelp, configExample } from './tools/config.js';
-import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, taskHelp, taskExample, watcherStatus } from './tools/tasks.js';
+import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, watchFiles, taskHelp, taskExample, watcherStatus } from './tools/tasks.js';
 import { FileWatcher } from './watcher/index.js';
 
 // Parse command-line arguments
@@ -301,7 +301,7 @@ Use action: "example" for comprehensive usage examples.`,
         inputSchema: {
           type: 'object',
           properties: {
-            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'help', 'example'] },
+            action: { type: 'string', description: 'Action (use "help" for usage)', enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'add_dependency', 'remove_dependency', 'get_dependencies', 'watch_files', 'watcher', 'help', 'example'] },
             task_id: { type: 'number' },
             title: { type: 'string' },
             description: { type: 'string' },
@@ -319,9 +319,18 @@ Use action: "example" for comprehensive usage examples.`,
             link_relation: { type: 'string' },
             limit: { type: 'number', default: 50 },
             offset: { type: 'number', default: 0 },
+            // watch_files parameters (v3.3.0)
+            watch_files: { type: 'array', items: { type: 'string' }, description: 'Array of file paths to watch for auto-tracking' },
+            file_path: { type: 'string', description: 'Single file path (for watch_files action)' },
+            file_paths: { type: 'array', items: { type: 'string' }, description: 'Array of file paths (for watch_files action)' },
             // batch_create parameters
             tasks: { type: 'array', description: 'Array of tasks for batch operation (max: 50)' },
             atomic: { type: 'boolean', description: 'Atomic mode - all succeed or all fail (default: true)' },
+            // dependency parameters (v3.2.0)
+            blocker_task_id: { type: 'number' },
+            blocked_task_id: { type: 'number' },
+            include_dependencies: { type: 'boolean' },
+            include_dependency_counts: { type: 'boolean' },
           },
           required: ['action'],
         },
@@ -446,7 +455,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'create': result = createTask(params); break;
           case 'update': result = updateTask(params); break;
           case 'get': result = getTask(params); break;
-          case 'list': result = listTasks(params); break;
+          case 'list': result = await listTasks(params); break;
           case 'move': result = moveTask(params); break;
           case 'link': result = linkTask(params); break;
           case 'archive': result = archiveTask(params); break;
@@ -454,6 +463,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'add_dependency': result = addDependency(params); break;
           case 'remove_dependency': result = removeDependency(params); break;
           case 'get_dependencies': result = getDependencies(params); break;
+          case 'watch_files': result = watchFiles(params); break;
           case 'watcher': result = watcherStatus(params); break;
           case 'help': result = taskHelp(); break;
           case 'example': result = taskExample(); break;

@@ -200,6 +200,13 @@ export function getStats(): GetStatsResponse {
       critical: getCount('t_tasks', 'priority = 4'),
     };
 
+    // Review status (v3.4.0) - tasks in waiting_review awaiting git commits
+    const review_status = {
+      awaiting_commit: tasks_by_status.waiting_review,
+      // Tasks in waiting_review for >24h (may need attention)
+      overdue_review: getCount('t_tasks', `status_id = 3 AND updated_ts < unixepoch() - 86400`),
+    };
+
     return {
       agents,
       files,
@@ -217,6 +224,7 @@ export function getStats(): GetStatsResponse {
       active_tasks,
       tasks_by_status,
       tasks_by_priority,
+      review_status, // v3.4.0: Enhanced review visibility
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

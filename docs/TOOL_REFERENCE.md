@@ -149,14 +149,19 @@
 
 | Action | Required | Optional |
 |--------|----------|----------|
-| **create** | action, title | description, acceptance_criteria, notes, priority, assigned_agent, created_by_agent, layer, tags, status |
-| **update** | action, task_id | title, priority, assigned_agent, layer, description, acceptance_criteria, notes |
-| **get** | action, task_id | - |
-| **list** | action | status, assigned_agent, layer, tags, limit, offset |
+| **create** | action, title | description, acceptance_criteria, notes, priority, assigned_agent, created_by_agent, layer, tags, status, **watch_files** (v3.3.0) |
+| **update** | action, task_id | title, priority, assigned_agent, layer, description, acceptance_criteria, notes, **watch_files** (v3.3.0) |
+| **get** | action, task_id | include_dependencies |
+| **list** | action | status, assigned_agent, layer, tags, limit, offset, include_dependency_counts |
 | **move** | action, task_id, new_status | - |
-| **link** | action, task_id, link_type, target_id | link_relation |
+| **link** | action, task_id, link_type, target_id | link_relation (⚠️ link_type="file" deprecated in v3.3.0) |
 | **archive** | action, task_id | - |
 | **batch_create** | action, tasks | atomic |
+| **add_dependency** | action, blocker_task_id, blocked_task_id | - |
+| **remove_dependency** | action, blocker_task_id, blocked_task_id | - |
+| **get_dependencies** | action, task_id | include_details |
+| **watch_files** (v3.3.0) | action, task_id, action (watch/unwatch/list) | file_paths |
+| **watcher** | action | subaction (status/list_files/list_tasks/help) |
 
 ---
 
@@ -320,6 +325,89 @@
 - **Maximum items per batch**: 50
 - **Recommended batch size**: 10-20 (for readability and debugging)
 - **Token savings**: ~52% vs individual calls
+
+---
+
+## File Watching with Tasks (v3.3.0)
+
+### New: watch_files Parameter
+
+**Replaces:** `task.link(link_type="file")` (deprecated in v3.3.0)
+
+Create tasks with automatic file monitoring in one step:
+
+```javascript
+{
+  action: "create",
+  title: "Implement user authentication",
+  watch_files: ["src/auth.ts", "src/auth.test.ts"],
+  acceptance_criteria: [
+    {type: "tests_pass", command: "npm test auth", expected_pattern: "passing"},
+    {type: "code_contains", file: "src/auth.ts", pattern: "export class AuthService"}
+  ],
+  priority: 3,
+  assigned_agent: "backend-dev"
+}
+```
+
+**Benefits:**
+- 75% fewer MCP calls (1 call vs 4 calls in v3.2.x)
+- 35% token reduction
+- Clearer intent
+- Atomic file registration
+
+### New: watch_files Action
+
+Manage file watches dynamically:
+
+```javascript
+// Watch files
+{
+  action: "watch_files",
+  task_id: 123,
+  action: "watch",
+  file_paths: ["src/auth.ts", "src/middleware/jwt.ts"]
+}
+
+// Unwatch files
+{
+  action: "watch_files",
+  task_id: 123,
+  action: "unwatch",
+  file_paths: ["src/middleware/jwt.ts"]
+}
+
+// List watched files
+{
+  action: "watch_files",
+  task_id: 123,
+  action: "list"
+}
+// Response: { files: ["src/auth.ts"], files_count: 1 }
+```
+
+### Migration from v3.2.x
+
+**Before (deprecated):**
+```javascript
+// Create task
+{action: "create", title: "Feature"}
+// Link files (separate calls)
+{action: "link", task_id: 123, link_type: "file", target_id: "src/file1.ts"}
+{action: "link", task_id: 123, link_type: "file", target_id: "src/file2.ts"}
+```
+
+**After (v3.3.0):**
+```javascript
+// Create task with files in one call
+{
+  action: "create",
+  title: "Feature",
+  watch_files: ["src/file1.ts", "src/file2.ts"]
+}
+```
+
+**See Also:** [MIGRATION_v3.3.md](./MIGRATION_v3.3.md) for complete migration guide.
 
 ---
 
@@ -590,7 +678,7 @@ Quick reference:
 - **waiting_review**: Completed, awaiting review
 - **blocked**: Cannot proceed due to blocker
 - **done**: Completed successfully
-- **archived**: No longer relevant
+- **archived**: Completed and archived (auto-archived after 48 hours)
 
 ### Constraint Categories
 

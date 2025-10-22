@@ -159,9 +159,10 @@ type TaskStatus =
 - `done` → `archived`
 - `archived` → (terminal state, no transitions)
 
-**Auto-Stale Detection**:
+**Auto-Stale Detection & Auto-Archive**:
 - `in_progress` >2 hours → auto-move to `waiting_review`
 - `waiting_review` >24 hours → auto-move to `todo`
+- `done` >48 hours → auto-move to `archived` (weekend-aware)
 
 ---
 

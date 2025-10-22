@@ -11,6 +11,8 @@ import { DEFAULT_DB_PATH, DB_BUSY_TIMEOUT } from './constants.js';
 import type { Database as DatabaseType } from './types.js';
 import { performAutoCleanup } from './utils/cleanup.js';
 import { runAllMigrations, needsAnyMigrations } from './migrations/index.js';
+import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndTransitionToReview } from './utils/task-stale-detection.js';
+import { loadConfigFile, loadAndFlattenConfig, validateConfig } from './config/loader.js';
 
 let dbInstance: DatabaseType | null = null;
 
@@ -22,15 +24,28 @@ let dbInstance: DatabaseType | null = null;
  * @param dbPath - Optional database path (defaults to .sqlew/sqlew.db)
  * @returns SQLite database instance
  */
-export function initializeDatabase(dbPath?: string): DatabaseType {
+export function initializeDatabase(dbPath?: string, configPath?: string): DatabaseType {
   // If already initialized, return existing instance
   if (dbInstance) {
     return dbInstance;
   }
 
   try {
-    // Use provided path or default
-    const finalPath = dbPath || DEFAULT_DB_PATH;
+    // Load config file to get database path and other settings
+    const config = loadConfigFile(configPath);
+
+    // Validate config
+    const validation = validateConfig(config);
+    if (!validation.valid) {
+      console.warn('⚠️  Configuration validation warnings:');
+      validation.errors.forEach(err => console.warn(`   - ${err}`));
+    }
+
+    // Determine database path with priority:
+    // 1. CLI argument (dbPath parameter)
+    // 2. Config file (config.database.path)
+    // 3. Default path (DEFAULT_DB_PATH)
+    const finalPath = dbPath || config.database?.path || DEFAULT_DB_PATH;
 
     // Convert to absolute path if relative
     const absolutePath = isAbsolute(finalPath)
@@ -125,18 +140,62 @@ export function initializeDatabase(dbPath?: string): DatabaseType {
       initializeSchema(db);
     }
 
+    // Populate database with config file values (if any)
+    try {
+      const flatConfig = loadAndFlattenConfig(configPath);
+      let configUpdates = 0;
+
+      for (const [key, value] of Object.entries(flatConfig)) {
+        if (value !== undefined) {
+          const stringValue = typeof value === 'boolean' ? (value ? '1' : '0') : String(value);
+          db.prepare('INSERT OR REPLACE INTO m_config (key, value) VALUES (?, ?)').run(key, stringValue);
+          configUpdates++;
+        }
+      }
+
+      if (configUpdates > 0) {
+        console.log(`✓ Loaded ${configUpdates} config values from file`);
+      }
+    } catch (error) {
+      console.warn('⚠️  Failed to load config file values:', error instanceof Error ? error.message : String(error));
+    }
+
+    // Initialize v3.4.0 config keys (git-aware auto-complete)
+    // Use INSERT OR IGNORE to avoid overwriting existing values
+    const v340Configs = [
+      { key: 'git_auto_complete_enabled', value: '1' },
+      { key: 'require_all_files_committed', value: '1' },
+      { key: 'stale_review_notification_hours', value: '48' },
+    ];
+    const configInsert = db.prepare('INSERT OR IGNORE INTO m_config (key, value) VALUES (?, ?)');
+    for (const config of v340Configs) {
+      configInsert.run(config.key, config.value);
+    }
+
     // Store instance
     dbInstance = db;
 
-    // Perform initial cleanup
-    try {
-      const cleanupResult = performAutoCleanup(db);
-      if (cleanupResult.messagesDeleted > 0 || cleanupResult.fileChangesDeleted > 0) {
-        console.log(`✓ Cleanup: ${cleanupResult.messagesDeleted} messages, ${cleanupResult.fileChangesDeleted} file changes deleted`);
+    // Perform initial cleanup and task maintenance
+    // Run synchronous tasks first
+    const staleTransitions = detectAndTransitionStaleTasks(db);
+    const archivedTasks = autoArchiveOldDoneTasks(db);
+    const cleanupResult = performAutoCleanup(db);
+
+    // Run async smart review detection in background (non-blocking)
+    detectAndTransitionToReview(db).then(reviewTransitions => {
+      const taskMaintenance = [];
+      if (staleTransitions > 0) taskMaintenance.push(`${staleTransitions} stale task transitions`);
+      if (archivedTasks > 0) taskMaintenance.push(`${archivedTasks} done tasks archived`);
+      if (reviewTransitions > 0) taskMaintenance.push(`${reviewTransitions} quality-based review transitions`);
+      if (cleanupResult.messagesDeleted > 0) taskMaintenance.push(`${cleanupResult.messagesDeleted} messages`);
+      if (cleanupResult.fileChangesDeleted > 0) taskMaintenance.push(`${cleanupResult.fileChangesDeleted} file changes`);
+
+      if (taskMaintenance.length > 0) {
+        console.log(`✓ Cleanup: ${taskMaintenance.join(', ')}`);
       }
-    } catch (error) {
+    }).catch(error => {
       console.warn('⚠️  Initial cleanup failed:', error instanceof Error ? error.message : String(error));
-    }
+    });
 
     return db;
   } catch (error) {

@@ -36,6 +36,20 @@ export function calculateFileChangeCutoff(db: Database): number {
 }
 
 /**
+ * Calculate cutoff timestamp for task archive (done → archived)
+ * Respects weekend-awareness configuration
+ *
+ * @param db - Database instance
+ * @returns Unix timestamp (seconds) for cutoff
+ */
+export function calculateTaskArchiveCutoff(db: Database): number {
+  const ignoreWeekends = getConfigBool(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
+  const retentionDays = getConfigInt(db, CONFIG_KEYS.AUTO_ARCHIVE_DONE_DAYS, 2); // Default: 2 days (48 hours)
+
+  return calculateCutoffTimestamp(retentionDays, ignoreWeekends, 'days');
+}
+
+/**
  * Calculate cutoff timestamp with optional weekend-awareness
  *
  * @param retention - Retention period (hours or days)

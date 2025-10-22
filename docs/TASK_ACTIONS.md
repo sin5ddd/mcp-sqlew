@@ -562,6 +562,8 @@ Link task to decision, constraint, or file.
 
 Archive completed task (soft delete).
 
+**Note:** Tasks in `done` status are automatically archived after 48 hours (configurable via `auto_archive_done_days`). Manual archiving is useful for immediate archival needs.
+
 ### Parameters
 
 **Required:**
@@ -570,10 +572,20 @@ Archive completed task (soft delete).
 
 ### Example
 
+**Manual Archive:**
 ```javascript
 {
   action: "archive",
   task_id: 1
+}
+```
+
+**Auto-Archive Configuration:**
+```javascript
+// Change auto-archive threshold (via config tool)
+{
+  action: "update",
+  auto_archive_done_days: "3"  // Archive after 3 days instead of default 2 days
 }
 ```
 

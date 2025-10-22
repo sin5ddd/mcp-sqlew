@@ -763,9 +763,14 @@ Auto-stale detection automatically transitions idle tasks to prevent them from g
 
 The logic:
 1. Check if enabled via `task_auto_stale_enabled` config
-2. Get threshold hours from config (2h for in_progress, 24h for waiting_review)
+2. Get threshold hours/days from config
 3. Run SQL UPDATE to transition stale tasks based on `updated_ts`
 4. Return count of transitioned tasks
+
+**Transition Rules:**
+1. **`in_progress` → `waiting_review`** (>2 hours idle)
+2. **`waiting_review` → `todo`** (>24 hours idle)
+3. **`done` → `archived`** (>48 hours idle, weekend-aware) - **Auto-Archive**
 
 SQL Pattern:
 ```sql
@@ -779,38 +784,67 @@ WHERE status_id = ? AND updated_ts < unixepoch() - ?
 1. **Before `list` action**
    - Ensures stale tasks show correct status
    - Returns `stale_tasks_transitioned` count
+   - Returns `archived_tasks` count
 
 2. **Before `move` action**
    - Prevents moving already-stale tasks
    - Ensures status consistency
 
+3. **On database startup**
+   - Maintenance on initialization
+   - Cleans up stale/old tasks
+
 ### Configuration
 
-**Enable/Disable:**
+**Via MCP Tool (config):**
+```javascript
+// Update auto-archive threshold
+{
+  action: "update",
+  auto_archive_done_days: "3"  // Archive after 3 days instead of 2
+}
+
+// Enable weekend-aware mode (affects auto-archive, messages, files)
+{
+  action: "update",
+  autodelete_ignore_weekend: "1"
+}
+```
+
+**Via .sqlew/config.toml:**
+```toml
+[tasks]
+auto_archive_done_days = 3          # Archive after 3 days
+stale_hours_in_progress = 4         # in_progress → waiting_review after 4 hours
+stale_hours_waiting_review = 48     # waiting_review → todo after 48 hours
+auto_stale_enabled = true
+
+[autodelete]
+ignore_weekend = true               # Weekend-aware mode (shared setting)
+```
+
+**Via SQL (Advanced):**
 ```sql
+-- Enable/Disable
 UPDATE m_config SET value = '1' WHERE key = 'task_auto_stale_enabled';  -- Enable
 UPDATE m_config SET value = '0' WHERE key = 'task_auto_stale_enabled';  -- Disable
-```
 
-**Adjust Thresholds:**
-```sql
--- in_progress → waiting_review after 4 hours
+-- Adjust auto-archive threshold
+UPDATE m_config SET value = '3' WHERE key = 'auto_archive_done_days';  -- 3 days
+
+-- Adjust stale detection thresholds
 UPDATE m_config SET value = '4' WHERE key = 'task_stale_hours_in_progress';
-
--- waiting_review → todo after 48 hours
 UPDATE m_config SET value = '48' WHERE key = 'task_stale_hours_waiting_review';
-```
 
-**Check Current Config:**
-```sql
-SELECT key, value FROM m_config WHERE key LIKE 'task_%';
+-- Check current config
+SELECT key, value FROM m_config WHERE key LIKE 'task_%' OR key LIKE 'auto_%';
 ```
 
 ### Monitoring
 
 Track transitions via `t_activity_log` table:
 ```sql
--- Recent transitions
+-- Recent transitions (including auto-archive)
 SELECT * FROM t_activity_log
 WHERE entity_type = 'task' AND action_type = 'status_change'
 ORDER BY ts DESC LIMIT 20;
@@ -819,7 +853,43 @@ ORDER BY ts DESC LIMIT 20;
 SELECT task_id, COUNT(*) as stale_count FROM t_activity_log
 WHERE entity_type = 'task' AND json_extract(details, '$.new_status') = 3
 GROUP BY task_id HAVING stale_count > 2;
+
+-- Recently auto-archived tasks
+SELECT * FROM t_activity_log
+WHERE entity_type = 'task'
+  AND action_type = 'status_change'
+  AND json_extract(details, '$.new_status') = 6  -- ARCHIVED status
+ORDER BY ts DESC LIMIT 20;
+
+-- Count of archived tasks per day
+SELECT date(ts, 'unixepoch') as day, COUNT(*) as archived_count
+FROM t_activity_log
+WHERE entity_type = 'task'
+  AND action_type = 'status_change'
+  AND json_extract(details, '$.new_status') = 6
+GROUP BY day
+ORDER BY day DESC;
 ```
+
+### Weekend-Aware Behavior
+
+When `autodelete_ignore_weekend` is enabled (via config.toml or MCP tool):
+
+**Example 1 - Task Completed on Friday:**
+- Task marked `done`: Friday 5:00 PM
+- Default 48 hours: Would archive Sunday 5:00 PM
+- **Weekend-aware**: Archives Tuesday 5:00 PM (skips Sat/Sun)
+
+**Example 2 - Task Completed on Wednesday:**
+- Task marked `done`: Wednesday 2:00 PM
+- Default 48 hours: Would archive Friday 2:00 PM
+- **Weekend-aware**: Archives Friday 2:00 PM (no weekend in between)
+
+**Why Weekend-Aware Mode?**
+- Teams/AI agents may not work on weekends
+- Prevents premature archiving during weekend breaks
+- Consistent with message/file retention behavior
+- Configurable: Disable if you work 7 days/week
 
 ## Linking System
 

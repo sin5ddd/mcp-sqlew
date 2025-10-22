@@ -91,13 +91,17 @@ Every task has:
 **`in_progress`:**
 - Active work happening
 - Should have assignee
-- Auto-transitions to `waiting_review` after 2 hours idle
+- Auto-transitions to `waiting_review` via:
+  - Smart quality gates (v3.3.0): All files modified, tests pass, TypeScript compiles, 3min idle (default)
+  - Time-based stale detection: 2 hours idle (fallback)
 
 **`waiting_review`:**
-- Awaiting human/AI feedback
+- Awaiting human/AI feedback or git commit
 - Code review needed
-- Design approval pending
-- Auto-transitions to `todo` after 24 hours idle
+- **Auto-transitions to `done` (v3.4.0 Git-aware):** When ALL watched files are committed to Git
+- Git commits = implicit review approval
+- Real-time: Detects commits via `.git/index` file watcher
+- Periodic: Checks on `task.list()` calls
 
 **`blocked`:**
 - Cannot proceed
@@ -119,9 +123,24 @@ Every task has:
 ### Visual Diagram
 
 ```
+v3.4.0 Git-Aware Workflow:
 todo → in_progress → waiting_review → done → archived
-         ↓              ↓
-      blocked ────────┘
+  ↓         ↓              ↓
+  |     (Quality gates   (Git commits)
+  |      or 2h idle)         ↓
+  |         ↓          (All watched files
+  └──── blocked        committed to Git)
+
+Real-time: .git/index file watcher detects commits
+Periodic: task.list() checks git log
+
+Alternative (with acceptance_criteria):
+todo → in_progress → done → archived
+  ↓         ↓
+  |    (Criteria met,
+  |     skip review)
+  |         ↓
+  └──── blocked
 ```
 
 ### Valid Transitions
@@ -129,10 +148,10 @@ todo → in_progress → waiting_review → done → archived
 | From Status | To Status(es) | Rationale |
 |-------------|--------------|-----------|
 | `todo` | `in_progress`, `blocked` | Start work or discover blocker |
-| `in_progress` | `waiting_review`, `blocked`, `done` | Need review, hit blocker, or complete |
+| `in_progress` | `waiting_review`, `blocked`, `done` | Quality gates met (v3.3.0), need review, hit blocker, or complete |
 | `waiting_review` | `in_progress`, `todo`, `done` | Resume work, reset to backlog, or approve |
 | `blocked` | `todo`, `in_progress` | Blocker resolved, resume or reset |
-| `done` | `archived` | Archive completed work |
+| `done` | `archived` | Archive completed work (auto after 48h in v3.3.0) |
 | `archived` | *(terminal state)* | No transitions allowed |
 
 ### Complete Transition Matrix
@@ -181,29 +200,49 @@ Auto-stale detection automatically transitions idle tasks to prevent them from g
 
 ### Detection Rules
 
-1. **`in_progress` → `waiting_review`** (>2 hours idle)
+**v3.3.0+: Smart Quality-Based Detection (Primary)**
+
+1. **`in_progress` → `waiting_review`** (quality gates met)
+   - All watched files modified at least once
+   - TypeScript compiles without errors (if .ts files)
+   - Tests pass (if test files exist)
+   - 15 minutes idle (no file modifications)
+   - Rationale: Work is complete and ready for review
+   - Configuration: See `.sqlew/config.toml` review_* settings
+
+**Time-Based Stale Detection (Fallback)**
+
+2. **`in_progress` → `waiting_review`** (>2 hours idle)
    - Rationale: Likely waiting for review or hit usage limit
    - Check: `updated_ts` older than 2 hours
 
-2. **`waiting_review` → `todo`** (>24 hours idle)
+3. **`waiting_review` → `todo`** (>24 hours idle)
    - Rationale: Review not happening, reset to backlog
    - Check: `updated_ts` older than 24 hours
+
+4. **`done` → `archived`** (>48 hours idle) - **Auto-Archive (v3.3.0)**
+   - Rationale: Completed tasks should be archived automatically
+   - Check: `updated_ts` older than 48 hours (2 days)
+   - Weekend-aware: Task done Friday → archives Tuesday (skips Sat/Sun)
 
 ### When It Runs
 
 Automatically runs before:
 1. **`list` action** - Ensures stale tasks show correct status
 2. **`move` action** - Prevents moving already-stale tasks
+3. **Database startup** - Maintenance on initialization
 
 **Response includes:**
 - `stale_tasks_transitioned`: Count of auto-transitioned tasks
+- `archived_tasks`: Count of auto-archived done tasks (in list action)
 
 **Example Response:**
 ```javascript
 {
   tasks: [...],
   count: 5,
-  stale_tasks_transitioned: 2  // 2 tasks auto-transitioned
+  stale_tasks_transitioned: 2,  // 2 tasks auto-transitioned
+  archived_tasks: 1              // 1 done task auto-archived
 }
 ```
 
@@ -213,25 +252,51 @@ Automatically runs before:
 - `task_auto_stale_enabled`: '1' (enabled)
 - `task_stale_hours_in_progress`: '2' (2 hours)
 - `task_stale_hours_waiting_review`: '24' (24 hours)
+- `auto_archive_done_days`: '2' (2 days / 48 hours)
+- `autodelete_ignore_weekend`: '0' (false) - Shared with messages/files cleanup
 
-**Enable/Disable:**
+**Via MCP Tool (config):**
+```javascript
+// Update auto-archive threshold
+{
+  action: "update",
+  auto_archive_done_days: "3"  // Archive after 3 days instead of 2
+}
+
+// Enable weekend-aware mode (affects auto-archive, messages, files)
+{
+  action: "update",
+  autodelete_ignore_weekend: "1"
+}
+```
+
+**Via .sqlew/config.toml:**
+```toml
+[tasks]
+auto_archive_done_days = 3          # Archive after 3 days
+stale_hours_in_progress = 4         # in_progress → waiting_review after 4 hours
+stale_hours_waiting_review = 48     # waiting_review → todo after 48 hours
+auto_stale_enabled = true
+
+[autodelete]
+ignore_weekend = true               # Weekend-aware mode (shared setting)
+```
+
+**Via SQL (Advanced):**
 ```sql
+-- Enable/Disable auto-stale
 UPDATE m_config SET value = '1' WHERE key = 'task_auto_stale_enabled';  -- Enable
 UPDATE m_config SET value = '0' WHERE key = 'task_auto_stale_enabled';  -- Disable
-```
 
-**Adjust Thresholds:**
-```sql
--- in_progress → waiting_review after 4 hours
+-- Adjust auto-archive threshold
+UPDATE m_config SET value = '3' WHERE key = 'auto_archive_done_days';  -- 3 days
+
+-- Adjust stale detection thresholds
 UPDATE m_config SET value = '4' WHERE key = 'task_stale_hours_in_progress';
-
--- waiting_review → todo after 48 hours
 UPDATE m_config SET value = '48' WHERE key = 'task_stale_hours_waiting_review';
-```
 
-**Check Current Config:**
-```sql
-SELECT key, value FROM m_config WHERE key LIKE 'task_%';
+-- Check current config
+SELECT key, value FROM m_config WHERE key LIKE 'task_%' OR key LIKE 'auto_%';
 ```
 
 ### Monitoring
@@ -239,7 +304,7 @@ SELECT key, value FROM m_config WHERE key LIKE 'task_%';
 Track transitions via `t_activity_log` table:
 
 ```sql
--- Recent auto-transitions
+-- Recent auto-transitions (including auto-archive)
 SELECT * FROM t_activity_log
 WHERE entity_type = 'task' AND action_type = 'status_change'
 ORDER BY ts DESC LIMIT 20;
@@ -248,7 +313,43 @@ ORDER BY ts DESC LIMIT 20;
 SELECT task_id, COUNT(*) as stale_count FROM t_activity_log
 WHERE entity_type = 'task' AND json_extract(details, '$.new_status') = 3
 GROUP BY task_id HAVING stale_count > 2;
+
+-- Recently auto-archived tasks
+SELECT * FROM t_activity_log
+WHERE entity_type = 'task'
+  AND action_type = 'status_change'
+  AND json_extract(details, '$.new_status') = 6  -- ARCHIVED status
+ORDER BY ts DESC LIMIT 20;
+
+-- Count of archived tasks per day
+SELECT date(ts, 'unixepoch') as day, COUNT(*) as archived_count
+FROM t_activity_log
+WHERE entity_type = 'task'
+  AND action_type = 'status_change'
+  AND json_extract(details, '$.new_status') = 6
+GROUP BY day
+ORDER BY day DESC;
 ```
+
+### Weekend-Aware Behavior
+
+When `autodelete_ignore_weekend` is enabled (via config.toml or MCP tool):
+
+**Example 1 - Task Completed on Friday:**
+- Task marked `done`: Friday 5:00 PM
+- Default 48 hours: Would archive Sunday 5:00 PM
+- **Weekend-aware**: Archives Tuesday 5:00 PM (skips Sat/Sun)
+
+**Example 2 - Task Completed on Wednesday:**
+- Task marked `done`: Wednesday 2:00 PM
+- Default 48 hours: Would archive Friday 2:00 PM
+- **Weekend-aware**: Archives Friday 2:00 PM (no weekend in between)
+
+**Why Weekend-Aware Mode?**
+- Teams/AI agents may not work on weekends
+- Prevents premature archiving during weekend breaks
+- Consistent with message/file retention behavior
+- Configurable: Disable if you work 7 days/week
 
 ## Priority System
 

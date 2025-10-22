@@ -265,6 +265,11 @@ export const CONFIG_KEYS = {
   AUTODELETE_IGNORE_WEEKEND: 'autodelete_ignore_weekend',
   AUTODELETE_MESSAGE_HOURS: 'autodelete_message_hours',
   AUTODELETE_FILE_HISTORY_DAYS: 'autodelete_file_history_days',
+  AUTO_ARCHIVE_DONE_DAYS: 'auto_archive_done_days',
+  REVIEW_IDLE_MINUTES: 'review_idle_minutes',
+  REVIEW_REQUIRE_ALL_FILES_MODIFIED: 'review_require_all_files_modified',
+  REVIEW_REQUIRE_TESTS_PASS: 'review_require_tests_pass',
+  REVIEW_REQUIRE_COMPILE: 'review_require_compile',
 } as const;
 
 // ============================================================================

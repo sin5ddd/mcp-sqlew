@@ -672,6 +672,11 @@ export interface GetStatsResponse {
     high: number;     // priority = 3
     critical: number; // priority = 4
   };
+  // Review status (v3.4.0)
+  review_status: {
+    awaiting_commit: number;  // Tasks in waiting_review awaiting git commits
+    overdue_review: number;   // Tasks in waiting_review > 24h
+  };
 }
 
 export interface FlushWALResponse {

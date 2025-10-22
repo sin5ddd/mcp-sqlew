@@ -72,7 +72,15 @@ Traditional code only tells you **WHAT** and **HOW**. sqlew adds **WHY**:
   - Auto-transition: `todo` → `in_progress` on file edit
   - Auto-complete: `in_progress` → `done` when acceptance criteria pass
   - 97% token reduction (4,650 tokens saved per 6-task session)
-- **Auto-Stale Detection**: Tasks automatically transition when idle
+- **Smart Review Detection** (v3.3.0): Quality-based auto-transition to `waiting_review`
+  - All watched files modified + TypeScript compiles + Tests pass + 15min idle
+  - Purely algorithmic - no AI instructions needed
+  - Configurable quality gates via `.sqlew/config.toml`
+  - Hybrid mode: Tasks with acceptance_criteria skip review → go directly to `done`
+- **Auto-Stale Detection & Auto-Archive**: Tasks automatically transition when idle
+  - `in_progress` → `waiting_review` (quality gates or >2 hours idle)
+  - `waiting_review` → `todo` (>24 hours idle)
+  - `done` → `archived` (>48 hours idle, weekend-aware)
 - **Weekend-Aware Cleanup**: Smart retention that pauses during weekends
 - **Batch Operations**: Process up to 50 items atomically
 
@@ -122,6 +130,47 @@ That's it! Restart Claude Desktop and sqlew is ready.
 ```
 
 Default location: `.sqlew/sqlew.db` in current directory
+
+## Configuration
+
+### Optional Config File
+
+sqlew supports TOML configuration files for persistent settings (`.sqlew/config.toml`):
+
+```toml
+[database]
+path = ".sqlew/custom.db"  # Override database location
+
+[autodelete]
+ignore_weekend = true       # Skip weekends in retention
+message_hours = 48          # Keep messages 48 hours
+file_history_days = 14      # Keep file history 14 days
+
+[tasks]
+auto_archive_done_days = 2
+stale_hours_in_progress = 2
+auto_stale_enabled = true
+```
+
+**Setup:**
+```bash
+# Copy example config
+cp .sqlew/config.toml.example .sqlew/config.toml
+
+# Edit settings
+nano .sqlew/config.toml
+
+# Start sqlew (automatically loads config)
+npx sqlew
+```
+
+**Priority:** CLI args > config.toml > database defaults
+
+**Complete Guide:** See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for:
+- All configuration options and validation rules
+- Common configurations (dev/prod/weekend-aware)
+- Runtime updates via MCP tools
+- Troubleshooting
 
 ## Quick Start
 
@@ -218,10 +267,12 @@ Each tool supports `action: "help"` for full documentation and `action: "example
 
 **Shared References:**
 - 📘 **[Shared Concepts](docs/SHARED_CONCEPTS.md)** - Layer definitions, enum values, atomic mode (339 lines, ~17k tokens)
+- ⚙️ **[Configuration](docs/CONFIGURATION.md)** - Config file setup, all options, validation rules (800+ lines, ~20k tokens) **NEW v3.3.0**
 - 🏗️ **[Architecture](docs/ARCHITECTURE.md)** - Technical architecture and database schema
 
 ### For Developers
 
+- **[Configuration Guide](docs/CONFIGURATION.md)** - TOML config file setup and options
 - **[Building from Source](docs/ARCHITECTURE.md#development)** - Setup and build instructions
 - **[Migration Guides](docs/MIGRATION_v2.md)** - Version upgrade guides
 - **[CLI Tool](docs/AI_AGENT_GUIDE.md#cli-usage)** - Query database from terminal
@@ -355,7 +406,7 @@ on [GitHub Sponsors](https://github.com/sponsors/sin5ddd)
 
 ## Version
 
-Current version: **3.2.2**
+Current version: **3.3.0**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License

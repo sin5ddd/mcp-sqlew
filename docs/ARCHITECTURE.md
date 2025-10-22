@@ -166,6 +166,18 @@ CREATE TABLE constraint_categories (
 ```
 Purpose: Constraint types (performance, architecture, security)
 
+#### m_config
+```sql
+CREATE TABLE m_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+```
+Purpose: Configuration storage (retention settings, task thresholds)
+- Populated from `.sqlew/config.toml` on startup
+- Accessible via MCP `config` tool
+- See [CONFIGURATION.md](CONFIGURATION.md) for details
+
 ### Transaction Tables (Core Data)
 
 #### decisions (String Values)

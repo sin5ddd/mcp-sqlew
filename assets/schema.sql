@@ -539,7 +539,12 @@ INSERT OR IGNORE INTO m_config (key, value) VALUES
     ('autodelete_file_history_days', '7'),
     ('task_stale_hours_in_progress', '2'),
     ('task_stale_hours_waiting_review', '24'),
-    ('task_auto_stale_enabled', '1');
+    ('task_auto_stale_enabled', '1'),
+    ('auto_archive_done_days', '2'),
+    ('review_idle_minutes', '15'),
+    ('review_require_all_files_modified', '1'),
+    ('review_require_tests_pass', '1'),
+    ('review_require_compile', '1');
 
 -- Task Statuses (1=todo, 2=in_progress, 3=waiting_review, 4=blocked, 5=done, 6=archived)
 INSERT OR IGNORE INTO m_task_statuses (id, name) VALUES

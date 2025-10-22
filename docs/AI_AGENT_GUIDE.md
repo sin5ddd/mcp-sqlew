@@ -127,7 +127,7 @@ Each tool serves a distinct purpose in the MCP sqlew ecosystem:
                  │  └─> Use `task` tool
                  │      • Examples: "Implement feature X", "Fix bug Y"
                  │      • Key: Tracks TODO items and progress
-                 │      • Supports: status transitions, auto-stale, linking
+                 │      • Supports: status transitions, auto-stale, auto-archive, linking
                  │
                  ├─ Record file modifications?
                  │  └─> Use `file` tool
