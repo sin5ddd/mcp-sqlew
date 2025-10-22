@@ -7,42 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.4.0] - 2025-10-22
 
-### Added - Git-Aware Auto-Complete 🎯
+### Added - VCS-Aware Auto-Complete 🎯
 
-**Major Feature: Automatic Task Completion via Git Commits**
+**Major Feature: Automatic Task Completion via Version Control Commits**
 
-Replace flawed auto-revert logic with intelligent git-commit-based task completion. When ALL watched files for a task are committed to Git, the task automatically transitions from `waiting_review` → `done`. Git commits serve as implicit review approval.
+Replace flawed auto-revert logic with intelligent VCS-commit-based task completion. When ALL watched files for a task are committed to version control (Git, Mercurial, or SVN), the task automatically transitions from `waiting_review` → `done`. VCS commits serve as implicit review approval.
+
+**Supported VCS Systems:**
+- ✅ **Git** - Full support with `.git/index` watching
+- ✅ **Mercurial (hg)** - Full support with `.hg/dirstate` watching
+- ✅ **SVN (Subversion)** - Periodic check support (no local index file)
+- 🔮 **Perforce** - Planned for future release (see [#19](https://github.com/sin5ddd/mcp-sqlew/issues/19))
+- 🔮 **Plastic SCM** - Planned for future release (see [#19](https://github.com/sin5ddd/mcp-sqlew/issues/19))
 
 #### Core Implementation
 
-**1. `detectAndCompleteReviewedTasks()` Function**
-- New core function for git-aware auto-complete detection
-- Uses `git log --since="@<task.created_ts>" --name-only` to query commit history
-- Validates ALL watched files are committed (configurable)
-- Gracefully handles non-git repositories (skips auto-complete)
-- **File**: `src/utils/task-stale-detection.ts`
-- **Token Efficiency**: Zero token cost - uses local git commands
+**1. VCS Adapter Interface (`src/utils/vcs-adapter.ts`)**
+- **New abstraction layer** supporting multiple version control systems
+- Interface: `VCSAdapter` with methods: `isRepository()`, `getCommittedFilesSince()`, `getVCSType()`
+- **Adapters implemented:**
+  - `GitAdapter` - Uses `git log --since` for commit history
+  - `MercurialAdapter` - Uses `hg log -d` for commit history
+  - `SVNAdapter` - Uses `svn log --xml` for commit history
+- **Auto-detection**: `detectVCS()` automatically detects VCS type (Git → Mercurial → SVN)
+- **Token Efficiency**: Zero token cost - uses local VCS commands
 
-**2. Real-Time Git Index Watching**
-- File watcher monitors `.git/index` for changes
-- Detects `git add` and `git commit` operations in real-time
-- Triggers `detectAndCompleteReviewedTasks()` automatically on git operations
+**2. `detectAndCompleteReviewedTasks()` Function**
+- Refactored to use VCS adapter abstraction layer
+- Auto-detects VCS type at runtime (no configuration required)
+- Validates ALL watched files are committed (configurable)
+- Gracefully handles non-VCS repositories (skips auto-complete)
+- **File**: `src/utils/task-stale-detection.ts`
+- **Supported**: Git, Mercurial, SVN
+
+**3. Real-Time VCS Index Watching**
+- File watcher monitors VCS index files for changes:
+  - Git: `.git/index` (commit operations)
+  - Mercurial: `.hg/dirstate` (commit operations)
+  - SVN: No local index (commits are remote)
+- Detects VCS operations in real-time
+- Triggers `detectAndCompleteReviewedTasks()` automatically on VCS commits
 - **Files**: `src/watcher/file-watcher.ts`, `src/watcher/index.ts`
 - **Benefit**: Immediate task completion without manual intervention
 
-**3. Periodic Git Checks**
+**4. Periodic VCS Checks**
 - `task.list()` action now checks for committed files before returning
 - Ensures eventual task completion even if file watcher missed events
+- Works with all VCS systems (Git, Mercurial, SVN)
 - **File**: `src/tools/tasks.ts`
 - **Response Fields**: `git_auto_completed` (count of auto-completed tasks)
 
-**4. Enhanced Inline Status (v3.4.0)**
+**5. Enhanced Inline Status (v3.4.0)**
 - `stats` tool now includes `review_status` section
 - Shows `awaiting_commit` count (tasks in waiting_review)
 - Shows `overdue_review` count (tasks in waiting_review >24h)
 - **File**: `src/tools/utils.ts`
 
-**5. Configuration Options**
+**6. Configuration Options**
 - `git_auto_complete_enabled` (default: '1') - Enable/disable feature
 - `require_all_files_committed` (default: '1') - ALL vs ANY files committed
 - `stale_review_notification_hours` (default: '48') - Notification threshold
@@ -55,7 +76,7 @@ Replace flawed auto-revert logic with intelligent git-commit-based task completi
 waiting_review (24h idle) → todo (work discarded ❌)
 ```
 
-**After v3.4.0 (GIT-AWARE):**
+**After v3.4.0 (VCS-AWARE):**
 ```
 waiting_review (all files committed) → done (work preserved ✅)
 ```
@@ -63,7 +84,8 @@ waiting_review (all files committed) → done (work preserved ✅)
 **Why This Matters:**
 - Tasks reaching `waiting_review` have passed quality gates (files modified, tests pass, compile success)
 - Work is essentially DONE - reverting to `todo` discarded completed work
-- Git commits are a natural, persistent signal that code has been reviewed and approved
+- VCS commits are a natural, persistent signal that code has been reviewed and approved
+- **Multi-VCS Support**: Works with Git, Mercurial, SVN - no configuration needed (auto-detection)
 
 #### Usage Examples
 
@@ -77,11 +99,12 @@ task action=create
 
 // 2. Edit files → auto-transition to in_progress
 // 3. Quality gates pass → auto-transition to waiting_review
-// 4. Developer commits files:
-git add src/auth.ts src/auth.test.ts
+// 4. Developer commits files (any VCS):
 git commit -m "feat: Add JWT authentication"
+// OR: hg commit -m "feat: Add JWT authentication"
+// OR: svn commit -m "feat: Add JWT authentication"
 
-// 5. File watcher detects .git/index change
+// 5. File watcher detects VCS index change (Git/Mercurial)
 // 6. Auto-complete runs → Task moves to 'done' ✅
 ```
 

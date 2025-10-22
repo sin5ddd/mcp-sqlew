@@ -21,6 +21,7 @@ import { GitIgnoreParser, createGitIgnoreParser } from './gitignore-parser.js';
 import { checkReadyForReview } from '../utils/quality-checks.js';
 import { CONFIG_KEYS } from '../constants.js';
 import { detectAndCompleteReviewedTasks } from '../utils/task-stale-detection.js';
+import { detectVCS } from '../utils/vcs-adapter.js';
 
 /**
  * File-to-task mapping for efficient lookup
@@ -95,18 +96,18 @@ export class FileWatcher {
 
       // Set up event handlers
       this.watcher.on('change', (path: string) => {
-        // Check if this is the git index file
-        if (path.endsWith('.git/index') || path.endsWith('.git\\index')) {
-          this.handleGitIndexChange(path);
+        // Check if this is a VCS index file
+        if (this.isVCSIndexFile(path)) {
+          this.handleVCSIndexChange(path);
         } else {
           this.handleFileChange(path);
         }
       });
 
       this.watcher.on('add', (path: string) => {
-        // Check if this is the git index file
-        if (path.endsWith('.git/index') || path.endsWith('.git\\index')) {
-          this.handleGitIndexChange(path);
+        // Check if this is a VCS index file
+        if (this.isVCSIndexFile(path)) {
+          this.handleVCSIndexChange(path);
         } else {
           this.handleFileChange(path);
         }
@@ -123,12 +124,8 @@ export class FileWatcher {
       this.lastModifiedTimes.clear();
       this.filesModifiedSet.clear();
 
-      // Watch .git/index for git commits (v3.4.0 Git-aware auto-complete)
-      const gitIndexPath = join(this.projectRoot, '.git', 'index');
-      if (existsSync(gitIndexPath)) {
-        this.watcher.add(gitIndexPath);
-        console.error('✓ Watching .git/index for git commits (v3.4.0)');
-      }
+      // Watch VCS index files for commit detection (v3.4.0 VCS-aware auto-complete)
+      await this.watchVCSIndexFiles();
 
       this.isRunning = true;
       console.error('✓ File watcher started successfully');
@@ -261,6 +258,64 @@ export class FileWatcher {
   }
 
   /**
+   * Check if a path is a VCS index file
+   */
+  private isVCSIndexFile(path: string): boolean {
+    // Git index file
+    if (path.endsWith('.git/index') || path.endsWith('.git\\index')) {
+      return true;
+    }
+    // Mercurial dirstate file
+    if (path.endsWith('.hg/dirstate') || path.endsWith('.hg\\dirstate')) {
+      return true;
+    }
+    // SVN doesn't have a local index file that changes on commit
+    return false;
+  }
+
+  /**
+   * Watch VCS index files for commit detection
+   */
+  private async watchVCSIndexFiles(): Promise<void> {
+    // Detect VCS type
+    const vcsAdapter = await detectVCS(this.projectRoot);
+
+    if (!vcsAdapter) {
+      console.error('ℹ No VCS detected - skipping VCS index watching');
+      return;
+    }
+
+    const vcsType = vcsAdapter.getVCSType();
+
+    // Watch appropriate VCS index file based on detected VCS
+    switch (vcsType) {
+      case 'Git': {
+        const gitIndexPath = join(this.projectRoot, '.git', 'index');
+        if (existsSync(gitIndexPath) && this.watcher) {
+          this.watcher.add(gitIndexPath);
+          console.error('✓ Watching .git/index for Git commits (v3.4.0)');
+        }
+        break;
+      }
+      case 'Mercurial': {
+        const hgDirstatePath = join(this.projectRoot, '.hg', 'dirstate');
+        if (existsSync(hgDirstatePath) && this.watcher) {
+          this.watcher.add(hgDirstatePath);
+          console.error('✓ Watching .hg/dirstate for Mercurial commits (v3.4.0)');
+        }
+        break;
+      }
+      case 'SVN': {
+        // SVN doesn't have a local index file - commits are remote
+        console.error('ℹ SVN detected - no local index file to watch (commits are remote)');
+        break;
+      }
+      default:
+        console.error(`ℹ Unknown VCS type: ${vcsType} - skipping index watching`);
+    }
+  }
+
+  /**
    * Handle file change event
    */
   private async handleFileChange(filePath: string): Promise<void> {
@@ -350,16 +405,15 @@ export class FileWatcher {
   }
 
   /**
-   * Handle .git/index changes (v3.4.0 Git-aware auto-complete)
-   * When .git/index is modified (git add/commit), check for tasks ready to auto-complete
+   * Handle VCS index file change - triggers VCS-aware auto-complete (v3.4.0)
    */
-  private async handleGitIndexChange(filePath: string): Promise<void> {
-    console.error('\n🔄 Git index changed - checking for tasks ready to auto-complete');
+  private async handleVCSIndexChange(filePath: string): Promise<void> {
+    console.error('\n🔄 VCS index changed - checking for tasks ready to auto-complete');
 
     const db = getDatabase();
 
     try {
-      // Run git-aware auto-complete detection
+      // Run VCS-aware auto-complete detection
       const completedCount = await detectAndCompleteReviewedTasks(db);
 
       if (completedCount > 0) {
@@ -368,7 +422,7 @@ export class FileWatcher {
         console.error(`  ℹ No tasks ready for auto-completion (all watched files not yet committed)`);
       }
     } catch (error) {
-      console.error(`  ✗ Error during git-aware auto-complete:`, error);
+      console.error(`  ✗ Error during VCS-aware auto-complete:`, error);
     }
   }
 

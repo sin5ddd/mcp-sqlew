@@ -9,10 +9,7 @@ import { calculateTaskArchiveCutoff } from './retention.js';
 import { checkReadyForReview } from './quality-checks.js';
 import { statSync } from 'fs';
 import { join } from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { detectVCS } from './vcs-adapter.js';
 
 /**
  * Task status IDs (matching schema)
@@ -178,20 +175,21 @@ export function autoArchiveOldDoneTasks(db: Database): number {
 }
 
 /**
- * Detect and complete tasks in waiting_review when all watched files are committed to Git
+ * Detect and complete tasks in waiting_review when all watched files are committed
  *
- * Git-aware auto-complete strategy (v3.4.0):
+ * VCS-aware auto-complete strategy (v3.4.0):
  * - Find all tasks in `waiting_review` status with watched files
  * - For each task, check if ALL watched files have been committed since task creation
- * - Use `git log --since="@<task.created_ts>" --name-only` to query Git history
- * - If all files committed → transition to `done` (Git commit = implicit approval)
- * - Gracefully handle non-Git repos (skip auto-complete)
+ * - Query VCS history to determine committed files
+ * - If all files committed → transition to `done` (VCS commit = implicit approval)
+ * - Supports multiple VCS: Git, Mercurial, SVN
+ * - Gracefully handle non-VCS repos (skip auto-complete)
  *
  * @param db - Database instance
  * @returns Count of auto-completed tasks
  */
 export async function detectAndCompleteReviewedTasks(db: Database): Promise<number> {
-  // 1. Check if git auto-complete is enabled
+  // 1. Check if auto-complete is enabled
   const isEnabled = getConfigBool(db, CONFIG_KEYS.GIT_AUTO_COMPLETE_ENABLED, true);
   if (!isEnabled) {
     return 0;
@@ -214,14 +212,15 @@ export async function detectAndCompleteReviewedTasks(db: Database): Promise<numb
   let completed = 0;
   const projectRoot = process.cwd();
 
-  // 3. Check if we're in a Git repository
-  try {
-    await execAsync('git rev-parse --git-dir', { cwd: projectRoot });
-  } catch (error) {
-    // Not a Git repository - skip git-aware completion
-    console.error('  ℹ Not a Git repository - skipping git-aware auto-complete');
+  // 3. Detect VCS type
+  const vcsAdapter = await detectVCS(projectRoot);
+  if (!vcsAdapter) {
+    // Not a VCS repository - skip VCS-aware completion
+    console.error('  ℹ Not a VCS repository (Git/Mercurial/SVN) - skipping VCS-aware auto-complete');
     return 0;
   }
+
+  console.error(`  ℹ VCS detected: ${vcsAdapter.getVCSType()}`);
 
   // 4. For each candidate task, check if all watched files are committed
   for (const task of candidateTasks) {
@@ -241,30 +240,17 @@ export async function detectAndCompleteReviewedTasks(db: Database): Promise<numb
 
       const filePaths = watchedFiles.map(f => f.path);
 
-      // Query Git log for commits since task creation
-      // Format: --since="@<unix_timestamp>" --name-only
-      // This returns all files committed since the task was created
-      const sinceTimestamp = `@${task.created_ts}`;
-      const gitCommand = `git log --since="${sinceTimestamp}" --name-only --pretty=format:""`;
+      // Query VCS history for commits since task creation
+      // Convert Unix timestamp to ISO 8601 format for VCS adapters
+      const sinceTimestamp = new Date(task.created_ts * 1000).toISOString();
 
       let committedFiles: Set<string>;
       try {
-        const { stdout } = await execAsync(gitCommand, {
-          cwd: projectRoot,
-          maxBuffer: 1024 * 1024 * 5, // 5MB buffer
-          timeout: 10000, // 10 second timeout
-        });
-
-        // Parse output - filter empty lines and create a Set of committed file paths
-        committedFiles = new Set(
-          stdout
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0)
-        );
+        const committedFilesList = await vcsAdapter.getCommittedFilesSince(sinceTimestamp);
+        committedFiles = new Set(committedFilesList);
       } catch (error) {
-        // Git command failed - skip this task
-        console.error(`  ⏸ Task #${task.id}: Git log failed - ${error instanceof Error ? error.message : String(error)}`);
+        // VCS query failed - skip this task
+        console.error(`  ⏸ Task #${task.id}: ${vcsAdapter.getVCSType()} query failed - ${error instanceof Error ? error.message : String(error)}`);
         continue;
       }
 
