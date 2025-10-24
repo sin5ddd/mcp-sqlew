@@ -12,7 +12,7 @@ import {
   getOrCreateFile,
   transaction
 } from '../database.js';
-import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndCompleteReviewedTasks } from '../utils/task-stale-detection.js';
+import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndCompleteReviewedTasks, detectAndArchiveOnCommit } from '../utils/task-stale-detection.js';
 import { processBatch } from '../utils/batch.js';
 import { FileWatcher } from '../watcher/index.js';
 import {
@@ -719,6 +719,7 @@ export async function listTasks(params: {
     // Run auto-stale detection, git-aware completion, and auto-archive before listing
     const transitionCount = detectAndTransitionStaleTasks(actualDb);
     const gitCompletedCount = await detectAndCompleteReviewedTasks(actualDb);
+    const gitArchivedCount = await detectAndArchiveOnCommit(actualDb);
     const archiveCount = autoArchiveOldDoneTasks(actualDb);
 
     // Build query with optional dependency counts
@@ -801,6 +802,7 @@ export async function listTasks(params: {
       count: rows.length,
       stale_tasks_transitioned: transitionCount,
       git_auto_completed: gitCompletedCount,
+      git_archived: gitArchivedCount,
       archived_tasks: archiveCount
     };
   } catch (error) {
