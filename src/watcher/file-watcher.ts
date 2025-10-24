@@ -47,6 +47,7 @@ export class FileWatcher {
   private projectRoot: string;
   private lastModifiedTimes: Map<number, number> = new Map(); // taskId -> timestamp
   private filesModifiedSet: Map<number, Set<string>> = new Map(); // taskId -> modified files
+  private vcsDetectionInterval: NodeJS.Timeout | null = null; // Periodic VCS re-detection (v3.5.3)
 
   private constructor() {
     // Private constructor for singleton
@@ -147,6 +148,13 @@ export class FileWatcher {
       // Watch VCS index files for commit detection (v3.4.0 VCS-aware auto-complete)
       await this.watchVCSIndexFiles();
 
+      // Periodic VCS re-detection (v3.5.3)
+      // Handles case where git is initialized after watcher starts
+      // Check every 5 minutes for new VCS initialization
+      this.vcsDetectionInterval = setInterval(async () => {
+        await this.refreshVCSWatching();
+      }, 5 * 60 * 1000); // 5 minutes
+
       this.isRunning = true;
       console.error('✓ File watcher started successfully');
       console.error(`  Project root: ${this.projectRoot}`);
@@ -174,6 +182,12 @@ export class FileWatcher {
       // Clear tracking maps
       this.lastModifiedTimes.clear();
       this.filesModifiedSet.clear();
+
+      // Clear VCS detection interval (v3.5.3)
+      if (this.vcsDetectionInterval) {
+        clearInterval(this.vcsDetectionInterval);
+        this.vcsDetectionInterval = null;
+      }
 
       // Close watcher
       if (this.watcher) {
@@ -279,6 +293,37 @@ export class FileWatcher {
   }
 
   /**
+   * Get VCS index file path for given VCS type (v3.5.3)
+   * Centralized mapping for easier extension to Mercurial/SVN
+   * @param vcsType - VCS type string (Git, Mercurial, SVN)
+   * @returns Absolute path to VCS index file, or null if VCS has no local index
+   */
+  private getVCSIndexPath(vcsType: string): string | null {
+    const vcsIndexPaths: Record<string, string | null> = {
+      'Git': join(this.projectRoot, '.git', 'index'),
+      'Mercurial': join(this.projectRoot, '.hg', 'dirstate'),
+      'SVN': null, // SVN has no local index file (commits are remote)
+    };
+
+    return vcsIndexPaths[vcsType] || null;
+  }
+
+  /**
+   * Re-detect VCS and start watching index files (v3.5.3)
+   * Called when VCS might be initialized after watcher starts
+   * Public method for external triggering (e.g., after git init)
+   */
+  public async refreshVCSWatching(): Promise<void> {
+    if (!this.watcher || !this.isRunning) {
+      console.error('⚠ Cannot refresh VCS watching: watcher not running');
+      return;
+    }
+
+    console.error('\n🔍 Re-detecting VCS...');
+    await this.watchVCSIndexFiles();
+  }
+
+  /**
    * Watch VCS index files for commit detection
    */
   private async watchVCSIndexFiles(): Promise<void> {
@@ -291,32 +336,18 @@ export class FileWatcher {
     }
 
     const vcsType = vcsAdapter.getVCSType();
+    const indexPath = this.getVCSIndexPath(vcsType);
 
-    // Watch appropriate VCS index file based on detected VCS
-    switch (vcsType) {
-      case 'Git': {
-        const gitIndexPath = join(this.projectRoot, '.git', 'index');
-        if (existsSync(gitIndexPath) && this.watcher) {
-          this.watcher.add(gitIndexPath);
-          console.error('✓ Watching .git/index for Git commits (v3.4.0)');
-        }
-        break;
-      }
-      case 'Mercurial': {
-        const hgDirstatePath = join(this.projectRoot, '.hg', 'dirstate');
-        if (existsSync(hgDirstatePath) && this.watcher) {
-          this.watcher.add(hgDirstatePath);
-          console.error('✓ Watching .hg/dirstate for Mercurial commits (v3.4.0)');
-        }
-        break;
-      }
-      case 'SVN': {
-        // SVN doesn't have a local index file - commits are remote
-        console.error('ℹ SVN detected - no local index file to watch (commits are remote)');
-        break;
-      }
-      default:
-        console.error(`ℹ Unknown VCS type: ${vcsType} - skipping index watching`);
+    if (indexPath === null) {
+      console.error(`ℹ ${vcsType} detected - no local index file to watch (commits are remote)`);
+      return;
+    }
+
+    if (existsSync(indexPath) && this.watcher) {
+      this.watcher.add(indexPath);
+      console.error(`✓ Watching ${indexPath} for ${vcsType} commits (v3.5.3)`);
+    } else if (!existsSync(indexPath)) {
+      console.error(`⚠ ${vcsType} index file not found: ${indexPath}`);
     }
   }
 

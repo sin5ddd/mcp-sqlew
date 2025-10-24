@@ -14,6 +14,15 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 /**
+ * VCS index files that must NEVER be ignored (v3.5.3)
+ * These files are explicitly watched for commit detection
+ */
+export const VCS_WATCH_WHITELIST = [
+  '.git/index',      // Git staging/commit detection
+  '.hg/dirstate',    // Mercurial (future support)
+];
+
+/**
  * Built-in patterns to always ignore (v3.4.1)
  * These are common patterns that should be ignored regardless of .gitignore
  */
@@ -150,7 +159,19 @@ export class GitIgnoreParser {
       return false;
     }
 
-    // Check if path is ignored
+    // WHITELIST CHECK FIRST (v3.5.3): VCS index files are NEVER ignored
+    // This ensures .git/index and other VCS files can be explicitly watched
+    const isVCSIndexFile = VCS_WATCH_WHITELIST.some(pattern =>
+      relativePath === pattern ||
+      relativePath.endsWith('/' + pattern) ||
+      relativePath.endsWith('\\' + pattern)
+    );
+
+    if (isVCSIndexFile) {
+      return false;  // Force allow - never ignore VCS index files
+    }
+
+    // Check if path is ignored by standard patterns
     return this.ig.ignores(relativePath);
   }
 
