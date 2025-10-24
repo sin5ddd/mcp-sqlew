@@ -23,6 +23,12 @@ export interface VCSAdapter {
   getCommittedFilesSince(sinceTimestamp: string): Promise<string[]>;
 
   /**
+   * Get list of files currently staged (ready to commit)
+   * @returns Array of staged file paths
+   */
+  getStagedFiles(): Promise<string[]>;
+
+  /**
    * Get the VCS type name (for logging)
    */
   getVCSType(): string;
@@ -58,6 +64,23 @@ export class GitAdapter implements VCSAdapter {
 
     // Remove duplicates
     return [...new Set(committedFiles)];
+  }
+
+  async getStagedFiles(): Promise<string[]> {
+    try {
+      const gitCommand = 'git diff --cached --name-only';
+      const { stdout } = await execAsync(gitCommand, { cwd: this.projectRoot });
+
+      const stagedFiles = stdout
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+      return stagedFiles;
+    } catch {
+      // Not in a git repo or error occurred
+      return [];
+    }
   }
 
   getVCSType(): string {
@@ -102,6 +125,29 @@ export class SVNAdapter implements VCSAdapter {
     return [...new Set(committedFiles)];
   }
 
+  async getStagedFiles(): Promise<string[]> {
+    try {
+      // SVN doesn't have a staging area - all changes are "staged"
+      // Get modified (M) and added (A) files
+      const svnCommand = 'svn status';
+      const { stdout } = await execAsync(svnCommand, { cwd: this.projectRoot });
+
+      const stagedFiles = stdout
+        .split('\n')
+        .filter(line => {
+          const trimmed = line.trim();
+          return trimmed.startsWith('M ') || trimmed.startsWith('A ');
+        })
+        .map(line => line.substring(2).trim()) // Remove status prefix
+        .filter(path => path.length > 0);
+
+      return stagedFiles;
+    } catch {
+      // Not in an SVN repo or error occurred
+      return [];
+    }
+  }
+
   getVCSType(): string {
     return 'SVN';
   }
@@ -143,6 +189,28 @@ export class MercurialAdapter implements VCSAdapter {
 
     // Remove duplicates
     return [...new Set(committedFiles)];
+  }
+
+  async getStagedFiles(): Promise<string[]> {
+    try {
+      // Get modified (M), added (A), and removed (R) files in working directory
+      const hgCommand = 'hg status -m -a -r';
+      const { stdout } = await execAsync(hgCommand, { cwd: this.projectRoot });
+
+      const stagedFiles = stdout
+        .split('\n')
+        .filter(line => {
+          const trimmed = line.trim();
+          return trimmed.startsWith('M ') || trimmed.startsWith('A ') || trimmed.startsWith('R ');
+        })
+        .map(line => line.substring(2).trim()) // Remove status prefix
+        .filter(path => path.length > 0);
+
+      return stagedFiles;
+    } catch {
+      // Not in a Mercurial repo or error occurred
+      return [];
+    }
   }
 
   getVCSType(): string {

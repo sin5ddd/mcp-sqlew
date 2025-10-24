@@ -21,7 +21,7 @@ import { AcceptanceCheck } from '../types.js';
 import { GitIgnoreParser, createGitIgnoreParser } from './gitignore-parser.js';
 import { checkReadyForReview } from '../utils/quality-checks.js';
 import { CONFIG_KEYS } from '../constants.js';
-import { detectAndCompleteReviewedTasks } from '../utils/task-stale-detection.js';
+import { detectAndCompleteReviewedTasks, detectAndCompleteOnStaging, detectAndArchiveOnCommit } from '../utils/task-stale-detection.js';
 import { detectVCS } from '../utils/vcs-adapter.js';
 
 /**
@@ -410,24 +410,46 @@ export class FileWatcher {
   }
 
   /**
-   * Handle VCS index file change - triggers VCS-aware auto-complete (v3.4.0)
+   * Handle VCS index file change - triggers two-step Git-aware workflow (v3.5.2)
+   * Step 1: Staging (git add) → waiting_review → done
+   * Step 2: Commit (git commit) → done → archived
+   * Fallback: If files already committed (not in staging), use v3.4.0 logic
    */
   private async handleVCSIndexChange(filePath: string): Promise<void> {
-    console.error('\n🔄 VCS index changed - checking for tasks ready to auto-complete');
+    console.error('\n🔄 VCS index changed - checking for tasks ready to auto-transition');
 
     const db = getDatabase();
 
     try {
-      // Run VCS-aware auto-complete detection
-      const completedCount = await detectAndCompleteReviewedTasks(db);
+      // Step 1: Check for staged files → complete tasks (waiting_review → done)
+      const stagingCompleted = await detectAndCompleteOnStaging(db);
 
-      if (completedCount > 0) {
-        console.error(`  ✓ Auto-completed ${completedCount} task(s) from waiting_review → done`);
+      // Step 2: Check for committed files → archive tasks (done → archived)
+      const commitArchived = await detectAndArchiveOnCommit(db);
+
+      // Fallback: Check for committed files → complete tasks (waiting_review → done)
+      // This handles cases where files go straight to commit without visible staging
+      const commitCompleted = await detectAndCompleteReviewedTasks(db);
+
+      // Log results
+      const transitions: string[] = [];
+      if (stagingCompleted > 0) {
+        transitions.push(`${stagingCompleted} task(s) completed (git add detected)`);
+      }
+      if (commitCompleted > 0) {
+        transitions.push(`${commitCompleted} task(s) completed (git commit fallback)`);
+      }
+      if (commitArchived > 0) {
+        transitions.push(`${commitArchived} task(s) archived (git commit detected)`);
+      }
+
+      if (transitions.length > 0) {
+        console.error(`  ✓ ${transitions.join(', ')}`);
       } else {
-        console.error(`  ℹ No tasks ready for auto-completion (all watched files not yet committed)`);
+        console.error(`  ℹ No tasks ready for auto-transition`);
       }
     } catch (error) {
-      console.error(`  ✗ Error during VCS-aware auto-complete:`, error);
+      console.error(`  ✗ Error during VCS-aware auto-transition:`, error);
     }
   }
 

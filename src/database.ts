@@ -172,6 +172,18 @@ export function initializeDatabase(dbPath?: string, configPath?: string): Databa
       configInsert.run(config.key, config.value);
     }
 
+    // Initialize v3.5.2 config keys (two-step git-aware workflow)
+    // Use INSERT OR IGNORE to avoid overwriting existing values
+    const v352Configs = [
+      { key: 'git_auto_complete_on_stage', value: '1' },          // Auto-complete on git add
+      { key: 'git_auto_archive_on_commit', value: '1' },          // Auto-archive on git commit
+      { key: 'require_all_files_staged', value: '1' },            // Require ALL files staged (vs ANY)
+      { key: 'require_all_files_committed_for_archive', value: '1' }, // Require ALL files committed for archiving
+    ];
+    for (const config of v352Configs) {
+      configInsert.run(config.key, config.value);
+    }
+
     // Store instance
     dbInstance = db;
 

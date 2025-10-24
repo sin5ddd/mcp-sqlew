@@ -293,6 +293,230 @@ export async function detectAndCompleteReviewedTasks(db: Database): Promise<numb
 }
 
 /**
+ * Detect and auto-complete tasks in waiting_review when all watched files are staged
+ * (v3.5.2 - Two-step Git-aware workflow: staging → done)
+ *
+ * Logic:
+ * - Find all tasks in waiting_review status
+ * - Check if ALL watched files are staged (git add)
+ * - If yes → transition to done
+ * - Respects git_auto_complete_on_stage config
+ *
+ * @param db - Database instance
+ * @returns Count of auto-completed tasks
+ */
+export async function detectAndCompleteOnStaging(db: Database): Promise<number> {
+  // 1. Check if auto-complete on staging is enabled
+  const isEnabled = getConfigBool(db, 'git_auto_complete_on_stage', true);
+  if (!isEnabled) {
+    return 0;
+  }
+
+  const requireAllFilesStaged = getConfigBool(db, 'require_all_files_staged', true);
+
+  // 2. Find all waiting_review tasks
+  const candidateTasks = db.prepare(`
+    SELECT t.id
+    FROM t_tasks t
+    JOIN m_task_statuses s ON t.status_id = s.id
+    WHERE s.name = 'waiting_review'
+  `).all() as Array<{ id: number }>;
+
+  if (candidateTasks.length === 0) {
+    return 0;
+  }
+
+  let completed = 0;
+  const projectRoot = process.cwd();
+
+  // 3. Detect VCS type
+  const vcsAdapter = await detectVCS(projectRoot);
+  if (!vcsAdapter) {
+    // Not a VCS repository - skip VCS-aware completion
+    return 0;
+  }
+
+  // 4. Get currently staged files
+  let stagedFiles: Set<string>;
+  try {
+    const stagedFilesList = await vcsAdapter.getStagedFiles();
+    stagedFiles = new Set(stagedFilesList);
+  } catch (error) {
+    // VCS query failed
+    console.error(`  ⏸ ${vcsAdapter.getVCSType()} staging query failed - ${error instanceof Error ? error.message : String(error)}`);
+    return 0;
+  }
+
+  if (stagedFiles.size === 0) {
+    // No staged files at all
+    return 0;
+  }
+
+  // 5. For each candidate task, check if all watched files are staged
+  for (const task of candidateTasks) {
+    try {
+      // Get watched files for this task
+      const watchedFiles = db.prepare(`
+        SELECT f.path
+        FROM t_task_file_links tfl
+        JOIN m_files f ON tfl.file_id = f.id
+        WHERE tfl.task_id = ?
+      `).all(task.id) as Array<{ path: string }>;
+
+      if (watchedFiles.length === 0) {
+        // No watched files - skip this task
+        continue;
+      }
+
+      const filePaths = watchedFiles.map(f => f.path);
+
+      // Check if all watched files are staged
+      const unstagedFiles: string[] = [];
+      for (const filePath of filePaths) {
+        if (!stagedFiles.has(filePath)) {
+          unstagedFiles.push(filePath);
+        }
+      }
+
+      // Determine if task should auto-complete
+      const shouldComplete = requireAllFilesStaged
+        ? unstagedFiles.length === 0  // ALL files must be staged
+        : stagedFiles.size > 0 && unstagedFiles.length < filePaths.length;  // At least SOME files staged
+
+      if (shouldComplete) {
+        // All watched files staged - transition to done
+        db.prepare(`
+          UPDATE t_tasks
+          SET status_id = ?,
+              updated_ts = unixepoch()
+          WHERE id = ?
+        `).run(TASK_STATUS.DONE, task.id);
+
+        completed++;
+
+        console.error(`  ✓ Task #${task.id}: waiting_review → done (all ${filePaths.length} watched files staged)`);
+      }
+    } catch (error) {
+      console.error(`  ✗ Error checking task #${task.id} for staged files:`, error);
+      continue;
+    }
+  }
+
+  return completed;
+}
+
+/**
+ * Detect and auto-archive tasks in done when all watched files are committed
+ * (v3.5.2 - Two-step Git-aware workflow: commit → archived)
+ *
+ * Logic:
+ * - Find all tasks in done status
+ * - Check if ALL watched files are committed (git commit)
+ * - If yes → transition to archived
+ * - Respects git_auto_archive_on_commit config
+ *
+ * @param db - Database instance
+ * @returns Count of auto-archived tasks
+ */
+export async function detectAndArchiveOnCommit(db: Database): Promise<number> {
+  // 1. Check if auto-archive on commit is enabled
+  const isEnabled = getConfigBool(db, 'git_auto_archive_on_commit', true);
+  if (!isEnabled) {
+    return 0;
+  }
+
+  const requireAllFilesCommitted = getConfigBool(db, 'require_all_files_committed_for_archive', true);
+
+  // 2. Find all done tasks
+  const candidateTasks = db.prepare(`
+    SELECT t.id, t.created_ts
+    FROM t_tasks t
+    JOIN m_task_statuses s ON t.status_id = s.id
+    WHERE s.name = 'done'
+  `).all() as Array<{ id: number; created_ts: number }>;
+
+  if (candidateTasks.length === 0) {
+    return 0;
+  }
+
+  let archived = 0;
+  const projectRoot = process.cwd();
+
+  // 3. Detect VCS type
+  const vcsAdapter = await detectVCS(projectRoot);
+  if (!vcsAdapter) {
+    // Not a VCS repository - skip VCS-aware archiving
+    return 0;
+  }
+
+  // 4. For each candidate task, check if all watched files are committed
+  for (const task of candidateTasks) {
+    try {
+      // Get watched files for this task
+      const watchedFiles = db.prepare(`
+        SELECT f.path
+        FROM t_task_file_links tfl
+        JOIN m_files f ON tfl.file_id = f.id
+        WHERE tfl.task_id = ?
+      `).all(task.id) as Array<{ path: string }>;
+
+      if (watchedFiles.length === 0) {
+        // No watched files - skip this task
+        continue;
+      }
+
+      const filePaths = watchedFiles.map(f => f.path);
+
+      // Query VCS history for commits since task creation
+      // Convert Unix timestamp to ISO 8601 format for VCS adapters
+      const sinceTimestamp = new Date(task.created_ts * 1000).toISOString();
+
+      let committedFiles: Set<string>;
+      try {
+        const committedFilesList = await vcsAdapter.getCommittedFilesSince(sinceTimestamp);
+        committedFiles = new Set(committedFilesList);
+      } catch (error) {
+        // VCS query failed - skip this task
+        console.error(`  ⏸ Task #${task.id}: ${vcsAdapter.getVCSType()} commit query failed - ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+
+      // Check if all watched files are committed
+      const uncommittedFiles: string[] = [];
+      for (const filePath of filePaths) {
+        if (!committedFiles.has(filePath)) {
+          uncommittedFiles.push(filePath);
+        }
+      }
+
+      // Determine if task should auto-archive
+      const shouldArchive = requireAllFilesCommitted
+        ? uncommittedFiles.length === 0  // ALL files must be committed
+        : committedFiles.size > 0 && uncommittedFiles.length < filePaths.length;  // At least SOME files committed
+
+      if (shouldArchive) {
+        // All watched files committed - transition to archived
+        db.prepare(`
+          UPDATE t_tasks
+          SET status_id = ?,
+              updated_ts = unixepoch()
+          WHERE id = ?
+        `).run(TASK_STATUS.ARCHIVED, task.id);
+
+        archived++;
+
+        console.error(`  📦 Task #${task.id}: done → archived (all ${filePaths.length} watched files committed)`);
+      }
+    } catch (error) {
+      console.error(`  ✗ Error checking task #${task.id} for commits:`, error);
+      continue;
+    }
+  }
+
+  return archived;
+}
+
+/**
  * Detect and transition in_progress tasks to waiting_review based on quality gates
  * Database-backed approach that survives restarts
  *

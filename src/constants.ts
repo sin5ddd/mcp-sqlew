@@ -270,6 +270,11 @@ export const CONFIG_KEYS = {
   REVIEW_REQUIRE_ALL_FILES_MODIFIED: 'review_require_all_files_modified',
   REVIEW_REQUIRE_TESTS_PASS: 'review_require_tests_pass',
   REVIEW_REQUIRE_COMPILE: 'review_require_compile',
+  // v3.5.2: Two-step Git-aware workflow
+  GIT_AUTO_COMPLETE_ON_STAGE: 'git_auto_complete_on_stage',
+  GIT_AUTO_ARCHIVE_ON_COMMIT: 'git_auto_archive_on_commit',
+  REQUIRE_ALL_FILES_STAGED: 'require_all_files_staged',
+  REQUIRE_ALL_FILES_COMMITTED_FOR_ARCHIVE: 'require_all_files_committed_for_archive',
 } as const;
 
 // ============================================================================

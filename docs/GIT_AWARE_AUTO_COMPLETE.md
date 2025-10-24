@@ -1,8 +1,20 @@
-# Git-Aware Auto-Complete (v3.4.0)
+# Git-Aware Auto-Complete (v3.4.0 - v3.5.2)
 
-**Feature Status**: Planning
-**Target Version**: v3.4.0
-**Architecture Decision**: #001 - Replace flawed auto-revert with Git-commit-based task completion
+**Feature Status**: Implemented ✅
+**Current Version**: v3.5.2 (Two-Step Git-Aware Workflow)
+**Previous Version**: v3.4.0 (Commit-Based Auto-Complete)
+**Architecture Decision**: #001 - Replace flawed auto-revert with Git-based task completion
+
+## Version Evolution
+
+### v3.4.0 - Commit-Based Auto-Complete
+- **Workflow**: `waiting_review` → [git commit] → `done`
+- **Problem**: Tasks stay in `done` status indefinitely, board becomes cluttered
+
+### v3.5.2 - Two-Step Git-Aware Workflow ⭐ **NEW**
+- **Step 1 - Staging**: `waiting_review` → [git add] → `done` (work complete)
+- **Step 2 - Archiving**: `done` → [git commit] → `archived` (work finalized, board clean)
+- **Benefit**: Automatic board cleanup while preserving Git workflow semantics
 
 ## Problem Statement
 
@@ -39,21 +51,23 @@ const waitingReviewTransitioned = db.prepare(`
 4. Auto-revert logic triggers → task reverts to `todo`
 5. **Loss of context**: Task appears incomplete when work is already done
 
-## Solution: Git-Aware Auto-Complete
+## Solution: Two-Step Git-Aware Workflow (v3.5.2)
 
 ### Core Concept
 
-**Treat Git commits as implicit review approval.**
+**Align task status with Git workflow stages.**
 
-When ALL watched files for a task are committed to Git, automatically transition the task from `waiting_review` → `done`.
+- **Staging (git add)** = Work complete → `waiting_review` → `done`
+- **Committing (git commit)** = Work finalized → `done` → `archived`
 
-### Rationale
+### Rationale (v3.5.2 Enhancement)
 
-1. **Git commits represent finalized work**: Developers commit when they consider work complete
-2. **Survives process restarts**: Git history is persistent (unlike in-memory state)
-3. **Multi-agent compatible**: Any agent can commit, all agents see the same Git state
-4. **Zero-token overhead**: No manual MCP calls needed to mark tasks complete
-5. **Natural workflow**: Aligns with existing Git-based development practices
+1. **Clean Task Board**: Tasks auto-archive after commit, keeping active board focused on current work
+2. **Fast Feedback**: `git add` provides immediate "work done" signal (faster than waiting for commit)
+3. **Git Workflow Alignment**: Staging = ready for review, Commit = finalized and permanent
+4. **Zero-token overhead**: Fully automated, no manual MCP calls needed
+5. **Multi-agent compatible**: Any agent can stage/commit, all agents see the same VCS state
+6. **Survives process restarts**: VCS state is persistent (Git/Mercurial/SVN)
 
 ## Architecture
 

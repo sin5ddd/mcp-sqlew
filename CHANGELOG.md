@@ -5,6 +5,54 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.2] - 2025-10-24
+
+### Added - Two-Step Git-Aware Task Workflow 🎯
+
+**Major Feature: Automatic task completion and archiving based on Git staging and committing**
+
+Task transitions now align with Git workflow stages:
+- **Step 1 - Staging** (`git add`): `waiting_review` → `done` (work complete)
+- **Step 2 - Committing** (`git commit`): `done` → `archived` (work finalized, board clean)
+
+#### Key Benefits
+1. 🧹 Clean Task Board - Automatic archiving keeps active board focused
+2. ⚡ Fast Feedback - `git add` provides immediate completion signal
+3. 🔒 Finalized State - `git commit` represents permanent work
+4. 💰 Zero Token Cost - Fully automated, no manual MCP calls needed
+5. 🌍 Multi-VCS Support - Works with Git, Mercurial, and SVN
+
+#### Implementation Details
+- **VCS Adapter**: Added `getStagedFiles()` method to all adapters (Git/Mercurial/SVN)
+- **Detection Functions**: `detectAndCompleteOnStaging()` and `detectAndArchiveOnCommit()`
+- **File Watcher**: Enhanced to call both functions on VCS index change
+- **Configuration**: 4 new config keys for granular control
+
+#### Configuration (v3.5.2)
+- `git_auto_complete_on_stage` (default: `'1'`) - Enable staging-based completion
+- `git_auto_archive_on_commit` (default: `'1'`) - Enable commit-based archiving
+- `require_all_files_staged` (default: `'1'`) - Require ALL files staged (vs ANY)
+- `require_all_files_committed_for_archive` (default: `'1'`) - Require ALL files committed
+
+#### Example Workflow
+```bash
+# Create task
+task action=create title="Feature" watch_files=["src/feature.ts"]
+
+# Work on feature → todo → in_progress → waiting_review
+
+# Stage changes
+git add src/feature.ts  # → Task: waiting_review → done ✅
+
+# Commit changes
+git commit -m "Add feature"  # → Task: done → archived 📦
+```
+
+#### Migration from v3.4.0
+- **Backward Compatible** - No breaking changes
+- Config defaults enable two-step workflow automatically
+- Can be disabled via config if needed
+
 ## [3.5.1] - 2025-10-24
 
 ### Fixed - File Watcher WSL Compatibility and Path Matching
