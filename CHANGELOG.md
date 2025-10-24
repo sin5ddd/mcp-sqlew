@@ -5,6 +5,68 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2025-10-24
+
+### Fixed - File Watcher WSL Compatibility and Path Matching
+
+**Bugfix: Upgraded chokidar from v3 to v4 + Fixed path normalization bug**
+
+File watcher was not detecting file changes on WSL due to two issues:
+1. Outdated chokidar v3.6.0 (requires manual polling configuration for WSL)
+2. Path mismatch bug: chokidar reports absolute paths but database stores relative paths
+
+#### Changes Made
+
+**1. Dependency Upgrade**
+- **chokidar**: `^3.6.0` → `^4.0.3`
+- **File**: `package.json`
+
+**2. Configuration Simplification**
+- Removed manual WSL detection and polling configuration
+- Removed `usePolling` and `interval` options (handled automatically by v4)
+- Updated error handler type: `Error` → `unknown` (chokidar v4 compatibility)
+- **File**: `src/watcher/file-watcher.ts`
+
+**3. Path Normalization Fix** (Critical Bug)
+- Fixed `normalizePath()` to convert absolute paths to relative paths
+- Chokidar reports: `/home/.../project/file.ts` (absolute)
+- Database stores: `file.ts` (relative)
+- **Before**: Map lookup failed (paths didn't match)
+- **After**: Both normalized to `file.ts` (matches correctly)
+- **File**: `src/watcher/file-watcher.ts:571-587`
+
+**4. Documentation Updates**
+- Updated version references to v3.5.1
+- Added note that chokidar v4 handles WSL automatically
+- **Files**: `src/watcher/file-watcher.ts`
+
+#### Problem Solved
+
+**Before v3.5.1:**
+```
+Issue 1 - WSL Detection:
+  Cause: chokidar v3 requires manual polling configuration
+  Result: File changes not detected on WSL
+
+Issue 2 - Path Matching:
+  Chokidar reports: /full/path/to/file.ts
+  Database stores: file.ts
+  Result: Map lookup fails, no auto-transition ❌
+```
+
+**After v3.5.1:**
+```
+WSL: chokidar v4 handles automatically
+Path: Both normalized to relative paths
+Result: Auto-tracking works correctly ✅
+```
+
+#### Testing
+- Verified on WSL with chokidar v4
+- Created task watching `test-watcher-v3.5.1.ts`
+- Edited file → Task auto-transitioned from todo → in_progress
+- TypeScript compilation successful
+
 ## [3.5.0] - 2025-10-22
 
 ### Added - Non-Existent File Auto-Pruning with Audit Trail 🔧

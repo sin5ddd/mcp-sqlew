@@ -2,8 +2,8 @@
  * File Watcher - Auto-tracking file changes linked to tasks
  * Monitors files and auto-transitions task status on file modification
  *
- * Features (v3.4.1):
- * - chokidar-based file watching with debouncing
+ * Features (v3.5.1):
+ * - chokidar v4 file watching with automatic WSL support
  * - Project root watching with .gitignore support
  * - Dynamic file registration (add/remove files at runtime)
  * - Auto-transition: todo → in_progress on file change
@@ -15,6 +15,7 @@ import chokidar, { FSWatcher } from 'chokidar';
 import { getDatabase, getConfigInt, getConfigBool } from '../database.js';
 import { basename, dirname, join } from 'path';
 import { existsSync } from 'fs';
+import { execSync } from 'child_process';
 import { executeAcceptanceCriteria } from './test-executor.js';
 import { AcceptanceCheck } from '../types.js';
 import { GitIgnoreParser, createGitIgnoreParser } from './gitignore-parser.js';
@@ -64,7 +65,19 @@ export class FileWatcher {
   }
 
   /**
-   * Initialize and start the file watcher (v3.4.1)
+   * Detect if running on WSL (Windows Subsystem for Linux)
+   */
+  private isWSL(): boolean {
+    try {
+      const result = execSync('uname -r', { encoding: 'utf-8' });
+      return result.toLowerCase().includes('microsoft') || result.toLowerCase().includes('wsl');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Initialize and start the file watcher (v3.5.1 - Chokidar v4)
    */
   public async start(): Promise<void> {
     if (this.isRunning) {
@@ -76,7 +89,14 @@ export class FileWatcher {
       // Initialize gitignore parser
       this.gitignoreParser = createGitIgnoreParser(this.projectRoot);
 
-      // Initialize chokidar with debouncing and gitignore support
+      // Detect WSL (informational only - chokidar v4 handles WSL automatically)
+      const isWSL = this.isWSL();
+      if (isWSL) {
+        console.error('✓ WSL detected - chokidar v4 handles WSL automatically');
+      }
+
+      // Initialize chokidar v4 with debouncing and gitignore support
+      // NOTE: Chokidar v4 automatically detects and handles WSL without manual polling configuration
       this.watcher = chokidar.watch(this.projectRoot, {
         persistent: true,
         ignoreInitial: true, // Don't trigger on startup
@@ -113,7 +133,7 @@ export class FileWatcher {
         }
       });
 
-      this.watcher.on('error', (error: Error) => {
+      this.watcher.on('error', (error: unknown) => {
         console.error('File watcher error:', error);
       });
 
@@ -546,14 +566,22 @@ export class FileWatcher {
   }
 
   /**
-   * Normalize file path (resolve relative paths, remove trailing slashes)
+   * Normalize file path (convert to relative path from project root, remove trailing slashes)
    */
   private normalizePath(filePath: string): string {
-    // Remove trailing slashes
-    let normalized = filePath.replace(/[\/\\]+$/, '');
-
     // Convert backslashes to forward slashes (Windows compatibility)
-    normalized = normalized.replace(/\\/g, '/');
+    let normalized = filePath.replace(/\\/g, '/');
+
+    // Remove trailing slashes
+    normalized = normalized.replace(/[\/\\]+$/, '');
+
+    // Convert absolute paths to relative paths from project root
+    const projectRootNormalized = this.projectRoot.replace(/\\/g, '/');
+    if (normalized.startsWith(projectRootNormalized + '/')) {
+      normalized = normalized.substring(projectRootNormalized.length + 1);
+    } else if (normalized.startsWith(projectRootNormalized)) {
+      normalized = normalized.substring(projectRootNormalized.length);
+    }
 
     return normalized;
   }
