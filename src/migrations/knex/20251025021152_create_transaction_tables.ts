@@ -217,15 +217,18 @@ export async function up(knex: Knex): Promise<void> {
     table.primary(['task_id', 'file_id']);
   });
 
-  // Task Dependencies (v3.2.0)
-  await knex.schema.createTable('t_task_dependencies', (table) => {
-    table.integer('task_id');
-    table.foreign('task_id').references('t_tasks.id');
-    table.integer('depends_on_task_id');
-    table.foreign('depends_on_task_id').references('t_tasks.id');
-    table.integer('created_ts').notNullable();
-    table.primary(['task_id', 'depends_on_task_id']);
-  });
+  // Task Dependencies (v3.2.0) - with CASCADE delete
+  // Note: Using raw SQL because Knex doesn't properly generate ON DELETE CASCADE for SQLite
+  await knex.raw(`
+    CREATE TABLE t_task_dependencies (
+      task_id INTEGER,
+      depends_on_task_id INTEGER,
+      created_ts INTEGER NOT NULL,
+      PRIMARY KEY (task_id, depends_on_task_id),
+      FOREIGN KEY (task_id) REFERENCES t_tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (depends_on_task_id) REFERENCES t_tasks(id) ON DELETE CASCADE
+    )
+  `);
 
   console.log('✅ Transaction tables created successfully');
 }

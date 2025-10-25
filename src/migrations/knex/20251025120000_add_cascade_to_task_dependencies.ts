@@ -10,22 +10,39 @@ export async function up(knex: Knex): Promise<void> {
   // We need to recreate the table with CASCADE constraints
   // Must use raw SQL because Knex doesn't properly generate ON DELETE CASCADE for SQLite
 
-  // 1. Create temporary table with CASCADE constraints (using current column names)
+  // Check which columns exist (handle both old and new schemas)
+  const tableInfo = await knex.raw(`PRAGMA table_info(t_task_dependencies)`);
+  const columns = tableInfo.map((col: any) => col.name);
+
+  const usesOldSchema = columns.includes('blocker_task_id');
+  const col1 = usesOldSchema ? 'blocker_task_id' : 'task_id';
+  const col2 = usesOldSchema ? 'blocked_task_id' : 'depends_on_task_id';
+
+  // Check if CASCADE already exists
+  const fkInfo = await knex.raw(`PRAGMA foreign_key_list(t_task_dependencies)`);
+  const hasCascade = fkInfo.some((fk: any) => fk.on_delete === 'CASCADE');
+
+  if (hasCascade) {
+    console.log('✓ CASCADE constraints already exist, skipping migration');
+    return;
+  }
+
+  // 1. Create temporary table with CASCADE constraints
   await knex.raw(`
     CREATE TABLE t_task_dependencies_new (
-      blocker_task_id INTEGER,
-      blocked_task_id INTEGER,
+      ${col1} INTEGER,
+      ${col2} INTEGER,
       created_ts INTEGER NOT NULL,
-      PRIMARY KEY (blocker_task_id, blocked_task_id),
-      FOREIGN KEY (blocker_task_id) REFERENCES t_tasks(id) ON DELETE CASCADE,
-      FOREIGN KEY (blocked_task_id) REFERENCES t_tasks(id) ON DELETE CASCADE
+      PRIMARY KEY (${col1}, ${col2}),
+      FOREIGN KEY (${col1}) REFERENCES t_tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (${col2}) REFERENCES t_tasks(id) ON DELETE CASCADE
     )
   `);
 
   // 2. Copy data from old table to new table
   await knex.raw(`
-    INSERT INTO t_task_dependencies_new (blocker_task_id, blocked_task_id, created_ts)
-    SELECT blocker_task_id, blocked_task_id, created_ts
+    INSERT INTO t_task_dependencies_new (${col1}, ${col2}, created_ts)
+    SELECT ${col1}, ${col2}, created_ts
     FROM t_task_dependencies
   `);
 
