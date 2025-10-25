@@ -128,13 +128,16 @@ async function createTaskInternal(params: {
   const createdByAgentId = await getOrCreateAgent(adapter, createdBy, trx);
 
   // Insert task
+  const now = Math.floor(Date.now() / 1000);
   const [taskId] = await knex('t_tasks').insert({
     title: params.title,
     status_id: statusId,
     priority: priority,
     assigned_agent_id: assignedAgentId,
     created_by_agent_id: createdByAgentId,
-    layer_id: layerId
+    layer_id: layerId,
+    created_ts: now,
+    updated_ts: now
   });
 
   // Process acceptance_criteria (can be string, JSON string, or array)
@@ -184,12 +187,43 @@ async function createTaskInternal(params: {
 
   // Insert tags if provided
   if (params.tags && params.tags.length > 0) {
-    for (const tagName of params.tags) {
+    // Parse tags - handle MCP SDK converting JSON string to char array
+    let tagsParsed: string[];
+
+    if (typeof params.tags === 'string') {
+      // String - try to parse as JSON
+      try {
+        tagsParsed = JSON.parse(params.tags);
+      } catch {
+        // If not valid JSON, treat as single tag name
+        tagsParsed = [params.tags];
+      }
+    } else if (Array.isArray(params.tags)) {
+      // Check if it's an array of single characters (MCP SDK bug)
+      // Example: ['[', '"', 't', 'e', 's', 't', 'i', 'n', 'g', '"', ']']
+      if (params.tags.every((item: any) => typeof item === 'string' && item.length === 1)) {
+        // Join characters back into string and parse JSON
+        const jsonString = params.tags.join('');
+        try {
+          tagsParsed = JSON.parse(jsonString);
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          throw new Error(`Invalid tags format: ${jsonString}. ${errMsg}`);
+        }
+      } else {
+        // Normal array of tag names
+        tagsParsed = params.tags;
+      }
+    } else {
+      throw new Error('Parameter "tags" must be a string or array');
+    }
+
+    for (const tagName of tagsParsed) {
       const tagId = await getOrCreateTag(adapter, tagName, trx);
       await knex('t_task_tags').insert({
         task_id: Number(taskId),
         tag_id: tagId
-      });
+      }).onConflict(['task_id', 'tag_id']).ignore();
     }
   }
 
@@ -1123,7 +1157,7 @@ export async function addDependency(params: {
       }
 
       // Validation 5: No transitive circular (check if adding this would create a cycle)
-      const cycleCheck = await knex.raw(`
+      const cycleCheck = await trx.raw(`
         WITH RECURSIVE dependency_chain AS (
           -- Start from the task that would be blocked
           SELECT blocked_task_id as task_id, 1 as depth
@@ -1144,7 +1178,7 @@ export async function addDependency(params: {
 
       if (cycleCheck) {
         // Build cycle path for error message
-        const cyclePathResult = await knex.raw(`
+        const cyclePathResult = await trx.raw(`
           WITH RECURSIVE dependency_chain AS (
             SELECT blocked_task_id as task_id, 1 as depth,
                    CAST(blocked_task_id AS TEXT) as path
@@ -1170,7 +1204,8 @@ export async function addDependency(params: {
       // All validations passed - insert dependency
       await trx('t_task_dependencies').insert({
         blocker_task_id: params.blocker_task_id,
-        blocked_task_id: params.blocked_task_id
+        blocked_task_id: params.blocked_task_id,
+        created_ts: Math.floor(Date.now() / 1000)
       });
 
       return {

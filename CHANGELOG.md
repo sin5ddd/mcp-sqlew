@@ -9,12 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - Help System Optimization 🚀
 
-**Major Feature: Database-driven help system with 91% token efficiency improvement**
+**Major Feature: Database-driven help system with 60-70% token efficiency improvement**
 
 The help system has been completely redesigned to move documentation from code to queryable database structures, dramatically reducing token consumption while improving discoverability.
 
 #### Key Achievements
-1. **91% Token Reduction** - Average help query: 199 tokens (vs ~2,150 legacy)
+1. **60-70% Token Reduction** - Average help query: 199 tokens (vs ~2,150 legacy)
 2. **95.8% Schema Reduction** - MCP InputSchemas: 350 tokens (vs 8,400 legacy)
 3. **6 New Help Actions** - Granular queries for actions, parameters, tools, use-cases
 4. **41 Use-Cases** - Comprehensive workflow examples across 6 categories
@@ -71,7 +71,7 @@ The help system has been completely redesigned to move documentation from code t
 | help_list_use_cases | ~388 | ~500 | **23%** |
 | help_next_actions | ~65 | ~100 | **35%** |
 
-**Overall**: 91% average token reduction (weighted by expected usage)
+**Overall**: 60-70% average token reduction (weighted by expected usage)
 
 #### Example Usage
 

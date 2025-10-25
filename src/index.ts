@@ -23,6 +23,8 @@ import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archive
 import { FileWatcher } from './watcher/index.js';
 import { trackAndReturnHelp } from './utils/help-tracking.js';
 import { queryHelpAction, queryHelpParams, queryHelpTool, queryHelpUseCase, queryHelpListUseCases, queryHelpNextActions } from './tools/help-queries.js';
+import { initDebugLogger, closeDebugLogger, debugLog, debugLogToolCall, debugLogToolResponse, debugLogError } from './utils/debug-logger.js';
+import { ensureSqlewDirectory } from './config/example-generator.js';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
@@ -31,6 +33,7 @@ const parsedArgs: {
   autodeleteIgnoreWeekend?: boolean;
   autodeleteMessageHours?: number;
   autodeleteFileHistoryDays?: number;
+  debugLogPath?: string;
 } = {};
 
 for (let i = 0; i < args.length; i++) {
@@ -53,6 +56,10 @@ for (let i = 0; i < args.length; i++) {
     parsedArgs.autodeleteFileHistoryDays = parseInt(arg.split('=')[1], 10);
   } else if (arg === '--autodelete-file-history-days' && i + 1 < args.length) {
     parsedArgs.autodeleteFileHistoryDays = parseInt(args[++i], 10);
+  } else if (arg.startsWith('--debug-log=')) {
+    parsedArgs.debugLogPath = arg.split('=')[1];
+  } else if (arg === '--debug-log' && i + 1 < args.length) {
+    parsedArgs.debugLogPath = args[++i];
   } else if (!arg.startsWith('--')) {
     // Backward compatibility: first non-flag argument is dbPath
     if (!parsedArgs.dbPath) {
@@ -234,6 +241,10 @@ Use action: "example" for comprehensive usage examples.`,
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const params = args as any;
+  const action = params.action || 'N/A';
+
+  // Debug logging: Tool call
+  debugLogToolCall(name, action, params);
 
   try {
     let result;
@@ -434,21 +445,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'task':
         switch (params.action) {
-          case 'create': result = createTask(params); break;
-          case 'update': result = updateTask(params); break;
-          case 'get': result = getTask(params); break;
+          case 'create': result = await createTask(params); break;
+          case 'update': result = await updateTask(params); break;
+          case 'get': result = await getTask(params); break;
           case 'list': result = await listTasks(params); break;
-          case 'move': result = moveTask(params); break;
-          case 'link': result = linkTask(params); break;
-          case 'archive': result = archiveTask(params); break;
-          case 'batch_create': result = batchCreateTasks({ tasks: params.tasks, atomic: params.atomic }); break;
-          case 'add_dependency': result = addDependency(params); break;
-          case 'remove_dependency': result = removeDependency(params); break;
-          case 'get_dependencies': result = getDependencies(params); break;
-          case 'watch_files': result = watchFiles(params); break;
-          case 'get_pruned_files': result = getPrunedFiles(params); break;
-          case 'link_pruned_file': result = linkPrunedFile(params); break;
-          case 'watcher': result = watcherStatus(params); break;
+          case 'move': result = await moveTask(params); break;
+          case 'link': result = await linkTask(params); break;
+          case 'archive': result = await archiveTask(params); break;
+          case 'batch_create': result = await batchCreateTasks({ tasks: params.tasks, atomic: params.atomic }); break;
+          case 'add_dependency': result = await addDependency(params); break;
+          case 'remove_dependency': result = await removeDependency(params); break;
+          case 'get_dependencies': result = await getDependencies(params); break;
+          case 'watch_files': result = await watchFiles(params); break;
+          case 'get_pruned_files': result = await getPrunedFiles(params); break;
+          case 'link_pruned_file': result = await linkPrunedFile(params); break;
+          case 'watcher': result = await watcherStatus(params); break;
           case 'help':
             const taskHelpContent = taskHelp();
             trackAndReturnHelp('task', 'help', JSON.stringify(taskHelpContent));
@@ -467,11 +478,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Unknown tool: ${name}`);
     }
 
+    // Debug logging: Success
+    debugLogToolResponse(name, action, true, result);
+
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
+    // Debug logging: Error
+    debugLogError(`Tool ${name}.${action}`, error);
+    debugLogToolResponse(name, action, false, undefined, { message });
+
     return {
       content: [{ type: 'text', text: JSON.stringify({ error: message }, null, 2) }],
       isError: true,
@@ -482,6 +501,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.error('\n✓ Shutting down MCP server...');
+  debugLog('INFO', 'Received SIGINT, shutting down gracefully');
   try {
     const watcher = FileWatcher.getInstance();
     await watcher.stop();
@@ -489,11 +509,13 @@ process.on('SIGINT', async () => {
     // Ignore watcher errors during shutdown
   }
   closeDatabase();
+  closeDebugLogger();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.error('\n✓ Shutting down MCP server...');
+  debugLog('INFO', 'Received SIGTERM, shutting down gracefully');
   try {
     const watcher = FileWatcher.getInstance();
     await watcher.stop();
@@ -501,13 +523,17 @@ process.on('SIGTERM', async () => {
     // Ignore watcher errors during shutdown
   }
   closeDatabase();
+  closeDebugLogger();
   process.exit(0);
 });
 
 // Start server with stdio transport
 async function main() {
   try {
-    // 1. Initialize database first
+    // 0. Ensure .sqlew directory and config template exist (first launch)
+    ensureSqlewDirectory();
+
+    // 1. Initialize database
     const config = dbPath ? { connection: { filename: dbPath } } : undefined;
     db = await initializeDatabase(config);
 
@@ -534,6 +560,14 @@ async function main() {
       console.error(`  Database: ${dbPath} (from ${source})`);
     }
     console.error(`  Auto-delete config: messages=${messageHours}h, file_history=${fileHistoryDays}d, ignore_weekend=${ignoreWeekend}`);
+
+    // Initialize debug logger (priority: CLI arg > environment variable > config file)
+    const debugLogPath = parsedArgs.debugLogPath || process.env.SQLEW_DEBUG || fileConfig.debug?.log_path;
+    initDebugLogger(debugLogPath);
+    debugLog('INFO', 'MCP Shared Context Server initialized', {
+      dbPath,
+      autoDeleteConfig: { messageHours, fileHistoryDays, ignoreWeekend }
+    });
 
     // 2. Connect MCP server
     const transport = new StdioServerTransport();

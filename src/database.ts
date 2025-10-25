@@ -5,7 +5,8 @@
 
 import { Knex } from 'knex';
 import knexConfig from './knexfile.js';
-import { DatabaseAdapter, createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
+import type { DatabaseAdapter } from './adapters/index.js';
+import { createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
 
 // Global adapter instance
 let adapterInstance: DatabaseAdapter | null = null;
@@ -27,10 +28,15 @@ export async function initializeDatabase(
   const dbType = config?.databaseType || 'sqlite';
   const adapter = createDatabaseAdapter(dbType);
 
+  // Determine if running from compiled code (dist/) or source (src/)
+  const isCompiledCode = import.meta.url.includes('/dist/');
+  const environment = isCompiledCode ? 'production' : 'development';
+
   // Use config from knexfile or provided config
+  const baseConfig = knexConfig[environment] || knexConfig.development;
   const knexConnConfig = config?.connection
-    ? { ...knexConfig.development, connection: config.connection }
-    : knexConfig.development;
+    ? { ...baseConfig, connection: config.connection }
+    : baseConfig;
 
   await adapter.connect(knexConnConfig);
 
@@ -38,7 +44,7 @@ export async function initializeDatabase(
   const knex = adapter.getKnex();
   await knex.migrate.latest();
 
-  console.log('✓ Database initialized with Knex adapter');
+  console.log(`✓ Database initialized with Knex adapter (${environment})`);
 
   adapterInstance = adapter;
   return adapter;
@@ -544,4 +550,4 @@ export async function transaction<T>(
 }
 
 // Export adapter types for tool functions
-export { DatabaseAdapter };
+export type { DatabaseAdapter };

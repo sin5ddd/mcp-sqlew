@@ -1,7 +1,7 @@
 // src/adapters/postgresql-adapter.ts
 import knexLib from 'knex';
 import type { Knex } from 'knex';
-import { DatabaseAdapter } from './index.js';
+import type { DatabaseAdapter } from './types.js';
 
 const { knex } = knexLib;
 

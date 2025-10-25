@@ -8,8 +8,8 @@
  * 4. Database queries are performant
  */
 
-import { Database } from 'better-sqlite3';
 import { initializeDatabase, getDatabase } from '../database.js';
+import type { DatabaseAdapter } from '../adapters/types.js';
 import {
   queryHelpAction,
   queryHelpParams,
@@ -45,8 +45,11 @@ export async function runHelpSystemTests(): Promise<{
   let failed = 0;
 
   // Initialize database
-  const dbPath = process.env.DB_PATH || '.claude/docs/sqlew.db';
-  initializeDatabase(dbPath);
+  const dbPath = process.env.DB_PATH || 'src/.sqlew/tmp/test-knex.db';
+  await initializeDatabase({
+    databaseType: 'sqlite',
+    connection: { filename: dbPath }
+  });
   const db = getDatabase();
 
   console.log('\n🧪 Running Help System Test Suite\n');

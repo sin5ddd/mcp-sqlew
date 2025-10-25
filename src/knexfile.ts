@@ -7,23 +7,28 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Default database path: .sqlew/sqlew.db in project root
+// Can be overridden via config file (.sqlew/config.toml) or CLI args
+const DEFAULT_DB_PATH = process.env.SQLEW_DB_PATH || '.sqlew/sqlew.db';
+
 const config: { [key: string]: Knex.Config } = {
   development: {
     client: 'better-sqlite3',
     connection: {
-      filename: path.join(__dirname, '.sqlew/tmp/test-knex.db'),
+      // Development uses project root relative path
+      filename: path.resolve(process.cwd(), DEFAULT_DB_PATH),
     },
     useNullAsDefault: true,
     migrations: {
       directory: path.join(__dirname, 'migrations/knex'),
-      extension: 'js',
+      extension: 'ts',
       tableName: 'knex_migrations',
-      loadExtensions: ['.js'],
+      loadExtensions: ['.ts'],
     },
     seeds: {
       directory: path.join(__dirname, 'seeds'),
-      extension: 'js',
-      loadExtensions: ['.js'],
+      extension: 'ts',
+      loadExtensions: ['.ts'],
     },
     // Enable better-sqlite3 pragmas for performance
     pool: {
@@ -45,27 +50,32 @@ const config: { [key: string]: Knex.Config } = {
     useNullAsDefault: true,
     migrations: {
       directory: path.join(__dirname, 'migrations/knex'),
-      extension: 'js',
+      extension: 'ts',
+      loadExtensions: ['.ts'],
     },
     seeds: {
       directory: path.join(__dirname, 'seeds'),
-      extension: 'js',
+      extension: 'ts',
+      loadExtensions: ['.ts'],
     },
   },
 
   production: {
     client: 'better-sqlite3',
     connection: {
-      filename: path.join(__dirname, '.claude/docs/sqlew.db'),
+      // Production uses project root relative path
+      filename: path.resolve(process.cwd(), DEFAULT_DB_PATH),
     },
     useNullAsDefault: true,
     migrations: {
       directory: path.join(__dirname, 'migrations/knex'),
       extension: 'js',
+      loadExtensions: ['.js'],
     },
     seeds: {
       directory: path.join(__dirname, 'seeds'),
       extension: 'js',
+      loadExtensions: ['.js'],
     },
     pool: {
       afterCreate: (conn: any, cb: any) => {
