@@ -3,51 +3,62 @@
  * Tests the new watch_files action: watch, unwatch, list
  */
 
-import { describe, it, beforeEach } from 'node:test';
-import assert from 'node:assert/strict';
-import Database from 'better-sqlite3';
-import { initializeSchema } from '../schema.js';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import * as assert from 'node:assert/strict';
 import { getOrCreateAgent, getOrCreateFile } from '../database.js';
-import type { Database as DatabaseType } from '../types.js';
+import type { DatabaseAdapter } from '../adapters/types.js';
+import { SQLiteAdapter } from '../adapters/sqlite-adapter.js';
 
 /**
  * Test database instance
  */
-let testDb: DatabaseType;
+let testDb: DatabaseAdapter;
 
 /**
  * Create an in-memory test database
  */
-function createTestDatabase(): DatabaseType {
-  const db = new Database(':memory:');
-  db.pragma('foreign_keys = ON');
-  initializeSchema(db);
-  return db;
+async function createTestDatabase(): Promise<DatabaseAdapter> {
+  const adapter = new SQLiteAdapter();
+  await adapter.connect({
+    client: 'better-sqlite3',
+    connection: { filename: ':memory:' },
+    useNullAsDefault: true,
+  });
+
+  // Run migrations to set up schema
+  const knex = adapter.getKnex();
+  await knex.migrate.latest();
+
+  return adapter;
 }
 
 /**
  * Helper: Create a test task
  */
-function createTestTask(db: DatabaseType, title: string): number {
-  const agentId = getOrCreateAgent(db, 'test-agent');
+async function createTestTask(db: DatabaseAdapter, title: string): Promise<number> {
+  const agentId = await getOrCreateAgent(db, 'test-agent');
   const statusId = 1; // todo
 
-  const result = db.prepare(`
-    INSERT INTO t_tasks (title, status_id, priority, created_by_agent_id, assigned_agent_id)
-    VALUES (?, ?, 2, ?, ?)
-  `).run(title, statusId, agentId, agentId);
+  const knex = db.getKnex();
+  const [id] = await knex('t_tasks').insert({
+    title,
+    status_id: statusId,
+    priority: 2,
+    created_by_agent_id: agentId,
+    assigned_agent_id: agentId,
+  });
 
-  return result.lastInsertRowid as number;
+  return id;
 }
 
 /**
  * Inline implementation of watchFiles action for testing
  */
-function watchFilesAction(db: DatabaseType, params: {
+async function watchFilesAction(db: DatabaseAdapter, params: {
   task_id: number;
   action: 'watch' | 'unwatch' | 'list';
   file_paths?: string[];
-}): any {
+}): Promise<any> {
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
   }
@@ -56,13 +67,14 @@ function watchFilesAction(db: DatabaseType, params: {
     throw new Error('Parameter "action" is required (watch, unwatch, or list)');
   }
 
+  const knex = db.getKnex();
+
   // Check if task exists
-  const taskData = db.prepare(`
-    SELECT t.id, t.title, s.name as status
-    FROM t_tasks t
-    JOIN m_task_statuses s ON t.status_id = s.id
-    WHERE t.id = ?
-  `).get(params.task_id) as { id: number; title: string; status: string } | undefined;
+  const taskData = await knex('t_tasks as t')
+    .join('m_task_statuses as s', 't.status_id', 's.id')
+    .where('t.id', params.task_id)
+    .select('t.id', 't.title', 's.name as status')
+    .first();
 
   if (!taskData) {
     throw new Error(`Task with id ${params.task_id} not found`);
@@ -73,18 +85,28 @@ function watchFilesAction(db: DatabaseType, params: {
       throw new Error('Parameter "file_paths" is required for watch action');
     }
 
-    const insertFileLinkStmt = db.prepare(`
-      INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
-      VALUES (?, ?)
-    `);
-
     const addedFiles: string[] = [];
     for (const filePath of params.file_paths) {
-      const fileId = getOrCreateFile(db, filePath);
-      const result = insertFileLinkStmt.run(params.task_id, fileId);
+      const fileId = await getOrCreateFile(db, filePath);
 
-      // Check if row was actually inserted (changes > 0)
-      if (result.changes > 0) {
+      // Try to insert, check if row was actually inserted
+      const rowsBefore = await knex('t_task_file_links')
+        .where({ task_id: params.task_id, file_id: fileId })
+        .count('* as count')
+        .first();
+
+      await knex('t_task_file_links')
+        .insert({ task_id: params.task_id, file_id: fileId })
+        .onConflict(['task_id', 'file_id'])
+        .ignore();
+
+      const rowsAfter = await knex('t_task_file_links')
+        .where({ task_id: params.task_id, file_id: fileId })
+        .count('* as count')
+        .first();
+
+      // Check if row was actually inserted
+      if (rowsAfter && rowsBefore && rowsAfter.count > rowsBefore.count) {
         addedFiles.push(filePath);
       }
     }
@@ -103,17 +125,17 @@ function watchFilesAction(db: DatabaseType, params: {
       throw new Error('Parameter "file_paths" is required for unwatch action');
     }
 
-    const deleteFileLinkStmt = db.prepare(`
-      DELETE FROM t_task_file_links
-      WHERE task_id = ? AND file_id = (SELECT id FROM m_files WHERE path = ?)
-    `);
-
     const removedFiles: string[] = [];
     for (const filePath of params.file_paths) {
-      const result = deleteFileLinkStmt.run(params.task_id, filePath);
+      const deletedCount = await knex('t_task_file_links')
+        .whereIn('file_id', function() {
+          this.select('id').from('m_files').where('path', filePath);
+        })
+        .andWhere('task_id', params.task_id)
+        .delete();
 
-      // Check if row was actually deleted (changes > 0)
-      if (result.changes > 0) {
+      // Check if row was actually deleted
+      if (deletedCount > 0) {
         removedFiles.push(filePath);
       }
     }
@@ -128,13 +150,11 @@ function watchFilesAction(db: DatabaseType, params: {
     };
 
   } else if (params.action === 'list') {
-    const filesStmt = db.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON tfl.file_id = f.id
-      WHERE tfl.task_id = ?
-    `);
-    const files = filesStmt.all(params.task_id).map((row: any) => row.path);
+    const files = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('tfl.task_id', params.task_id)
+      .select('f.path')
+      .then(rows => rows.map((row: any) => row.path));
 
     return {
       success: true,
@@ -151,14 +171,20 @@ function watchFilesAction(db: DatabaseType, params: {
 }
 
 describe('Task watch_files action tests', () => {
-  beforeEach(() => {
-    testDb = createTestDatabase();
+  beforeEach(async () => {
+    testDb = await createTestDatabase();
   });
 
-  it('should list watched files for task with no files', () => {
-    const taskId = createTestTask(testDb, 'Task without files');
+  afterEach(async () => {
+    if (testDb) {
+      await testDb.disconnect();
+    }
+  });
 
-    const result = watchFilesAction(testDb, {
+  it('should list watched files for task with no files', async () => {
+    const taskId = await createTestTask(testDb, 'Task without files');
+
+    const result = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });
@@ -169,10 +195,10 @@ describe('Task watch_files action tests', () => {
     assert.deepStrictEqual(result.files, []);
   });
 
-  it('should watch files for a task', () => {
-    const taskId = createTestTask(testDb, 'Task to watch files');
+  it('should watch files for a task', async () => {
+    const taskId = await createTestTask(testDb, 'Task to watch files');
 
-    const result = watchFilesAction(testDb, {
+    const result = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts', 'src/database.ts']
@@ -184,18 +210,18 @@ describe('Task watch_files action tests', () => {
     assert.deepStrictEqual(result.files, ['src/index.ts', 'src/database.ts']);
   });
 
-  it('should list watched files after watching', () => {
-    const taskId = createTestTask(testDb, 'Task with watched files');
+  it('should list watched files after watching', async () => {
+    const taskId = await createTestTask(testDb, 'Task with watched files');
 
     // Watch files
-    watchFilesAction(testDb, {
+    await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts', 'src/database.ts', 'src/schema.ts']
     });
 
     // List files
-    const result = watchFilesAction(testDb, {
+    const result = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });
@@ -209,11 +235,11 @@ describe('Task watch_files action tests', () => {
     assert.ok(result.files.includes('src/schema.ts'));
   });
 
-  it('should handle watching duplicate files (idempotent)', () => {
-    const taskId = createTestTask(testDb, 'Task for idempotent test');
+  it('should handle watching duplicate files (idempotent)', async () => {
+    const taskId = await createTestTask(testDb, 'Task for idempotent test');
 
     // Watch files first time
-    const result1 = watchFilesAction(testDb, {
+    const result1 = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts']
@@ -222,7 +248,7 @@ describe('Task watch_files action tests', () => {
     assert.strictEqual(result1.files_added, 1);
 
     // Watch same file again
-    const result2 = watchFilesAction(testDb, {
+    const result2 = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts']
@@ -231,7 +257,7 @@ describe('Task watch_files action tests', () => {
     assert.strictEqual(result2.files_added, 0, 'Should not add duplicate file');
 
     // Verify only one link exists
-    const listResult = watchFilesAction(testDb, {
+    const listResult = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });
@@ -239,18 +265,18 @@ describe('Task watch_files action tests', () => {
     assert.strictEqual(listResult.files_count, 1);
   });
 
-  it('should unwatch files from a task', () => {
-    const taskId = createTestTask(testDb, 'Task for unwatch test');
+  it('should unwatch files from a task', async () => {
+    const taskId = await createTestTask(testDb, 'Task for unwatch test');
 
     // Watch files
-    watchFilesAction(testDb, {
+    await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts', 'src/database.ts', 'src/schema.ts']
     });
 
     // Unwatch one file
-    const result = watchFilesAction(testDb, {
+    const result = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'unwatch',
       file_paths: ['src/database.ts']
@@ -262,7 +288,7 @@ describe('Task watch_files action tests', () => {
     assert.deepStrictEqual(result.files, ['src/database.ts']);
 
     // Verify remaining files
-    const listResult = watchFilesAction(testDb, {
+    const listResult = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });
@@ -273,18 +299,18 @@ describe('Task watch_files action tests', () => {
     assert.ok(!listResult.files.includes('src/database.ts'));
   });
 
-  it('should unwatch multiple files at once', () => {
-    const taskId = createTestTask(testDb, 'Task for batch unwatch');
+  it('should unwatch multiple files at once', async () => {
+    const taskId = await createTestTask(testDb, 'Task for batch unwatch');
 
     // Watch files
-    watchFilesAction(testDb, {
+    await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts', 'src/database.ts', 'src/schema.ts', 'src/types.ts']
     });
 
     // Unwatch multiple files
-    const result = watchFilesAction(testDb, {
+    const result = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'unwatch',
       file_paths: ['src/database.ts', 'src/types.ts']
@@ -293,7 +319,7 @@ describe('Task watch_files action tests', () => {
     assert.strictEqual(result.files_removed, 2);
 
     // Verify remaining files
-    const listResult = watchFilesAction(testDb, {
+    const listResult = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });
@@ -303,18 +329,18 @@ describe('Task watch_files action tests', () => {
     assert.ok(listResult.files.includes('src/schema.ts'));
   });
 
-  it('should handle unwatching non-existent file gracefully', () => {
-    const taskId = createTestTask(testDb, 'Task for non-existent unwatch');
+  it('should handle unwatching non-existent file gracefully', async () => {
+    const taskId = await createTestTask(testDb, 'Task for non-existent unwatch');
 
     // Watch one file
-    watchFilesAction(testDb, {
+    await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts']
     });
 
     // Try to unwatch file that was never watched
-    const result = watchFilesAction(testDb, {
+    const result = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'unwatch',
       file_paths: ['src/non-existent.ts']
@@ -324,10 +350,10 @@ describe('Task watch_files action tests', () => {
     assert.strictEqual(result.files_removed, 0, 'Should remove 0 files');
   });
 
-  it('should throw error for invalid task_id', () => {
-    assert.throws(
-      () => {
-        watchFilesAction(testDb, {
+  it('should throw error for invalid task_id', async () => {
+    await assert.rejects(
+      async () => {
+        await watchFilesAction(testDb, {
           task_id: 999,
           action: 'list'
         });
@@ -336,12 +362,12 @@ describe('Task watch_files action tests', () => {
     );
   });
 
-  it('should throw error when watch action missing file_paths', () => {
-    const taskId = createTestTask(testDb, 'Task for error test');
+  it('should throw error when watch action missing file_paths', async () => {
+    const taskId = await createTestTask(testDb, 'Task for error test');
 
-    assert.throws(
-      () => {
-        watchFilesAction(testDb, {
+    await assert.rejects(
+      async () => {
+        await watchFilesAction(testDb, {
           task_id: taskId,
           action: 'watch'
         });
@@ -350,12 +376,12 @@ describe('Task watch_files action tests', () => {
     );
   });
 
-  it('should throw error when unwatch action missing file_paths', () => {
-    const taskId = createTestTask(testDb, 'Task for error test');
+  it('should throw error when unwatch action missing file_paths', async () => {
+    const taskId = await createTestTask(testDb, 'Task for error test');
 
-    assert.throws(
-      () => {
-        watchFilesAction(testDb, {
+    await assert.rejects(
+      async () => {
+        await watchFilesAction(testDb, {
           task_id: taskId,
           action: 'unwatch'
         });
@@ -364,12 +390,12 @@ describe('Task watch_files action tests', () => {
     );
   });
 
-  it('should handle empty file_paths array for watch', () => {
-    const taskId = createTestTask(testDb, 'Task for empty array test');
+  it('should handle empty file_paths array for watch', async () => {
+    const taskId = await createTestTask(testDb, 'Task for empty array test');
 
-    assert.throws(
-      () => {
-        watchFilesAction(testDb, {
+    await assert.rejects(
+      async () => {
+        await watchFilesAction(testDb, {
           task_id: taskId,
           action: 'watch',
           file_paths: []
@@ -379,42 +405,42 @@ describe('Task watch_files action tests', () => {
     );
   });
 
-  it('should watch then unwatch all files', () => {
-    const taskId = createTestTask(testDb, 'Task for full cycle test');
+  it('should watch then unwatch all files', async () => {
+    const taskId = await createTestTask(testDb, 'Task for full cycle test');
 
     // Watch files
-    watchFilesAction(testDb, {
+    await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: ['src/index.ts', 'src/database.ts']
     });
 
     // Verify watched
-    const listResult1 = watchFilesAction(testDb, {
+    const listResult1 = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });
     assert.strictEqual(listResult1.files_count, 2);
 
     // Unwatch all
-    watchFilesAction(testDb, {
+    await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'unwatch',
       file_paths: ['src/index.ts', 'src/database.ts']
     });
 
     // Verify empty
-    const listResult2 = watchFilesAction(testDb, {
+    const listResult2 = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });
     assert.strictEqual(listResult2.files_count, 0);
   });
 
-  it('should handle various file path formats', () => {
-    const taskId = createTestTask(testDb, 'Task for path formats');
+  it('should handle various file path formats', async () => {
+    const taskId = await createTestTask(testDb, 'Task for path formats');
 
-    const result = watchFilesAction(testDb, {
+    const result = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'watch',
       file_paths: [
@@ -427,7 +453,7 @@ describe('Task watch_files action tests', () => {
 
     assert.strictEqual(result.files_added, 4);
 
-    const listResult = watchFilesAction(testDb, {
+    const listResult = await watchFilesAction(testDb, {
       task_id: taskId,
       action: 'list'
     });

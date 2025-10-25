@@ -3,50 +3,61 @@
  * Tests that the deprecated API still works while showing deprecation warnings
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import Database from 'better-sqlite3';
-import { initializeSchema } from '../schema.js';
+import { SQLiteAdapter } from '../adapters/sqlite-adapter.js';
+import type { DatabaseAdapter } from '../adapters/types.js';
 import { getOrCreateAgent, getOrCreateFile } from '../database.js';
-import type { Database as DatabaseType } from '../types.js';
 
 /**
  * Test database instance
  */
-let testDb: DatabaseType;
+let testDb: DatabaseAdapter;
 
 /**
  * Create an in-memory test database
  */
-function createTestDatabase(): DatabaseType {
-  const db = new Database(':memory:');
-  db.pragma('foreign_keys = ON');
-  initializeSchema(db);
-  return db;
+async function createTestDatabase(): Promise<DatabaseAdapter> {
+  const adapter = new SQLiteAdapter();
+  await adapter.connect({
+    client: 'better-sqlite3',
+    connection: ':memory:',
+    useNullAsDefault: true,
+  });
+
+  // Run migrations to set up schema
+  const knex = adapter.getKnex();
+  await knex.migrate.latest();
+
+  return adapter;
 }
 
 /**
  * Helper: Create a test task
  */
-function createTestTask(db: DatabaseType, title: string): number {
-  const agentId = getOrCreateAgent(db, 'test-agent');
+async function createTestTask(db: DatabaseAdapter, title: string): Promise<number> {
+  const agentId = await getOrCreateAgent(db, 'test-agent');
   const statusId = 1; // todo
 
-  const result = db.prepare(`
-    INSERT INTO t_tasks (title, status_id, priority, created_by_agent_id, assigned_agent_id)
-    VALUES (?, ?, 2, ?, ?)
-  `).run(title, statusId, agentId, agentId);
+  const knex = db.getKnex();
+  const [taskId] = await knex('t_tasks').insert({
+    title,
+    status_id: statusId,
+    priority: 2,
+    created_by_agent_id: agentId,
+    assigned_agent_id: agentId,
+  });
 
-  return result.lastInsertRowid as number;
+  return taskId;
 }
 
 /**
  * Inline implementation of linkTask for testing (file link_type only)
  */
-function linkTaskFile(db: DatabaseType, params: {
+async function linkTaskFile(db: DatabaseAdapter, params: {
   task_id: number;
   target_id: string;
-}): any {
+}): Promise<any> {
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
   }
@@ -56,7 +67,8 @@ function linkTaskFile(db: DatabaseType, params: {
   }
 
   // Check if task exists
-  const taskExists = db.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+  const knex = db.getKnex();
+  const taskExists = await knex('t_tasks').where('id', params.task_id).first();
   if (!taskExists) {
     throw new Error(`Task with id ${params.task_id} not found`);
   }
@@ -65,13 +77,12 @@ function linkTaskFile(db: DatabaseType, params: {
   // console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.`);
 
   const filePath = String(params.target_id);
-  const fileId = getOrCreateFile(db, filePath);
+  const fileId = await getOrCreateFile(db, filePath);
 
-  const stmt = db.prepare(`
-    INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
-    VALUES (?, ?)
-  `);
-  stmt.run(params.task_id, fileId);
+  await knex('t_task_file_links')
+    .insert({ task_id: params.task_id, file_id: fileId })
+    .onConflict(['task_id', 'file_id'])
+    .ignore();
 
   return {
     success: true,
@@ -84,14 +95,20 @@ function linkTaskFile(db: DatabaseType, params: {
 }
 
 describe('Backward compatibility: task.link(link_type="file")', () => {
-  beforeEach(() => {
-    testDb = createTestDatabase();
+  beforeEach(async () => {
+    testDb = await createTestDatabase();
   });
 
-  it('should still link file to task (backward compatible)', () => {
-    const taskId = createTestTask(testDb, 'Task for backward compat test');
+  afterEach(async () => {
+    if (testDb) {
+      await testDb.disconnect();
+    }
+  });
 
-    const result = linkTaskFile(testDb, {
+  it('should still link file to task (backward compatible)', async () => {
+    const taskId = await createTestTask(testDb, 'Task for backward compat test');
+
+    const result = await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/index.ts'
     });
@@ -102,10 +119,10 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     assert.strictEqual(result.target, 'src/index.ts');
   });
 
-  it('should include deprecation warning in response', () => {
-    const taskId = createTestTask(testDb, 'Task for deprecation warning test');
+  it('should include deprecation warning in response', async () => {
+    const taskId = await createTestTask(testDb, 'Task for deprecation warning test');
 
-    const result = linkTaskFile(testDb, {
+    const result = await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/database.ts'
     });
@@ -115,52 +132,50 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     assert.ok(result.deprecation_warning.includes('watch_files'), 'Warning should suggest watch_files');
   });
 
-  it('should create file link in database', () => {
-    const taskId = createTestTask(testDb, 'Task for DB link test');
+  it('should create file link in database', async () => {
+    const taskId = await createTestTask(testDb, 'Task for DB link test');
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/schema.ts'
     });
 
     // Verify file link was created
-    const links = testDb.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON tfl.file_id = f.id
-      WHERE tfl.task_id = ?
-    `).all(taskId) as { path: string }[];
+    const knex = testDb.getKnex();
+    const links = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('tfl.task_id', taskId)
+      .select('f.path');
 
     assert.strictEqual(links.length, 1);
     assert.strictEqual(links[0].path, 'src/schema.ts');
   });
 
-  it('should handle multiple file links', () => {
-    const taskId = createTestTask(testDb, 'Task for multiple links');
+  it('should handle multiple file links', async () => {
+    const taskId = await createTestTask(testDb, 'Task for multiple links');
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/index.ts'
     });
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/database.ts'
     });
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/schema.ts'
     });
 
     // Verify all links exist
-    const links = testDb.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON tfl.file_id = f.id
-      WHERE tfl.task_id = ?
-      ORDER BY f.path
-    `).all(taskId) as { path: string }[];
+    const knex = testDb.getKnex();
+    const links = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('tfl.task_id', taskId)
+      .orderBy('f.path')
+      .select('f.path');
 
     assert.strictEqual(links.length, 3);
     assert.strictEqual(links[0].path, 'src/database.ts');
@@ -168,62 +183,63 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     assert.strictEqual(links[2].path, 'src/schema.ts');
   });
 
-  it('should be idempotent (duplicate links ignored)', () => {
-    const taskId = createTestTask(testDb, 'Task for idempotent test');
+  it('should be idempotent (duplicate links ignored)', async () => {
+    const taskId = await createTestTask(testDb, 'Task for idempotent test');
 
     // Link same file twice
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/index.ts'
     });
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/index.ts'
     });
 
     // Should only have one link
-    const links = testDb.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON tfl.file_id = f.id
-      WHERE tfl.task_id = ?
-    `).all(taskId) as { path: string }[];
+    const knex = testDb.getKnex();
+    const links = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('tfl.task_id', taskId)
+      .select('f.path');
 
     assert.strictEqual(links.length, 1, 'Should not create duplicate links');
   });
 
-  it('should work with new watch_files action on same task', () => {
-    const taskId = createTestTask(testDb, 'Task for mixed API test');
+  it('should work with new watch_files action on same task', async () => {
+    const taskId = await createTestTask(testDb, 'Task for mixed API test');
 
     // Use old API
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/index.ts'
     });
 
     // Use new API (simulated by direct DB insert)
-    const fileId = getOrCreateFile(testDb, 'src/database.ts');
-    testDb.prepare('INSERT OR IGNORE INTO t_task_file_links (task_id, file_id) VALUES (?, ?)').run(taskId, fileId);
+    const fileId = await getOrCreateFile(testDb, 'src/database.ts');
+    const knex = testDb.getKnex();
+    await knex('t_task_file_links')
+      .insert({ task_id: taskId, file_id: fileId })
+      .onConflict(['task_id', 'file_id'])
+      .ignore();
 
     // Both files should be linked
-    const links = testDb.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON tfl.file_id = f.id
-      WHERE tfl.task_id = ?
-      ORDER BY f.path
-    `).all(taskId) as { path: string }[];
+    const links = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('tfl.task_id', taskId)
+      .orderBy('f.path')
+      .select('f.path');
 
     assert.strictEqual(links.length, 2);
     assert.strictEqual(links[0].path, 'src/database.ts');
     assert.strictEqual(links[1].path, 'src/index.ts');
   });
 
-  it('should throw error for invalid task_id', () => {
-    assert.throws(
-      () => {
-        linkTaskFile(testDb, {
+  it('should throw error for invalid task_id', async () => {
+    await assert.rejects(
+      async () => {
+        await linkTaskFile(testDb, {
           task_id: 999,
           target_id: 'src/index.ts'
         });
@@ -232,60 +248,59 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     );
   });
 
-  it('should handle various file path formats', () => {
-    const taskId = createTestTask(testDb, 'Task for path formats');
+  it('should handle various file path formats', async () => {
+    const taskId = await createTestTask(testDb, 'Task for path formats');
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'package.json'
     });
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'src/tools/tasks.ts'
     });
 
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId,
       target_id: 'docs/README.md'
     });
 
-    const links = testDb.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON tfl.file_id = f.id
-      WHERE tfl.task_id = ?
-    `).all(taskId) as { path: string }[];
+    const knex = testDb.getKnex();
+    const links = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('tfl.task_id', taskId)
+      .select('f.path');
 
     assert.strictEqual(links.length, 3);
   });
 
-  it('should maintain same database schema as new API', () => {
-    const taskId1 = createTestTask(testDb, 'Task with old API');
-    const taskId2 = createTestTask(testDb, 'Task with new API');
+  it('should maintain same database schema as new API', async () => {
+    const taskId1 = await createTestTask(testDb, 'Task with old API');
+    const taskId2 = await createTestTask(testDb, 'Task with new API');
 
     // Old API
-    linkTaskFile(testDb, {
+    await linkTaskFile(testDb, {
       task_id: taskId1,
       target_id: 'src/index.ts'
     });
 
     // New API (simulated)
-    const fileId = getOrCreateFile(testDb, 'src/index.ts');
-    testDb.prepare('INSERT OR IGNORE INTO t_task_file_links (task_id, file_id) VALUES (?, ?)').run(taskId2, fileId);
+    const fileId = await getOrCreateFile(testDb, 'src/index.ts');
+    const knex = testDb.getKnex();
+    await knex('t_task_file_links')
+      .insert({ task_id: taskId2, file_id: fileId })
+      .onConflict(['task_id', 'file_id'])
+      .ignore();
 
     // Both should create identical links
-    const links1 = testDb.prepare(`
-      SELECT task_id, file_id
-      FROM t_task_file_links
-      WHERE task_id = ?
-    `).all(taskId1) as { task_id: number; file_id: number }[];
+    const links1 = await knex('t_task_file_links')
+      .where('task_id', taskId1)
+      .select('task_id', 'file_id');
 
-    const links2 = testDb.prepare(`
-      SELECT task_id, file_id
-      FROM t_task_file_links
-      WHERE task_id = ?
-    `).all(taskId2) as { task_id: number; file_id: number }[];
+    const links2 = await knex('t_task_file_links')
+      .where('task_id', taskId2)
+      .select('task_id', 'file_id');
 
     // Same file_id should be used
     assert.strictEqual(links1[0].file_id, links2[0].file_id, 'Should use same file ID');

@@ -5,69 +5,84 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import Database from 'better-sqlite3';
-import { initializeSchema } from '../schema.js';
-import { runAllMigrations } from '../migrations/index.js';
+import { initializeDatabase } from '../database.js';
+import type { DatabaseAdapter } from '../adapters/types.js';
 import { getOrCreateAgent } from '../database.js';
 import { setDecision } from '../tools/context.js';
 import { getPrunedFiles, linkPrunedFile } from '../tools/tasks.js';
-import type { Database as DatabaseType } from '../types.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 /**
  * Test database instance
  */
-let testDb: DatabaseType;
+let testDb: DatabaseAdapter;
 
 /**
  * Create an in-memory test database
  */
-function createTestDatabase(): DatabaseType {
-  const db = new Database(':memory:');
-  db.pragma('foreign_keys = ON');
-  initializeSchema(db);
-  runAllMigrations(db);
-  return db;
+async function createTestDatabase(): Promise<DatabaseAdapter> {
+  // Use unique temp file for each test run to ensure clean state
+  const tmpDir = path.join(process.cwd(), 'src', '.sqlew', 'tmp');
+  if (!fs.existsSync(tmpDir)) {
+    fs.mkdirSync(tmpDir, { recursive: true });
+  }
+  const dbPath = path.join(tmpDir, `test-auto-pruning-${Date.now()}.db`);
+
+  const adapter = await initializeDatabase({
+    databaseType: 'sqlite',
+    connection: { filename: dbPath }
+  });
+
+  return adapter;
 }
 
 /**
  * Helper: Create a test task
  */
-function createTestTask(db: DatabaseType, title: string): number {
-  const agentId = getOrCreateAgent(db, 'test-agent');
+async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<number> {
+  const agentId = await getOrCreateAgent(adapter, 'test-agent');
   const statusId = 2; // in_progress
+  const knex = adapter.getKnex();
 
-  const result = db.prepare(`
-    INSERT INTO t_tasks (title, status_id, priority, created_by_agent_id, assigned_agent_id)
-    VALUES (?, ?, 2, ?, ?)
-  `).run(title, statusId, agentId, agentId);
+  const [id] = await knex('t_tasks').insert({
+    title,
+    status_id: statusId,
+    priority: 2,
+    created_by_agent_id: agentId,
+    assigned_agent_id: agentId
+  });
 
-  return result.lastInsertRowid as number;
+  return id;
 }
 
 /**
  * Helper: Create a pruned file record
  */
-function createPrunedFileRecord(db: DatabaseType, taskId: number, filePath: string): number {
-  const result = db.prepare(`
-    INSERT INTO t_task_pruned_files (task_id, file_path, pruned_ts)
-    VALUES (?, ?, unixepoch())
-  `).run(taskId, filePath);
+async function createPrunedFileRecord(adapter: DatabaseAdapter, taskId: number, filePath: string): Promise<number> {
+  const knex = adapter.getKnex();
 
-  return result.lastInsertRowid as number;
+  const [id] = await knex('t_task_pruned_files').insert({
+    task_id: taskId,
+    file_path: filePath,
+    pruned_ts: knex.raw('unixepoch()')
+  });
+
+  return id;
 }
 
 describe('Auto-pruning: Decision linking workflow', () => {
-  beforeEach(() => {
-    testDb = createTestDatabase();
+  beforeEach(async () => {
+    testDb = await createTestDatabase();
   });
 
-  it('should link decisions to pruned files for WHY reasoning', () => {
+  it('should link decisions to pruned files for WHY reasoning', async () => {
     // 1. Setup: Create task with pruned file
-    const taskId = createTestTask(testDb, 'Implement OAuth authentication');
-    const prunedFileId = createPrunedFileRecord(testDb, taskId, 'src/auth/oauth-handler.ts');
+    const taskId = await createTestTask(testDb, 'Implement OAuth authentication');
+    const prunedFileId = await createPrunedFileRecord(testDb, taskId, 'src/auth/oauth-handler.ts');
 
     // 2. Create decision explaining why file wasn't created
-    const decisionResult = setDecision({
+    const decisionResult = await setDecision({
       key: 'oauth-not-implemented',
       value: 'Decided to use API key auth instead of OAuth for simplicity',
       tags: ['architecture', 'authentication'],
@@ -78,7 +93,7 @@ describe('Auto-pruning: Decision linking workflow', () => {
     assert.strictEqual(decisionResult.key, 'oauth-not-implemented');
 
     // 3. Link decision to pruned file
-    const linkResult = linkPrunedFile({
+    const linkResult = await linkPrunedFile({
       pruned_file_id: prunedFileId,
       decision_key: 'oauth-not-implemented'
     }, testDb);
@@ -90,15 +105,17 @@ describe('Auto-pruning: Decision linking workflow', () => {
     assert.strictEqual(linkResult.file_path, 'src/auth/oauth-handler.ts');
 
     // 4. Verify link in database directly
-    const linkedDecisionId = testDb.prepare(`
-      SELECT linked_decision_key_id FROM t_task_pruned_files WHERE id = ?
-    `).get(prunedFileId) as { linked_decision_key_id: number | null } | undefined;
+    const knex = testDb.getKnex();
+    const linkedDecisionId = await knex('t_task_pruned_files')
+      .where({ id: prunedFileId })
+      .select('linked_decision_key_id')
+      .first();
 
     assert.ok(linkedDecisionId, 'Pruned file record should exist');
     assert.ok(linkedDecisionId.linked_decision_key_id !== null, 'Decision key ID should be linked');
 
     // 5. Query pruned files - decision key should be returned
-    const getPrunedResult = getPrunedFiles({
+    const getPrunedResult = await getPrunedFiles({
       task_id: taskId,
       limit: 100
     }, testDb);
@@ -116,39 +133,39 @@ describe('Auto-pruning: Decision linking workflow', () => {
     assert.strictEqual(prunedFile.linked_decision, 'oauth-not-implemented', 'Linked decision key should match');
   });
 
-  it('should handle multiple pruned files with different decisions', () => {
-    const taskId = createTestTask(testDb, 'Feature implementation');
+  it('should handle multiple pruned files with different decisions', async () => {
+    const taskId = await createTestTask(testDb, 'Feature implementation');
 
     // Create pruned files
-    const prunedFileId1 = createPrunedFileRecord(testDb, taskId, 'src/oauth-handler.ts');
-    const prunedFileId2 = createPrunedFileRecord(testDb, taskId, 'src/ldap-connector.ts');
+    const prunedFileId1 = await createPrunedFileRecord(testDb, taskId, 'src/oauth-handler.ts');
+    const prunedFileId2 = await createPrunedFileRecord(testDb, taskId, 'src/ldap-connector.ts');
 
     // Create decisions
-    setDecision({
+    await setDecision({
       key: 'no-oauth',
       value: 'OAuth not needed for MVP',
       status: 'active'
     }, testDb);
 
-    setDecision({
+    await setDecision({
       key: 'no-ldap',
       value: 'LDAP integration deferred to Phase 2',
       status: 'active'
     }, testDb);
 
     // Link decisions
-    linkPrunedFile({
+    await linkPrunedFile({
       pruned_file_id: prunedFileId1,
       decision_key: 'no-oauth'
     }, testDb);
 
-    linkPrunedFile({
+    await linkPrunedFile({
       pruned_file_id: prunedFileId2,
       decision_key: 'no-ldap'
     }, testDb);
 
     // Verify
-    const getPrunedResult = getPrunedFiles({
+    const getPrunedResult = await getPrunedFiles({
       task_id: taskId
     }, testDb);
 
@@ -163,11 +180,11 @@ describe('Auto-pruning: Decision linking workflow', () => {
     assert.strictEqual(file2?.linked_decision, 'no-ldap');
   });
 
-  it('should handle pruned files without linked decisions', () => {
-    const taskId = createTestTask(testDb, 'Task with unlinked pruned files');
-    createPrunedFileRecord(testDb, taskId, 'src/temp-file.ts');
+  it('should handle pruned files without linked decisions', async () => {
+    const taskId = await createTestTask(testDb, 'Task with unlinked pruned files');
+    await createPrunedFileRecord(testDb, taskId, 'src/temp-file.ts');
 
-    const getPrunedResult = getPrunedFiles({
+    const getPrunedResult = await getPrunedFiles({
       task_id: taskId
     }, testDb);
 
@@ -178,14 +195,14 @@ describe('Auto-pruning: Decision linking workflow', () => {
     assert.strictEqual(prunedFile.linked_decision, null, 'Unlinked file should have null decision');
   });
 
-  it('should handle linking to non-existent decision gracefully', () => {
-    const taskId = createTestTask(testDb, 'Task for error test');
-    const prunedFileId = createPrunedFileRecord(testDb, taskId, 'src/test.ts');
+  it('should handle linking to non-existent decision gracefully', async () => {
+    const taskId = await createTestTask(testDb, 'Task for error test');
+    const prunedFileId = await createPrunedFileRecord(testDb, taskId, 'src/test.ts');
 
     // Attempt to link non-existent decision
-    assert.throws(
-      () => {
-        linkPrunedFile({
+    await assert.rejects(
+      async () => {
+        await linkPrunedFile({
           pruned_file_id: prunedFileId,
           decision_key: 'does-not-exist'
         }, testDb);
@@ -195,18 +212,18 @@ describe('Auto-pruning: Decision linking workflow', () => {
     );
   });
 
-  it('should handle linking to non-existent pruned file gracefully', () => {
+  it('should handle linking to non-existent pruned file gracefully', async () => {
     // Create decision
-    setDecision({
+    await setDecision({
       key: 'test-decision',
       value: 'Test decision value',
       status: 'active'
     }, testDb);
 
     // Attempt to link non-existent pruned file
-    assert.throws(
-      () => {
-        linkPrunedFile({
+    await assert.rejects(
+      async () => {
+        await linkPrunedFile({
           pruned_file_id: 99999,
           decision_key: 'test-decision'
         }, testDb);
@@ -216,11 +233,11 @@ describe('Auto-pruning: Decision linking workflow', () => {
     );
   });
 
-  it('should validate required parameters for linkPrunedFile', () => {
+  it('should validate required parameters for linkPrunedFile', async () => {
     // Missing pruned_file_id
-    assert.throws(
-      () => {
-        linkPrunedFile({
+    await assert.rejects(
+      async () => {
+        await linkPrunedFile({
           pruned_file_id: 0,
           decision_key: 'test'
         }, testDb);
@@ -230,9 +247,9 @@ describe('Auto-pruning: Decision linking workflow', () => {
     );
 
     // Missing decision_key
-    assert.throws(
-      () => {
-        linkPrunedFile({
+    await assert.rejects(
+      async () => {
+        await linkPrunedFile({
           pruned_file_id: 1,
           decision_key: ''
         }, testDb);
@@ -242,11 +259,11 @@ describe('Auto-pruning: Decision linking workflow', () => {
     );
   });
 
-  it('should validate required parameters for getPrunedFiles', () => {
+  it('should validate required parameters for getPrunedFiles', async () => {
     // Missing task_id
-    assert.throws(
-      () => {
-        getPrunedFiles({
+    await assert.rejects(
+      async () => {
+        await getPrunedFiles({
           task_id: 0
         }, testDb);
       },
@@ -255,9 +272,9 @@ describe('Auto-pruning: Decision linking workflow', () => {
     );
 
     // Non-existent task
-    assert.throws(
-      () => {
-        getPrunedFiles({
+    await assert.rejects(
+      async () => {
+        await getPrunedFiles({
           task_id: 99999
         }, testDb);
       },
@@ -266,54 +283,54 @@ describe('Auto-pruning: Decision linking workflow', () => {
     );
   });
 
-  it('should allow updating linked decision for a pruned file', () => {
-    const taskId = createTestTask(testDb, 'Task for update test');
-    const prunedFileId = createPrunedFileRecord(testDb, taskId, 'src/feature.ts');
+  it('should allow updating linked decision for a pruned file', async () => {
+    const taskId = await createTestTask(testDb, 'Task for update test');
+    const prunedFileId = await createPrunedFileRecord(testDb, taskId, 'src/feature.ts');
 
     // Create two decisions
-    setDecision({
+    await setDecision({
       key: 'decision-v1',
       value: 'Initial decision',
       status: 'active'
     }, testDb);
 
-    setDecision({
+    await setDecision({
       key: 'decision-v2',
       value: 'Updated decision',
       status: 'active'
     }, testDb);
 
     // Link first decision
-    linkPrunedFile({
+    await linkPrunedFile({
       pruned_file_id: prunedFileId,
       decision_key: 'decision-v1'
     }, testDb);
 
     // Verify first link
-    let getPrunedResult = getPrunedFiles({ task_id: taskId }, testDb);
+    let getPrunedResult = await getPrunedFiles({ task_id: taskId }, testDb);
     assert.strictEqual(getPrunedResult.pruned_files[0].linked_decision, 'decision-v1');
 
     // Update to second decision
-    linkPrunedFile({
+    await linkPrunedFile({
       pruned_file_id: prunedFileId,
       decision_key: 'decision-v2'
     }, testDb);
 
     // Verify updated link
-    getPrunedResult = getPrunedFiles({ task_id: taskId }, testDb);
+    getPrunedResult = await getPrunedFiles({ task_id: taskId }, testDb);
     assert.strictEqual(getPrunedResult.pruned_files[0].linked_decision, 'decision-v2');
   });
 
-  it('should respect limit parameter in getPrunedFiles', () => {
-    const taskId = createTestTask(testDb, 'Task with many pruned files');
+  it('should respect limit parameter in getPrunedFiles', async () => {
+    const taskId = await createTestTask(testDb, 'Task with many pruned files');
 
     // Create 5 pruned files
     for (let i = 1; i <= 5; i++) {
-      createPrunedFileRecord(testDb, taskId, `src/file${i}.ts`);
+      await createPrunedFileRecord(testDb, taskId, `src/file${i}.ts`);
     }
 
     // Query with limit
-    const getPrunedResult = getPrunedFiles({
+    const getPrunedResult = await getPrunedFiles({
       task_id: taskId,
       limit: 3
     }, testDb);

@@ -10,7 +10,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { initializeDatabase, closeDatabase, setConfigValue, getAllConfig, DatabaseAdapter } from './database.js';
+import { initializeDatabase, closeDatabase, setConfigValue, getAllConfig, DatabaseAdapter, getAdapter } from './database.js';
 import { CONFIG_KEYS } from './constants.js';
 import { loadConfigFile } from './config/loader.js';
 import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer, quickSetDecision, searchAdvanced, setDecisionBatch, hasUpdates, setFromTemplate, createTemplate, listTemplates, hardDeleteDecision, addDecisionContextAction, listDecisionContextsAction, decisionHelp, decisionExample } from './tools/context.js';
@@ -358,8 +358,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'stats':
         switch (params.action) {
-          case 'layer_summary': result = getLayerSummary(); break;
-          case 'db_stats': result = getStats(); break;
+          case 'layer_summary': result = await getLayerSummary(); break;
+          case 'db_stats': result = await getStats(); break;
           case 'clear': result = clearOldData(params); break;
           case 'activity_log': result = getActivityLog({
             since: params.since,
@@ -372,32 +372,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!params.target_tool || !params.target_action) {
               result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpAction(db, params.target_tool, params.target_action);
+              result = queryHelpAction(getAdapter(), params.target_tool, params.target_action);
             }
             break;
           case 'help_params':
             if (!params.target_tool || !params.target_action) {
               result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpParams(db, params.target_tool, params.target_action);
+              result = queryHelpParams(getAdapter(), params.target_tool, params.target_action);
             }
             break;
           case 'help_tool':
             if (!params.tool) {
               result = { error: 'Parameter "tool" is required' };
             } else {
-              result = queryHelpTool(db, params.tool);
+              result = queryHelpTool(getAdapter(), params.tool);
             }
             break;
           case 'help_use_case':
             if (!params.use_case_id) {
               result = { error: 'Parameter "use_case_id" is required' };
             } else {
-              result = queryHelpUseCase(db, params.use_case_id);
+              result = queryHelpUseCase(getAdapter(), params.use_case_id);
             }
             break;
           case 'help_list_use_cases':
-            result = queryHelpListUseCases(db, {
+            result = queryHelpListUseCases(getAdapter(), {
               category: params.category,
               complexity: params.complexity,
               limit: params.limit,
@@ -408,7 +408,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!params.target_tool || !params.target_action) {
               result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpNextActions(db, params.target_tool, params.target_action);
+              result = queryHelpNextActions(getAdapter(), params.target_tool, params.target_action);
             }
             break;
           case 'help':
