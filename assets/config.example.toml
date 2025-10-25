@@ -1,0 +1,97 @@
+# sqlew Configuration File
+# Copy this file to .sqlew/config.toml and customize as needed
+#
+# Priority: CLI arguments > config.toml > database m_config > defaults
+# Documentation: docs/CONFIGURATION.md
+
+# ============================================================================
+# Database Settings
+# ============================================================================
+[database]
+# Database file path (relative to project root or absolute)
+# Default: ".sqlew/sqlew.db"
+# path = ".sqlew/custom.db"
+# path = "/absolute/path/to/database.db"
+
+# ============================================================================
+# Auto-Deletion Settings
+# ============================================================================
+[autodelete]
+# Skip weekends when calculating retention periods
+# When true: 24 hours on Monday = previous Friday (skips Sat/Sun)
+# When false: 24 hours = exactly 24 hours ago
+# Default: false
+ignore_weekend = false
+
+# Message retention period in hours (1-720)
+# Messages older than this are automatically deleted
+# Default: 24 (1 day)
+message_hours = 24
+
+# File change history retention in days (1-365)
+# File changes older than this are automatically deleted
+# Default: 7 (1 week)
+file_history_days = 7
+
+# ============================================================================
+# Debug Logging Settings (v3.5.4)
+# ============================================================================
+[debug]
+# Debug log file path (optional)
+# When set, enables detailed debug logging for troubleshooting
+# Environment variable SQLEW_DEBUG takes precedence over this setting
+# Default: not set (logging disabled)
+# log_path = "/home/user/.sqlew/debug.log"
+# log_path = ".sqlew/debug.log"
+
+# ============================================================================
+# Task Management Settings
+# ============================================================================
+[tasks]
+# Auto-archive done tasks after N days (1-365)
+# Tasks in 'done' status older than this are moved to 'archived'
+# Keeps task list clean while preserving history
+# Default: 2 (48 hours)
+auto_archive_done_days = 2
+
+# Stale detection threshold for 'in_progress' tasks (hours, 1-168)
+# Tasks stuck in 'in_progress' longer than this → move to 'waiting_review'
+# Helps recover from interrupted AI sessions
+# Default: 2 (2 hours)
+stale_hours_in_progress = 2
+
+# Stale detection threshold for 'waiting_review' tasks (hours, 1-720)
+# Tasks stuck in 'waiting_review' longer than this → move back to 'todo'
+# Prevents abandoned reviews from blocking workflow
+# Default: 24 (1 day)
+stale_hours_waiting_review = 24
+
+# Enable automatic stale detection
+# When true: Runs stale detection on startup and before task operations
+# When false: Stale detection disabled (manual only)
+# Default: true
+auto_stale_enabled = true
+
+# ============================================================================
+# Example Configurations
+# ============================================================================
+
+# Aggressive cleanup (development)
+# [autodelete]
+# message_hours = 1
+# file_history_days = 1
+# [tasks]
+# auto_archive_done_days = 1
+
+# Conservative cleanup (production)
+# [autodelete]
+# message_hours = 168  # 7 days
+# file_history_days = 30
+# [tasks]
+# auto_archive_done_days = 7
+
+# Weekend-aware workflow (for developers)
+# [autodelete]
+# ignore_weekend = true
+# message_hours = 48
+# file_history_days = 14

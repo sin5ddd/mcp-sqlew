@@ -50,6 +50,10 @@ export function loadConfigFile(configPath?: string): SqlewConfig {
         ...DEFAULT_CONFIG.tasks,
         ...parsed.tasks,
       },
+      debug: {
+        ...DEFAULT_CONFIG.debug,
+        ...parsed.debug,
+      },
     };
 
     return merged;

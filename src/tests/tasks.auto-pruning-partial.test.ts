@@ -5,37 +5,34 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import Database from 'better-sqlite3';
-import { initializeSchema } from '../schema.js';
-import { runAllMigrations } from '../migrations/index.js';
+import { initializeDatabase, getOrCreateAgent, getOrCreateFile, closeDatabase } from '../database.js';
+import type { DatabaseAdapter } from '../adapters/types.js';
 import { detectAndTransitionToReview } from '../utils/task-stale-detection.js';
-import { getOrCreateAgent, getOrCreateFile } from '../database.js';
-import type { Database as DatabaseType } from '../types.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
 describe('Auto-pruning: Partial file existence', () => {
-  let db: DatabaseType;
+  let db: DatabaseAdapter;
   let tempDir: string;
+  let tempDbPath: string;
 
-  beforeEach(() => {
-    db = new Database(':memory:');
-    db.pragma('foreign_keys = ON');
-    initializeSchema(db);
-    runAllMigrations(db);
-
-    // Skip the explicit migration result check
-    if (false) {
-      throw new Error(`Migration failed`);
-    }
-
-    // Create temp directory for test files
+  beforeEach(async () => {
+    // Create temp directory for test files and database
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlew-test-'));
+    tempDbPath = path.join(tempDir, 'test.db');
+
+    // Initialize database with Knex adapter
+    db = await initializeDatabase({
+      databaseType: 'sqlite',
+      connection: {
+        filename: tempDbPath,
+      },
+    });
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await closeDatabase();
     // Cleanup temp directory
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -44,7 +41,7 @@ describe('Auto-pruning: Partial file existence', () => {
 
   it('should prune non-existent files and keep existing ones', async () => {
     // 1. Create test task
-    const taskId = createTestTask(db);
+    const taskId = await createTestTask(db);
 
     // 2. Create 4 watched files (2 exist, 2 don't)
     const existingFile1 = path.join(tempDir, 'exists1.ts');
@@ -57,7 +54,7 @@ describe('Auto-pruning: Partial file existence', () => {
     // Don't create nonExistentFile1 and nonExistentFile2
 
     // Add all 4 files to watch list
-    addWatchedFiles(db, taskId, [
+    await addWatchedFiles(db, taskId, [
       existingFile1,
       existingFile2,
       nonExistentFile1,
@@ -67,11 +64,13 @@ describe('Auto-pruning: Partial file existence', () => {
     // Set task to in_progress status and update timestamp to be old enough
     // for auto-transition (older than 15 minutes, which is the default review_idle_minutes)
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
-    db.prepare(`
-      UPDATE t_tasks
-      SET status_id = 2, updated_ts = ?
-      WHERE id = ?
-    `).run(fifteenMinutesAgo, taskId);
+    const knex = db.getKnex();
+    await knex('t_tasks')
+      .where({ id: taskId })
+      .update({
+        status_id: 2,
+        updated_ts: fifteenMinutesAgo,
+      });
 
     // 3. Trigger auto-pruning by detecting ready for review
     // Change cwd to tempDir so file existence checks work correctly
@@ -87,7 +86,7 @@ describe('Auto-pruning: Partial file existence', () => {
       // 4. Verify results
 
       // Check watch list - should have only 2 files (the existing ones)
-      const watchedFiles = getWatchedFiles(db, taskId);
+      const watchedFiles = await getWatchedFiles(db, taskId);
       assert.equal(watchedFiles.length, 2, 'Should have 2 files in watch list');
       assert.ok(
         watchedFiles.includes('exists1.ts'),
@@ -99,13 +98,9 @@ describe('Auto-pruning: Partial file existence', () => {
       );
 
       // Check pruned files table - should have 2 records
-      const prunedFiles = db
-        .prepare(
-          `
-        SELECT file_path FROM t_task_pruned_files WHERE task_id = ?
-      `
-        )
-        .all(taskId) as Array<{ file_path: string }>;
+      const prunedFiles = await knex('t_task_pruned_files')
+        .where({ task_id: taskId })
+        .select('file_path');
 
       assert.equal(prunedFiles.length, 2, 'Should have 2 pruned file records');
 
@@ -121,9 +116,9 @@ describe('Auto-pruning: Partial file existence', () => {
       );
 
       // Check task status transitioned to waiting_review
-      const task = db
-        .prepare('SELECT status_id FROM t_tasks WHERE id = ?')
-        .get(taskId) as { status_id: number };
+      const task = await knex('t_tasks')
+        .where({ id: taskId })
+        .first('status_id');
       assert.equal(
         task.status_id,
         3,
@@ -137,7 +132,7 @@ describe('Auto-pruning: Partial file existence', () => {
 
   it('should not transition if all files are non-existent', async () => {
     // 1. Create test task
-    const taskId = createTestTask(db);
+    const taskId = await createTestTask(db);
 
     // 2. Create 2 watched files that don't exist
     const nonExistentFile1 = path.join(tempDir, 'missing1.ts');
@@ -145,15 +140,17 @@ describe('Auto-pruning: Partial file existence', () => {
     // Don't create these files
 
     // Add files to watch list
-    addWatchedFiles(db, taskId, [nonExistentFile1, nonExistentFile2]);
+    await addWatchedFiles(db, taskId, [nonExistentFile1, nonExistentFile2]);
 
     // Set task to in_progress status and update timestamp to be old enough
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
-    db.prepare(`
-      UPDATE t_tasks
-      SET status_id = 2, updated_ts = ?
-      WHERE id = ?
-    `).run(fifteenMinutesAgo, taskId);
+    const knex = db.getKnex();
+    await knex('t_tasks')
+      .where({ id: taskId })
+      .update({
+        status_id: 2,
+        updated_ts: fifteenMinutesAgo,
+      });
 
     // 3. Trigger auto-pruning
     const originalCwd = process.cwd();
@@ -166,15 +163,17 @@ describe('Auto-pruning: Partial file existence', () => {
       assert.equal(transitioned, 0, 'Should not have transitioned any tasks');
 
       // 4. Verify task is still in in_progress
-      const task = db
-        .prepare('SELECT status_id FROM t_tasks WHERE id = ?')
-        .get(taskId) as { status_id: number };
+      const task = await knex('t_tasks')
+        .where({ id: taskId })
+        .first('status_id');
       assert.equal(task.status_id, 2, 'Task should still be in in_progress (2)');
 
       // 5. Verify no pruning occurred (safety check blocked it)
-      const prunedFiles = db
-        .prepare('SELECT COUNT(*) as count FROM t_task_pruned_files WHERE task_id = ?')
-        .get(taskId) as { count: number };
+      const prunedFiles = await knex('t_task_pruned_files')
+        .where({ task_id: taskId })
+        .count('* as count')
+        .first();
+      assert.ok(prunedFiles, 'Should have pruned files result');
       assert.equal(
         prunedFiles.count,
         0,
@@ -187,7 +186,7 @@ describe('Auto-pruning: Partial file existence', () => {
 
   it('should not prune when all files exist', async () => {
     // 1. Create test task
-    const taskId = createTestTask(db);
+    const taskId = await createTestTask(db);
 
     // 2. Create 3 watched files that all exist
     const existingFile1 = path.join(tempDir, 'exists1.ts');
@@ -199,7 +198,7 @@ describe('Auto-pruning: Partial file existence', () => {
     fs.writeFileSync(existingFile3, '// test file 3');
 
     // Add files to watch list
-    addWatchedFiles(db, taskId, [
+    await addWatchedFiles(db, taskId, [
       existingFile1,
       existingFile2,
       existingFile3,
@@ -207,11 +206,13 @@ describe('Auto-pruning: Partial file existence', () => {
 
     // Set task to in_progress status and update timestamp to be old enough
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
-    db.prepare(`
-      UPDATE t_tasks
-      SET status_id = 2, updated_ts = ?
-      WHERE id = ?
-    `).run(fifteenMinutesAgo, taskId);
+    const knex = db.getKnex();
+    await knex('t_tasks')
+      .where({ id: taskId })
+      .update({
+        status_id: 2,
+        updated_ts: fifteenMinutesAgo,
+      });
 
     // 3. Trigger auto-pruning
     const originalCwd = process.cwd();
@@ -224,19 +225,21 @@ describe('Auto-pruning: Partial file existence', () => {
       assert.equal(transitioned, 1, 'Should have transitioned 1 task');
 
       // 4. Verify no pruning occurred
-      const prunedFiles = db
-        .prepare('SELECT COUNT(*) as count FROM t_task_pruned_files WHERE task_id = ?')
-        .get(taskId) as { count: number };
+      const prunedFiles = await knex('t_task_pruned_files')
+        .where({ task_id: taskId })
+        .count('* as count')
+        .first();
+      assert.ok(prunedFiles, 'Should have pruned files result');
       assert.equal(prunedFiles.count, 0, 'Should have 0 pruned records');
 
       // 5. Verify all files still in watch list
-      const watchedFiles = getWatchedFiles(db, taskId);
+      const watchedFiles = await getWatchedFiles(db, taskId);
       assert.equal(watchedFiles.length, 3, 'Should still have 3 files in watch list');
 
       // 6. Verify task transitioned to waiting_review
-      const task = db
-        .prepare('SELECT status_id FROM t_tasks WHERE id = ?')
-        .get(taskId) as { status_id: number };
+      const task = await knex('t_tasks')
+        .where({ id: taskId })
+        .first('status_id');
       assert.equal(
         task.status_id,
         3,
@@ -249,7 +252,7 @@ describe('Auto-pruning: Partial file existence', () => {
 
   it('should handle mixed ratios (3 exist, 1 missing)', async () => {
     // 1. Create test task
-    const taskId = createTestTask(db);
+    const taskId = await createTestTask(db);
 
     // 2. Create 4 watched files (3 exist, 1 doesn't)
     const existingFile1 = path.join(tempDir, 'exists1.ts');
@@ -263,7 +266,7 @@ describe('Auto-pruning: Partial file existence', () => {
     // Don't create nonExistentFile
 
     // Add all files to watch list
-    addWatchedFiles(db, taskId, [
+    await addWatchedFiles(db, taskId, [
       existingFile1,
       existingFile2,
       existingFile3,
@@ -272,11 +275,13 @@ describe('Auto-pruning: Partial file existence', () => {
 
     // Set task to in_progress status and update timestamp to be old enough
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
-    db.prepare(`
-      UPDATE t_tasks
-      SET status_id = 2, updated_ts = ?
-      WHERE id = ?
-    `).run(fifteenMinutesAgo, taskId);
+    const knex = db.getKnex();
+    await knex('t_tasks')
+      .where({ id: taskId })
+      .update({
+        status_id: 2,
+        updated_ts: fifteenMinutesAgo,
+      });
 
     // 3. Trigger auto-pruning
     const originalCwd = process.cwd();
@@ -289,12 +294,12 @@ describe('Auto-pruning: Partial file existence', () => {
       assert.equal(transitioned, 1, 'Should have transitioned 1 task');
 
       // 4. Verify results
-      const watchedFiles = getWatchedFiles(db, taskId);
+      const watchedFiles = await getWatchedFiles(db, taskId);
       assert.equal(watchedFiles.length, 3, 'Should have 3 files in watch list');
 
-      const prunedFiles = db
-        .prepare('SELECT file_path FROM t_task_pruned_files WHERE task_id = ?')
-        .all(taskId) as Array<{ file_path: string }>;
+      const prunedFiles = await knex('t_task_pruned_files')
+        .where({ task_id: taskId })
+        .select('file_path');
       assert.equal(prunedFiles.length, 1, 'Should have 1 pruned file record');
       assert.equal(
         prunedFiles[0].file_path,
@@ -312,56 +317,56 @@ describe('Auto-pruning: Partial file existence', () => {
 /**
  * Create a test task in in_progress status
  */
-function createTestTask(db: DatabaseType): number {
-  const agentId = getOrCreateAgent(db, 'test-agent');
+async function createTestTask(db: DatabaseAdapter): Promise<number> {
+  const agentId = await getOrCreateAgent(db, 'test-agent');
+  const knex = db.getKnex();
 
-  const result = db
-    .prepare(
-      `
-    INSERT INTO t_tasks (title, status_id, priority, created_by_agent_id, assigned_agent_id)
-    VALUES (?, 2, 2, ?, ?)
-  `
-    )
-    .run('Test Task for Auto-Pruning', agentId, agentId);
+  const [taskId] = await knex('t_tasks').insert({
+    title: 'Test Task for Auto-Pruning',
+    status_id: 2,
+    priority: 2,
+    created_by_agent_id: agentId,
+    assigned_agent_id: agentId,
+  });
 
-  return result.lastInsertRowid as number;
+  return taskId;
 }
 
 /**
  * Add watched files to a task
  */
-function addWatchedFiles(
-  db: DatabaseType,
+async function addWatchedFiles(
+  db: DatabaseAdapter,
   taskId: number,
   filePaths: string[]
-): void {
-  const insertFileLinkStmt = db.prepare(`
-    INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
-    VALUES (?, ?)
-  `);
+): Promise<void> {
+  const knex = db.getKnex();
 
   for (const filePath of filePaths) {
     // Extract just the filename (last segment) for relative paths
     const fileName = path.basename(filePath);
-    const fileId = getOrCreateFile(db, fileName);
-    insertFileLinkStmt.run(taskId, fileId);
+    const fileId = await getOrCreateFile(db, fileName);
+
+    await knex('t_task_file_links')
+      .insert({
+        task_id: taskId,
+        file_id: fileId,
+      })
+      .onConflict(['task_id', 'file_id'])
+      .ignore();
   }
 }
 
 /**
  * Get watched files for a task
  */
-function getWatchedFiles(db: DatabaseType, taskId: number): string[] {
-  return (
-    db
-      .prepare(
-        `
-    SELECT mf.path
-    FROM t_task_file_links tfl
-    JOIN m_files mf ON tfl.file_id = mf.id
-    WHERE tfl.task_id = ?
-  `
-      )
-      .all(taskId) as Array<{ path: string }>
-  ).map((row) => row.path);
+async function getWatchedFiles(db: DatabaseAdapter, taskId: number): Promise<string[]> {
+  const knex = db.getKnex();
+
+  const files = await knex('t_task_file_links as tfl')
+    .join('m_files as mf', 'tfl.file_id', 'mf.id')
+    .where('tfl.task_id', taskId)
+    .select('mf.path');
+
+  return files.map((row) => row.path);
 }

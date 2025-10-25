@@ -1,26 +1,31 @@
 /**
  * Task management tools for Kanban Task Watcher
  * Implements create, update, get, list, move, link, archive, batch_create actions
+ *
+ * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
  */
 
+import { DatabaseAdapter } from '../adapters/index.js';
 import {
-  getDatabase,
+  getAdapter,
   getOrCreateAgent,
   getOrCreateTag,
   getOrCreateContextKey,
   getLayerId,
-  getOrCreateFile,
-  transaction
+  getOrCreateFile
 } from '../database.js';
 import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndCompleteReviewedTasks, detectAndArchiveOnCommit } from '../utils/task-stale-detection.js';
-import { processBatch } from '../utils/batch.js';
 import { FileWatcher } from '../watcher/index.js';
 import {
   validatePriorityRange,
   validateLength,
   validateRange
 } from '../utils/validators.js';
-import type { Database } from '../types.js';
+import { Knex } from 'knex';
+import {
+  logTaskCreate,
+  logTaskStatusChange
+} from '../utils/activity-logging.js';
 
 /**
  * Task status enum (matches m_task_statuses)
@@ -72,10 +77,11 @@ const VALID_TRANSITIONS: Record<number, number[]> = {
  * Used by createTask (with transaction) and batchCreateTasks (manages its own transaction)
  *
  * @param params - Task parameters
- * @param db - Database instance
+ * @param adapter - Database adapter instance
+ * @param trx - Optional transaction
  * @returns Response with success status and task metadata
  */
-function createTaskInternal(params: {
+async function createTaskInternal(params: {
   title: string;
   description?: string;
   acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
@@ -87,7 +93,9 @@ function createTaskInternal(params: {
   tags?: string[];
   status?: string;
   watch_files?: string[];  // Array of file paths to watch (v3.4.1)
-}, db: Database): any {
+}, adapter: DatabaseAdapter, trx?: Knex.Transaction): Promise<any> {
+  const knex = trx || adapter.getKnex();
+
   // Validate priority
   const priority = params.priority !== undefined ? params.priority : 2;
   validatePriorityRange(priority);
@@ -102,7 +110,7 @@ function createTaskInternal(params: {
   // Validate layer if provided
   let layerId: number | null = null;
   if (params.layer) {
-    layerId = getLayerId(db, params.layer);
+    layerId = await getLayerId(adapter, params.layer, trx);
     if (layerId === null) {
       throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
     }
@@ -111,30 +119,26 @@ function createTaskInternal(params: {
   // Get or create agents
   let assignedAgentId: number | null = null;
   if (params.assigned_agent) {
-    assignedAgentId = getOrCreateAgent(db, params.assigned_agent);
+    assignedAgentId = await getOrCreateAgent(adapter, params.assigned_agent, trx);
   }
 
   // Default to 'system' if no created_by_agent provided
-  // This ensures the activity log trigger has a valid agent_id
+  // This ensures the activity log has a valid agent_id
   const createdBy = params.created_by_agent || 'system';
-  const createdByAgentId = getOrCreateAgent(db, createdBy);
+  const createdByAgentId = await getOrCreateAgent(adapter, createdBy, trx);
 
   // Insert task
-  const insertTaskStmt = db.prepare(`
-    INSERT INTO t_tasks (title, status_id, priority, assigned_agent_id, created_by_agent_id, layer_id)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-
-  const taskResult = insertTaskStmt.run(
-    params.title,
-    statusId,
-    priority,
-    assignedAgentId,
-    createdByAgentId,
-    layerId
-  );
-
-  const taskId = taskResult.lastInsertRowid as number;
+  const now = Math.floor(Date.now() / 1000);
+  const [taskId] = await knex('t_tasks').insert({
+    title: params.title,
+    status_id: statusId,
+    priority: priority,
+    assigned_agent_id: assignedAgentId,
+    created_by_agent_id: createdByAgentId,
+    layer_id: layerId,
+    created_ts: now,
+    updated_ts: now
+  });
 
   // Process acceptance_criteria (can be string, JSON string, or array)
   let acceptanceCriteriaString: string | null = null;
@@ -172,32 +176,64 @@ function createTaskInternal(params: {
 
   // Insert task details if provided
   if (params.description || acceptanceCriteriaString || acceptanceCriteriaJson || params.notes) {
-    const insertDetailsStmt = db.prepare(`
-      INSERT INTO t_task_details (task_id, description, acceptance_criteria, acceptance_criteria_json, notes)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    insertDetailsStmt.run(
-      taskId,
-      params.description || null,
-      acceptanceCriteriaString,
-      acceptanceCriteriaJson,
-      params.notes || null
-    );
+    await knex('t_task_details').insert({
+      task_id: Number(taskId),
+      description: params.description || null,
+      acceptance_criteria: acceptanceCriteriaString,
+      acceptance_criteria_json: acceptanceCriteriaJson,
+      notes: params.notes || null
+    });
   }
 
   // Insert tags if provided
   if (params.tags && params.tags.length > 0) {
-    const insertTagStmt = db.prepare(`
-      INSERT INTO t_task_tags (task_id, tag_id)
-      VALUES (?, ?)
-    `);
+    // Parse tags - handle MCP SDK converting JSON string to char array
+    let tagsParsed: string[];
 
-    for (const tagName of params.tags) {
-      const tagId = getOrCreateTag(db, tagName);
-      insertTagStmt.run(taskId, tagId);
+    if (typeof params.tags === 'string') {
+      // String - try to parse as JSON
+      try {
+        tagsParsed = JSON.parse(params.tags);
+      } catch {
+        // If not valid JSON, treat as single tag name
+        tagsParsed = [params.tags];
+      }
+    } else if (Array.isArray(params.tags)) {
+      // Check if it's an array of single characters (MCP SDK bug)
+      // Example: ['[', '"', 't', 'e', 's', 't', 'i', 'n', 'g', '"', ']']
+      if (params.tags.every((item: any) => typeof item === 'string' && item.length === 1)) {
+        // Join characters back into string and parse JSON
+        const jsonString = params.tags.join('');
+        try {
+          tagsParsed = JSON.parse(jsonString);
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          throw new Error(`Invalid tags format: ${jsonString}. ${errMsg}`);
+        }
+      } else {
+        // Normal array of tag names
+        tagsParsed = params.tags;
+      }
+    } else {
+      throw new Error('Parameter "tags" must be a string or array');
+    }
+
+    for (const tagName of tagsParsed) {
+      const tagId = await getOrCreateTag(adapter, tagName, trx);
+      await knex('t_task_tags').insert({
+        task_id: Number(taskId),
+        tag_id: tagId
+      }).onConflict(['task_id', 'tag_id']).ignore();
     }
   }
+
+  // Activity logging (replaces triggers)
+  await logTaskCreate(knex, {
+    task_id: Number(taskId),
+    title: params.title,
+    agent_id: createdByAgentId,
+    layer_id: layerId || undefined
+  });
 
   // Link files and register with watcher if watch_files provided (v3.4.1)
   if (params.watch_files && params.watch_files.length > 0) {
@@ -232,21 +268,19 @@ function createTaskInternal(params: {
       throw new Error('Parameter "watch_files" must be a string or array');
     }
 
-    const insertFileLinkStmt = db.prepare(`
-      INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
-      VALUES (?, ?)
-    `);
-
     for (const filePath of watchFilesParsed) {
-      const fileId = getOrCreateFile(db, filePath);
-      insertFileLinkStmt.run(taskId, fileId);
+      const fileId = await getOrCreateFile(adapter, filePath, trx);
+      await knex('t_task_file_links').insert({
+        task_id: Number(taskId),
+        file_id: fileId
+      }).onConflict(['task_id', 'file_id']).ignore();
     }
 
     // Register files with watcher for auto-tracking
     try {
       const watcher = FileWatcher.getInstance();
       for (const filePath of watchFilesParsed) {
-        watcher.registerFile(filePath, taskId, params.title, status);
+        watcher.registerFile(filePath, Number(taskId), params.title, status);
       }
     } catch (error) {
       // Watcher may not be initialized yet, ignore
@@ -256,7 +290,7 @@ function createTaskInternal(params: {
 
   return {
     success: true,
-    task_id: taskId,
+    task_id: Number(taskId),
     title: params.title,
     status: status,
     message: `Task "${params.title}" created successfully`
@@ -266,7 +300,7 @@ function createTaskInternal(params: {
 /**
  * Create a new task
  */
-export function createTask(params: {
+export async function createTask(params: {
   title: string;
   description?: string;
   acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
@@ -278,8 +312,8 @@ export function createTask(params: {
   tags?: string[];
   status?: string;
   watch_files?: string[];  // Array of file paths to watch (v3.4.1)
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
   if (!params.title || params.title.trim() === '') {
@@ -289,8 +323,8 @@ export function createTask(params: {
   validateLength(params.title, 'Parameter "title"', 200);
 
   try {
-    return transaction(actualDb, () => {
-      return createTaskInternal(params, actualDb);
+    return await actualAdapter.transaction(async (trx) => {
+      return await createTaskInternal(params, actualAdapter, trx);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -301,7 +335,7 @@ export function createTask(params: {
 /**
  * Update task metadata
  */
-export function updateTask(params: {
+export async function updateTask(params: {
   task_id: number;
   title?: string;
   priority?: number;
@@ -311,8 +345,8 @@ export function updateTask(params: {
   acceptance_criteria?: string | any[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
   watch_files?: string[];  // Array of file paths to watch (v3.4.1)
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
   if (!params.task_id) {
@@ -320,55 +354,51 @@ export function updateTask(params: {
   }
 
   try {
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
+      const knex = actualAdapter.getKnex();
+
       // Check if task exists
-      const taskExists = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+      const taskExists = await trx('t_tasks').where({ id: params.task_id }).first();
       if (!taskExists) {
         throw new Error(`Task with id ${params.task_id} not found`);
       }
 
-      // Build update query dynamically
-      const updates: string[] = [];
-      const updateParams: any[] = [];
+      // Build update data dynamically
+      const updateData: any = {};
 
       if (params.title !== undefined) {
         if (params.title.trim() === '') {
           throw new Error('Parameter "title" cannot be empty');
         }
         validateLength(params.title, 'Parameter "title"', 200);
-        updates.push('title = ?');
-        updateParams.push(params.title);
+        updateData.title = params.title;
       }
 
       if (params.priority !== undefined) {
         validatePriorityRange(params.priority);
-        updates.push('priority = ?');
-        updateParams.push(params.priority);
+        updateData.priority = params.priority;
       }
 
       if (params.assigned_agent !== undefined) {
-        const agentId = getOrCreateAgent(actualDb, params.assigned_agent);
-        updates.push('assigned_agent_id = ?');
-        updateParams.push(agentId);
+        const agentId = await getOrCreateAgent(actualAdapter, params.assigned_agent, trx);
+        updateData.assigned_agent_id = agentId;
       }
 
       if (params.layer !== undefined) {
-        const layerId = getLayerId(actualDb, params.layer);
+        const layerId = await getLayerId(actualAdapter, params.layer, trx);
         if (layerId === null) {
           throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
         }
-        updates.push('layer_id = ?');
-        updateParams.push(layerId);
+        updateData.layer_id = layerId;
       }
 
       // Update t_tasks if any updates
-      if (updates.length > 0) {
-        const updateStmt = actualDb.prepare(`
-          UPDATE t_tasks
-          SET ${updates.join(', ')}
-          WHERE id = ?
-        `);
-        updateStmt.run(...updateParams, params.task_id);
+      if (Object.keys(updateData).length > 0) {
+        await trx('t_tasks')
+          .where({ id: params.task_id })
+          .update(updateData);
+
+        // TODO: Add activity logging for updates if needed
       }
 
       // Update t_task_details if any detail fields provided
@@ -410,51 +440,36 @@ export function updateTask(params: {
         }
 
         // Check if details exist
-        const detailsExist = actualDb.prepare('SELECT task_id FROM t_task_details WHERE task_id = ?').get(params.task_id);
+        const detailsExist = await trx('t_task_details').where({ task_id: params.task_id }).first();
 
-        if (detailsExist) {
+        const detailsUpdate: any = {};
+        if (params.description !== undefined) {
+          detailsUpdate.description = params.description || null;
+        }
+        if (acceptanceCriteriaString !== undefined) {
+          detailsUpdate.acceptance_criteria = acceptanceCriteriaString;
+        }
+        if (acceptanceCriteriaJson !== undefined) {
+          detailsUpdate.acceptance_criteria_json = acceptanceCriteriaJson;
+        }
+        if (params.notes !== undefined) {
+          detailsUpdate.notes = params.notes || null;
+        }
+
+        if (detailsExist && Object.keys(detailsUpdate).length > 0) {
           // Update existing details
-          const detailUpdates: string[] = [];
-          const detailParams: any[] = [];
-
-          if (params.description !== undefined) {
-            detailUpdates.push('description = ?');
-            detailParams.push(params.description || null);
-          }
-          if (acceptanceCriteriaString !== undefined) {
-            detailUpdates.push('acceptance_criteria = ?');
-            detailParams.push(acceptanceCriteriaString);
-          }
-          if (acceptanceCriteriaJson !== undefined) {
-            detailUpdates.push('acceptance_criteria_json = ?');
-            detailParams.push(acceptanceCriteriaJson);
-          }
-          if (params.notes !== undefined) {
-            detailUpdates.push('notes = ?');
-            detailParams.push(params.notes || null);
-          }
-
-          if (detailUpdates.length > 0) {
-            const updateDetailsStmt = actualDb.prepare(`
-              UPDATE t_task_details
-              SET ${detailUpdates.join(', ')}
-              WHERE task_id = ?
-            `);
-            updateDetailsStmt.run(...detailParams, params.task_id);
-          }
-        } else {
+          await trx('t_task_details')
+            .where({ task_id: params.task_id })
+            .update(detailsUpdate);
+        } else if (!detailsExist) {
           // Insert new details
-          const insertDetailsStmt = actualDb.prepare(`
-            INSERT INTO t_task_details (task_id, description, acceptance_criteria, acceptance_criteria_json, notes)
-            VALUES (?, ?, ?, ?, ?)
-          `);
-          insertDetailsStmt.run(
-            params.task_id,
-            params.description || null,
-            acceptanceCriteriaString !== undefined ? acceptanceCriteriaString : null,
-            acceptanceCriteriaJson !== undefined ? acceptanceCriteriaJson : null,
-            params.notes || null
-          );
+          await trx('t_task_details').insert({
+            task_id: params.task_id,
+            description: params.description || null,
+            acceptance_criteria: acceptanceCriteriaString !== undefined ? acceptanceCriteriaString : null,
+            acceptance_criteria_json: acceptanceCriteriaJson !== undefined ? acceptanceCriteriaJson : null,
+            notes: params.notes || null
+          });
         }
       }
 
@@ -489,24 +504,21 @@ export function updateTask(params: {
           throw new Error('Parameter "watch_files" must be a string or array');
         }
 
-        const insertFileLinkStmt = actualDb.prepare(`
-          INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
-          VALUES (?, ?)
-        `);
-
         for (const filePath of watchFilesParsed) {
-          const fileId = getOrCreateFile(actualDb, filePath);
-          insertFileLinkStmt.run(params.task_id, fileId);
+          const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+          await trx('t_task_file_links').insert({
+            task_id: params.task_id,
+            file_id: fileId
+          }).onConflict(['task_id', 'file_id']).ignore();
         }
 
         // Register files with watcher for auto-tracking
         try {
-          const taskData = actualDb.prepare(`
-            SELECT t.title, s.name as status
-            FROM t_tasks t
-            JOIN m_task_statuses s ON t.status_id = s.id
-            WHERE t.id = ?
-          `).get(params.task_id) as { title: string; status: string } | undefined;
+          const taskData = await trx('t_tasks as t')
+            .join('m_task_statuses as s', 't.status_id', 's.id')
+            .where('t.id', params.task_id)
+            .select('t.title', 's.name as status')
+            .first() as { title: string; status: string } | undefined;
 
           if (taskData) {
             const watcher = FileWatcher.getInstance();
@@ -535,56 +547,55 @@ export function updateTask(params: {
 /**
  * Internal helper: Query task dependencies (used by getTask and getDependencies)
  */
-function queryTaskDependencies(db: Database, taskId: number, includeDetails: boolean = false): { blockers: any[], blocking: any[] } {
+async function queryTaskDependencies(adapter: DatabaseAdapter, taskId: number, includeDetails: boolean = false): Promise<{ blockers: any[], blocking: any[] }> {
+  const knex = adapter.getKnex();
+
   // Build query based on include_details flag
-  let selectFields: string;
-  if (includeDetails) {
-    // Include description from t_task_details
-    selectFields = `
-      t.id,
-      t.title,
-      s.name as status,
-      t.priority,
-      aa.name as assigned_to,
-      t.created_ts,
-      t.updated_ts,
-      td.description
-    `;
-  } else {
-    // Metadata only (token-efficient)
-    selectFields = `
-      t.id,
-      t.title,
-      s.name as status,
-      t.priority
-    `;
-  }
+  const selectFields = includeDetails
+    ? [
+        't.id',
+        't.title',
+        's.name as status',
+        't.priority',
+        'aa.name as assigned_to',
+        't.created_ts',
+        't.updated_ts',
+        'td.description'
+      ]
+    : [
+        't.id',
+        't.title',
+        's.name as status',
+        't.priority'
+      ];
 
   // Get blockers (tasks that block this task)
-  const blockersQuery = `
-    SELECT ${selectFields}
-    FROM t_tasks t
-    JOIN t_task_dependencies d ON t.id = d.blocker_task_id
-    LEFT JOIN m_task_statuses s ON t.status_id = s.id
-    LEFT JOIN m_agents aa ON t.assigned_agent_id = aa.id
-    ${includeDetails ? 'LEFT JOIN t_task_details td ON t.id = td.task_id' : ''}
-    WHERE d.blocked_task_id = ?
-  `;
+  let blockersQuery = knex('t_tasks as t')
+    .join('t_task_dependencies as d', 't.id', 'd.blocker_task_id')
+    .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
+    .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
+    .where('d.blocked_task_id', taskId)
+    .select(selectFields);
 
-  const blockers = db.prepare(blockersQuery).all(taskId);
+  if (includeDetails) {
+    blockersQuery = blockersQuery.leftJoin('t_task_details as td', 't.id', 'td.task_id');
+  }
+
+  const blockers = await blockersQuery;
 
   // Get blocking (tasks this task blocks)
-  const blockingQuery = `
-    SELECT ${selectFields}
-    FROM t_tasks t
-    JOIN t_task_dependencies d ON t.id = d.blocked_task_id
-    LEFT JOIN m_task_statuses s ON t.status_id = s.id
-    LEFT JOIN m_agents aa ON t.assigned_agent_id = aa.id
-    ${includeDetails ? 'LEFT JOIN t_task_details td ON t.id = td.task_id' : ''}
-    WHERE d.blocker_task_id = ?
-  `;
+  let blockingQuery = knex('t_tasks as t')
+    .join('t_task_dependencies as d', 't.id', 'd.blocked_task_id')
+    .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
+    .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
+    .where('d.blocker_task_id', taskId)
+    .select(selectFields);
 
-  const blocking = db.prepare(blockingQuery).all(taskId);
+  if (includeDetails) {
+    blockingQuery = blockingQuery.leftJoin('t_task_details as td', 't.id', 'td.task_id');
+  }
+
+  const blocking = await blockingQuery;
 
   return { blockers, blocking };
 }
@@ -592,11 +603,12 @@ function queryTaskDependencies(db: Database, taskId: number, includeDetails: boo
 /**
  * Get full task details
  */
-export function getTask(params: {
+export async function getTask(params: {
   task_id: number;
   include_dependencies?: boolean;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -604,31 +616,29 @@ export function getTask(params: {
 
   try {
     // Get task with details
-    const stmt = actualDb.prepare(`
-      SELECT
-        t.id,
-        t.title,
-        s.name as status,
-        t.priority,
-        aa.name as assigned_to,
-        ca.name as created_by,
-        l.name as layer,
-        t.created_ts,
-        t.updated_ts,
-        t.completed_ts,
-        td.description,
-        td.acceptance_criteria,
-        td.notes
-      FROM t_tasks t
-      LEFT JOIN m_task_statuses s ON t.status_id = s.id
-      LEFT JOIN m_agents aa ON t.assigned_agent_id = aa.id
-      LEFT JOIN m_agents ca ON t.created_by_agent_id = ca.id
-      LEFT JOIN m_layers l ON t.layer_id = l.id
-      LEFT JOIN t_task_details td ON t.id = td.task_id
-      WHERE t.id = ?
-    `);
-
-    const task = stmt.get(params.task_id) as any;
+    const task = await knex('t_tasks as t')
+      .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
+      .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
+      .leftJoin('m_agents as ca', 't.created_by_agent_id', 'ca.id')
+      .leftJoin('m_layers as l', 't.layer_id', 'l.id')
+      .leftJoin('t_task_details as td', 't.id', 'td.task_id')
+      .where('t.id', params.task_id)
+      .select(
+        't.id',
+        't.title',
+        's.name as status',
+        't.priority',
+        'aa.name as assigned_to',
+        'ca.name as created_by',
+        'l.name as layer',
+        't.created_ts',
+        't.updated_ts',
+        't.completed_ts',
+        'td.description',
+        'td.acceptance_criteria',
+        'td.notes'
+      )
+      .first() as any;
 
     if (!task) {
       return {
@@ -638,40 +648,30 @@ export function getTask(params: {
     }
 
     // Get tags
-    const tagsStmt = actualDb.prepare(`
-      SELECT tg.name
-      FROM t_task_tags tt
-      JOIN m_tags tg ON tt.tag_id = tg.id
-      WHERE tt.task_id = ?
-    `);
-    const tags = tagsStmt.all(params.task_id).map((row: any) => row.name);
+    const tags = await knex('t_task_tags as tt')
+      .join('m_tags as tg', 'tt.tag_id', 'tg.id')
+      .where('tt.task_id', params.task_id)
+      .select('tg.name')
+      .then(rows => rows.map((row: any) => row.name));
 
     // Get decision links
-    const decisionsStmt = actualDb.prepare(`
-      SELECT ck.key, tdl.link_type
-      FROM t_task_decision_links tdl
-      JOIN m_context_keys ck ON tdl.decision_key_id = ck.id
-      WHERE tdl.task_id = ?
-    `);
-    const decisions = decisionsStmt.all(params.task_id);
+    const decisions = await knex('t_task_decision_links as tdl')
+      .join('m_context_keys as ck', 'tdl.decision_key_id', 'ck.id')
+      .where('tdl.task_id', params.task_id)
+      .select('ck.key', 'tdl.link_type');
 
     // Get constraint links
-    const constraintsStmt = actualDb.prepare(`
-      SELECT c.id, c.constraint_text
-      FROM t_task_constraint_links tcl
-      JOIN t_constraints c ON tcl.constraint_id = c.id
-      WHERE tcl.task_id = ?
-    `);
-    const constraints = constraintsStmt.all(params.task_id);
+    const constraints = await knex('t_task_constraint_links as tcl')
+      .join('t_constraints as c', 'tcl.constraint_id', 'c.id')
+      .where('tcl.task_id', params.task_id)
+      .select('c.id', 'c.constraint_text');
 
     // Get file links
-    const filesStmt = actualDb.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON tfl.file_id = f.id
-      WHERE tfl.task_id = ?
-    `);
-    const files = filesStmt.all(params.task_id).map((row: any) => row.path);
+    const files = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('tfl.task_id', params.task_id)
+      .select('f.path')
+      .then(rows => rows.map((row: any) => row.path));
 
     // Build result
     const result: any = {
@@ -687,7 +687,7 @@ export function getTask(params: {
 
     // Include dependencies if requested (token-efficient, metadata-only)
     if (params.include_dependencies) {
-      const deps = queryTaskDependencies(actualDb, params.task_id, false);
+      const deps = await queryTaskDependencies(actualAdapter, params.task_id, false);
       result.task.dependencies = {
         blockers: deps.blockers,
         blocking: deps.blocking
@@ -712,76 +712,73 @@ export async function listTasks(params: {
   limit?: number;
   offset?: number;
   include_dependency_counts?: boolean;
-} = {}, db?: Database): Promise<any> {
-  const actualDb = db ?? getDatabase();
+} = {}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     // Run auto-stale detection, git-aware completion, and auto-archive before listing
-    const transitionCount = detectAndTransitionStaleTasks(actualDb);
-    const gitCompletedCount = await detectAndCompleteReviewedTasks(actualDb);
-    const gitArchivedCount = await detectAndArchiveOnCommit(actualDb);
-    const archiveCount = autoArchiveOldDoneTasks(actualDb);
+    const transitionCount = await detectAndTransitionStaleTasks(actualAdapter);
+    const gitCompletedCount = await detectAndCompleteReviewedTasks(actualAdapter);
+    const gitArchivedCount = await detectAndArchiveOnCommit(actualAdapter);
+    const archiveCount = await autoArchiveOldDoneTasks(actualAdapter);
 
     // Build query with optional dependency counts
-    let query: string;
+    let query;
     if (params.include_dependency_counts) {
       // Include dependency counts with LEFT JOINs
-      query = `
-        SELECT
-          vt.*,
-          COALESCE(blockers.blocked_by_count, 0) as blocked_by_count,
-          COALESCE(blocking.blocking_count, 0) as blocking_count
-        FROM v_task_board vt
-        LEFT JOIN (
-          SELECT blocked_task_id, COUNT(*) as blocked_by_count
-          FROM t_task_dependencies
-          GROUP BY blocked_task_id
-        ) blockers ON vt.id = blockers.blocked_task_id
-        LEFT JOIN (
-          SELECT blocker_task_id, COUNT(*) as blocking_count
-          FROM t_task_dependencies
-          GROUP BY blocker_task_id
-        ) blocking ON vt.id = blocking.blocker_task_id
-        WHERE 1=1
-      `;
+      const blockersCTE = knex('t_task_dependencies')
+        .select('blocked_task_id')
+        .count('* as blocked_by_count')
+        .groupBy('blocked_task_id')
+        .as('blockers');
+
+      const blockingCTE = knex('t_task_dependencies')
+        .select('blocker_task_id')
+        .count('* as blocking_count')
+        .groupBy('blocker_task_id')
+        .as('blocking');
+
+      query = knex('v_task_board as vt')
+        .leftJoin(blockersCTE, 'vt.id', 'blockers.blocked_task_id')
+        .leftJoin(blockingCTE, 'vt.id', 'blocking.blocker_task_id')
+        .select(
+          'vt.*',
+          knex.raw('COALESCE(blockers.blocked_by_count, 0) as blocked_by_count'),
+          knex.raw('COALESCE(blocking.blocking_count, 0) as blocking_count')
+        );
     } else {
       // Standard query without dependency counts
-      query = 'SELECT * FROM v_task_board WHERE 1=1';
+      query = knex('v_task_board');
     }
-
-    const queryParams: any[] = [];
 
     // Filter by status
     if (params.status) {
       if (!STATUS_TO_ID[params.status]) {
         throw new Error(`Invalid status: ${params.status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
       }
-      query += params.include_dependency_counts ? ' AND vt.status = ?' : ' AND status = ?';
-      queryParams.push(params.status);
+      query = query.where(params.include_dependency_counts ? 'vt.status' : 'status', params.status);
     }
 
     // Filter by assigned agent
     if (params.assigned_agent) {
-      query += params.include_dependency_counts ? ' AND vt.assigned_to = ?' : ' AND assigned_to = ?';
-      queryParams.push(params.assigned_agent);
+      query = query.where(params.include_dependency_counts ? 'vt.assigned_to' : 'assigned_to', params.assigned_agent);
     }
 
     // Filter by layer
     if (params.layer) {
-      query += params.include_dependency_counts ? ' AND vt.layer = ?' : ' AND layer = ?';
-      queryParams.push(params.layer);
+      query = query.where(params.include_dependency_counts ? 'vt.layer' : 'layer', params.layer);
     }
 
     // Filter by tags
     if (params.tags && params.tags.length > 0) {
       for (const tag of params.tags) {
-        query += params.include_dependency_counts ? ' AND vt.tags LIKE ?' : ' AND tags LIKE ?';
-        queryParams.push(`%${tag}%`);
+        query = query.where(params.include_dependency_counts ? 'vt.tags' : 'tags', 'like', `%${tag}%`);
       }
     }
 
     // Order by updated timestamp (most recent first)
-    query += params.include_dependency_counts ? ' ORDER BY vt.updated_ts DESC' : ' ORDER BY updated_ts DESC';
+    query = query.orderBy(params.include_dependency_counts ? 'vt.updated_ts' : 'updated_ts', 'desc');
 
     // Pagination
     const limit = params.limit !== undefined ? params.limit : 50;
@@ -790,12 +787,10 @@ export async function listTasks(params: {
     validateRange(limit, 'Parameter "limit"', 0, 100);
     validateRange(offset, 'Parameter "offset"', 0, Number.MAX_SAFE_INTEGER);
 
-    query += ' LIMIT ? OFFSET ?';
-    queryParams.push(limit, offset);
+    query = query.limit(limit).offset(offset);
 
     // Execute query
-    const stmt = actualDb.prepare(query);
-    const rows = stmt.all(...queryParams);
+    const rows = await query;
 
     return {
       tasks: rows,
@@ -814,11 +809,12 @@ export async function listTasks(params: {
 /**
  * Move task to different status
  */
-export function moveTask(params: {
+export async function moveTask(params: {
   task_id: number;
   new_status: string;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -830,12 +826,15 @@ export function moveTask(params: {
 
   try {
     // Run auto-stale detection and auto-archive before move
-    detectAndTransitionStaleTasks(actualDb);
-    autoArchiveOldDoneTasks(actualDb);
+    await detectAndTransitionStaleTasks(actualAdapter);
+    await autoArchiveOldDoneTasks(actualAdapter);
 
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
       // Get current status
-      const taskRow = actualDb.prepare('SELECT status_id FROM t_tasks WHERE id = ?').get(params.task_id) as { status_id: number } | undefined;
+      const taskRow = await trx('t_tasks')
+        .where({ id: params.task_id })
+        .select('status_id')
+        .first() as { status_id: number } | undefined;
 
       if (!taskRow) {
         throw new Error(`Task with id ${params.task_id} not found`);
@@ -858,14 +857,29 @@ export function moveTask(params: {
       }
 
       // Update status
-      const updateStmt = actualDb.prepare(`
-        UPDATE t_tasks
-        SET status_id = ?,
-            completed_ts = CASE WHEN ? = 5 THEN unixepoch() ELSE completed_ts END
-        WHERE id = ?
-      `);
+      const updateData: any = {
+        status_id: newStatusId
+      };
 
-      updateStmt.run(newStatusId, newStatusId, params.task_id);
+      // Set completed_ts when moving to done
+      if (newStatusId === TASK_STATUS.DONE) {
+        updateData.completed_ts = Math.floor(Date.now() / 1000);
+      }
+
+      await trx('t_tasks')
+        .where({ id: params.task_id })
+        .update(updateData);
+
+      // Activity logging (replaces trigger)
+      // Note: Using system agent (id=1) for status changes
+      // In a real implementation, you'd pass the actual agent_id who made the change
+      const systemAgentId = 1;
+      await logTaskStatusChange(knex, {
+        task_id: params.task_id,
+        old_status: currentStatusId,
+        new_status: newStatusId,
+        agent_id: systemAgentId
+      });
 
       // Update watcher if moving to done or archived (stop watching)
       if (params.new_status === 'done' || params.new_status === 'archived') {
@@ -894,13 +908,14 @@ export function moveTask(params: {
 /**
  * Link task to decision/constraint/file
  */
-export function linkTask(params: {
+export async function linkTask(params: {
   task_id: number;
   link_type: 'decision' | 'constraint' | 'file';
   target_id: string | number;
   link_relation?: string;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -915,23 +930,23 @@ export function linkTask(params: {
   }
 
   try {
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
       // Check if task exists
-      const taskExists = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+      const taskExists = await trx('t_tasks').where({ id: params.task_id }).first();
       if (!taskExists) {
         throw new Error(`Task with id ${params.task_id} not found`);
       }
 
       if (params.link_type === 'decision') {
         const decisionKey = String(params.target_id);
-        const keyId = getOrCreateContextKey(actualDb, decisionKey);
+        const keyId = await getOrCreateContextKey(actualAdapter, decisionKey, trx);
         const linkRelation = params.link_relation || 'implements';
 
-        const stmt = actualDb.prepare(`
-          INSERT OR REPLACE INTO t_task_decision_links (task_id, decision_key_id, link_type)
-          VALUES (?, ?, ?)
-        `);
-        stmt.run(params.task_id, keyId, linkRelation);
+        await knex('t_task_decision_links').insert({
+          task_id: params.task_id,
+          decision_key_id: keyId,
+          link_type: linkRelation
+        }).onConflict(['task_id', 'decision_key_id']).merge();
 
         return {
           success: true,
@@ -946,16 +961,15 @@ export function linkTask(params: {
         const constraintId = Number(params.target_id);
 
         // Check if constraint exists
-        const constraintExists = actualDb.prepare('SELECT id FROM t_constraints WHERE id = ?').get(constraintId);
+        const constraintExists = await trx('t_constraints').where({ id: constraintId }).first();
         if (!constraintExists) {
           throw new Error(`Constraint with id ${constraintId} not found`);
         }
 
-        const stmt = actualDb.prepare(`
-          INSERT OR IGNORE INTO t_task_constraint_links (task_id, constraint_id)
-          VALUES (?, ?)
-        `);
-        stmt.run(params.task_id, constraintId);
+        await trx('t_task_constraint_links').insert({
+          task_id: params.task_id,
+          constraint_id: constraintId
+        }).onConflict(['task_id', 'constraint_id']).ignore();
 
         return {
           success: true,
@@ -972,22 +986,20 @@ export function linkTask(params: {
         console.warn(`   Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
 
         const filePath = String(params.target_id);
-        const fileId = getOrCreateFile(actualDb, filePath);
+        const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
 
-        const stmt = actualDb.prepare(`
-          INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
-          VALUES (?, ?)
-        `);
-        stmt.run(params.task_id, fileId);
+        await trx('t_task_file_links').insert({
+          task_id: params.task_id,
+          file_id: fileId
+        }).onConflict(['task_id', 'file_id']).ignore();
 
         // Register file with watcher for auto-tracking
         try {
-          const taskData = actualDb.prepare(`
-            SELECT t.title, s.name as status
-            FROM t_tasks t
-            JOIN m_task_statuses s ON t.status_id = s.id
-            WHERE t.id = ?
-          `).get(params.task_id) as { title: string; status: string } | undefined;
+          const taskData = await trx('t_tasks as t')
+            .join('m_task_statuses as s', 't.status_id', 's.id')
+            .where('t.id', params.task_id)
+            .select('t.title', 's.name as status')
+            .first() as { title: string; status: string } | undefined;
 
           if (taskData) {
             const watcher = FileWatcher.getInstance();
@@ -1020,17 +1032,21 @@ export function linkTask(params: {
 /**
  * Archive completed task
  */
-export function archiveTask(params: { task_id: number }, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+export async function archiveTask(params: { task_id: number }, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
   }
 
   try {
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
       // Check if task is in 'done' status
-      const taskRow = actualDb.prepare('SELECT status_id FROM t_tasks WHERE id = ?').get(params.task_id) as { status_id: number } | undefined;
+      const taskRow = await trx('t_tasks')
+        .where({ id: params.task_id })
+        .select('status_id')
+        .first() as { status_id: number } | undefined;
 
       if (!taskRow) {
         throw new Error(`Task with id ${params.task_id} not found`);
@@ -1041,8 +1057,19 @@ export function archiveTask(params: { task_id: number }, db?: Database): any {
       }
 
       // Update to archived
-      const updateStmt = actualDb.prepare('UPDATE t_tasks SET status_id = ? WHERE id = ?');
-      updateStmt.run(TASK_STATUS.ARCHIVED, params.task_id);
+      await trx('t_tasks')
+        .where({ id: params.task_id })
+        .update({ status_id: TASK_STATUS.ARCHIVED });
+
+      // Activity logging
+      // Note: Using system agent (id=1) for status changes
+      const systemAgentId = 1;
+      await logTaskStatusChange(knex, {
+        task_id: params.task_id,
+        old_status: TASK_STATUS.DONE,
+        new_status: TASK_STATUS.ARCHIVED,
+        agent_id: systemAgentId
+      });
 
       // Unregister from file watcher (archived tasks don't need tracking)
       try {
@@ -1067,11 +1094,12 @@ export function archiveTask(params: { task_id: number }, db?: Database): any {
 /**
  * Add dependency (blocking relationship) between tasks
  */
-export function addDependency(params: {
+export async function addDependency(params: {
   blocker_task_id: number;
   blocked_task_id: number;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.blocker_task_id) {
     throw new Error('Parameter "blocker_task_id" is required');
@@ -1082,15 +1110,22 @@ export function addDependency(params: {
   }
 
   try {
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
       // Validation 1: No self-dependencies
       if (params.blocker_task_id === params.blocked_task_id) {
         throw new Error('Self-dependency not allowed');
       }
 
       // Validation 2: Both tasks must exist and check if archived
-      const blockerTask = actualDb.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocker_task_id) as { id: number; status_id: number } | undefined;
-      const blockedTask = actualDb.prepare('SELECT id, status_id FROM t_tasks WHERE id = ?').get(params.blocked_task_id) as { id: number; status_id: number } | undefined;
+      const blockerTask = await trx('t_tasks')
+        .where({ id: params.blocker_task_id })
+        .select('id', 'status_id')
+        .first() as { id: number; status_id: number } | undefined;
+
+      const blockedTask = await trx('t_tasks')
+        .where({ id: params.blocked_task_id })
+        .select('id', 'status_id')
+        .first() as { id: number; status_id: number } | undefined;
 
       if (!blockerTask) {
         throw new Error(`Blocker task #${params.blocker_task_id} not found`);
@@ -1110,17 +1145,19 @@ export function addDependency(params: {
       }
 
       // Validation 4: No direct circular (reverse relationship)
-      const reverseExists = actualDb.prepare(`
-        SELECT 1 FROM t_task_dependencies
-        WHERE blocker_task_id = ? AND blocked_task_id = ?
-      `).get(params.blocked_task_id, params.blocker_task_id);
+      const reverseExists = await trx('t_task_dependencies')
+        .where({
+          blocker_task_id: params.blocked_task_id,
+          blocked_task_id: params.blocker_task_id
+        })
+        .first();
 
       if (reverseExists) {
         throw new Error(`Circular dependency detected: Task #${params.blocked_task_id} already blocks Task #${params.blocker_task_id}`);
       }
 
       // Validation 5: No transitive circular (check if adding this would create a cycle)
-      const cycleCheck = actualDb.prepare(`
+      const cycleCheck = await trx.raw(`
         WITH RECURSIVE dependency_chain AS (
           -- Start from the task that would be blocked
           SELECT blocked_task_id as task_id, 1 as depth
@@ -1136,11 +1173,12 @@ export function addDependency(params: {
           WHERE dc.depth < 100
         )
         SELECT task_id FROM dependency_chain WHERE task_id = ?
-      `).get(params.blocked_task_id, params.blocker_task_id) as { task_id: number } | undefined;
+      `, [params.blocked_task_id, params.blocker_task_id])
+        .then((result: any) => result[0] as { task_id: number } | undefined);
 
       if (cycleCheck) {
         // Build cycle path for error message
-        const cyclePathResult = actualDb.prepare(`
+        const cyclePathResult = await trx.raw(`
           WITH RECURSIVE dependency_chain AS (
             SELECT blocked_task_id as task_id, 1 as depth,
                    CAST(blocked_task_id AS TEXT) as path
@@ -1156,19 +1194,19 @@ export function addDependency(params: {
             WHERE dc.depth < 100
           )
           SELECT path FROM dependency_chain WHERE task_id = ? ORDER BY depth DESC LIMIT 1
-        `).get(params.blocked_task_id, params.blocker_task_id) as { path: string } | undefined;
+        `, [params.blocked_task_id, params.blocker_task_id])
+          .then((result: any) => result[0] as { path: string } | undefined);
 
         const cyclePath = cyclePathResult?.path || `#${params.blocked_task_id} → ... → #${params.blocker_task_id}`;
         throw new Error(`Circular dependency detected: Task #${params.blocker_task_id} → #${cyclePath} → #${params.blocker_task_id}`);
       }
 
       // All validations passed - insert dependency
-      const insertStmt = actualDb.prepare(`
-        INSERT INTO t_task_dependencies (blocker_task_id, blocked_task_id)
-        VALUES (?, ?)
-      `);
-
-      insertStmt.run(params.blocker_task_id, params.blocked_task_id);
+      await trx('t_task_dependencies').insert({
+        blocker_task_id: params.blocker_task_id,
+        blocked_task_id: params.blocked_task_id,
+        created_ts: Math.floor(Date.now() / 1000)
+      });
 
       return {
         success: true,
@@ -1188,11 +1226,12 @@ export function addDependency(params: {
 /**
  * Remove dependency between tasks
  */
-export function removeDependency(params: {
+export async function removeDependency(params: {
   blocker_task_id: number;
   blocked_task_id: number;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.blocker_task_id) {
     throw new Error('Parameter "blocker_task_id" is required');
@@ -1203,12 +1242,12 @@ export function removeDependency(params: {
   }
 
   try {
-    const deleteStmt = actualDb.prepare(`
-      DELETE FROM t_task_dependencies
-      WHERE blocker_task_id = ? AND blocked_task_id = ?
-    `);
-
-    deleteStmt.run(params.blocker_task_id, params.blocked_task_id);
+    await knex('t_task_dependencies')
+      .where({
+        blocker_task_id: params.blocker_task_id,
+        blocked_task_id: params.blocked_task_id
+      })
+      .delete();
 
     return {
       success: true,
@@ -1223,11 +1262,12 @@ export function removeDependency(params: {
 /**
  * Get dependencies for a task (bidirectional: what blocks this task, what this task blocks)
  */
-export function getDependencies(params: {
+export async function getDependencies(params: {
   task_id: number;
   include_details?: boolean;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -1237,13 +1277,13 @@ export function getDependencies(params: {
 
   try {
     // Check if task exists
-    const taskExists = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+    const taskExists = await knex('t_tasks').where({ id: params.task_id }).first();
     if (!taskExists) {
       throw new Error(`Task with id ${params.task_id} not found`);
     }
 
     // Use the shared helper function
-    const deps = queryTaskDependencies(actualDb, params.task_id, includeDetails);
+    const deps = await queryTaskDependencies(actualAdapter, params.task_id, includeDetails);
 
     return {
       task_id: params.task_id,
@@ -1263,7 +1303,7 @@ export function getDependencies(params: {
 /**
  * Create multiple tasks atomically
  */
-export function batchCreateTasks(params: {
+export async function batchCreateTasks(params: {
   tasks: Array<{
     title: string;
     description?: string;
@@ -1273,54 +1313,104 @@ export function batchCreateTasks(params: {
     tags?: string[];
   }>;
   atomic?: boolean;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
 
   if (!params.tasks || !Array.isArray(params.tasks)) {
     throw new Error('Parameter "tasks" is required and must be an array');
   }
 
+  if (params.tasks.length > 50) {
+    throw new Error('Parameter "tasks" must contain at most 50 items');
+  }
+
   const atomic = params.atomic !== undefined ? params.atomic : true;
 
-  // Use processBatch utility
-  const batchResult = processBatch(
-    actualDb,
-    params.tasks,
-    (task, actualDb) => {
-      const result = createTaskInternal(task, actualDb);
-      return {
-        title: task.title,
-        task_id: result.task_id
-      };
-    },
-    atomic,
-    50
-  );
+  try {
+    if (atomic) {
+      // Atomic mode: All or nothing
+      const results = await actualAdapter.transaction(async (trx) => {
+        const processedResults = [];
 
-  // Map batch results to task batch response format
-  return {
-    success: batchResult.success,
-    created: batchResult.processed,
-    failed: batchResult.failed,
-    results: batchResult.results.map(r => ({
-      title: (r.data as any)?.title || '',
-      task_id: r.data?.task_id,
-      success: r.success,
-      error: r.error
-    }))
-  };
+        for (const task of params.tasks) {
+          try {
+            const result = await createTaskInternal(task, actualAdapter, trx);
+            processedResults.push({
+              title: task.title,
+              task_id: result.task_id,
+              success: true,
+              error: undefined
+            });
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Batch failed at task "${task.title}": ${errorMessage}`);
+          }
+        }
+
+        return processedResults;
+      });
+
+      return {
+        success: true,
+        created: results.length,
+        failed: 0,
+        results: results
+      };
+    } else {
+      // Non-atomic mode: Process each independently
+      const results = [];
+      let created = 0;
+      let failed = 0;
+
+      for (const task of params.tasks) {
+        try {
+          const result = await actualAdapter.transaction(async (trx) => {
+            return await createTaskInternal(task, actualAdapter, trx);
+          });
+
+          results.push({
+            title: task.title,
+            task_id: result.task_id,
+            success: true,
+            error: undefined
+          });
+          created++;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          results.push({
+            title: task.title,
+            task_id: undefined,
+            success: false,
+            error: errorMessage
+          });
+          failed++;
+        }
+      }
+
+      return {
+        success: failed === 0,
+        created: created,
+        failed: failed,
+        results: results
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to execute batch operation: ${message}`);
+  }
 }
 
 /**
  * Watch/unwatch files for a task (v3.4.1)
  * Replaces the need to use task.link(file) for file watching
  */
-export function watchFiles(params: {
+export async function watchFiles(params: {
   task_id: number;
   action: 'watch' | 'unwatch' | 'list';
   file_paths?: string[];
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -1331,14 +1421,13 @@ export function watchFiles(params: {
   }
 
   try {
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
       // Check if task exists
-      const taskData = actualDb.prepare(`
-        SELECT t.id, t.title, s.name as status
-        FROM t_tasks t
-        JOIN m_task_statuses s ON t.status_id = s.id
-        WHERE t.id = ?
-      `).get(params.task_id) as { id: number; title: string; status: string } | undefined;
+      const taskData = await trx('t_tasks as t')
+        .join('m_task_statuses as s', 't.status_id', 's.id')
+        .where('t.id', params.task_id)
+        .select('t.id', 't.title', 's.name as status')
+        .first() as { id: number; title: string; status: string } | undefined;
 
       if (!taskData) {
         throw new Error(`Task with id ${params.task_id} not found`);
@@ -1349,18 +1438,20 @@ export function watchFiles(params: {
           throw new Error('Parameter "file_paths" is required for watch action');
         }
 
-        const insertFileLinkStmt = actualDb.prepare(`
-          INSERT OR IGNORE INTO t_task_file_links (task_id, file_id)
-          VALUES (?, ?)
-        `);
-
         const addedFiles: string[] = [];
         for (const filePath of params.file_paths) {
-          const fileId = getOrCreateFile(actualDb, filePath);
-          const result = insertFileLinkStmt.run(params.task_id, fileId);
+          const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
 
-          // Check if row was actually inserted (changes > 0)
-          if (result.changes > 0) {
+          // Check if already exists
+          const existing = await trx('t_task_file_links')
+            .where({ task_id: params.task_id, file_id: fileId })
+            .first();
+
+          if (!existing) {
+            await trx('t_task_file_links').insert({
+              task_id: params.task_id,
+              file_id: fileId
+            });
             addedFiles.push(filePath);
           }
         }
@@ -1390,31 +1481,18 @@ export function watchFiles(params: {
           throw new Error('Parameter "file_paths" is required for unwatch action');
         }
 
-        const deleteFileLinkStmt = actualDb.prepare(`
-          DELETE FROM t_task_file_links
-          WHERE task_id = ? AND file_id = (SELECT id FROM m_files WHERE path = ?)
-        `);
-
         const removedFiles: string[] = [];
         for (const filePath of params.file_paths) {
-          const result = deleteFileLinkStmt.run(params.task_id, filePath);
+          const deleted = await trx('t_task_file_links')
+            .where('task_id', params.task_id)
+            .whereIn('file_id', function() {
+              this.select('id').from('m_files').where({ path: filePath });
+            })
+            .delete();
 
-          // Check if row was actually deleted (changes > 0)
-          if (result.changes > 0) {
+          if (deleted > 0) {
             removedFiles.push(filePath);
           }
-        }
-
-        // Unregister files from watcher
-        try {
-          const watcher = FileWatcher.getInstance();
-          for (const filePath of removedFiles) {
-            // Note: FileWatcher.unregisterFile doesn't exist in current API
-            // The watcher will handle cleanup when task moves to done/archived
-            // For now, we just remove the DB link
-          }
-        } catch (error) {
-          // Watcher may not be initialized, ignore
         }
 
         return {
@@ -1427,13 +1505,11 @@ export function watchFiles(params: {
         };
 
       } else if (params.action === 'list') {
-        const filesStmt = actualDb.prepare(`
-          SELECT f.path
-          FROM t_task_file_links tfl
-          JOIN m_files f ON tfl.file_id = f.id
-          WHERE tfl.task_id = ?
-        `);
-        const files = filesStmt.all(params.task_id).map((row: any) => row.path);
+        const files = await trx('t_task_file_links as tfl')
+          .join('m_files as f', 'tfl.file_id', 'f.id')
+          .where('tfl.task_id', params.task_id)
+          .select('f.path')
+          .then(rows => rows.map((row: any) => row.path));
 
         return {
           success: true,
@@ -1458,44 +1534,43 @@ export function watchFiles(params: {
  * Get pruned files for a task (v3.5.0 Auto-Pruning)
  * Returns audit trail of files that were auto-pruned as non-existent
  */
-export function getPrunedFiles(params: {
+export async function getPrunedFiles(params: {
   task_id: number;
   limit?: number;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
-
     // Validate task_id
     if (!params.task_id || typeof params.task_id !== 'number') {
       throw new Error('task_id is required and must be a number');
     }
 
     // Validate task exists
-    const task = actualDb.prepare('SELECT id FROM t_tasks WHERE id = ?').get(params.task_id);
+    const task = await knex('t_tasks').where({ id: params.task_id }).first();
     if (!task) {
       throw new Error(`Task not found: ${params.task_id}`);
     }
 
     // Get pruned files
     const limit = params.limit || 100;
-    const rows = actualDb.prepare(`
-      SELECT
-        tpf.id,
-        tpf.file_path,
-        datetime(tpf.pruned_ts, 'unixepoch') as pruned_at,
-        k.key as linked_decision
-      FROM t_task_pruned_files tpf
-      LEFT JOIN m_context_keys k ON tpf.linked_decision_key_id = k.id
-      WHERE tpf.task_id = ?
-      ORDER BY tpf.pruned_ts DESC
-      LIMIT ?
-    `).all(params.task_id, limit) as Array<{
-      id: number;
-      file_path: string;
-      pruned_at: string;
-      linked_decision: string | null;
-    }>;
+    const rows = await knex('t_task_pruned_files as tpf')
+      .leftJoin('m_context_keys as k', 'tpf.linked_decision_key_id', 'k.id')
+      .where('tpf.task_id', params.task_id)
+      .select(
+        'tpf.id',
+        'tpf.file_path',
+        knex.raw(`datetime(tpf.pruned_ts, 'unixepoch') as pruned_at`),
+        'k.key as linked_decision'
+      )
+      .orderBy('tpf.pruned_ts', 'desc')
+      .limit(limit) as Array<{
+        id: number;
+        file_path: string;
+        pruned_at: string;
+        linked_decision: string | null;
+      }>;
 
     return {
       success: true,
@@ -1516,14 +1591,14 @@ export function getPrunedFiles(params: {
  * Link a pruned file to a decision (v3.5.0 Auto-Pruning)
  * Attaches WHY reasoning to pruned files for project archaeology
  */
-export function linkPrunedFile(params: {
+export async function linkPrunedFile(params: {
   pruned_file_id: number;
   decision_key: string;
-}, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
-
     // Validate pruned_file_id
     if (!params.pruned_file_id || typeof params.pruned_file_id !== 'number') {
       throw new Error('pruned_file_id is required and must be a number');
@@ -1535,35 +1610,36 @@ export function linkPrunedFile(params: {
     }
 
     // Get decision key_id
-    const decision = actualDb.prepare(`
-      SELECT k.id as key_id
-      FROM m_context_keys k
-      WHERE k.key = ? AND EXISTS (
-        SELECT 1 FROM t_decisions d WHERE d.key_id = k.id
-      )
-    `).get(params.decision_key) as { key_id: number } | undefined;
+    const decision = await knex('m_context_keys as k')
+      .whereExists(function() {
+        this.select('*')
+          .from('t_decisions as d')
+          .whereRaw('d.key_id = k.id');
+      })
+      .where('k.key', params.decision_key)
+      .select('k.id as key_id')
+      .first() as { key_id: number } | undefined;
 
     if (!decision) {
       throw new Error(`Decision not found: ${params.decision_key}`);
     }
 
     // Check if pruned file exists
-    const prunedFile = actualDb.prepare(`
-      SELECT id, task_id, file_path FROM t_task_pruned_files WHERE id = ?
-    `).get(params.pruned_file_id) as { id: number; task_id: number; file_path: string } | undefined;
+    const prunedFile = await knex('t_task_pruned_files')
+      .where({ id: params.pruned_file_id })
+      .select('id', 'task_id', 'file_path')
+      .first() as { id: number; task_id: number; file_path: string } | undefined;
 
     if (!prunedFile) {
       throw new Error(`Pruned file record not found: ${params.pruned_file_id}`);
     }
 
     // Update the link
-    const result = actualDb.prepare(`
-      UPDATE t_task_pruned_files
-      SET linked_decision_key_id = ?
-      WHERE id = ?
-    `).run(decision.key_id, params.pruned_file_id);
+    const updated = await knex('t_task_pruned_files')
+      .where({ id: params.pruned_file_id })
+      .update({ linked_decision_key_id: decision.key_id });
 
-    if (result.changes === 0) {
+    if (updated === 0) {
       throw new Error(`Failed to link pruned file #${params.pruned_file_id} to decision ${params.decision_key}`);
     }
 
@@ -1843,8 +1919,9 @@ export function taskHelp(): any {
 /**
  * Query file watcher status and monitored files/tasks
  */
-export function watcherStatus(args: any, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+export async function watcherStatus(args: any, adapter?: DatabaseAdapter): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
   const subaction = args.subaction || 'status';
   const watcher = FileWatcher.getInstance();
 
@@ -1890,14 +1967,13 @@ export function watcherStatus(args: any, db?: Database): any {
   }
 
   if (subaction === 'list_files') {
-    const fileLinks = actualDb.prepare(`
-      SELECT DISTINCT tfl.file_path, t.id, t.title, ts.status_name
-      FROM t_task_file_links tfl
-      JOIN t_tasks t ON tfl.task_id = t.id
-      JOIN m_task_statuses ts ON t.status_id = ts.id
-      WHERE t.status_id != 6  -- Exclude archived tasks
-      ORDER BY tfl.file_path, t.id
-    `).all() as Array<{ file_path: string; id: number; title: string; status_name: string }>;
+    const fileLinks = await knex('t_task_file_links as tfl')
+      .join('t_tasks as t', 'tfl.task_id', 't.id')
+      .join('m_task_statuses as ts', 't.status_id', 'ts.id')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('t.status_id', '!=', 6)  // Exclude archived tasks
+      .select('f.path as file_path', 't.id', 't.title', 'ts.name as status_name')
+      .orderBy(['f.path', 't.id']) as Array<{ file_path: string; id: number; title: string; status_name: string }>;
 
     // Group by file
     const fileMap = new Map<string, Array<{ task_id: number; task_title: string; status: string }>>();
@@ -1928,16 +2004,20 @@ export function watcherStatus(args: any, db?: Database): any {
   }
 
   if (subaction === 'list_tasks') {
-    const taskLinks = actualDb.prepare(`
-      SELECT t.id, t.title, ts.status_name, COUNT(DISTINCT tfl.file_path) as file_count,
-             GROUP_CONCAT(DISTINCT tfl.file_path, ', ') as files
-      FROM t_tasks t
-      JOIN m_task_statuses ts ON t.status_id = ts.id
-      JOIN t_task_file_links tfl ON t.id = tfl.task_id
-      WHERE t.status_id != 6  -- Exclude archived tasks
-      GROUP BY t.id, t.title, ts.status_name
-      ORDER BY t.id
-    `).all() as Array<{ id: number; title: string; status_name: string; file_count: number; files: string }>;
+    const taskLinks = await knex('t_tasks as t')
+      .join('m_task_statuses as ts', 't.status_id', 'ts.id')
+      .join('t_task_file_links as tfl', 't.id', 'tfl.task_id')
+      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .where('t.status_id', '!=', 6)  // Exclude archived tasks
+      .groupBy('t.id', 't.title', 'ts.name')
+      .select(
+        't.id',
+        't.title',
+        'ts.name as status_name',
+        knex.raw('COUNT(DISTINCT tfl.file_id) as file_count'),
+        knex.raw('GROUP_CONCAT(DISTINCT f.path, \', \') as files')
+      )
+      .orderBy('t.id') as Array<{ id: number; title: string; status_name: string; file_count: number; files: string }>;
 
     const tasks = taskLinks.map(task => ({
       task_id: task.id,

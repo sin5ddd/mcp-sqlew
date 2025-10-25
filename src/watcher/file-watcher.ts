@@ -12,7 +12,8 @@
  */
 
 import chokidar, { FSWatcher } from 'chokidar';
-import { getDatabase, getConfigInt, getConfigBool } from '../database.js';
+import { getAdapter, getConfigInt, getConfigBool } from '../database.js';
+import { SQLiteAdapter } from '../adapters/index.js';
 import { basename, dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
@@ -23,6 +24,18 @@ import { checkReadyForReview } from '../utils/quality-checks.js';
 import { CONFIG_KEYS } from '../constants.js';
 import { detectAndCompleteReviewedTasks, detectAndCompleteOnStaging, detectAndArchiveOnCommit } from '../utils/task-stale-detection.js';
 import { detectVCS } from '../utils/vcs-adapter.js';
+
+/**
+ * Helper to get raw better-sqlite3 Database instance from adapter
+ * For legacy code that uses db.prepare() directly
+ */
+function getRawDb(): any {
+  const adapter = getAdapter();
+  if (adapter instanceof SQLiteAdapter) {
+    return adapter.getRawDatabase();
+  }
+  throw new Error('File watcher only supported for SQLite adapter');
+}
 
 /**
  * File-to-task mapping for efficient lookup
@@ -364,7 +377,8 @@ export class FileWatcher {
 
     console.error(`\n📝 File changed: ${basename(normalizedPath)}`);
 
-    const db = getDatabase();
+    const adapter = getAdapter();
+    const db = getRawDb();
 
     // Process each task linked to this file
     for (const mapping of mappings) {
@@ -430,7 +444,7 @@ export class FileWatcher {
 
         // After debounce period, check if task is ready for review
         // Use setTimeout to check after idle period
-        const idleMinutes = getConfigInt(db, CONFIG_KEYS.REVIEW_IDLE_MINUTES, 15);
+        const idleMinutes = await getConfigInt(adapter, CONFIG_KEYS.REVIEW_IDLE_MINUTES, 15);
         setTimeout(async () => {
           await this.checkAndTransitionToReview(taskId);
         }, idleMinutes * 60 * 1000);
@@ -449,7 +463,7 @@ export class FileWatcher {
   private async handleVCSIndexChange(filePath: string): Promise<void> {
     console.error('\n🔄 VCS index changed - checking for tasks ready to auto-transition');
 
-    const db = getDatabase();
+    const db = getAdapter();
 
     try {
       // Step 1: Check for staged files → complete tasks (waiting_review → done)
@@ -492,7 +506,7 @@ export class FileWatcher {
     taskTitle: string,
     mapping: FileTaskMapping
   ): Promise<void> {
-    const db = getDatabase();
+    const db = getRawDb();
 
     try {
       // Get acceptance criteria JSON
@@ -582,7 +596,7 @@ export class FileWatcher {
    * Load existing task-file links from database
    */
   private async loadTaskFileLinks(): Promise<void> {
-    const db = getDatabase();
+    const db = getRawDb();
 
     try {
       // Query all active tasks with file links
@@ -661,7 +675,8 @@ export class FileWatcher {
    * @param taskId - Task ID to check
    */
   private async checkAndTransitionToReview(taskId: number): Promise<void> {
-    const db = getDatabase();
+    const adapter = getAdapter();
+    const db = getRawDb();
 
     try {
       // Get current task status
@@ -683,10 +698,10 @@ export class FileWatcher {
       }
 
       // Read configuration
-      const idleMinutes = getConfigInt(db, CONFIG_KEYS.REVIEW_IDLE_MINUTES, 15);
-      const requireAllFilesModified = getConfigBool(db, CONFIG_KEYS.REVIEW_REQUIRE_ALL_FILES_MODIFIED, true);
-      const requireTestsPass = getConfigBool(db, CONFIG_KEYS.REVIEW_REQUIRE_TESTS_PASS, true);
-      const requireCompile = getConfigBool(db, CONFIG_KEYS.REVIEW_REQUIRE_COMPILE, true);
+      const idleMinutes = await getConfigInt(adapter, CONFIG_KEYS.REVIEW_IDLE_MINUTES, 15);
+      const requireAllFilesModified = await getConfigBool(adapter, CONFIG_KEYS.REVIEW_REQUIRE_ALL_FILES_MODIFIED, true);
+      const requireTestsPass = await getConfigBool(adapter, CONFIG_KEYS.REVIEW_REQUIRE_TESTS_PASS, true);
+      const requireCompile = await getConfigBool(adapter, CONFIG_KEYS.REVIEW_REQUIRE_COMPILE, true);
 
       // Check idle time
       const lastModified = this.lastModifiedTimes.get(taskId);

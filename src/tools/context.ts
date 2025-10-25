@@ -1,13 +1,28 @@
 /**
  * Context management tools for MCP Shared Context Server
  * Implements set_decision, get_context, and get_decision tools
+ *
+ * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
  */
 
-import { getDatabase, getOrCreateAgent, getOrCreateContextKey, getOrCreateTag, getOrCreateScope, getLayerId, transaction, addDecisionContext as dbAddDecisionContext, getDecisionWithContext as dbGetDecisionWithContext, listDecisionContexts as dbListDecisionContexts } from '../database.js';
+import { DatabaseAdapter } from '../adapters/index.js';
+import {
+  getAdapter,
+  getOrCreateAgent,
+  getOrCreateContextKey,
+  getOrCreateTag,
+  getOrCreateScope,
+  getLayerId,
+  addDecisionContext as dbAddDecisionContext,
+  getDecisionWithContext as dbGetDecisionWithContext,
+  listDecisionContexts as dbListDecisionContexts
+} from '../database.js';
 import { STRING_TO_STATUS, STATUS_TO_STRING, DEFAULT_VERSION, DEFAULT_STATUS } from '../constants.js';
 import { processBatch } from '../utils/batch.js';
 import { validateRequired, validateStatus, validateLayer } from '../utils/validators.js';
 import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
+import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../utils/activity-logging.js';
+import { Knex } from 'knex';
 import type {
   SetDecisionParams,
   GetContextParams,
@@ -16,7 +31,6 @@ import type {
   GetContextResponse,
   GetDecisionResponse,
   TaggedDecision,
-  Database,
   Status,
   SearchByTagsParams,
   SearchByTagsResponse,
@@ -47,10 +61,17 @@ import type {
  * Used by setDecision (with transaction) and setDecisionBatch (manages its own transaction)
  *
  * @param params - Decision parameters
- * @param db - Database instance
+ * @param adapter - Database adapter instance
+ * @param trx - Optional transaction
  * @returns Response with success status and metadata
  */
-function setDecisionInternal(params: SetDecisionParams, db: Database): SetDecisionResponse {
+async function setDecisionInternal(
+  params: SetDecisionParams,
+  adapter: DatabaseAdapter,
+  trx?: Knex.Transaction
+): Promise<SetDecisionResponse> {
+  const knex = trx || adapter.getKnex();
+
   // Validate required parameters
   const trimmedKey = validateRequired(params.key, 'key');
 
@@ -75,70 +96,99 @@ function setDecisionInternal(params: SetDecisionParams, db: Database): SetDecisi
   // Validate layer if provided
   let layerId: number | null = null;
   if (params.layer) {
-    layerId = validateLayer(db, params.layer);
+    const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
+    if (!validLayers.includes(params.layer)) {
+      throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
+    }
+    layerId = await getLayerId(adapter, params.layer, trx);
+    if (layerId === null) {
+      throw new Error(`Layer not found in database: ${params.layer}`);
+    }
   }
 
   // Get or create master records
-  const agentId = getOrCreateAgent(db, agentName);
-  const keyId = getOrCreateContextKey(db, params.key);
+  const agentId = await getOrCreateAgent(adapter, agentName, trx);
+  const keyId = await getOrCreateContextKey(adapter, params.key, trx);
 
   // Current timestamp
   const ts = Math.floor(Date.now() / 1000);
 
+  // Check if decision already exists for activity logging
+  const existingDecision = await knex(isNumeric ? 't_decisions_numeric' : 't_decisions')
+    .where({ key_id: keyId })
+    .first();
+
   // Insert or update decision based on value type
-  if (isNumeric) {
-    // Numeric decision
-    const stmt = db.prepare(`
-      INSERT INTO t_decisions_numeric (key_id, value, agent_id, layer_id, version, status, ts)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(key_id) DO UPDATE SET
-        value = excluded.value,
-        agent_id = excluded.agent_id,
-        layer_id = excluded.layer_id,
-        version = excluded.version,
-        status = excluded.status,
-        ts = excluded.ts
-    `);
-    stmt.run(keyId, value, agentId, layerId, version, status, ts);
+  const tableName = isNumeric ? 't_decisions_numeric' : 't_decisions';
+  const decisionData = {
+    key_id: keyId,
+    value: isNumeric ? value : String(value),
+    agent_id: agentId,
+    layer_id: layerId,
+    version: version,
+    status: status,
+    ts: ts
+  };
+
+  await adapter.upsert(
+    tableName,
+    decisionData,
+    ['key_id']
+  );
+
+  // Activity logging (replaces triggers)
+  if (existingDecision) {
+    // Update case - log update and record history
+    await logDecisionUpdate(knex, {
+      key: params.key,
+      old_value: String(existingDecision.value),
+      new_value: String(value),
+      old_version: existingDecision.version,
+      new_version: version,
+      agent_id: agentId,
+      layer_id: layerId || undefined
+    });
+
+    await recordDecisionHistory(knex, {
+      key_id: keyId,
+      version: existingDecision.version,
+      value: String(existingDecision.value),
+      agent_id: existingDecision.agent_id,
+      ts: existingDecision.ts
+    });
   } else {
-    // String decision
-    const stmt = db.prepare(`
-      INSERT INTO t_decisions (key_id, value, agent_id, layer_id, version, status, ts)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(key_id) DO UPDATE SET
-        value = excluded.value,
-        agent_id = excluded.agent_id,
-        layer_id = excluded.layer_id,
-        version = excluded.version,
-        status = excluded.status,
-        ts = excluded.ts
-    `);
-    stmt.run(keyId, String(value), agentId, layerId, version, status, ts);
+    // New decision case - log set
+    await logDecisionSet(knex, {
+      key: params.key,
+      value: String(value),
+      version: version,
+      status: status,
+      agent_id: agentId,
+      layer_id: layerId || undefined
+    });
   }
 
   // Handle m_tags (many-to-many)
   if (params.tags && params.tags.length > 0) {
     // Clear existing tags
-    db.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
+    await knex('t_decision_tags').where({ decision_key_id: keyId }).delete();
 
     // Insert new tags
-    const tagStmt = db.prepare('INSERT INTO t_decision_tags (decision_key_id, tag_id) VALUES (?, ?)');
     for (const tagName of params.tags) {
-      const tagId = getOrCreateTag(db, tagName);
-      tagStmt.run(keyId, tagId);
+      const tagId = await getOrCreateTag(adapter, tagName, trx);
+      await knex('t_decision_tags').insert({ decision_key_id: keyId, tag_id: tagId });
     }
   }
 
   // Handle m_scopes (many-to-many)
   if (params.scopes && params.scopes.length > 0) {
     // Clear existing scopes
-    db.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
+    await knex('t_decision_scopes').where({ decision_key_id: keyId }).delete();
 
     // Insert new scopes
-    const scopeStmt = db.prepare('INSERT INTO t_decision_scopes (decision_key_id, scope_id) VALUES (?, ?)');
     for (const scopeName of params.scopes) {
-      const scopeId = getOrCreateScope(db, scopeName);
-      scopeStmt.run(keyId, scopeId);
+      const scopeId = await getOrCreateScope(adapter, scopeName, trx);
+      await knex('t_decision_scopes').insert({ decision_key_id: keyId, scope_id: scopeId });
     }
   }
 
@@ -157,16 +207,19 @@ function setDecisionInternal(params: SetDecisionParams, db: Database): SetDecisi
  * Supports tags, layers, scopes, and version tracking
  *
  * @param params - Decision parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status and metadata
  */
-export function setDecision(params: SetDecisionParams, db?: Database): SetDecisionResponse {
-  const actualDb = db ?? getDatabase();
+export async function setDecision(
+  params: SetDecisionParams,
+  adapter?: DatabaseAdapter
+): Promise<SetDecisionResponse> {
+  const actualAdapter = adapter ?? getAdapter();
 
   try {
     // Use transaction for atomicity
-    return transaction(actualDb, () => {
-      return setDecisionInternal(params, actualDb);
+    return await actualAdapter.transaction(async (trx) => {
+      return await setDecisionInternal(params, actualAdapter, trx);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -180,37 +233,37 @@ export function setDecision(params: SetDecisionParams, db?: Database): SetDecisi
  * Supports filtering by status, layer, tags, and scope
  *
  * @param params - Filter parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of t_decisions with metadata
  */
-export function getContext(params: GetContextParams = {}, db?: Database): GetContextResponse {
-  const actualDb = db ?? getDatabase();
+export async function getContext(
+  params: GetContextParams = {},
+  adapter?: DatabaseAdapter
+): Promise<GetContextResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     // Build query dynamically based on filters
-    let query = 'SELECT * FROM v_tagged_decisions WHERE 1=1';
-    const queryParams: any[] = [];
+    let query = knex('v_tagged_decisions');
 
     // Filter by status
     if (params.status) {
       if (!STRING_TO_STATUS[params.status]) {
         throw new Error(`Invalid status: ${params.status}`);
       }
-      query += ' AND status = ?';
-      queryParams.push(params.status);
+      query = query.where('status', params.status);
     }
 
     // Filter by layer
     if (params.layer) {
-      query += ' AND layer = ?';
-      queryParams.push(params.layer);
+      query = query.where('layer', params.layer);
     }
 
     // Filter by scope
     if (params.scope) {
       // Use LIKE for comma-separated scopes
-      query += ' AND scopes LIKE ?';
-      queryParams.push(`%${params.scope}%`);
+      query = query.where('scopes', 'like', `%${params.scope}%`);
     }
 
     // Filter by tags
@@ -220,25 +273,23 @@ export function getContext(params: GetContextParams = {}, db?: Database): GetCon
       if (tagMatch === 'AND') {
         // All tags must be present
         for (const tag of params.tags) {
-          query += ' AND tags LIKE ?';
-          queryParams.push(`%${tag}%`);
+          query = query.where('tags', 'like', `%${tag}%`);
         }
       } else {
         // Any tag must be present (OR)
-        const tagConditions = params.tags.map(() => 'tags LIKE ?').join(' OR ');
-        query += ` AND (${tagConditions})`;
-        for (const tag of params.tags) {
-          queryParams.push(`%${tag}%`);
-        }
+        query = query.where((builder) => {
+          for (const tag of params.tags!) {
+            builder.orWhere('tags', 'like', `%${tag}%`);
+          }
+        });
       }
     }
 
     // Order by most recent
-    query += ' ORDER BY updated DESC';
+    query = query.orderBy('updated', 'desc');
 
     // Execute query
-    const stmt = actualDb.prepare(query);
-    const rows = stmt.all(...queryParams) as TaggedDecision[];
+    const rows = await query.select('*') as TaggedDecision[];
 
     return {
       decisions: rows,
@@ -256,11 +307,15 @@ export function getContext(params: GetContextParams = {}, db?: Database): GetCon
  * Optionally includes decision context (v3.2.2)
  *
  * @param params - Decision key and optional include_context flag
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Decision details or not found
  */
-export function getDecision(params: GetDecisionParams & { include_context?: boolean }, db?: Database): GetDecisionResponse {
-  const actualDb = db ?? getDatabase();
+export async function getDecision(
+  params: GetDecisionParams & { include_context?: boolean },
+  adapter?: DatabaseAdapter
+): Promise<GetDecisionResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate parameter
   if (!params.key || params.key.trim() === '') {
@@ -270,7 +325,7 @@ export function getDecision(params: GetDecisionParams & { include_context?: bool
   try {
     // If include_context is true, use the context-aware function
     if (params.include_context) {
-      const result = dbGetDecisionWithContext(actualDb, params.key);
+      const result = await dbGetDecisionWithContext(actualAdapter, params.key);
 
       if (!result) {
         return {
@@ -301,8 +356,9 @@ export function getDecision(params: GetDecisionParams & { include_context?: bool
     }
 
     // Standard query without context (backward compatible)
-    const stmt = actualDb.prepare('SELECT * FROM v_tagged_decisions WHERE key = ?');
-    const row = stmt.get(params.key) as TaggedDecision | undefined;
+    const row = await knex('v_tagged_decisions')
+      .where({ key: params.key })
+      .first() as TaggedDecision | undefined;
 
     if (!row) {
       return {
@@ -325,11 +381,15 @@ export function getDecision(params: GetDecisionParams & { include_context?: bool
  * Provides flexible tag-based filtering with status and layer support
  *
  * @param params - Search parameters (tags, match_mode, status, layer)
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of t_decisions matching tag criteria
  */
-export function searchByTags(params: SearchByTagsParams, db?: Database): SearchByTagsResponse {
-  const actualDb = db ?? getDatabase();
+export async function searchByTags(
+  params: SearchByTagsParams,
+  adapter?: DatabaseAdapter
+): Promise<SearchByTagsResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate required parameters
   if (!params.tags || params.tags.length === 0) {
@@ -338,23 +398,21 @@ export function searchByTags(params: SearchByTagsParams, db?: Database): SearchB
 
   try {
     const matchMode = params.match_mode || 'OR';
-    let query = 'SELECT * FROM v_tagged_decisions WHERE 1=1';
-    const queryParams: any[] = [];
+    let query = knex('v_tagged_decisions');
 
     // Apply tag filtering based on match mode
     if (matchMode === 'AND') {
       // All tags must be present
       for (const tag of params.tags) {
-        query += ' AND tags LIKE ?';
-        queryParams.push(`%${tag}%`);
+        query = query.where('tags', 'like', `%${tag}%`);
       }
     } else if (matchMode === 'OR') {
       // Any tag must be present
-      const tagConditions = params.tags.map(() => 'tags LIKE ?').join(' OR ');
-      query += ` AND (${tagConditions})`;
-      for (const tag of params.tags) {
-        queryParams.push(`%${tag}%`);
-      }
+      query = query.where((builder) => {
+        for (const tag of params.tags) {
+          builder.orWhere('tags', 'like', `%${tag}%`);
+        }
+      });
     } else {
       throw new Error(`Invalid match_mode: ${matchMode}. Must be 'AND' or 'OR'`);
     }
@@ -364,27 +422,24 @@ export function searchByTags(params: SearchByTagsParams, db?: Database): SearchB
       if (!STRING_TO_STATUS[params.status]) {
         throw new Error(`Invalid status: ${params.status}. Must be 'active', 'deprecated', or 'draft'`);
       }
-      query += ' AND status = ?';
-      queryParams.push(params.status);
+      query = query.where('status', params.status);
     }
 
     // Optional layer filter
     if (params.layer) {
       // Validate layer exists
-      const layerId = getLayerId(actualDb, params.layer);
+      const layerId = await getLayerId(actualAdapter, params.layer);
       if (layerId === null) {
         throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
       }
-      query += ' AND layer = ?';
-      queryParams.push(params.layer);
+      query = query.where('layer', params.layer);
     }
 
     // Order by most recent
-    query += ' ORDER BY updated DESC';
+    query = query.orderBy('updated', 'desc');
 
     // Execute query
-    const stmt = actualDb.prepare(query);
-    const rows = stmt.all(...queryParams) as TaggedDecision[];
+    const rows = await query.select('*') as TaggedDecision[];
 
     return {
       decisions: rows,
@@ -401,11 +456,15 @@ export function searchByTags(params: SearchByTagsParams, db?: Database): SearchB
  * Returns all historical versions ordered by timestamp (newest first)
  *
  * @param params - Decision key to get history for
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of historical versions with metadata
  */
-export function getVersions(params: GetVersionsParams, db?: Database): GetVersionsResponse {
-  const actualDb = db ?? getDatabase();
+export async function getVersions(
+  params: GetVersionsParams,
+  adapter?: DatabaseAdapter
+): Promise<GetVersionsResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate required parameter
   if (!params.key || params.key.trim() === '') {
@@ -414,7 +473,9 @@ export function getVersions(params: GetVersionsParams, db?: Database): GetVersio
 
   try {
     // Get key_id for the decision
-    const keyResult = actualDb.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
+    const keyResult = await knex('m_context_keys')
+      .where({ key: params.key })
+      .first('id') as { id: number } | undefined;
 
     if (!keyResult) {
       // Key doesn't exist, return empty history
@@ -428,24 +489,21 @@ export function getVersions(params: GetVersionsParams, db?: Database): GetVersio
     const keyId = keyResult.id;
 
     // Query t_decision_history with agent join
-    const stmt = actualDb.prepare(`
-      SELECT
-        dh.version,
-        dh.value,
-        a.name as agent_name,
-        datetime(dh.ts, 'unixepoch') as timestamp
-      FROM t_decision_history dh
-      LEFT JOIN m_agents a ON dh.agent_id = a.id
-      WHERE dh.key_id = ?
-      ORDER BY dh.ts DESC
-    `);
-
-    const rows = stmt.all(keyId) as Array<{
-      version: string;
-      value: string;
-      agent_name: string | null;
-      timestamp: string;
-    }>;
+    const rows = await knex('t_decision_history as dh')
+      .leftJoin('m_agents as a', 'dh.agent_id', 'a.id')
+      .where('dh.key_id', keyId)
+      .select(
+        'dh.version',
+        'dh.value',
+        'a.name as agent_name',
+        knex.raw(`datetime(dh.ts, 'unixepoch') as timestamp`)
+      )
+      .orderBy('dh.ts', 'desc') as Array<{
+        version: string;
+        value: string;
+        agent_name: string | null;
+        timestamp: string;
+      }>;
 
     // Transform to response format
     const history = rows.map(row => ({
@@ -471,11 +529,15 @@ export function getVersions(params: GetVersionsParams, db?: Database): GetVersio
  * Supports status filtering and optional tag inclusion
  *
  * @param params - Layer name, optional status and include_tags
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of t_decisions in the specified layer
  */
-export function searchByLayer(params: SearchByLayerParams, db?: Database): SearchByLayerResponse {
-  const actualDb = db ?? getDatabase();
+export async function searchByLayer(
+  params: SearchByLayerParams,
+  adapter?: DatabaseAdapter
+): Promise<SearchByLayerResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate required parameter
   if (!params.layer || params.layer.trim() === '') {
@@ -484,7 +546,7 @@ export function searchByLayer(params: SearchByLayerParams, db?: Database): Searc
 
   try {
     // Validate layer exists
-    const layerId = getLayerId(actualDb, params.layer);
+    const layerId = await getLayerId(actualAdapter, params.layer);
     if (layerId === null) {
       throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
     }
@@ -498,70 +560,57 @@ export function searchByLayer(params: SearchByLayerParams, db?: Database): Searc
       throw new Error(`Invalid status: ${statusValue}. Must be 'active', 'deprecated', or 'draft'`);
     }
 
-    let query: string;
-    const queryParams: any[] = [params.layer, statusValue];
+    let rows: TaggedDecision[];
 
     if (includeTagsValue) {
       // Use v_tagged_decisions view for full metadata
-      query = `
-        SELECT * FROM v_tagged_decisions
-        WHERE layer = ? AND status = ?
-        ORDER BY updated DESC
-      `;
+      rows = await knex('v_tagged_decisions')
+        .where({ layer: params.layer, status: statusValue })
+        .orderBy('updated', 'desc')
+        .select('*') as TaggedDecision[];
     } else {
       // Use base t_decisions table with minimal joins
-      query = `
-        SELECT
-          ck.key,
-          d.value,
-          d.version,
-          CASE d.status
-            WHEN 1 THEN 'active'
-            WHEN 2 THEN 'deprecated'
-            WHEN 3 THEN 'draft'
-          END as status,
-          l.name as layer,
-          NULL as tags,
-          NULL as scopes,
-          a.name as decided_by,
-          datetime(d.ts, 'unixepoch') as updated
-        FROM t_decisions d
-        INNER JOIN m_context_keys ck ON d.key_id = ck.id
-        LEFT JOIN m_layers l ON d.layer_id = l.id
-        LEFT JOIN m_agents a ON d.agent_id = a.id
-        WHERE l.name = ? AND d.status = ?
+      const statusInt = STRING_TO_STATUS[statusValue];
 
-        UNION ALL
+      const stringDecisions = knex('t_decisions as d')
+        .innerJoin('m_context_keys as ck', 'd.key_id', 'ck.id')
+        .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
+        .leftJoin('m_agents as a', 'd.agent_id', 'a.id')
+        .where('l.name', params.layer)
+        .where('d.status', statusInt)
+        .select(
+          'ck.key',
+          'd.value',
+          'd.version',
+          knex.raw(`CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' WHEN 3 THEN 'draft' END as status`),
+          'l.name as layer',
+          knex.raw('NULL as tags'),
+          knex.raw('NULL as scopes'),
+          'a.name as decided_by',
+          knex.raw(`datetime(d.ts, 'unixepoch') as updated`)
+        );
 
-        SELECT
-          ck.key,
-          CAST(dn.value AS TEXT) as value,
-          dn.version,
-          CASE dn.status
-            WHEN 1 THEN 'active'
-            WHEN 2 THEN 'deprecated'
-            WHEN 3 THEN 'draft'
-          END as status,
-          l.name as layer,
-          NULL as tags,
-          NULL as scopes,
-          a.name as decided_by,
-          datetime(dn.ts, 'unixepoch') as updated
-        FROM t_decisions_numeric dn
-        INNER JOIN m_context_keys ck ON dn.key_id = ck.id
-        LEFT JOIN m_layers l ON dn.layer_id = l.id
-        LEFT JOIN m_agents a ON dn.agent_id = a.id
-        WHERE l.name = ? AND dn.status = ?
+      const numericDecisions = knex('t_decisions_numeric as dn')
+        .innerJoin('m_context_keys as ck', 'dn.key_id', 'ck.id')
+        .leftJoin('m_layers as l', 'dn.layer_id', 'l.id')
+        .leftJoin('m_agents as a', 'dn.agent_id', 'a.id')
+        .where('l.name', params.layer)
+        .where('dn.status', statusInt)
+        .select(
+          'ck.key',
+          knex.raw('CAST(dn.value AS TEXT) as value'),
+          'dn.version',
+          knex.raw(`CASE dn.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' WHEN 3 THEN 'draft' END as status`),
+          'l.name as layer',
+          knex.raw('NULL as tags'),
+          knex.raw('NULL as scopes'),
+          'a.name as decided_by',
+          knex.raw(`datetime(dn.ts, 'unixepoch') as updated`)
+        );
 
-        ORDER BY updated DESC
-      `;
-      // Add params for the numeric table part of UNION
-      queryParams.push(params.layer, statusValue);
+      // Union both queries
+      rows = await stringDecisions.union([numericDecisions]).orderBy('updated', 'desc') as TaggedDecision[];
     }
-
-    // Execute query
-    const stmt = actualDb.prepare(query);
-    const rows = stmt.all(...queryParams) as TaggedDecision[];
 
     return {
       layer: params.layer,
@@ -599,10 +648,13 @@ export function searchByLayer(params: SearchByLayerParams, db?: Database): Searc
  * All inferred fields can be overridden via optional parameters.
  *
  * @param params - Quick set parameters (key and value required)
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status and inferred metadata
  */
-export function quickSetDecision(params: QuickSetDecisionParams, db?: Database): QuickSetDecisionResponse {
+export async function quickSetDecision(
+  params: QuickSetDecisionParams,
+  adapter?: DatabaseAdapter
+): Promise<QuickSetDecisionResponse> {
   // Validate required parameters
   if (!params.key || params.key.trim() === '') {
     throw new Error('Parameter "key" is required and cannot be empty');
@@ -674,8 +726,8 @@ export function quickSetDecision(params: QuickSetDecisionParams, db?: Database):
     scopes: inferredScopes
   };
 
-  // Call setDecision with full params (pass db if provided)
-  const result = setDecision(fullParams, db);
+  // Call setDecision with full params (pass adapter if provided)
+  const result = await setDecision(fullParams, adapter);
 
   // Return response with inferred metadata
   return {
@@ -704,11 +756,15 @@ export function quickSetDecision(params: QuickSetDecisionParams, db?: Database):
  * - search_text: Full-text search in value field
  *
  * @param params - Advanced search parameters with filtering, sorting, pagination
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Filtered decisions with total count for pagination
  */
-export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database): SearchAdvancedResponse {
-  const actualDb = db ?? getDatabase();
+export async function searchAdvanced(
+  params: SearchAdvancedParams = {},
+  adapter?: DatabaseAdapter
+): Promise<SearchAdvancedResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     // Parse relative time to Unix timestamp
@@ -736,65 +792,69 @@ export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database)
     };
 
     // Build base query using v_tagged_decisions view
-    let query = 'SELECT * FROM v_tagged_decisions WHERE 1=1';
-    const queryParams: any[] = [];
+    let query = knex('v_tagged_decisions');
 
     // Filter by layers (OR relationship)
     if (params.layers && params.layers.length > 0) {
-      const layerConditions = params.layers.map(() => 'layer = ?').join(' OR ');
-      query += ` AND (${layerConditions})`;
-      queryParams.push(...params.layers);
+      query = query.whereIn('layer', params.layers);
     }
 
     // Filter by tags_all (AND relationship - must have ALL tags)
     if (params.tags_all && params.tags_all.length > 0) {
       for (const tag of params.tags_all) {
-        query += ' AND (tags LIKE ? OR tags = ?)';
-        queryParams.push(`%${tag}%`, tag);
+        query = query.where((builder) => {
+          builder.where('tags', 'like', `%${tag}%`).orWhere('tags', tag);
+        });
       }
     }
 
     // Filter by tags_any (OR relationship - must have ANY tag)
     if (params.tags_any && params.tags_any.length > 0) {
-      const tagConditions = params.tags_any.map(() => '(tags LIKE ? OR tags = ?)').join(' OR ');
-      query += ` AND (${tagConditions})`;
-      for (const tag of params.tags_any) {
-        queryParams.push(`%${tag}%`, tag);
-      }
+      const tagsAny = params.tags_any; // Capture for closure
+      query = query.where((builder) => {
+        for (const tag of tagsAny) {
+          builder.orWhere('tags', 'like', `%${tag}%`).orWhere('tags', tag);
+        }
+      });
     }
 
     // Exclude tags
     if (params.exclude_tags && params.exclude_tags.length > 0) {
       for (const tag of params.exclude_tags) {
-        query += ' AND (tags IS NULL OR (tags NOT LIKE ? AND tags != ?))';
-        queryParams.push(`%${tag}%`, tag);
+        query = query.where((builder) => {
+          builder.whereNull('tags')
+            .orWhere((subBuilder) => {
+              subBuilder.where('tags', 'not like', `%${tag}%`)
+                .where('tags', '!=', tag);
+            });
+        });
       }
     }
 
     // Filter by scopes with wildcard support
     if (params.scopes && params.scopes.length > 0) {
-      const scopeConditions: string[] = [];
-      for (const scope of params.scopes) {
-        if (scope.includes('*')) {
-          // Wildcard pattern - convert to LIKE pattern
-          const likePattern = scope.replace(/\*/g, '%');
-          scopeConditions.push('(scopes LIKE ? OR scopes = ?)');
-          queryParams.push(`%${likePattern}%`, likePattern);
-        } else {
-          // Exact match
-          scopeConditions.push('(scopes LIKE ? OR scopes = ?)');
-          queryParams.push(`%${scope}%`, scope);
+      const scopes = params.scopes; // Capture for closure
+      query = query.where((builder) => {
+        for (const scope of scopes) {
+          if (scope.includes('*')) {
+            // Wildcard pattern - convert to LIKE pattern
+            const likePattern = scope.replace(/\*/g, '%');
+            builder.orWhere('scopes', 'like', `%${likePattern}%`)
+              .orWhere('scopes', likePattern);
+          } else {
+            // Exact match
+            builder.orWhere('scopes', 'like', `%${scope}%`)
+              .orWhere('scopes', scope);
+          }
         }
-      }
-      query += ` AND (${scopeConditions.join(' OR ')})`;
+      });
     }
 
     // Temporal filtering - updated_after
     if (params.updated_after) {
       const timestamp = parseRelativeTime(params.updated_after);
       if (timestamp !== null) {
-        query += ' AND (SELECT unixepoch(updated)) >= ?';
-        queryParams.push(timestamp);
+        query = query.whereRaw('unixepoch(updated) >= ?', [timestamp]);
       } else {
         throw new Error(`Invalid updated_after format: ${params.updated_after}. Use ISO timestamp or relative time like "7d", "2h", "30m"`);
       }
@@ -804,8 +864,7 @@ export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database)
     if (params.updated_before) {
       const timestamp = parseRelativeTime(params.updated_before);
       if (timestamp !== null) {
-        query += ' AND (SELECT unixepoch(updated)) <= ?';
-        queryParams.push(timestamp);
+        query = query.whereRaw('unixepoch(updated) <= ?', [timestamp]);
       } else {
         throw new Error(`Invalid updated_before format: ${params.updated_before}. Use ISO timestamp or relative time like "7d", "2h", "30m"`);
       }
@@ -813,28 +872,22 @@ export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database)
 
     // Filter by decided_by (OR relationship)
     if (params.decided_by && params.decided_by.length > 0) {
-      const agentConditions = params.decided_by.map(() => 'decided_by = ?').join(' OR ');
-      query += ` AND (${agentConditions})`;
-      queryParams.push(...params.decided_by);
+      query = query.whereIn('decided_by', params.decided_by);
     }
 
     // Filter by statuses (OR relationship)
     if (params.statuses && params.statuses.length > 0) {
-      const statusConditions = params.statuses.map(() => 'status = ?').join(' OR ');
-      query += ` AND (${statusConditions})`;
-      queryParams.push(...params.statuses);
+      query = query.whereIn('status', params.statuses);
     }
 
     // Full-text search in value field
     if (params.search_text) {
-      query += ' AND value LIKE ?';
-      queryParams.push(`%${params.search_text}%`);
+      query = query.where('value', 'like', `%${params.search_text}%`);
     }
 
     // Count total matching records (before pagination)
-    const countQuery = query.replace('SELECT * FROM', 'SELECT COUNT(*) as total FROM');
-    const countStmt = actualDb.prepare(countQuery);
-    const countResult = countStmt.get(...queryParams) as { total: number };
+    const countQuery = query.clone().count('* as total');
+    const countResult = await countQuery.first() as { total: number };
     const totalCount = countResult.total;
 
     // Sorting
@@ -849,7 +902,7 @@ export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database)
       throw new Error(`Invalid sort_order: ${sortOrder}. Must be 'asc' or 'desc'`);
     }
 
-    query += ` ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
+    query = query.orderBy(sortBy, sortOrder);
 
     // Pagination
     const limit = params.limit !== undefined ? params.limit : 20;
@@ -863,12 +916,10 @@ export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database)
       throw new Error('Parameter "offset" must be non-negative');
     }
 
-    query += ' LIMIT ? OFFSET ?';
-    queryParams.push(limit, offset);
+    query = query.limit(limit).offset(offset);
 
     // Execute query
-    const stmt = actualDb.prepare(query);
-    const rows = stmt.all(...queryParams) as TaggedDecision[];
+    const rows = await query.select('*') as TaggedDecision[];
 
     return {
       decisions: rows,
@@ -887,48 +938,110 @@ export function searchAdvanced(params: SearchAdvancedParams = {}, db?: Database)
  * Limit: 50 items per batch (constraint #3)
  *
  * @param params - Batch parameters with array of decisions and atomic flag
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status and detailed results for each item
  */
-export function setDecisionBatch(params: SetDecisionBatchParams, db?: Database): SetDecisionBatchResponse {
-  const actualDb = db ?? getDatabase();
+export async function setDecisionBatch(
+  params: SetDecisionBatchParams,
+  adapter?: DatabaseAdapter
+): Promise<SetDecisionBatchResponse> {
+  const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
   if (!params.decisions || !Array.isArray(params.decisions)) {
     throw new Error('Parameter "decisions" is required and must be an array');
   }
 
+  if (params.decisions.length === 0) {
+    return {
+      success: true,
+      inserted: 0,
+      failed: 0,
+      results: []
+    };
+  }
+
+  if (params.decisions.length > 50) {
+    throw new Error('Parameter "decisions" must contain at most 50 items');
+  }
+
   const atomic = params.atomic !== undefined ? params.atomic : true;
 
-  // Use processBatch utility
-  const batchResult = processBatch(
-    actualDb,
-    params.decisions,
-    (decision, db) => {
-      const result = setDecisionInternal(decision, db);
-      return {
-        key: decision.key,
-        key_id: result.key_id,
-        version: result.version
-      };
-    },
-    atomic,
-    50
-  );
+  try {
+    if (atomic) {
+      // Atomic mode: All or nothing
+      const results = await actualAdapter.transaction(async (trx) => {
+        const processedResults = [];
 
-  // Map batch results to SetDecisionBatchResponse format
-  return {
-    success: batchResult.success,
-    inserted: batchResult.processed,
-    failed: batchResult.failed,
-    results: batchResult.results.map(r => ({
-      key: (r.data as any)?.key || '',
-      key_id: r.data?.key_id,
-      version: r.data?.version,
-      success: r.success,
-      error: r.error
-    }))
-  };
+        for (const decision of params.decisions) {
+          try {
+            const result = await setDecisionInternal(decision, actualAdapter, trx);
+            processedResults.push({
+              key: decision.key,
+              key_id: result.key_id,
+              version: result.version,
+              success: true,
+              error: undefined
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Batch failed at decision "${decision.key}": ${message}`);
+          }
+        }
+
+        return processedResults;
+      });
+
+      return {
+        success: true,
+        inserted: results.length,
+        failed: 0,
+        results: results
+      };
+    } else {
+      // Non-atomic mode: Process each independently
+      const results = [];
+      let inserted = 0;
+      let failed = 0;
+
+      for (const decision of params.decisions) {
+        try {
+          const result = await actualAdapter.transaction(async (trx) => {
+            return await setDecisionInternal(decision, actualAdapter, trx);
+          });
+
+          results.push({
+            key: decision.key,
+            key_id: result.key_id,
+            version: result.version,
+            success: true,
+            error: undefined
+          });
+          inserted++;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          results.push({
+            key: decision.key,
+            key_id: undefined,
+            version: undefined,
+            success: false,
+            error: message
+          });
+          failed++;
+        }
+      }
+
+      return {
+        success: failed === 0,
+        inserted: inserted,
+        failed: failed,
+        results: results
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to execute batch operation: ${message}`);
+  }
 }
 
 /**
@@ -937,11 +1050,15 @@ export function setDecisionBatch(params: SetDecisionBatchParams, db?: Database):
  * Token cost: ~5-10 tokens per check
  *
  * @param params - Agent name and since_timestamp (ISO 8601)
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Boolean flag and counts for decisions, messages, files
  */
-export function hasUpdates(params: HasUpdatesParams, db?: Database): HasUpdatesResponse {
-  const actualDb = db ?? getDatabase();
+export async function hasUpdates(
+  params: HasUpdatesParams,
+  adapter?: DatabaseAdapter
+): Promise<HasUpdatesResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate required parameters
   if (!params.agent_name || params.agent_name.trim() === '') {
@@ -961,43 +1078,50 @@ export function hasUpdates(params: HasUpdatesParams, db?: Database): HasUpdatesR
     const sinceTs = Math.floor(sinceDate.getTime() / 1000);
 
     // Count decisions updated since timestamp (both string and numeric tables)
-    const decisionCountStmt = actualDb.prepare(`
-      SELECT COUNT(*) as count FROM (
-        SELECT ts FROM t_decisions WHERE ts > ?
-        UNION ALL
-        SELECT ts FROM t_decisions_numeric WHERE ts > ?
-      )
-    `);
-    const decisionResult = decisionCountStmt.get(sinceTs, sinceTs) as { count: number };
-    const decisionsCount = decisionResult.count;
+    const decisionCount1 = await knex('t_decisions')
+      .where('ts', '>', sinceTs)
+      .count('* as count')
+      .first() as { count: number };
+
+    const decisionCount2 = await knex('t_decisions_numeric')
+      .where('ts', '>', sinceTs)
+      .count('* as count')
+      .first() as { count: number };
+
+    const decisionsCount = (decisionCount1?.count || 0) + (decisionCount2?.count || 0);
 
     // Get agent_id for the requesting agent
-    const agentResult = actualDb.prepare('SELECT id FROM m_agents WHERE name = ?').get(params.agent_name) as { id: number } | undefined;
+    const agentResult = await knex('m_agents')
+      .where({ name: params.agent_name })
+      .first('id') as { id: number } | undefined;
 
     // Count messages for the agent (received messages - to_agent_id matches OR broadcast messages)
     let messagesCount = 0;
     if (agentResult) {
       const agentId = agentResult.id;
-      const messageCountStmt = actualDb.prepare(`
-        SELECT COUNT(*) as count FROM t_agent_messages
-        WHERE ts > ? AND (to_agent_id = ? OR to_agent_id IS NULL)
-      `);
-      const messageResult = messageCountStmt.get(sinceTs, agentId) as { count: number };
-      messagesCount = messageResult.count;
+      const messageResult = await knex('t_agent_messages')
+        .where('ts', '>', sinceTs)
+        .where((builder) => {
+          builder.where('to_agent_id', agentId)
+            .orWhereNull('to_agent_id');
+        })
+        .count('* as count')
+        .first() as { count: number };
+      messagesCount = messageResult?.count || 0;
     }
 
     // Count file changes since timestamp
-    const fileCountStmt = actualDb.prepare(`
-      SELECT COUNT(*) as count FROM t_file_changes WHERE ts > ?
-    `);
-    const fileResult = fileCountStmt.get(sinceTs) as { count: number };
-    const filesCount = fileResult.count;
+    const fileResult = await knex('t_file_changes')
+      .where('ts', '>', sinceTs)
+      .count('* as count')
+      .first() as { count: number };
+    const filesCount = fileResult?.count || 0;
 
     // Determine if there are any updates
-    const hasUpdates = decisionsCount > 0 || messagesCount > 0 || filesCount > 0;
+    const hasUpdatesFlag = decisionsCount > 0 || messagesCount > 0 || filesCount > 0;
 
     return {
-      has_updates: hasUpdates,
+      has_updates: hasUpdatesFlag,
       counts: {
         decisions: decisionsCount,
         messages: messagesCount,
@@ -1016,11 +1140,15 @@ export function hasUpdates(params: HasUpdatesParams, db?: Database): HasUpdatesR
  * Validates required fields if template specifies any
  *
  * @param params - Template name, key, value, and optional overrides
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status and applied defaults metadata
  */
-export function setFromTemplate(params: SetFromTemplateParams, db?: Database): SetFromTemplateResponse {
-  const actualDb = db ?? getDatabase();
+export async function setFromTemplate(
+  params: SetFromTemplateParams,
+  adapter?: DatabaseAdapter
+): Promise<SetFromTemplateResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate required parameters
   if (!params.template || params.template.trim() === '') {
@@ -1037,12 +1165,14 @@ export function setFromTemplate(params: SetFromTemplateParams, db?: Database): S
 
   try {
     // Get template
-    const templateRow = actualDb.prepare('SELECT * FROM t_decision_templates WHERE name = ?').get(params.template) as {
-      id: number;
-      name: string;
-      defaults: string;
-      required_fields: string | null;
-    } | undefined;
+    const templateRow = await knex('t_decision_templates')
+      .where({ name: params.template })
+      .first() as {
+        id: number;
+        name: string;
+        defaults: string;
+        required_fields: string | null;
+      } | undefined;
 
     if (!templateRow) {
       throw new Error(`Template not found: ${params.template}`);
@@ -1062,7 +1192,7 @@ export function setFromTemplate(params: SetFromTemplateParams, db?: Database): S
     // Validate required fields if specified
     if (requiredFields && requiredFields.length > 0) {
       for (const field of requiredFields) {
-        if (!(field in params) || params[field] === undefined || params[field] === null) {
+        if (!(field in params) || (params as any)[field] === undefined || (params as any)[field] === null) {
           throw new Error(`Template "${params.template}" requires field: ${field}`);
         }
       }
@@ -1097,8 +1227,8 @@ export function setFromTemplate(params: SetFromTemplateParams, db?: Database): S
       appliedDefaults.status = defaults.status;
     }
 
-    // Call setDecision with merged params (pass db if provided)
-    const result = setDecision(decisionParams, actualDb);
+    // Call setDecision with merged params (pass adapter if provided)
+    const result = await setDecision(decisionParams, actualAdapter);
 
     return {
       success: result.success,
@@ -1120,11 +1250,15 @@ export function setFromTemplate(params: SetFromTemplateParams, db?: Database): S
  * Defines reusable defaults and required fields for decisions
  *
  * @param params - Template name, defaults, required fields, and creator
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status and template ID
  */
-export function createTemplate(params: CreateTemplateParams, db?: Database): CreateTemplateResponse {
-  const actualDb = db ?? getDatabase();
+export async function createTemplate(
+  params: CreateTemplateParams,
+  adapter?: DatabaseAdapter
+): Promise<CreateTemplateResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate required parameters
   if (!params.name || params.name.trim() === '') {
@@ -1136,10 +1270,10 @@ export function createTemplate(params: CreateTemplateParams, db?: Database): Cre
   }
 
   try {
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
       // Validate layer if provided in defaults
       if (params.defaults.layer) {
-        const layerId = getLayerId(actualDb, params.defaults.layer);
+        const layerId = await getLayerId(actualAdapter, params.defaults.layer, trx);
         if (layerId === null) {
           throw new Error(`Invalid layer in defaults: ${params.defaults.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
         }
@@ -1153,7 +1287,7 @@ export function createTemplate(params: CreateTemplateParams, db?: Database): Cre
       // Get or create agent if creator specified
       let createdById: number | null = null;
       if (params.created_by) {
-        createdById = getOrCreateAgent(actualDb, params.created_by);
+        createdById = await getOrCreateAgent(actualAdapter, params.created_by, trx);
       }
 
       // Serialize defaults and required fields
@@ -1161,16 +1295,16 @@ export function createTemplate(params: CreateTemplateParams, db?: Database): Cre
       const requiredFieldsJson = params.required_fields ? JSON.stringify(params.required_fields) : null;
 
       // Insert template
-      const stmt = actualDb.prepare(`
-        INSERT INTO t_decision_templates (name, defaults, required_fields, created_by)
-        VALUES (?, ?, ?, ?)
-      `);
-
-      const info = stmt.run(params.name, defaultsJson, requiredFieldsJson, createdById);
+      const [id] = await trx('t_decision_templates').insert({
+        name: params.name,
+        defaults: defaultsJson,
+        required_fields: requiredFieldsJson,
+        created_by: createdById
+      });
 
       return {
         success: true,
-        template_id: info.lastInsertRowid as number,
+        template_id: id,
         template_name: params.name,
         message: `Template "${params.name}" created successfully`
       };
@@ -1186,34 +1320,35 @@ export function createTemplate(params: CreateTemplateParams, db?: Database): Cre
  * Returns all templates with their defaults and metadata
  *
  * @param params - No parameters required
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of all templates with parsed JSON fields
  */
-export function listTemplates(params: ListTemplatesParams = {}, db?: Database): ListTemplatesResponse {
-  const actualDb = db ?? getDatabase();
+export async function listTemplates(
+  params: ListTemplatesParams = {},
+  adapter?: DatabaseAdapter
+): Promise<ListTemplatesResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
-    const stmt = actualDb.prepare(`
-      SELECT
-        t.id,
-        t.name,
-        t.defaults,
-        t.required_fields,
-        a.name as created_by,
-        datetime(t.ts, 'unixepoch') as created_at
-      FROM t_decision_templates t
-      LEFT JOIN m_agents a ON t.created_by = a.id
-      ORDER BY t.name ASC
-    `);
-
-    const rows = stmt.all() as Array<{
-      id: number;
-      name: string;
-      defaults: string;
-      required_fields: string | null;
-      created_by: string | null;
-      created_at: string;
-    }>;
+    const rows = await knex('t_decision_templates as t')
+      .leftJoin('m_agents as a', 't.created_by', 'a.id')
+      .select(
+        't.id',
+        't.name',
+        't.defaults',
+        't.required_fields',
+        'a.name as created_by',
+        knex.raw(`datetime(t.ts, 'unixepoch') as created_at`)
+      )
+      .orderBy('t.name', 'asc') as Array<{
+        id: number;
+        name: string;
+        defaults: string;
+        required_fields: string | null;
+        created_by: string | null;
+        created_at: string;
+      }>;
 
     // Parse JSON fields
     const templates = rows.map(row => ({
@@ -1248,11 +1383,15 @@ export function listTemplates(params: ListTemplatesParams = {}, db?: Database): 
  * (tags, scopes) will also be deleted due to CASCADE constraints.
  *
  * @param params - Decision key to delete
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status
  */
-export function hardDeleteDecision(params: HardDeleteDecisionParams, db?: Database): HardDeleteDecisionResponse {
-  const actualDb = db ?? getDatabase();
+export async function hardDeleteDecision(
+  params: HardDeleteDecisionParams,
+  adapter?: DatabaseAdapter
+): Promise<HardDeleteDecisionResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   // Validate parameter
   if (!params.key || params.key.trim() === '') {
@@ -1260,9 +1399,11 @@ export function hardDeleteDecision(params: HardDeleteDecisionParams, db?: Databa
   }
 
   try {
-    return transaction(actualDb, () => {
+    return await actualAdapter.transaction(async (trx) => {
       // Get key_id
-      const keyResult = actualDb.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(params.key) as { id: number } | undefined;
+      const keyResult = await trx('m_context_keys')
+        .where({ key: params.key })
+        .first('id') as { id: number } | undefined;
 
       if (!keyResult) {
         // Key doesn't exist - still return success (idempotent)
@@ -1276,22 +1417,22 @@ export function hardDeleteDecision(params: HardDeleteDecisionParams, db?: Databa
       const keyId = keyResult.id;
 
       // Delete from t_decisions (if exists)
-      const deletedString = actualDb.prepare('DELETE FROM t_decisions WHERE key_id = ?').run(keyId);
+      const deletedString = await trx('t_decisions').where({ key_id: keyId }).delete();
 
       // Delete from t_decisions_numeric (if exists)
-      const deletedNumeric = actualDb.prepare('DELETE FROM t_decisions_numeric WHERE key_id = ?').run(keyId);
+      const deletedNumeric = await trx('t_decisions_numeric').where({ key_id: keyId }).delete();
 
       // Delete from t_decision_history (CASCADE should handle this, but explicit for clarity)
-      const deletedHistory = actualDb.prepare('DELETE FROM t_decision_history WHERE key_id = ?').run(keyId);
+      const deletedHistory = await trx('t_decision_history').where({ key_id: keyId }).delete();
 
       // Delete from t_decision_tags (CASCADE should handle this)
-      const deletedTags = actualDb.prepare('DELETE FROM t_decision_tags WHERE decision_key_id = ?').run(keyId);
+      const deletedTags = await trx('t_decision_tags').where({ decision_key_id: keyId }).delete();
 
       // Delete from t_decision_scopes (CASCADE should handle this)
-      const deletedScopes = actualDb.prepare('DELETE FROM t_decision_scopes WHERE decision_key_id = ?').run(keyId);
+      const deletedScopes = await trx('t_decision_scopes').where({ decision_key_id: keyId }).delete();
 
       // Calculate total deleted records
-      const totalDeleted = deletedString.changes + deletedNumeric.changes + deletedHistory.changes + deletedTags.changes + deletedScopes.changes;
+      const totalDeleted = deletedString + deletedNumeric + deletedHistory + deletedTags + deletedScopes;
 
       if (totalDeleted === 0) {
         return {
@@ -1322,11 +1463,14 @@ export function hardDeleteDecision(params: HardDeleteDecisionParams, db?: Databa
  * Adds rich context (rationale, alternatives, tradeoffs) to a decision
  *
  * @param params - Context parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status
  */
-export function addDecisionContextAction(params: any, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+export async function addDecisionContextAction(
+  params: any,
+  adapter?: DatabaseAdapter
+): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
   if (!params.key || params.key.trim() === '') {
@@ -1350,8 +1494,8 @@ export function addDecisionContextAction(params: any, db?: Database): any {
       tradeoffs = JSON.stringify(tradeoffs);
     }
 
-    const contextId = dbAddDecisionContext(
-      actualDb,
+    const contextId = await dbAddDecisionContext(
+      actualAdapter,
       params.key,
       params.rationale,
       alternatives,
@@ -1378,14 +1522,17 @@ export function addDecisionContextAction(params: any, db?: Database): any {
  * Query decision contexts with optional filters
  *
  * @param params - Filter parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of decision contexts
  */
-export function listDecisionContextsAction(params: any, db?: Database): any {
-  const actualDb = db ?? getDatabase();
+export async function listDecisionContextsAction(
+  params: any,
+  adapter?: DatabaseAdapter
+): Promise<any> {
+  const actualAdapter = adapter ?? getAdapter();
 
   try {
-    const contexts = dbListDecisionContexts(actualDb, {
+    const contexts = await dbListDecisionContexts(actualAdapter, {
       decisionKey: params.decision_key,
       relatedTaskId: params.related_task_id,
       relatedConstraintId: params.related_constraint_id,

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert';
+import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';

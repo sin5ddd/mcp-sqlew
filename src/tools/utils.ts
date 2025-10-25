@@ -1,9 +1,13 @@
 /**
  * Utility tools for MCP Shared Context Server
  * Database statistics, layer summaries, and manual cleanup
+ *
+ * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
  */
 
-import { getDatabase, transaction } from '../database.js';
+import { DatabaseAdapter } from '../adapters/index.js';
+import { getAdapter } from '../database.js';
+import { Knex } from 'knex';
 import type {
   GetLayerSummaryResponse,
   ClearOldDataParams,
@@ -14,7 +18,6 @@ import type {
   ActivityLogEntry,
   LayerSummary,
   FlushWALResponse,
-  Database,
 } from '../types.js';
 import { calculateMessageCutoff, calculateFileChangeCutoff } from '../utils/retention.js';
 import { cleanupWithCustomRetention } from '../utils/cleanup.js';
@@ -23,25 +26,19 @@ import { cleanupWithCustomRetention } from '../utils/cleanup.js';
  * Get summary statistics for all architecture layers
  * Uses the v_layer_summary view for token efficiency
  *
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Layer summaries for all 5 standard layers
  */
-export function getLayerSummary(db?: Database): GetLayerSummaryResponse {
-  const actualDb = db ?? getDatabase();
+export async function getLayerSummary(
+  adapter?: DatabaseAdapter
+): Promise<GetLayerSummaryResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
-    // Query the v_layer_summary view for all layers
-    const stmt = actualDb.prepare(`
-      SELECT 
-        layer,
-        decisions_count,
-        file_changes_count,
-        constraints_count
-      FROM v_layer_summary
-      ORDER BY layer
-    `);
-
-    const summary = stmt.all() as LayerSummary[];
+    const summary = await knex('v_layer_summary')
+      .select('layer', 'decisions_count', 'file_changes_count', 'constraints_count')
+      .orderBy('layer') as LayerSummary[];
 
     return {
       summary,
@@ -61,67 +58,51 @@ export function getLayerSummary(db?: Database): GetLayerSummaryResponse {
  * If parameters are provided, they override m_config settings (no weekend-awareness).
  *
  * @param params - Optional parameters for cleanup thresholds (overrides config)
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Counts of deleted records
  */
-export function clearOldData(params?: ClearOldDataParams, db?: Database): ClearOldDataResponse {
-  const actualDb = db ?? getDatabase();
+export async function clearOldData(
+  params?: ClearOldDataParams,
+  adapter?: DatabaseAdapter
+): Promise<ClearOldDataResponse> {
+  const actualAdapter = adapter ?? getAdapter();
 
   try {
-    return transaction(actualDb, () => {
-      let messagesThreshold: number;
-      let fileChangesThreshold: number;
+    return await actualAdapter.transaction(async (trx) => {
       let messagesDeleted = 0;
       let fileChangesDeleted = 0;
       let activityLogsDeleted = 0;
 
       if (params?.messages_older_than_hours !== undefined || params?.file_changes_older_than_days !== undefined) {
         // Parameters provided: use custom retention (no weekend-awareness)
-        const result = cleanupWithCustomRetention(
-          actualDb,
+        const result = await cleanupWithCustomRetention(
+          actualAdapter,
           params.messages_older_than_hours,
-          params.file_changes_older_than_days
+          params.file_changes_older_than_days,
+          trx
         );
         messagesDeleted = result.messagesDeleted;
         fileChangesDeleted = result.fileChangesDeleted;
         activityLogsDeleted = result.activityLogsDeleted;
       } else {
         // No parameters: use config-based weekend-aware retention
-        messagesThreshold = calculateMessageCutoff(actualDb);
-        fileChangesThreshold = calculateFileChangeCutoff(actualDb);
+        const messagesThreshold = await calculateMessageCutoff(actualAdapter);
+        const fileChangesThreshold = await calculateFileChangeCutoff(actualAdapter);
 
-        // Count and delete messages
-        const messagesCount = actualDb.prepare(
-          'SELECT COUNT(*) as count FROM t_agent_messages WHERE ts < ?'
-        ).get(messagesThreshold) as { count: number };
+        // Delete messages
+        messagesDeleted = await trx('t_agent_messages')
+          .where('ts', '<', messagesThreshold)
+          .delete();
 
-        const deleteMessages = actualDb.prepare(
-          'DELETE FROM t_agent_messages WHERE ts < ?'
-        );
-        deleteMessages.run(messagesThreshold);
-        messagesDeleted = messagesCount.count;
+        // Delete file changes
+        fileChangesDeleted = await trx('t_file_changes')
+          .where('ts', '<', fileChangesThreshold)
+          .delete();
 
-        // Count and delete file changes
-        const fileChangesCount = actualDb.prepare(
-          'SELECT COUNT(*) as count FROM t_file_changes WHERE ts < ?'
-        ).get(fileChangesThreshold) as { count: number };
-
-        const deleteFileChanges = actualDb.prepare(
-          'DELETE FROM t_file_changes WHERE ts < ?'
-        );
-        deleteFileChanges.run(fileChangesThreshold);
-        fileChangesDeleted = fileChangesCount.count;
-
-        // Count and delete activity logs (uses same threshold as messages per constraint #4)
-        const activityLogsCount = actualDb.prepare(
-          'SELECT COUNT(*) as count FROM t_activity_log WHERE ts < ?'
-        ).get(messagesThreshold) as { count: number };
-
-        const deleteActivityLogs = actualDb.prepare(
-          'DELETE FROM t_activity_log WHERE ts < ?'
-        );
-        deleteActivityLogs.run(messagesThreshold);
-        activityLogsDeleted = activityLogsCount.count;
+        // Delete activity logs (uses same threshold as messages per constraint #4)
+        activityLogsDeleted = await trx('t_activity_log')
+          .where('ts', '<', messagesThreshold)
+          .delete();
       }
 
       return {
@@ -141,73 +122,79 @@ export function clearOldData(params?: ClearOldDataParams, db?: Database): ClearO
  * Get comprehensive database statistics
  * Returns counts for all major tables and database health metrics
  *
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Complete database statistics
  */
-export function getStats(db?: Database): GetStatsResponse {
-  const actualDb = db ?? getDatabase();
+export async function getStats(
+  adapter?: DatabaseAdapter
+): Promise<GetStatsResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     // Helper to get count from a table
-    const getCount = (table: string, where?: string): number => {
-      const query = where
-        ? `SELECT COUNT(*) as count FROM ${table} WHERE ${where}`
-        : `SELECT COUNT(*) as count FROM ${table}`;
-      const result = actualDb.prepare(query).get() as { count: number };
+    const getCount = async (table: string, where?: string): Promise<number> => {
+      let query = knex(table).count('* as count');
+
+      if (where) {
+        query = query.whereRaw(where);
+      }
+
+      const result = await query.first() as { count: number };
       return result.count;
     };
 
-    // Get all statistics
-    const agents = getCount('m_agents');
-    const files = getCount('m_files');
-    const context_keys = getCount('m_context_keys');
+    // Get all statistics (note: all await calls!)
+    const agents = await getCount('m_agents');
+    const files = await getCount('m_files');
+    const context_keys = await getCount('m_context_keys');
 
     // Decisions (active vs total)
-    const active_decisions = getCount('t_decisions', 'status = 1');
-    const total_decisions = getCount('t_decisions');
+    const active_decisions = await getCount('t_decisions', 'status = 1');
+    const total_decisions = await getCount('t_decisions');
 
     // Messages
-    const messages = getCount('t_agent_messages');
+    const messages = await getCount('t_agent_messages');
 
     // File changes
-    const file_changes = getCount('t_file_changes');
+    const file_changes = await getCount('t_file_changes');
 
     // Constraints (active vs total)
-    const active_constraints = getCount('t_constraints', 'active = 1');
-    const total_constraints = getCount('t_constraints');
+    const active_constraints = await getCount('t_constraints', 'active = 1');
+    const total_constraints = await getCount('t_constraints');
 
     // Metadata
-    const tags = getCount('m_tags');
-    const scopes = getCount('m_scopes');
-    const layers = getCount('m_layers');
+    const tags = await getCount('m_tags');
+    const scopes = await getCount('m_scopes');
+    const layers = await getCount('m_layers');
 
     // Task statistics (v3.x)
-    const total_tasks = getCount('t_tasks');
-    const active_tasks = getCount('t_tasks', 'status_id NOT IN (5, 6)'); // Exclude done and archived
+    const total_tasks = await getCount('t_tasks');
+    const active_tasks = await getCount('t_tasks', 'status_id NOT IN (5, 6)'); // Exclude done and archived
 
     // Tasks by status (1=todo, 2=in_progress, 3=waiting_review, 4=blocked, 5=done, 6=archived)
     const tasks_by_status = {
-      todo: getCount('t_tasks', 'status_id = 1'),
-      in_progress: getCount('t_tasks', 'status_id = 2'),
-      waiting_review: getCount('t_tasks', 'status_id = 3'),
-      blocked: getCount('t_tasks', 'status_id = 4'),
-      done: getCount('t_tasks', 'status_id = 5'),
-      archived: getCount('t_tasks', 'status_id = 6'),
+      todo: await getCount('t_tasks', 'status_id = 1'),
+      in_progress: await getCount('t_tasks', 'status_id = 2'),
+      waiting_review: await getCount('t_tasks', 'status_id = 3'),
+      blocked: await getCount('t_tasks', 'status_id = 4'),
+      done: await getCount('t_tasks', 'status_id = 5'),
+      archived: await getCount('t_tasks', 'status_id = 6'),
     };
 
     // Tasks by priority (1=low, 2=medium, 3=high, 4=critical)
     const tasks_by_priority = {
-      low: getCount('t_tasks', 'priority = 1'),
-      medium: getCount('t_tasks', 'priority = 2'),
-      high: getCount('t_tasks', 'priority = 3'),
-      critical: getCount('t_tasks', 'priority = 4'),
+      low: await getCount('t_tasks', 'priority = 1'),
+      medium: await getCount('t_tasks', 'priority = 2'),
+      high: await getCount('t_tasks', 'priority = 3'),
+      critical: await getCount('t_tasks', 'priority = 4'),
     };
 
     // Review status (v3.4.0) - tasks in waiting_review awaiting git commits
     const review_status = {
       awaiting_commit: tasks_by_status.waiting_review,
       // Tasks in waiting_review for >24h (may need attention)
-      overdue_review: getCount('t_tasks', `status_id = 3 AND updated_ts < unixepoch() - 86400`),
+      overdue_review: await getCount('t_tasks', `status_id = 3 AND updated_ts < unixepoch() - 86400`),
     };
 
     return {
@@ -240,21 +227,23 @@ export function getStats(db?: Database): GetStatsResponse {
  * Supports time-based filtering (relative or absolute) and agent/action filtering
  *
  * @param params - Filter parameters (since, agent_names, actions, limit)
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Activity log entries with parsed details
  */
-export function getActivityLog(params?: GetActivityLogParams, db?: Database): GetActivityLogResponse {
-  const actualDb = db ?? getDatabase();
+export async function getActivityLog(
+  params?: GetActivityLogParams,
+  adapter?: DatabaseAdapter
+): Promise<GetActivityLogResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
-    // Parse 'since' parameter to get timestamp
     let sinceTimestamp: number | null = null;
 
     if (params?.since) {
       const since = params.since;
       const now = Math.floor(Date.now() / 1000);
 
-      // Check for relative time format (e.g., "5m", "1h", "2d")
       const relativeMatch = since.match(/^(\d+)([mhd])$/);
       if (relativeMatch) {
         const value = parseInt(relativeMatch[1], 10);
@@ -269,7 +258,6 @@ export function getActivityLog(params?: GetActivityLogParams, db?: Database): Ge
 
         sinceTimestamp = now - seconds;
       } else {
-        // Try to parse as ISO 8601 timestamp
         try {
           const date = new Date(since);
           sinceTimestamp = Math.floor(date.getTime() / 1000);
@@ -279,55 +267,35 @@ export function getActivityLog(params?: GetActivityLogParams, db?: Database): Ge
       }
     }
 
-    // Build query
-    let query = `
-      SELECT
-        al.id,
-        al.ts,
-        a.name as agent,
-        al.action_type,
-        al.target,
-        l.name as layer,
-        al.details
-      FROM t_activity_log al
-      JOIN m_agents a ON al.agent_id = a.id
-      LEFT JOIN m_layers l ON al.layer_id = l.id
-      WHERE 1=1
-    `;
+    let query = knex('t_activity_log as al')
+      .join('m_agents as a', 'al.agent_id', 'a.id')
+      .leftJoin('m_layers as l', 'al.layer_id', 'l.id')
+      .select(
+        'al.id',
+        'al.ts',
+        'a.name as agent',
+        'al.action_type',
+        'al.target',
+        'l.name as layer',
+        'al.details'
+      );
 
-    const queryParams: any[] = [];
-
-    // Filter by timestamp
     if (sinceTimestamp !== null) {
-      query += ' AND al.ts >= ?';
-      queryParams.push(sinceTimestamp);
+      query = query.where('al.ts', '>=', sinceTimestamp);
     }
 
-    // Filter by agent names
     if (params?.agent_names && params.agent_names.length > 0 && !params.agent_names.includes('*')) {
-      const placeholders = params.agent_names.map(() => '?').join(',');
-      query += ` AND a.name IN (${placeholders})`;
-      queryParams.push(...params.agent_names);
+      query = query.whereIn('a.name', params.agent_names);
     }
 
-    // Filter by action types
     if (params?.actions && params.actions.length > 0) {
-      const placeholders = params.actions.map(() => '?').join(',');
-      query += ` AND al.action_type IN (${placeholders})`;
-      queryParams.push(...params.actions);
+      query = query.whereIn('al.action_type', params.actions);
     }
 
-    // Order by timestamp descending (most recent first)
-    query += ' ORDER BY al.ts DESC';
-
-    // Apply limit
     const limit = params?.limit ?? 100;
-    query += ' LIMIT ?';
-    queryParams.push(limit);
+    query = query.orderBy('al.ts', 'desc').limit(limit);
 
-    // Execute query
-    const stmt = actualDb.prepare(query);
-    const rows = stmt.all(...queryParams) as Array<{
+    const rows = await query as Array<{
       id: number;
       ts: number;
       agent: string;
@@ -337,7 +305,6 @@ export function getActivityLog(params?: GetActivityLogParams, db?: Database): Ge
       details: string | null;
     }>;
 
-    // Transform results
     const activities: ActivityLogEntry[] = rows.map(row => ({
       id: row.id,
       timestamp: new Date(row.ts * 1000).toISOString(),
@@ -362,22 +329,26 @@ export function getActivityLog(params?: GetActivityLogParams, db?: Database): Ge
  * Force WAL checkpoint to flush pending transactions to main database file
  * Uses TRUNCATE mode for complete flush - useful before git commits
  *
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Checkpoint result with pages flushed
  */
-export function flushWAL(db?: Database): FlushWALResponse {
-  const actualDb = db ?? getDatabase();
+export async function flushWAL(
+  adapter?: DatabaseAdapter
+): Promise<FlushWALResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     // Execute TRUNCATE checkpoint - most aggressive mode
     // Blocks until complete, ensures all WAL data written to main DB file
-    // Returns array: [busy, log, checkpointed]
+    // Returns array: [[busy, log, checkpointed]]
     // - busy: number of frames not checkpointed due to locks
     // - log: total number of frames in WAL file
     // - checkpointed: number of frames checkpointed
-    const result = actualDb.pragma('wal_checkpoint(TRUNCATE)', { simple: true }) as number[] | undefined;
+    const result = await knex.raw('PRAGMA wal_checkpoint(TRUNCATE)') as any;
 
-    const pagesFlushed = result?.[2] || 0;
+    // Parse result array format from Knex
+    const pagesFlushed = result?.[0]?.[0]?.[2] || 0;
 
     return {
       success: true,

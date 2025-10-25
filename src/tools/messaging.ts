@@ -1,9 +1,15 @@
 /**
  * Messaging Tools for MCP Shared Context Server
  * Agent-to-agent communication with priority and read tracking
+ *
+ * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
  */
 
-import { getDatabase, getOrCreateAgent, transaction } from '../database.js';
+import { DatabaseAdapter } from '../adapters/index.js';
+import {
+  getAdapter,
+  getOrCreateAgent,
+} from '../database.js';
 import {
   STRING_TO_MESSAGE_TYPE,
   STRING_TO_PRIORITY,
@@ -12,6 +18,8 @@ import {
   DEFAULT_PRIORITY,
 } from '../constants.js';
 import { validateMessageType, validatePriority } from '../utils/validators.js';
+import { logMessageSend } from '../utils/activity-logging.js';
+import { Knex } from 'knex';
 import type {
   SendMessageParams,
   GetMessagesParams,
@@ -21,20 +29,24 @@ import type {
   MarkReadResponse,
   SendMessageBatchParams,
   SendMessageBatchResponse,
-  Database
 } from '../types.js';
-import { performAutoCleanup } from '../utils/cleanup.js';
-import { processBatch } from '../utils/batch.js';
 
 /**
- * Internal helper: Send message without cleanup or transaction wrapper
- * Used by sendMessage (with cleanup) and sendMessageBatch (manages its own transaction)
+ * Internal helper: Send message without wrapping in transaction
+ * Used by sendMessage (with transaction) and sendMessageBatch (manages its own transaction)
  *
  * @param params - Message parameters
- * @param db - Database instance
+ * @param adapter - Database adapter instance
+ * @param trx - Optional transaction
  * @returns Response with message ID and timestamp
  */
-function sendMessageInternal(params: SendMessageParams, db: Database): SendMessageResponse & { timestamp: string } {
+async function sendMessageInternal(
+  params: SendMessageParams,
+  adapter: DatabaseAdapter,
+  trx?: Knex.Transaction
+): Promise<SendMessageResponse & { timestamp: string }> {
+  const knex = trx || adapter.getKnex();
+
   // Validate msg_type
   validateMessageType(params.msg_type);
 
@@ -43,10 +55,10 @@ function sendMessageInternal(params: SendMessageParams, db: Database): SendMessa
   validatePriority(priority);
 
   // Auto-register from_agent
-  const fromAgentId = getOrCreateAgent(db, params.from_agent);
+  const fromAgentId = await getOrCreateAgent(adapter, params.from_agent, trx);
 
   // Auto-register to_agent if provided (null = broadcast)
-  const toAgentId = params.to_agent ? getOrCreateAgent(db, params.to_agent) : null;
+  const toAgentId = params.to_agent ? await getOrCreateAgent(adapter, params.to_agent, trx) : null;
 
   // Convert enums to integers
   const msgTypeInt = STRING_TO_MESSAGE_TYPE[params.msg_type];
@@ -55,21 +67,33 @@ function sendMessageInternal(params: SendMessageParams, db: Database): SendMessa
   // Serialize payload if provided
   const payloadStr = params.payload ? JSON.stringify(params.payload) : null;
 
+  // Current timestamp
+  const ts = Math.floor(Date.now() / 1000);
+
   // Insert message
-  const stmt = db.prepare(`
-    INSERT INTO t_agent_messages (from_agent_id, to_agent_id, msg_type, priority, payload, read)
-    VALUES (?, ?, ?, ?, ?, 0)
-  `);
+  const [messageId] = await knex('t_agent_messages').insert({
+    from_agent_id: fromAgentId,
+    to_agent_id: toAgentId,
+    msg_type: msgTypeInt,
+    priority: priorityInt,
+    payload: payloadStr,
+    read: 0,
+    ts: ts
+  });
 
-  const result = stmt.run(fromAgentId, toAgentId, msgTypeInt, priorityInt, payloadStr);
+  // Activity logging (replaces trigger)
+  await logMessageSend(knex, {
+    from_agent_id: fromAgentId,
+    to_agent_id: toAgentId || 0,
+    msg_type: msgTypeInt,
+    priority: priorityInt
+  });
 
-  // Get timestamp
-  const tsResult = db.prepare('SELECT ts FROM t_agent_messages WHERE id = ?').get(result.lastInsertRowid) as { ts: number };
-  const timestamp = new Date(tsResult.ts * 1000).toISOString();
+  const timestamp = new Date(ts * 1000).toISOString();
 
   return {
     success: true,
-    message_id: Number(result.lastInsertRowid),
+    message_id: Number(messageId),
     timestamp,
   };
 }
@@ -79,16 +103,23 @@ function sendMessageInternal(params: SendMessageParams, db: Database): SendMessa
  * Supports priority levels and optional JSON payload
  *
  * @param params - Message parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with message ID and timestamp
  */
-export function sendMessage(params: SendMessageParams, db?: Database): SendMessageResponse & { timestamp: string } {
-  const actualDb = db ?? getDatabase();
+export async function sendMessage(
+  params: SendMessageParams,
+  adapter?: DatabaseAdapter
+): Promise<SendMessageResponse & { timestamp: string }> {
+  const actualAdapter = adapter ?? getAdapter();
 
-  // Cleanup old messages before inserting new one
-  performAutoCleanup(actualDb);
-
-  return sendMessageInternal(params, actualDb);
+  try {
+    return await actualAdapter.transaction(async (trx) => {
+      return await sendMessageInternal(params, actualAdapter, trx);
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to send message: ${message}`);
+  }
 }
 
 /**
@@ -96,93 +127,96 @@ export function sendMessage(params: SendMessageParams, db?: Database): SendMessa
  * Returns messages addressed to agent or broadcast (to_agent_id IS NULL)
  *
  * @param params - Query parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of messages with metadata
  */
-export function getMessages(params: {
+export async function getMessages(params: {
   agent_name: string;
   unread_only?: boolean;
   priority_filter?: 'low' | 'medium' | 'high' | 'critical';
   msg_type_filter?: 'decision' | 'warning' | 'request' | 'info';
   limit?: number;
-}, db?: Database): GetMessagesResponse {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<GetMessagesResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
-  // Get or create agent to get ID
-  const agentId = getOrCreateAgent(actualDb, params.agent_name);
+  try {
+    // Get or create agent to get ID
+    const agentId = await getOrCreateAgent(actualAdapter, params.agent_name);
 
-  // Build query dynamically based on filters
-  let query = `
-    SELECT
-      m.id,
-      a.name as from_agent,
-      m.msg_type,
-      m.priority,
-      m.payload,
-      m.ts,
-      m.read
-    FROM t_agent_messages m
-    JOIN m_agents a ON m.from_agent_id = a.id
-    WHERE (m.to_agent_id = ? OR m.to_agent_id IS NULL)
-  `;
+    // Build query dynamically based on filters
+    let query = knex('t_agent_messages as m')
+      .join('m_agents as a', 'm.from_agent_id', 'a.id')
+      .where((builder) => {
+        builder.where('m.to_agent_id', agentId)
+          .orWhereNull('m.to_agent_id');
+      })
+      .select(
+        'm.id',
+        'a.name as from_agent',
+        'm.msg_type',
+        'm.priority',
+        'm.payload',
+        'm.ts',
+        'm.read'
+      );
 
-  const queryParams: any[] = [agentId];
+    // Filter by read status
+    if (params.unread_only) {
+      query = query.where('m.read', 0);
+    }
 
-  // Filter by read status
-  if (params.unread_only) {
-    query += ' AND m.read = 0';
+    // Filter by priority
+    if (params.priority_filter) {
+      validatePriority(params.priority_filter);
+      const priorityInt = STRING_TO_PRIORITY[params.priority_filter];
+      query = query.where('m.priority', priorityInt);
+    }
+
+    // Filter by msg_type
+    if (params.msg_type_filter) {
+      validateMessageType(params.msg_type_filter);
+      const msgTypeInt = STRING_TO_MESSAGE_TYPE[params.msg_type_filter];
+      query = query.where('m.msg_type', msgTypeInt);
+    }
+
+    // Order by priority DESC, then timestamp DESC
+    const limit = params.limit || 50;
+    query = query.orderBy([
+      { column: 'm.priority', order: 'desc' },
+      { column: 'm.ts', order: 'desc' }
+    ]).limit(limit);
+
+    // Execute query
+    const rows = await query as Array<{
+      id: number;
+      from_agent: string;
+      msg_type: number;
+      priority: number;
+      payload: string | null;
+      ts: number;
+      read: number;
+    }>;
+
+    // Transform results
+    const messages = rows.map(row => ({
+      id: row.id,
+      from_agent: row.from_agent,
+      msg_type: MESSAGE_TYPE_TO_STRING[row.msg_type as keyof typeof MESSAGE_TYPE_TO_STRING],
+      priority: PRIORITY_TO_STRING[row.priority as keyof typeof PRIORITY_TO_STRING],
+      payload: row.payload ? JSON.parse(row.payload) : null,
+      timestamp: new Date(row.ts * 1000).toISOString(),
+      read: row.read === 1,
+    }));
+
+    return {
+      messages,
+      count: messages.length,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to get messages: ${message}`);
   }
-
-  // Filter by priority
-  if (params.priority_filter) {
-    validatePriority(params.priority_filter);
-    const priorityInt = STRING_TO_PRIORITY[params.priority_filter];
-    query += ' AND m.priority = ?';
-    queryParams.push(priorityInt);
-  }
-
-  // Filter by msg_type
-  if (params.msg_type_filter) {
-    validateMessageType(params.msg_type_filter);
-    const msgTypeInt = STRING_TO_MESSAGE_TYPE[params.msg_type_filter];
-    query += ' AND m.msg_type = ?';
-    queryParams.push(msgTypeInt);
-  }
-
-  // Order by priority DESC, then timestamp DESC
-  query += ' ORDER BY m.priority DESC, m.ts DESC';
-
-  // Limit results
-  const limit = params.limit || 50;
-  query += ' LIMIT ?';
-  queryParams.push(limit);
-
-  const stmt = actualDb.prepare(query);
-  const rows = stmt.all(...queryParams) as Array<{
-    id: number;
-    from_agent: string;
-    msg_type: number;
-    priority: number;
-    payload: string | null;
-    ts: number;
-    read: number;
-  }>;
-
-  // Transform results
-  const messages = rows.map(row => ({
-    id: row.id,
-    from_agent: row.from_agent,
-    msg_type: MESSAGE_TYPE_TO_STRING[row.msg_type as keyof typeof MESSAGE_TYPE_TO_STRING],
-    priority: PRIORITY_TO_STRING[row.priority as keyof typeof PRIORITY_TO_STRING],
-    payload: row.payload ? JSON.parse(row.payload) : null,
-    timestamp: new Date(row.ts * 1000).toISOString(),
-    read: row.read === 1,
-  }));
-
-  return {
-    messages,
-    count: messages.length,
-  };
 }
 
 /**
@@ -190,41 +224,43 @@ export function getMessages(params: {
  * Only marks messages addressed to the specified agent (security check)
  *
  * @param params - Message IDs and agent name
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Success status and count of marked messages
  */
-export function markRead(params: {
+export async function markRead(params: {
   message_ids: number[];
   agent_name: string;
-}, db?: Database): MarkReadResponse & { marked_count: number } {
-  const actualDb = db ?? getDatabase();
+}, adapter?: DatabaseAdapter): Promise<MarkReadResponse & { marked_count: number }> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
-  // Validate message_ids array
-  if (!params.message_ids || params.message_ids.length === 0) {
-    throw new Error('message_ids array cannot be empty');
+  try {
+    // Validate message_ids array
+    if (!params.message_ids || params.message_ids.length === 0) {
+      throw new Error('message_ids array cannot be empty');
+    }
+
+    // Get agent ID
+    const agentId = await getOrCreateAgent(actualAdapter, params.agent_name);
+
+    // Update only messages addressed to this agent (security check)
+    // Also allow broadcast messages (to_agent_id IS NULL)
+    const markedCount = await knex('t_agent_messages')
+      .whereIn('id', params.message_ids)
+      .where((builder) => {
+        builder.where('to_agent_id', agentId)
+          .orWhereNull('to_agent_id');
+      })
+      .update({ read: 1 });
+
+    return {
+      success: true,
+      marked_count: markedCount,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to mark messages as read: ${message}`);
   }
-
-  // Get agent ID
-  const agentId = getOrCreateAgent(actualDb, params.agent_name);
-
-  // Build placeholders for IN clause
-  const placeholders = params.message_ids.map(() => '?').join(',');
-
-  // Update only messages addressed to this agent (security check)
-  // Also allow broadcast messages (to_agent_id IS NULL)
-  const stmt = actualDb.prepare(`
-    UPDATE t_agent_messages
-    SET read = 1
-    WHERE id IN (${placeholders})
-      AND (to_agent_id = ? OR to_agent_id IS NULL)
-  `);
-
-  const result = stmt.run(...params.message_ids, agentId);
-
-  return {
-    success: true,
-    marked_count: result.changes,
-  };
 }
 
 /**
@@ -233,53 +269,113 @@ export function markRead(params: {
  * Limit: 50 items per batch (constraint #3)
  *
  * @param params - Batch parameters with array of messages and atomic flag
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status and detailed results for each item
  */
-export function sendMessageBatch(params: SendMessageBatchParams, db?: Database): SendMessageBatchResponse {
-  const actualDb = db ?? getDatabase();
+export async function sendMessageBatch(
+  params: SendMessageBatchParams,
+  adapter?: DatabaseAdapter
+): Promise<SendMessageBatchResponse> {
+  const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
   if (!params.messages || !Array.isArray(params.messages)) {
     throw new Error('Parameter "messages" is required and must be an array');
   }
 
-  // Cleanup old messages before processing batch
-  performAutoCleanup(actualDb);
+  if (params.messages.length === 0) {
+    return {
+      success: true,
+      inserted: 0,
+      failed: 0,
+      results: []
+    };
+  }
+
+  if (params.messages.length > 50) {
+    throw new Error('Parameter "messages" must contain at most 50 items');
+  }
 
   const atomic = params.atomic !== undefined ? params.atomic : true;
 
-  // Use processBatch utility
-  const batchResult = processBatch(
-    actualDb,
-    params.messages,
-    (message, db) => {
-      const result = sendMessageInternal(message, db);
-      return {
-        from_agent: message.from_agent,
-        to_agent: message.to_agent || null,
-        message_id: result.message_id,
-        timestamp: result.timestamp
-      };
-    },
-    atomic,
-    50
-  );
+  try {
+    if (atomic) {
+      // Atomic mode: All or nothing
+      const results = await actualAdapter.transaction(async (trx) => {
+        const processedResults = [];
 
-  // Map batch results to SendMessageBatchResponse format
-  return {
-    success: batchResult.success,
-    inserted: batchResult.processed,
-    failed: batchResult.failed,
-    results: batchResult.results.map(r => ({
-      from_agent: (r.data as any)?.from_agent || '',
-      to_agent: (r.data as any)?.to_agent || null,
-      message_id: r.data?.message_id,
-      timestamp: r.data?.timestamp,
-      success: r.success,
-      error: r.error
-    }))
-  };
+        for (const message of params.messages) {
+          try {
+            const result = await sendMessageInternal(message, actualAdapter, trx);
+            processedResults.push({
+              from_agent: message.from_agent,
+              to_agent: message.to_agent || null,
+              message_id: result.message_id,
+              timestamp: result.timestamp,
+              success: true,
+              error: undefined
+            });
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Batch failed at message from "${message.from_agent}": ${errorMessage}`);
+          }
+        }
+
+        return processedResults;
+      });
+
+      return {
+        success: true,
+        inserted: results.length,
+        failed: 0,
+        results: results
+      };
+    } else {
+      // Non-atomic mode: Process each independently
+      const results = [];
+      let inserted = 0;
+      let failed = 0;
+
+      for (const message of params.messages) {
+        try {
+          const result = await actualAdapter.transaction(async (trx) => {
+            return await sendMessageInternal(message, actualAdapter, trx);
+          });
+
+          results.push({
+            from_agent: message.from_agent,
+            to_agent: message.to_agent || null,
+            message_id: result.message_id,
+            timestamp: result.timestamp,
+            success: true,
+            error: undefined
+          });
+          inserted++;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          results.push({
+            from_agent: message.from_agent,
+            to_agent: message.to_agent || null,
+            message_id: undefined,
+            timestamp: undefined,
+            success: false,
+            error: errorMessage
+          });
+          failed++;
+        }
+      }
+
+      return {
+        success: failed === 0,
+        inserted: inserted,
+        failed: failed,
+        results: results
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to execute batch operation: ${message}`);
+  }
 }
 
 /**

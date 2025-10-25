@@ -46,6 +46,14 @@ export interface TaskConfig {
 }
 
 /**
+ * Debug logging configuration (v3.5.4)
+ */
+export interface DebugConfig {
+  /** Debug log file path (environment variable SQLEW_DEBUG takes precedence) */
+  log_path?: string;
+}
+
+/**
  * Complete configuration structure
  * Maps to .sqlew/config.toml sections
  */
@@ -56,6 +64,8 @@ export interface SqlewConfig {
   autodelete?: AutoDeleteConfig;
   /** Task management settings */
   tasks?: TaskConfig;
+  /** Debug logging settings */
+  debug?: DebugConfig;
 }
 
 /**

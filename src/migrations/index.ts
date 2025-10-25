@@ -1,5 +1,5 @@
 /**
- * Migration Orchestrator
+ * Migration Orchestrator (v4.0.0 - Hybrid Support)
  *
  * Coordinates automatic sequential execution of all database migrations.
  * Supports upgrading from any previous version to the latest version in a single run.
@@ -10,15 +10,28 @@
  * - Sequential execution with transaction safety
  * - Detailed logging and error reporting
  * - Dry-run mode support
+ * - Hybrid support: better-sqlite3 (Database) OR Knex.js (DatabaseAdapter)
+ *
+ * Migration Strategy (v4.0.0+):
+ * - Knex migrations: Run automatically via initializeDatabase() → knex.migrate.latest()
+ * - Custom migrations: Legacy orchestrator for v1.x-v3.x upgrades (this file)
+ * - New deployments: Use Knex migrations only (src/migrations/knex/*)
+ * - Old upgrades: Use custom migrations first, then Knex migrations
  */
 
 import { Database } from 'better-sqlite3';
+import { DatabaseAdapter } from '../adapters/index.js';
+import { Knex } from 'knex';
 import * as tablePrefixes from './add-table-prefixes.js';
 import * as v210Features from './add-v2.1.0-features.js';
 import * as taskTables from './add-task-tables.js';
 import * as taskDependencies from './add-task-dependencies.js';
 import * as decisionContext from './add-decision-context.js';
 import * as prunedFiles from './add-v3.5.0-pruned-files.js';
+import * as helpSystemTables from './add-help-system-tables.js';
+import * as seedToolMetadata from './seed-tool-metadata.js';
+import * as seedHelpData from './seed-help-data.js';
+import * as tokenTracking from './add-token-tracking.js';
 
 export interface MigrationResult {
   success: boolean;
@@ -33,6 +46,44 @@ export interface MigrationInfo {
   needsMigration: (db: Database) => boolean;
   runMigration: (db: Database) => MigrationResult;
   getMigrationInfo: () => string;
+}
+
+/**
+ * Type guard to check if input is DatabaseAdapter
+ */
+function isDatabaseAdapter(dbOrAdapter: Database | DatabaseAdapter): dbOrAdapter is DatabaseAdapter {
+  return typeof (dbOrAdapter as any).getKnex === 'function';
+}
+
+/**
+ * Get Database instance from either Database or DatabaseAdapter
+ * For Knex adapters, we need to access the underlying better-sqlite3 connection
+ *
+ * NOTE: This is a temporary bridge for backward compatibility with custom migrations.
+ * New code should use Knex query builder via adapter.getKnex() instead.
+ */
+function getDatabase(dbOrAdapter: Database | DatabaseAdapter): Database {
+  if (isDatabaseAdapter(dbOrAdapter)) {
+    // For SQLiteAdapter, access the underlying better-sqlite3 connection
+    // This assumes SQLiteAdapter stores it in a private property
+    const knex = dbOrAdapter.getKnex();
+    const client = (knex as any).client;
+
+    if (client && client.driver && client.driver.name) {
+      // Access the better-sqlite3 connection from Knex client
+      const connections = (client as any)._connectionCache || {};
+      const connectionKey = Object.keys(connections)[0];
+
+      if (connectionKey && connections[connectionKey]) {
+        return connections[connectionKey];
+      }
+    }
+
+    // Fallback: throw error if we can't extract Database
+    throw new Error('Cannot extract Database from DatabaseAdapter for custom migrations. Please use Knex migrations instead.');
+  }
+
+  return dbOrAdapter;
 }
 
 /**
@@ -87,6 +138,68 @@ const MIGRATIONS: MigrationInfo[] = [
     runMigration: prunedFiles.migrateToPrunedFiles,
     getMigrationInfo: prunedFiles.getPrunedFilesMigrationInfo,
   },
+  {
+    name: 'add-help-system-tables',
+    fromVersion: '3.5.3',
+    toVersion: '3.6.0',
+    needsMigration: helpSystemTables.needsHelpSystemMigration,
+    runMigration: helpSystemTables.migrateToHelpSystem,
+    getMigrationInfo: helpSystemTables.getHelpSystemMigrationInfo,
+  },
+  {
+    name: 'seed-tool-metadata',
+    fromVersion: '3.6.0',
+    toVersion: '3.6.0',
+    needsMigration: seedToolMetadata.needsToolMetadataSeeding,
+    runMigration: (db) => {
+      try {
+        seedToolMetadata.seedToolMetadata(db);
+        return {
+          success: true,
+          message: 'Tool metadata seeded successfully',
+          details: [seedToolMetadata.getToolMetadataSeedingInfo()]
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          success: false,
+          message: `Failed to seed tool metadata: ${message}`
+        };
+      }
+    },
+    getMigrationInfo: seedToolMetadata.getToolMetadataSeedingInfo,
+  },
+  {
+    name: 'seed-help-data',
+    fromVersion: '3.6.0',
+    toVersion: '3.6.0',
+    needsMigration: seedHelpData.needsHelpDataSeeding,
+    runMigration: (db) => {
+      try {
+        seedHelpData.seedHelpData(db);
+        return {
+          success: true,
+          message: 'Help system use-case data seeded successfully',
+          details: [seedHelpData.getHelpDataSeedingInfo()]
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          success: false,
+          message: `Failed to seed help data: ${message}`
+        };
+      }
+    },
+    getMigrationInfo: seedHelpData.getHelpDataSeedingInfo,
+  },
+  {
+    name: 'add-token-tracking',
+    fromVersion: '3.6.0',
+    toVersion: '3.6.0',
+    needsMigration: tokenTracking.needsTokenTrackingMigration,
+    runMigration: tokenTracking.migrateToTokenTracking,
+    getMigrationInfo: tokenTracking.getTokenTrackingMigrationInfo,
+  },
 ];
 
 /**
@@ -100,13 +213,25 @@ const MIGRATIONS: MigrationInfo[] = [
  * - v3.0.0: Has m_task_statuses but no t_task_dependencies
  * - v3.2.0: Has t_task_dependencies but no t_decision_context
  * - v3.2.2: Has t_decision_context but no t_task_pruned_files
- * - v3.5.0: Has t_task_pruned_files
+ * - v3.5.0: Has t_task_pruned_files but no m_help_tools
+ * - v3.6.0: Has m_help_tools (help system tables)
+ * - v4.0.0: Has knex_migrations table (Knex migration system)
  *
- * @param db - Database connection
+ * @param dbOrAdapter - Database connection or DatabaseAdapter
  * @returns Detected version string
  */
-export function detectDatabaseVersion(db: Database): string {
+export function detectDatabaseVersion(dbOrAdapter: Database | DatabaseAdapter): string {
   try {
+    const db = getDatabase(dbOrAdapter);
+    // Check for help system tables (v3.6.0)
+    const hasHelpTables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='m_help_tools'"
+    ).get();
+
+    if (hasHelpTables) {
+      return '3.6.0';
+    }
+
     // Check for pruned files table (v3.5.0)
     const hasPrunedFiles = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='t_task_pruned_files'"
@@ -181,10 +306,11 @@ export function detectDatabaseVersion(db: Database): string {
 /**
  * Get migration plan for current database
  *
- * @param db - Database connection
+ * @param dbOrAdapter - Database connection or DatabaseAdapter
  * @returns Array of migration names that need to run
  */
-export function getMigrationPlan(db: Database): string[] {
+export function getMigrationPlan(dbOrAdapter: Database | DatabaseAdapter): string[] {
+  const db = getDatabase(dbOrAdapter);
   const plan: string[] = [];
 
   for (const migration of MIGRATIONS) {
@@ -206,23 +332,30 @@ export function getMigrationPlan(db: Database): string[] {
  * 4. Stops on first failure (rollback already handled by individual migrations)
  * 5. Returns combined results
  *
- * @param db - Database connection
+ * NOTE (v4.0.0+): This function runs custom migrations (v1.x-v3.x upgrades only).
+ * Knex migrations run automatically via initializeDatabase() → knex.migrate.latest().
+ *
+ * @param dbOrAdapter - Database connection or DatabaseAdapter
  * @param dryRun - If true, only show plan without executing (default: false)
  * @returns Array of migration results
  */
-export function runAllMigrations(db: Database, dryRun: boolean = false): MigrationResult[] {
+export function runAllMigrations(dbOrAdapter: Database | DatabaseAdapter, dryRun: boolean = false): MigrationResult[] {
+  const db = getDatabase(dbOrAdapter);
   const results: MigrationResult[] = [];
 
   try {
     // Detect current version
-    const currentVersion = detectDatabaseVersion(db);
+    const currentVersion = detectDatabaseVersion(dbOrAdapter);
     console.log(`\n📊 Current database version: ${currentVersion}`);
 
     // Get migration plan
-    const plan = getMigrationPlan(db);
+    const plan = getMigrationPlan(dbOrAdapter);
 
     if (plan.length === 0) {
-      console.log('✅ Database is up to date, no migrations needed.\n');
+      console.log('✅ Database is up to date, no custom migrations needed.\n');
+      if (isDatabaseAdapter(dbOrAdapter)) {
+        console.log('ℹ️  Knex migrations were run automatically via initializeDatabase().\n');
+      }
       return [{
         success: true,
         message: 'No migrations needed',
@@ -230,7 +363,7 @@ export function runAllMigrations(db: Database, dryRun: boolean = false): Migrati
       }];
     }
 
-    console.log(`\n📋 Migration plan (${plan.length} migration${plan.length === 1 ? '' : 's'}):`);
+    console.log(`\n📋 Migration plan (${plan.length} custom migration${plan.length === 1 ? '' : 's'}):`);
     plan.forEach((step, i) => {
       console.log(`  ${i + 1}. ${step}`);
     });
@@ -279,8 +412,12 @@ export function runAllMigrations(db: Database, dryRun: boolean = false): Migrati
     }
 
     // Detect final version
-    const finalVersion = detectDatabaseVersion(db);
-    console.log(`\n✅ Migration complete: ${currentVersion} → ${finalVersion}\n`);
+    const finalVersion = detectDatabaseVersion(dbOrAdapter);
+    console.log(`\n✅ Custom migrations complete: ${currentVersion} → ${finalVersion}\n`);
+
+    if (isDatabaseAdapter(dbOrAdapter)) {
+      console.log('ℹ️  Knex migrations were run automatically via initializeDatabase().\n');
+    }
 
     return results;
 
@@ -324,27 +461,28 @@ export function listAllMigrations(): Omit<MigrationInfo, 'needsMigration' | 'run
 /**
  * Check if database needs any migrations
  *
- * @param db - Database connection
+ * @param dbOrAdapter - Database connection or DatabaseAdapter
  * @returns true if migrations are needed
  */
-export function needsAnyMigrations(db: Database): boolean {
+export function needsAnyMigrations(dbOrAdapter: Database | DatabaseAdapter): boolean {
+  const db = getDatabase(dbOrAdapter);
   return MIGRATIONS.some(m => m.needsMigration(db));
 }
 
 /**
  * Get summary of migration status
  *
- * @param db - Database connection
+ * @param dbOrAdapter - Database connection or DatabaseAdapter
  * @returns Summary object
  */
-export function getMigrationStatus(db: Database): {
+export function getMigrationStatus(dbOrAdapter: Database | DatabaseAdapter): {
   currentVersion: string;
   upToDate: boolean;
   pendingMigrations: number;
   migrationPlan: string[];
 } {
-  const currentVersion = detectDatabaseVersion(db);
-  const plan = getMigrationPlan(db);
+  const currentVersion = detectDatabaseVersion(dbOrAdapter);
+  const plan = getMigrationPlan(dbOrAdapter);
 
   return {
     currentVersion,

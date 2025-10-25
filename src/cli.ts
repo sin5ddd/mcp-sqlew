@@ -179,7 +179,7 @@ EXAMPLES:
 /**
  * Query decisions command
  */
-function queryDecisions(args: CLIArgs): void {
+async function queryDecisions(args: CLIArgs): Promise<void> {
   const outputFormat = args.output || 'json';
 
   // Build query params
@@ -202,7 +202,7 @@ function queryDecisions(args: CLIArgs): void {
   }
 
   // Execute query
-  const result = searchAdvanced(params);
+  const result = await searchAdvanced(params);
 
   // Output results
   if (outputFormat === 'json') {
@@ -215,7 +215,7 @@ function queryDecisions(args: CLIArgs): void {
 /**
  * Query messages command
  */
-function queryMessages(args: CLIArgs): void {
+async function queryMessages(args: CLIArgs): Promise<void> {
   const outputFormat = args.output || 'json';
 
   // Agent name is required for messages
@@ -239,7 +239,7 @@ function queryMessages(args: CLIArgs): void {
   }
 
   // Execute query
-  const result = getMessages(params);
+  const result = await getMessages(params);
 
   // Output results
   if (outputFormat === 'json') {
@@ -252,7 +252,7 @@ function queryMessages(args: CLIArgs): void {
 /**
  * Query files command
  */
-function queryFiles(args: CLIArgs): void {
+async function queryFiles(args: CLIArgs): Promise<void> {
   const outputFormat = args.output || 'json';
 
   // Build query params
@@ -275,7 +275,7 @@ function queryFiles(args: CLIArgs): void {
   }
 
   // Execute query
-  const result = getFileChanges(params);
+  const result = await getFileChanges(params);
 
   // Output results
   if (outputFormat === 'json') {
@@ -288,7 +288,7 @@ function queryFiles(args: CLIArgs): void {
 /**
  * Query activity command
  */
-function queryActivity(args: CLIArgs): void {
+async function queryActivity(args: CLIArgs): Promise<void> {
   const outputFormat = args.output || 'json';
 
   // Build query params
@@ -316,7 +316,7 @@ function queryActivity(args: CLIArgs): void {
   }
 
   // Execute query
-  const result = getActivityLog(params);
+  const result = await getActivityLog(params);
 
   // Output results
   if (outputFormat === 'json') {
@@ -330,7 +330,7 @@ function queryActivity(args: CLIArgs): void {
 // Main Entry Point
 // ============================================================================
 
-function main(): void {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   // Show help if requested or no command
@@ -342,22 +342,23 @@ function main(): void {
   try {
     // Initialize database
     const dbPath = args['db-path'];
-    initializeDatabase(dbPath);
+    const config = dbPath ? { configPath: dbPath } : undefined;
+    await initializeDatabase(config);
 
     // Route to appropriate command
     if (args.command === 'query') {
       switch (args.subcommand) {
         case 'decisions':
-          queryDecisions(args);
+          await queryDecisions(args);
           break;
         case 'messages':
-          queryMessages(args);
+          await queryMessages(args);
           break;
         case 'files':
-          queryFiles(args);
+          await queryFiles(args);
           break;
         case 'activity':
-          queryActivity(args);
+          await queryActivity(args);
           break;
         default:
           console.error(`Unknown subcommand: ${args.subcommand}`);
