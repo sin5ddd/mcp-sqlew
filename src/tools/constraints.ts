@@ -1,9 +1,18 @@
 /**
  * Constraint management tools for MCP Shared Context Server
  * Handles constraint tracking with priority, layer assignment, and tags
+ *
+ * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
  */
 
-import { getDatabase, getOrCreateAgent, getLayerId, transaction, getOrCreateTag, getOrCreateCategoryId } from '../database.js';
+import { DatabaseAdapter } from '../adapters/index.js';
+import {
+  getAdapter,
+  getOrCreateAgent,
+  getLayerId,
+  getOrCreateTag,
+  getOrCreateCategoryId
+} from '../database.js';
 import {
   STRING_TO_PRIORITY,
   PRIORITY_TO_STRING,
@@ -12,6 +21,8 @@ import {
   SQLITE_FALSE
 } from '../constants.js';
 import { validateCategory, validatePriority } from '../utils/validators.js';
+import { logConstraintAdd } from '../utils/activity-logging.js';
+import { Knex } from 'knex';
 import type {
   AddConstraintParams,
   AddConstraintResponse,
@@ -20,8 +31,7 @@ import type {
   DeactivateConstraintParams,
   DeactivateConstraintResponse,
   TaggedConstraint,
-  Priority,
-  Database
+  Priority
 } from '../types.js';
 
 /**
@@ -33,11 +43,14 @@ import type {
  * Add a constraint with priority, layer, and tags
  *
  * @param params - Constraint parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Constraint ID and timestamp
  */
-export function addConstraint(params: AddConstraintParams, db?: Database): AddConstraintResponse {
-  const actualDb = db ?? getDatabase();
+export async function addConstraint(
+  params: AddConstraintParams,
+  adapter?: DatabaseAdapter
+): Promise<AddConstraintResponse> {
+  const actualAdapter = adapter ?? getAdapter();
 
   try {
     // Validate required parameters
@@ -60,40 +73,60 @@ export function addConstraint(params: AddConstraintParams, db?: Database): AddCo
       if (!validLayers.includes(params.layer)) {
         throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
       }
-      layerId = getLayerId(actualDb, params.layer);
+      layerId = await getLayerId(actualAdapter, params.layer);
       if (!layerId) {
         throw new Error(`Layer not found: ${params.layer}`);
       }
     }
 
     // Use transaction for multi-table insert
-    const result = transaction(actualDb, () => {
+    const result = await actualAdapter.transaction(async (trx) => {
+      const knex = actualAdapter.getKnex();
+
       // Get or create category
-      const categoryId = getOrCreateCategoryId(actualDb, params.category);
+      const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
 
       // Get or create created_by agent
       const createdBy = params.created_by || 'system';
-      const agentId = getOrCreateAgent(actualDb, createdBy);
+      const agentId = await getOrCreateAgent(actualAdapter, createdBy, trx);
+
+      // Calculate timestamp
+      const ts = Math.floor(Date.now() / 1000);
 
       // Insert constraint
-      const insertResult = actualDb.prepare(`
-        INSERT INTO t_constraints (category_id, layer_id, constraint_text, priority, active, created_by, ts)
-        VALUES (?, ?, ?, ?, ?, ?, unixepoch())
-      `).run(categoryId, layerId, params.constraint_text, priority, SQLITE_TRUE, agentId);
-
-      const constraintId = insertResult.lastInsertRowid as number;
+      const [constraintId] = await trx('t_constraints').insert({
+        category_id: categoryId,
+        layer_id: layerId,
+        constraint_text: params.constraint_text,
+        priority: priority,
+        active: SQLITE_TRUE,
+        created_by: agentId,
+        ts: ts
+      });
 
       // Insert m_tags if provided
       if (params.tags && params.tags.length > 0) {
-        const tagStmt = actualDb.prepare('INSERT INTO t_constraint_tags (constraint_id, tag_id) VALUES (?, ?)');
-
         for (const tagName of params.tags) {
-          const tagId = getOrCreateTag(actualDb, tagName);
-          tagStmt.run(constraintId, tagId);
+          const tagId = await getOrCreateTag(actualAdapter, tagName, trx);
+          await trx('t_constraint_tags').insert({
+            constraint_id: Number(constraintId),
+            tag_id: tagId
+          });
         }
       }
 
-      return { constraintId };
+      // Activity logging (replaces trigger)
+      await logConstraintAdd(knex, {
+        constraint_id: Number(constraintId),
+        category: params.category,
+        constraint_text: params.constraint_text,
+        priority: priorityStr,
+        layer: params.layer || null,
+        created_by: createdBy,
+        agent_id: agentId
+      });
+
+      return { constraintId: Number(constraintId) };
     });
 
     return {
@@ -111,61 +144,52 @@ export function addConstraint(params: AddConstraintParams, db?: Database): AddCo
  * Uses v_tagged_constraints view for token efficiency
  *
  * @param params - Filter parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of t_constraints matching filters
  */
-export function getConstraints(params: GetConstraintsParams, db?: Database): GetConstraintsResponse {
-  const actualDb = db ?? getDatabase();
+export async function getConstraints(
+  params: GetConstraintsParams,
+  adapter?: DatabaseAdapter
+): Promise<GetConstraintsResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
-    // Build query conditions
-    const conditions: string[] = [];
-    const values: any[] = [];
-
-    // Use v_tagged_constraints view (already filters active=1)
-    let sql = 'SELECT * FROM v_tagged_constraints WHERE 1=1';
+    // Build query using v_tagged_constraints view (already filters active=1)
+    let query = knex('v_tagged_constraints');
 
     // Filter by category
     if (params.category) {
       validateCategory(params.category);
-      conditions.push('category = ?');
-      values.push(params.category);
+      query = query.where('category', params.category);
     }
 
     // Filter by layer
     if (params.layer) {
-      conditions.push('layer = ?');
-      values.push(params.layer);
+      query = query.where('layer', params.layer);
     }
 
     // Filter by priority
     if (params.priority) {
-      conditions.push('priority = ?');
-      values.push(params.priority);
+      query = query.where('priority', params.priority);
     }
 
     // Filter by m_tags (OR logic - match ANY tag)
     if (params.tags && params.tags.length > 0) {
-      const tagConditions = params.tags.map(() => 'tags LIKE ?').join(' OR ');
-      conditions.push(`(${tagConditions})`);
-      for (const tag of params.tags) {
-        values.push(`%${tag}%`);
-      }
-    }
-
-    // Add all conditions to query
-    if (conditions.length > 0) {
-      sql += ' AND ' + conditions.join(' AND ');
+      query = query.where((builder) => {
+        for (const tag of params.tags!) {
+          builder.orWhere('tags', 'like', `%${tag}%`);
+        }
+      });
     }
 
     // Note: v_tagged_constraints view already orders by priority DESC, category, ts DESC
     // Add limit if provided
     const limit = params.limit || 50;
-    sql += ' LIMIT ?';
-    values.push(limit);
+    query = query.limit(limit);
 
     // Execute query
-    const rows = actualDb.prepare(sql).all(...values) as TaggedConstraint[];
+    const rows = await query.select('*') as TaggedConstraint[];
 
     // Parse m_tags from comma-separated to array for consistency
     const constraints = rows.map(row => ({
@@ -188,11 +212,15 @@ export function getConstraints(params: GetConstraintsParams, db?: Database): Get
  * Idempotent - deactivating already-inactive constraint is safe
  *
  * @param params - Constraint ID to deactivate
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Success status
  */
-export function deactivateConstraint(params: DeactivateConstraintParams, db?: Database): DeactivateConstraintResponse {
-  const actualDb = db ?? getDatabase();
+export async function deactivateConstraint(
+  params: DeactivateConstraintParams,
+  adapter?: DatabaseAdapter
+): Promise<DeactivateConstraintResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     // Validate constraint_id
@@ -201,14 +229,19 @@ export function deactivateConstraint(params: DeactivateConstraintParams, db?: Da
     }
 
     // Check if constraint exists
-    const constraint = actualDb.prepare('SELECT id, active FROM t_constraints WHERE id = ?').get(params.constraint_id) as { id: number; active: number } | undefined;
+    const constraint = await knex('t_constraints')
+      .where({ id: params.constraint_id })
+      .select('id', 'active')
+      .first() as { id: number; active: number } | undefined;
 
     if (!constraint) {
       throw new Error(`Constraint not found: ${params.constraint_id}`);
     }
 
     // Update constraint to inactive (idempotent)
-    actualDb.prepare('UPDATE t_constraints SET active = ? WHERE id = ?').run(SQLITE_FALSE, params.constraint_id);
+    await knex('t_constraints')
+      .where({ id: params.constraint_id })
+      .update({ active: SQLITE_FALSE });
 
     return {
       success: true,

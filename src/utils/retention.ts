@@ -3,7 +3,7 @@
  * Calculates cutoff timestamps that skip weekends when configured
  */
 
-import { Database } from '../types.js';
+import { DatabaseAdapter } from '../adapters/index.js';
 import { getConfigBool, getConfigInt } from '../database.js';
 import { CONFIG_KEYS } from '../constants.js';
 
@@ -11,12 +11,12 @@ import { CONFIG_KEYS } from '../constants.js';
  * Calculate cutoff timestamp for message retention
  * Respects weekend-awareness configuration
  *
- * @param db - Database instance
+ * @param adapter - Database adapter instance
  * @returns Unix timestamp (seconds) for cutoff
  */
-export function calculateMessageCutoff(db: Database): number {
-  const ignoreWeekends = getConfigBool(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
-  const retentionHours = getConfigInt(db, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, 24);
+export async function calculateMessageCutoff(adapter: DatabaseAdapter): Promise<number> {
+  const ignoreWeekends = await getConfigBool(adapter, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
+  const retentionHours = await getConfigInt(adapter, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, 24);
 
   return calculateCutoffTimestamp(retentionHours, ignoreWeekends, 'hours');
 }
@@ -25,12 +25,12 @@ export function calculateMessageCutoff(db: Database): number {
  * Calculate cutoff timestamp for file change retention
  * Respects weekend-awareness configuration
  *
- * @param db - Database instance
+ * @param adapter - Database adapter instance
  * @returns Unix timestamp (seconds) for cutoff
  */
-export function calculateFileChangeCutoff(db: Database): number {
-  const ignoreWeekends = getConfigBool(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
-  const retentionDays = getConfigInt(db, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, 7);
+export async function calculateFileChangeCutoff(adapter: DatabaseAdapter): Promise<number> {
+  const ignoreWeekends = await getConfigBool(adapter, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
+  const retentionDays = await getConfigInt(adapter, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, 7);
 
   return calculateCutoffTimestamp(retentionDays, ignoreWeekends, 'days');
 }
@@ -39,12 +39,12 @@ export function calculateFileChangeCutoff(db: Database): number {
  * Calculate cutoff timestamp for task archive (done → archived)
  * Respects weekend-awareness configuration
  *
- * @param db - Database instance
+ * @param adapter - Database adapter instance
  * @returns Unix timestamp (seconds) for cutoff
  */
-export function calculateTaskArchiveCutoff(db: Database): number {
-  const ignoreWeekends = getConfigBool(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
-  const retentionDays = getConfigInt(db, CONFIG_KEYS.AUTO_ARCHIVE_DONE_DAYS, 2); // Default: 2 days (48 hours)
+export async function calculateTaskArchiveCutoff(adapter: DatabaseAdapter): Promise<number> {
+  const ignoreWeekends = await getConfigBool(adapter, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
+  const retentionDays = await getConfigInt(adapter, CONFIG_KEYS.AUTO_ARCHIVE_DONE_DAYS, 2); // Default: 2 days (48 hours)
 
   return calculateCutoffTimestamp(retentionDays, ignoreWeekends, 'days');
 }

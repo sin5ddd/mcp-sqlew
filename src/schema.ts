@@ -132,6 +132,8 @@ export function verifySchemaIntegrity(db: Database): {
     't_activity_log', 't_decision_templates',
     't_tasks', 't_task_details', 't_task_tags', 't_task_decision_links',
     't_task_constraint_links', 't_task_file_links', 't_task_dependencies',
+    'm_help_tools', 'm_help_actions', 't_help_action_params', 't_help_action_examples',
+    'm_help_use_case_categories', 't_help_use_cases', 't_help_action_sequences',
   ];
 
   const requiredViews = [

@@ -1,27 +1,30 @@
 /**
  * Configuration management tools for MCP Shared Context Server
  * Provides tools to get and update auto-deletion configuration
+ *
+ * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
  */
 
-import { getDatabase, getAllConfig, setConfigValue, getConfigBool, getConfigInt } from '../database.js';
+import { DatabaseAdapter } from '../adapters/index.js';
+import { getAdapter, getConfigBool, getConfigInt, setConfigValue } from '../database.js';
 import { CONFIG_KEYS } from '../constants.js';
 
 /**
  * Get current configuration settings
  *
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Current configuration values
  */
-export function getConfig(db?: import('../types.js').Database): {
+export async function getConfig(adapter?: DatabaseAdapter): Promise<{
   ignoreWeekend: boolean;
   messageRetentionHours: number;
   fileHistoryRetentionDays: number;
-} {
-  const actualDb = db ?? getDatabase();
+}> {
+  const actualAdapter = adapter ?? getAdapter();
 
-  const ignoreWeekend = getConfigBool(actualDb, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
-  const messageRetentionHours = getConfigInt(actualDb, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, 24);
-  const fileHistoryRetentionDays = getConfigInt(actualDb, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, 7);
+  const ignoreWeekend = await getConfigBool(actualAdapter, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
+  const messageRetentionHours = await getConfigInt(actualAdapter, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, 24);
+  const fileHistoryRetentionDays = await getConfigInt(actualAdapter, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, 7);
 
   return {
     ignoreWeekend,
@@ -35,14 +38,14 @@ export function getConfig(db?: import('../types.js').Database): {
  * Validates values before updating
  *
  * @param params - Configuration parameters to update
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Updated configuration
  */
-export function updateConfig(params: {
+export async function updateConfig(params: {
   ignoreWeekend?: boolean;
   messageRetentionHours?: number;
   fileHistoryRetentionDays?: number;
-}, db?: import('../types.js').Database): {
+}, adapter?: DatabaseAdapter): Promise<{
   success: boolean;
   config: {
     ignoreWeekend: boolean;
@@ -50,8 +53,8 @@ export function updateConfig(params: {
     fileHistoryRetentionDays: number;
   };
   message: string;
-} {
-  const actualDb = db ?? getDatabase();
+}> {
+  const actualAdapter = adapter ?? getAdapter();
 
   // Validate values
   if (params.messageRetentionHours !== undefined) {
@@ -68,19 +71,19 @@ export function updateConfig(params: {
 
   // Update values
   if (params.ignoreWeekend !== undefined) {
-    setConfigValue(actualDb, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, params.ignoreWeekend ? '1' : '0');
+    await setConfigValue(actualAdapter, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, params.ignoreWeekend ? '1' : '0');
   }
 
   if (params.messageRetentionHours !== undefined) {
-    setConfigValue(actualDb, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, String(params.messageRetentionHours));
+    await setConfigValue(actualAdapter, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, String(params.messageRetentionHours));
   }
 
   if (params.fileHistoryRetentionDays !== undefined) {
-    setConfigValue(actualDb, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(params.fileHistoryRetentionDays));
+    await setConfigValue(actualAdapter, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(params.fileHistoryRetentionDays));
   }
 
   // Get updated config
-  const updatedConfig = getConfig(actualDb);
+  const updatedConfig = await getConfig(actualAdapter);
 
   return {
     success: true,

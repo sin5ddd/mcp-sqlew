@@ -28,7 +28,15 @@
     "rebuild": "npm run clean && npm run build",
     "test": "npm run build && node --test dist/tests/tasks.dependencies.test.js",
     "test:migrations": "npm run build && node dist/tests/migrations/test-v3.2-migration.js",
-    "prepublishOnly": "npm run rebuild"
+    "prepublishOnly": "npm run rebuild",
+    "knex": "tsx node_modules/.bin/knex --knexfile src/knexfile.ts",
+    "migrate:make": "npm run knex migrate:make",
+    "migrate:latest": "npm run knex migrate:latest",
+    "migrate:rollback": "npm run knex migrate:rollback",
+    "migrate:rollback:all": "npm run knex migrate:rollback --all",
+    "migrate:status": "npm run knex migrate:status",
+    "seed:make": "npm run knex seed:make",
+    "seed:run": "npm run knex seed:run"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -59,11 +67,15 @@
     "better-sqlite3": "^11.0.0",
     "chokidar": "^4.0.3",
     "ignore": "^7.0.5",
-    "smol-toml": "^1.4.2"
+    "knex": "^3.1.0",
+    "smol-toml": "^1.4.2",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
+    "@types/knex": "^0.15.2",
     "@types/node": "^20.0.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.0.0"
   }
 }

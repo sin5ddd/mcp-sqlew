@@ -1,9 +1,17 @@
 /**
  * File tracking tools for MCP Shared Context Server
  * Provides file change tracking with layer integration and lock detection
+ *
+ * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
  */
 
-import { getDatabase, getOrCreateFile, getOrCreateAgent, getLayerId, transaction } from '../database.js';
+import { DatabaseAdapter } from '../adapters/index.js';
+import {
+  getAdapter,
+  getOrCreateFile,
+  getOrCreateAgent,
+  getLayerId
+} from '../database.js';
 import {
   STRING_TO_CHANGE_TYPE,
   CHANGE_TYPE_TO_STRING,
@@ -12,6 +20,8 @@ import {
 } from '../constants.js';
 import { validateChangeType } from '../utils/validators.js';
 import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
+import { logFileRecord } from '../utils/activity-logging.js';
+import { Knex } from 'knex';
 import type {
   RecordFileChangeParams,
   RecordFileChangeResponse,
@@ -21,21 +31,25 @@ import type {
   CheckFileLockResponse,
   RecentFileChange,
   RecordFileChangeBatchParams,
-  RecordFileChangeBatchResponse,
-  Database
+  RecordFileChangeBatchResponse
 } from '../types.js';
-import { performAutoCleanup } from '../utils/cleanup.js';
-import { processBatch } from '../utils/batch.js';
 
 /**
- * Internal helper: Record file change without cleanup or transaction wrapper
- * Used by recordFileChange (with cleanup) and recordFileChangeBatch (manages its own transaction)
+ * Internal helper: Record file change without transaction wrapper
+ * Used by recordFileChange (with transaction) and recordFileChangeBatch (manages its own transaction)
  *
  * @param params - File change parameters
- * @param db - Database instance
+ * @param adapter - Database adapter instance
+ * @param trx - Optional transaction
  * @returns Success response with change ID and timestamp
  */
-function recordFileChangeInternal(params: RecordFileChangeParams, db: Database): RecordFileChangeResponse {
+async function recordFileChangeInternal(
+  params: RecordFileChangeParams,
+  adapter: DatabaseAdapter,
+  trx?: Knex.Transaction
+): Promise<RecordFileChangeResponse> {
+  const knex = trx || adapter.getKnex();
+
   // Validate change_type
   validateChangeType(params.change_type);
   const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
@@ -48,38 +62,43 @@ function recordFileChangeInternal(params: RecordFileChangeParams, db: Database):
         `Invalid layer: ${params.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
       );
     }
-    layerId = getLayerId(db, params.layer);
+    layerId = await getLayerId(adapter, params.layer, trx);
     if (layerId === null) {
       throw new Error(`Layer not found: ${params.layer}`);
     }
   }
 
   // Auto-register file and agent
-  const fileId = getOrCreateFile(db, params.file_path);
-  const agentId = getOrCreateAgent(db, params.agent_name);
+  const fileId = await getOrCreateFile(adapter, params.file_path, trx);
+  const agentId = await getOrCreateAgent(adapter, params.agent_name, trx);
+
+  // Current timestamp
+  const ts = Math.floor(Date.now() / 1000);
 
   // Insert file change record
-  const stmt = db.prepare(`
-    INSERT INTO t_file_changes (file_id, agent_id, layer_id, change_type, description)
-    VALUES (?, ?, ?, ?, ?)
-  `);
+  const [changeId] = await knex('t_file_changes').insert({
+    file_id: fileId,
+    agent_id: agentId,
+    layer_id: layerId,
+    change_type: changeTypeInt,
+    description: params.description || null,
+    ts: ts
+  });
 
-  const result = stmt.run(
-    fileId,
-    agentId,
-    layerId,
-    changeTypeInt,
-    params.description || null
-  );
+  // Activity logging (replaces trigger)
+  await logFileRecord(knex, {
+    file_path: params.file_path,
+    change_type: changeTypeInt,
+    agent_id: agentId,
+    layer_id: layerId || undefined
+  });
 
-  // Get timestamp
-  const tsResult = db.prepare('SELECT ts FROM t_file_changes WHERE id = ?')
-    .get(result.lastInsertRowid) as { ts: number } | undefined;
+  const timestamp = new Date(ts * 1000).toISOString();
 
   return {
     success: true,
-    change_id: result.lastInsertRowid as number,
-    timestamp: tsResult ? new Date(tsResult.ts * 1000).toISOString() : new Date().toISOString(),
+    change_id: Number(changeId),
+    timestamp: timestamp,
   };
 }
 
@@ -88,17 +107,20 @@ function recordFileChangeInternal(params: RecordFileChangeParams, db: Database):
  * Auto-registers the file and agent if they don't exist.
  *
  * @param params - File change parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Success response with change ID and timestamp
  */
-export function recordFileChange(params: RecordFileChangeParams, db?: Database): RecordFileChangeResponse {
-  const actualDb = db ?? getDatabase();
-
-  // Cleanup old file changes before inserting new one
-  performAutoCleanup(actualDb);
+export async function recordFileChange(
+  params: RecordFileChangeParams,
+  adapter?: DatabaseAdapter
+): Promise<RecordFileChangeResponse> {
+  const actualAdapter = adapter ?? getAdapter();
 
   try {
-    return recordFileChangeInternal(params, actualDb);
+    // Use transaction for atomicity
+    return await actualAdapter.transaction(async (trx) => {
+      return await recordFileChangeInternal(params, actualAdapter, trx);
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to record file change: ${message}`);
@@ -110,11 +132,15 @@ export function recordFileChange(params: RecordFileChangeParams, db?: Database):
  * Uses token-efficient view when no specific filters are applied.
  *
  * @param params - Filter parameters
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Array of file changes with metadata
  */
-export function getFileChanges(params: GetFileChangesParams, db?: Database): GetFileChangesResponse {
-  const actualDb = db ?? getDatabase();
+export async function getFileChanges(
+  params: GetFileChangesParams = {},
+  adapter?: DatabaseAdapter
+): Promise<GetFileChangesResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     const limit = params.limit || DEFAULT_QUERY_LIMIT;
@@ -154,12 +180,9 @@ export function getFileChanges(params: GetFileChangesParams, db?: Database): Get
 
     // Use view if no specific filters (token efficient)
     if (filterConditions.length === 0) {
-      const stmt = actualDb.prepare(`
-        SELECT * FROM v_recent_file_changes
-        LIMIT ?
-      `);
-
-      const rows = stmt.all(limit) as RecentFileChange[];
+      const rows = await knex('v_recent_file_changes')
+        .limit(limit)
+        .select('*') as RecentFileChange[];
 
       return {
         changes: rows,
@@ -170,29 +193,50 @@ export function getFileChanges(params: GetFileChangesParams, db?: Database): Get
     // Build WHERE clause using query builder
     const { whereClause, params: queryParams } = buildWhereClause(filterConditions);
 
-    const stmt = actualDb.prepare(`
-      SELECT
-        f.path,
-        a.name as changed_by,
-        l.name as layer,
-        CASE fc.change_type
+    // Build query dynamically with filters
+    let query = knex('t_file_changes as fc')
+      .join('m_files as f', 'fc.file_id', 'f.id')
+      .join('m_agents as a', 'fc.agent_id', 'a.id')
+      .leftJoin('m_layers as l', 'fc.layer_id', 'l.id')
+      .select(
+        'f.path',
+        'a.name as changed_by',
+        'l.name as layer',
+        knex.raw(`CASE fc.change_type
           WHEN 1 THEN 'created'
           WHEN 2 THEN 'modified'
           ELSE 'deleted'
-        END as change_type,
-        fc.description,
-        datetime(fc.ts, 'unixepoch') as changed_at
-      FROM t_file_changes fc
-      JOIN m_files f ON fc.file_id = f.id
-      JOIN m_agents a ON fc.agent_id = a.id
-      LEFT JOIN m_layers l ON fc.layer_id = l.id
-      WHERE 1=1${whereClause}
-      ORDER BY fc.ts DESC
-      LIMIT ?
-    `);
+        END as change_type`),
+        'fc.description',
+        knex.raw(`datetime(fc.ts, 'unixepoch') as changed_at`)
+      )
+      .orderBy('fc.ts', 'desc')
+      .limit(limit);
 
-    queryParams.push(limit);
-    const rows = stmt.all(...queryParams) as RecentFileChange[];
+    // Apply filter conditions
+    if (params.file_path) {
+      query = query.where('f.path', params.file_path);
+    }
+
+    if (params.agent_name) {
+      query = query.where('a.name', params.agent_name);
+    }
+
+    if (params.layer) {
+      query = query.where('l.name', params.layer);
+    }
+
+    if (params.change_type) {
+      const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
+      query = query.where('fc.change_type', changeTypeInt);
+    }
+
+    if (params.since) {
+      const sinceEpoch = Math.floor(new Date(params.since).getTime() / 1000);
+      query = query.where('fc.ts', '>=', sinceEpoch);
+    }
+
+    const rows = await query as RecentFileChange[];
 
     return {
       changes: rows,
@@ -210,11 +254,15 @@ export function getFileChanges(params: GetFileChangesParams, db?: Database): Get
  * Useful to prevent concurrent edits by multiple agents.
  *
  * @param params - File path and lock duration
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Lock status with details
  */
-export function checkFileLock(params: CheckFileLockParams, db?: Database): CheckFileLockResponse {
-  const actualDb = db ?? getDatabase();
+export async function checkFileLock(
+  params: CheckFileLockParams,
+  adapter?: DatabaseAdapter
+): Promise<CheckFileLockResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+  const knex = actualAdapter.getKnex();
 
   try {
     const lockDuration = params.lock_duration || 300; // Default 5 minutes
@@ -222,21 +270,14 @@ export function checkFileLock(params: CheckFileLockParams, db?: Database): Check
     const lockThreshold = currentTime - lockDuration;
 
     // Get the most recent change to this file
-    const stmt = actualDb.prepare(`
-      SELECT
-        a.name as agent,
-        fc.change_type,
-        fc.ts
-      FROM t_file_changes fc
-      JOIN m_files f ON fc.file_id = f.id
-      JOIN m_agents a ON fc.agent_id = a.id
-      WHERE f.path = ?
-      ORDER BY fc.ts DESC
-      LIMIT 1
-    `);
-
-    const result = stmt.get(params.file_path) as
-      { agent: string; change_type: number; ts: number } | undefined;
+    const result = await knex('t_file_changes as fc')
+      .join('m_files as f', 'fc.file_id', 'f.id')
+      .join('m_agents as a', 'fc.agent_id', 'a.id')
+      .where('f.path', params.file_path)
+      .select('a.name as agent', 'fc.change_type', 'fc.ts')
+      .orderBy('fc.ts', 'desc')
+      .limit(1)
+      .first() as { agent: string; change_type: number; ts: number } | undefined;
 
     if (!result) {
       // File never changed
@@ -275,51 +316,110 @@ export function checkFileLock(params: CheckFileLockParams, db?: Database): Check
  * Limit: 50 items per batch (constraint #3)
  *
  * @param params - Batch parameters with array of file changes and atomic flag
- * @param db - Optional database instance (for testing)
+ * @param adapter - Optional database adapter (for testing)
  * @returns Response with success status and detailed results for each item
  */
-export function recordFileChangeBatch(params: RecordFileChangeBatchParams, db?: Database): RecordFileChangeBatchResponse {
-  const actualDb = db ?? getDatabase();
+export async function recordFileChangeBatch(
+  params: RecordFileChangeBatchParams,
+  adapter?: DatabaseAdapter
+): Promise<RecordFileChangeBatchResponse> {
+  const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
   if (!params.file_changes || !Array.isArray(params.file_changes)) {
     throw new Error('Parameter "file_changes" is required and must be an array');
   }
 
-  // Cleanup old file changes before processing batch
-  performAutoCleanup(actualDb);
+  if (params.file_changes.length === 0) {
+    return {
+      success: true,
+      inserted: 0,
+      failed: 0,
+      results: []
+    };
+  }
+
+  if (params.file_changes.length > 50) {
+    throw new Error('Parameter "file_changes" must contain at most 50 items');
+  }
 
   const atomic = params.atomic !== undefined ? params.atomic : true;
 
-  // Use processBatch utility
-  const batchResult = processBatch(
-    actualDb,
-    params.file_changes,
-    (fileChange, db) => {
-      const result = recordFileChangeInternal(fileChange, db);
-      return {
-        file_path: fileChange.file_path,
-        change_id: result.change_id,
-        timestamp: result.timestamp
-      };
-    },
-    atomic,
-    50
-  );
+  try {
+    if (atomic) {
+      // Atomic mode: All or nothing
+      const results = await actualAdapter.transaction(async (trx) => {
+        const processedResults = [];
 
-  // Map batch results to RecordFileChangeBatchResponse format
-  return {
-    success: batchResult.success,
-    inserted: batchResult.processed,
-    failed: batchResult.failed,
-    results: batchResult.results.map(r => ({
-      file_path: (r.data as any)?.file_path || '',
-      change_id: r.data?.change_id,
-      timestamp: r.data?.timestamp,
-      success: r.success,
-      error: r.error
-    }))
-  };
+        for (const fileChange of params.file_changes) {
+          try {
+            const result = await recordFileChangeInternal(fileChange, actualAdapter, trx);
+            processedResults.push({
+              file_path: fileChange.file_path,
+              change_id: result.change_id,
+              timestamp: result.timestamp,
+              success: true,
+              error: undefined
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Batch failed at file "${fileChange.file_path}": ${message}`);
+          }
+        }
+
+        return processedResults;
+      });
+
+      return {
+        success: true,
+        inserted: results.length,
+        failed: 0,
+        results: results
+      };
+    } else {
+      // Non-atomic mode: Process each independently
+      const results = [];
+      let inserted = 0;
+      let failed = 0;
+
+      for (const fileChange of params.file_changes) {
+        try {
+          const result = await actualAdapter.transaction(async (trx) => {
+            return await recordFileChangeInternal(fileChange, actualAdapter, trx);
+          });
+
+          results.push({
+            file_path: fileChange.file_path,
+            change_id: result.change_id,
+            timestamp: result.timestamp,
+            success: true,
+            error: undefined
+          });
+          inserted++;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          results.push({
+            file_path: fileChange.file_path,
+            change_id: undefined,
+            timestamp: undefined,
+            success: false,
+            error: message
+          });
+          failed++;
+        }
+      }
+
+      return {
+        success: failed === 0,
+        inserted: inserted,
+        failed: failed,
+        results: results
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to execute batch operation: ${message}`);
+  }
 }
 
 /**

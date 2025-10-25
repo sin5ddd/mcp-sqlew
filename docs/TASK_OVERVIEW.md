@@ -93,7 +93,7 @@ Every task has:
 - Should have assignee
 - Auto-transitions to `waiting_review` via:
   - Smart quality gates (v3.4.1): All files modified, tests pass, TypeScript compiles, 3min idle (default)
-  - Time-based stale detection: 2 hours idle (fallback)
+  - Time-based stale detection: 18 hours idle (fallback, supports multi-day tasks)
 
 **`waiting_review`:**
 - Awaiting human/AI feedback or git commit
@@ -250,7 +250,7 @@ Automatically runs before:
 
 **Default Settings:**
 - `task_auto_stale_enabled`: '1' (enabled)
-- `task_stale_hours_in_progress`: '2' (2 hours)
+- `task_stale_hours_in_progress`: '18' (18 hours - supports multi-day tasks and lunch breaks)
 - `task_stale_hours_waiting_review`: '24' (24 hours)
 - `auto_archive_done_days`: '2' (2 days / 48 hours)
 - `autodelete_ignore_weekend`: '0' (false) - Shared with messages/files cleanup

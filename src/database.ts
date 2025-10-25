@@ -1,263 +1,89 @@
 /**
  * Database connection and initialization module
- * Handles SQLite database setup with configurable path
+ * Handles database setup with Knex.js and DatabaseAdapter pattern
  */
 
-import Database from 'better-sqlite3';
-import { mkdirSync, existsSync } from 'fs';
-import { dirname, resolve, isAbsolute } from 'path';
-import { initializeSchema, isSchemaInitialized, verifySchemaIntegrity } from './schema.js';
-import { DEFAULT_DB_PATH, DB_BUSY_TIMEOUT } from './constants.js';
-import type { Database as DatabaseType } from './types.js';
-import { performAutoCleanup } from './utils/cleanup.js';
-import { runAllMigrations, needsAnyMigrations } from './migrations/index.js';
-import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndTransitionToReview } from './utils/task-stale-detection.js';
-import { loadConfigFile, loadAndFlattenConfig, validateConfig } from './config/loader.js';
+import { Knex } from 'knex';
+import knexConfig from './knexfile.js';
+import { DatabaseAdapter, createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
 
-let dbInstance: DatabaseType | null = null;
+// Global adapter instance
+let adapterInstance: DatabaseAdapter | null = null;
 
 /**
- * Initialize database connection
- * Creates database file and folder if they don't exist
- * Initializes schema on first run
- *
- * @param dbPath - Optional database path (defaults to .sqlew/sqlew.db)
- * @returns SQLite database instance
+ * Initialize database with adapter pattern
  */
-export function initializeDatabase(dbPath?: string, configPath?: string): DatabaseType {
-  // If already initialized, return existing instance
-  if (dbInstance) {
-    return dbInstance;
+export async function initializeDatabase(
+  config?: {
+    databaseType?: 'sqlite' | 'postgresql' | 'mysql';
+    connection?: any;
+    configPath?: string;
+  }
+): Promise<DatabaseAdapter> {
+  if (adapterInstance) {
+    return adapterInstance;
   }
 
-  try {
-    // Load config file to get database path and other settings
-    const config = loadConfigFile(configPath);
+  const dbType = config?.databaseType || 'sqlite';
+  const adapter = createDatabaseAdapter(dbType);
 
-    // Validate config
-    const validation = validateConfig(config);
-    if (!validation.valid) {
-      console.warn('⚠️  Configuration validation warnings:');
-      validation.errors.forEach(err => console.warn(`   - ${err}`));
-    }
+  // Use config from knexfile or provided config
+  const knexConnConfig = config?.connection
+    ? { ...knexConfig.development, connection: config.connection }
+    : knexConfig.development;
 
-    // Determine database path with priority:
-    // 1. CLI argument (dbPath parameter)
-    // 2. Config file (config.database.path)
-    // 3. Default path (DEFAULT_DB_PATH)
-    const finalPath = dbPath || config.database?.path || DEFAULT_DB_PATH;
+  await adapter.connect(knexConnConfig);
 
-    // Convert to absolute path if relative
-    const absolutePath = isAbsolute(finalPath)
-      ? finalPath
-      : resolve(process.cwd(), finalPath);
+  // Run migrations if needed
+  const knex = adapter.getKnex();
+  await knex.migrate.latest();
 
-    // Create directory if it doesn't exist
-    const dbDir = dirname(absolutePath);
-    if (!existsSync(dbDir)) {
-      mkdirSync(dbDir, { recursive: true });
-      console.log(`✓ Created database directory: ${dbDir}`);
-    }
+  console.log('✓ Database initialized with Knex adapter');
 
-    // Open database connection
-    const db = new Database(absolutePath, {
-      verbose: process.env.DEBUG_SQL ? console.log : undefined,
-    });
+  adapterInstance = adapter;
+  return adapter;
+}
 
-    // Configure database
-    db.pragma('journal_mode = WAL');  // Write-Ahead Logging for better concurrency
-    db.pragma('foreign_keys = ON');   // Enforce foreign key constraints
-    db.pragma('synchronous = NORMAL'); // Balance between safety and performance
-    db.pragma(`busy_timeout = ${DB_BUSY_TIMEOUT}`);  // Set busy timeout
-
-    console.log(`✓ Connected to database: ${absolutePath}`);
-
-    // Check if database has existing schema
-    const schemaExists = isSchemaInitialized(db);
-
-    if (schemaExists) {
-      // Run all pending migrations using orchestrator
-      // This handles upgrades from any version (v1.0.0, v1.1.x, v2.0.0, v2.1.x) to latest
-      if (needsAnyMigrations(db)) {
-        const migrationResults = runAllMigrations(db);
-
-        // Check if any migration failed
-        const failed = migrationResults.find(r => !r.success);
-        if (failed) {
-          console.error('\n❌ ERROR: Migration failed!');
-          console.error(failed.message);
-          db.close();
-          process.exit(1);
-        }
-
-        // After table prefix migration, run schema initialization to create views/triggers
-        // (tables already exist, CREATE TABLE IF NOT EXISTS will skip them)
-        const hadPrefixMigration = migrationResults.some(r =>
-          r.message.toLowerCase().includes('table prefix') ||
-          r.message.toLowerCase().includes('prefix')
-        );
-
-        if (hadPrefixMigration) {
-          console.log('\n→ Creating views and triggers for new schema...');
-          initializeSchema(db);
-        }
-      }
-
-      // Validate existing schema integrity (after migrations)
-      console.log('→ Validating existing database schema...');
-      const validation = verifySchemaIntegrity(db);
-
-      if (!validation.valid) {
-        // Schema is invalid - display error and exit
-        console.error('\n❌ ERROR: Database schema validation failed!');
-        console.error('\nThe existing database file has an incompatible schema.');
-        console.error(`Database location: ${absolutePath}`);
-
-        if (validation.missing.length > 0) {
-          console.error('\n📋 Missing components:');
-          validation.missing.forEach(item => console.error(`  - ${item}`));
-        }
-
-        if (validation.errors.length > 0) {
-          console.error('\n⚠️  Validation errors:');
-          validation.errors.forEach(error => console.error(`  - ${error}`));
-        }
-
-        console.error('\n💡 Possible solutions:');
-        console.error('  1. Backup and delete the existing database file to start fresh');
-        console.error('  2. Use a different database path with --db-path option');
-        console.error('  3. Restore from a backup if available\n');
-
-        // Close database and exit
-        db.close();
-        process.exit(1);
-      }
-
-      console.log('✓ Database schema validation passed');
-    } else {
-      // Initialize new schema
-      console.log('→ Initializing database schema...');
-      initializeSchema(db);
-    }
-
-    // Populate database with config file values (if any)
-    try {
-      const flatConfig = loadAndFlattenConfig(configPath);
-      let configUpdates = 0;
-
-      for (const [key, value] of Object.entries(flatConfig)) {
-        if (value !== undefined) {
-          const stringValue = typeof value === 'boolean' ? (value ? '1' : '0') : String(value);
-          db.prepare('INSERT OR REPLACE INTO m_config (key, value) VALUES (?, ?)').run(key, stringValue);
-          configUpdates++;
-        }
-      }
-
-      if (configUpdates > 0) {
-        console.log(`✓ Loaded ${configUpdates} config values from file`);
-      }
-    } catch (error) {
-      console.warn('⚠️  Failed to load config file values:', error instanceof Error ? error.message : String(error));
-    }
-
-    // Initialize v3.4.0 config keys (git-aware auto-complete)
-    // Use INSERT OR IGNORE to avoid overwriting existing values
-    const v340Configs = [
-      { key: 'git_auto_complete_enabled', value: '1' },
-      { key: 'require_all_files_committed', value: '1' },
-      { key: 'stale_review_notification_hours', value: '48' },
-    ];
-    const configInsert = db.prepare('INSERT OR IGNORE INTO m_config (key, value) VALUES (?, ?)');
-    for (const config of v340Configs) {
-      configInsert.run(config.key, config.value);
-    }
-
-    // Initialize v3.5.2 config keys (two-step git-aware workflow)
-    // Use INSERT OR IGNORE to avoid overwriting existing values
-    const v352Configs = [
-      { key: 'git_auto_complete_on_stage', value: '1' },          // Auto-complete on git add
-      { key: 'git_auto_archive_on_commit', value: '1' },          // Auto-archive on git commit
-      { key: 'require_all_files_staged', value: '1' },            // Require ALL files staged (vs ANY)
-      { key: 'require_all_files_committed_for_archive', value: '1' }, // Require ALL files committed for archiving
-    ];
-    for (const config of v352Configs) {
-      configInsert.run(config.key, config.value);
-    }
-
-    // Store instance
-    dbInstance = db;
-
-    // Perform initial cleanup and task maintenance
-    // Run synchronous tasks first
-    const staleTransitions = detectAndTransitionStaleTasks(db);
-    const archivedTasks = autoArchiveOldDoneTasks(db);
-    const cleanupResult = performAutoCleanup(db);
-
-    // Run async smart review detection in background (non-blocking)
-    detectAndTransitionToReview(db).then(reviewTransitions => {
-      const taskMaintenance = [];
-      if (staleTransitions > 0) taskMaintenance.push(`${staleTransitions} stale task transitions`);
-      if (archivedTasks > 0) taskMaintenance.push(`${archivedTasks} done tasks archived`);
-      if (reviewTransitions > 0) taskMaintenance.push(`${reviewTransitions} quality-based review transitions`);
-      if (cleanupResult.messagesDeleted > 0) taskMaintenance.push(`${cleanupResult.messagesDeleted} messages`);
-      if (cleanupResult.fileChangesDeleted > 0) taskMaintenance.push(`${cleanupResult.fileChangesDeleted} file changes`);
-
-      if (taskMaintenance.length > 0) {
-        console.log(`✓ Cleanup: ${taskMaintenance.join(', ')}`);
-      }
-    }).catch(error => {
-      console.warn('⚠️  Initial cleanup failed:', error instanceof Error ? error.message : String(error));
-    });
-
-    return db;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to initialize database: ${message}`);
+/**
+ * Get current database adapter
+ */
+export function getAdapter(): DatabaseAdapter {
+  if (!adapterInstance) {
+    throw new Error('Database not initialized. Call initializeDatabase() first.');
   }
+  return adapterInstance;
 }
 
 /**
  * Close database connection
  */
-export function closeDatabase(): void {
-  if (dbInstance) {
-    dbInstance.close();
-    dbInstance = null;
+export async function closeDatabase(): Promise<void> {
+  if (adapterInstance) {
+    await adapterInstance.disconnect();
+    adapterInstance = null;
     console.log('✓ Database connection closed');
   }
 }
 
-/**
- * Get current database instance
- * Throws error if not initialized
- *
- * @returns Current database instance
- */
-export function getDatabase(): DatabaseType {
-  if (!dbInstance) {
-    throw new Error('Database not initialized. Call initializeDatabase() first.');
-  }
-  return dbInstance;
-}
-
 // ============================================================================
-// Helper Functions for Master Table Management
+// Helper Functions for Master Table Management (Async)
 // ============================================================================
 
 /**
  * Get or create agent by name
- * Uses INSERT OR IGNORE for idempotent operation
- *
- * @param db - Database instance
- * @param name - Agent name
- * @returns Agent ID
  */
-export function getOrCreateAgent(db: DatabaseType, name: string): number {
-  // Try to insert
-  db.prepare('INSERT OR IGNORE INTO m_agents (name) VALUES (?)').run(name);
+export async function getOrCreateAgent(
+  adapter: DatabaseAdapter,
+  name: string,
+  trx?: Knex.Transaction
+): Promise<number> {
+  const knex = trx || adapter.getKnex();
+
+  // Try to insert (will be ignored if exists)
+  await knex('m_agents').insert({ name }).onConflict('name').ignore();
 
   // Get the ID
-  const result = db.prepare('SELECT id FROM m_agents WHERE name = ?').get(name) as { id: number } | undefined;
+  const result = await knex('m_agents').where({ name }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create agent: ${name}`);
@@ -268,15 +94,17 @@ export function getOrCreateAgent(db: DatabaseType, name: string): number {
 
 /**
  * Get or create context key by name
- *
- * @param db - Database instance
- * @param key - Context key name
- * @returns Context key ID
  */
-export function getOrCreateContextKey(db: DatabaseType, key: string): number {
-  db.prepare('INSERT OR IGNORE INTO m_context_keys (key) VALUES (?)').run(key);
+export async function getOrCreateContextKey(
+  adapter: DatabaseAdapter,
+  key: string,
+  trx?: Knex.Transaction
+): Promise<number> {
+  const knex = trx || adapter.getKnex();
 
-  const result = db.prepare('SELECT id FROM m_context_keys WHERE key = ?').get(key) as { id: number } | undefined;
+  await knex('m_context_keys').insert({ key }).onConflict('key').ignore();
+
+  const result = await knex('m_context_keys').where({ key }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create context key: ${key}`);
@@ -287,15 +115,17 @@ export function getOrCreateContextKey(db: DatabaseType, key: string): number {
 
 /**
  * Get or create file by path
- *
- * @param db - Database instance
- * @param path - File path
- * @returns File ID
  */
-export function getOrCreateFile(db: DatabaseType, path: string): number {
-  db.prepare('INSERT OR IGNORE INTO m_files (path) VALUES (?)').run(path);
+export async function getOrCreateFile(
+  adapter: DatabaseAdapter,
+  path: string,
+  trx?: Knex.Transaction
+): Promise<number> {
+  const knex = trx || adapter.getKnex();
 
-  const result = db.prepare('SELECT id FROM m_files WHERE path = ?').get(path) as { id: number } | undefined;
+  await knex('m_files').insert({ path }).onConflict('path').ignore();
+
+  const result = await knex('m_files').where({ path }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create file: ${path}`);
@@ -306,15 +136,17 @@ export function getOrCreateFile(db: DatabaseType, path: string): number {
 
 /**
  * Get or create tag by name
- *
- * @param db - Database instance
- * @param name - Tag name
- * @returns Tag ID
  */
-export function getOrCreateTag(db: DatabaseType, name: string): number {
-  db.prepare('INSERT OR IGNORE INTO m_tags (name) VALUES (?)').run(name);
+export async function getOrCreateTag(
+  adapter: DatabaseAdapter,
+  name: string,
+  trx?: Knex.Transaction
+): Promise<number> {
+  const knex = trx || adapter.getKnex();
 
-  const result = db.prepare('SELECT id FROM m_tags WHERE name = ?').get(name) as { id: number } | undefined;
+  await knex('m_tags').insert({ name }).onConflict('name').ignore();
+
+  const result = await knex('m_tags').where({ name }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create tag: ${name}`);
@@ -325,15 +157,17 @@ export function getOrCreateTag(db: DatabaseType, name: string): number {
 
 /**
  * Get or create scope by name
- *
- * @param db - Database instance
- * @param name - Scope name
- * @returns Scope ID
  */
-export function getOrCreateScope(db: DatabaseType, name: string): number {
-  db.prepare('INSERT OR IGNORE INTO m_scopes (name) VALUES (?)').run(name);
+export async function getOrCreateScope(
+  adapter: DatabaseAdapter,
+  name: string,
+  trx?: Knex.Transaction
+): Promise<number> {
+  const knex = trx || adapter.getKnex();
 
-  const result = db.prepare('SELECT id FROM m_scopes WHERE name = ?').get(name) as { id: number } | undefined;
+  await knex('m_scopes').insert({ name }).onConflict('name').ignore();
+
+  const result = await knex('m_scopes').where({ name }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create scope: ${name}`);
@@ -344,18 +178,17 @@ export function getOrCreateScope(db: DatabaseType, name: string): number {
 
 /**
  * Get or create category ID
- * Uses INSERT to create if doesn't exist
- *
- * @param db - Database instance
- * @param category - Category name
- * @returns Category ID
  */
-export function getOrCreateCategoryId(db: DatabaseType, category: string): number {
-  // Use INSERT OR IGNORE for idempotent operation
-  db.prepare('INSERT OR IGNORE INTO m_constraint_categories (name) VALUES (?)').run(category);
+export async function getOrCreateCategoryId(
+  adapter: DatabaseAdapter,
+  category: string,
+  trx?: Knex.Transaction
+): Promise<number> {
+  const knex = trx || adapter.getKnex();
 
-  // Get the ID
-  const result = db.prepare('SELECT id FROM m_constraint_categories WHERE name = ?').get(category) as { id: number } | undefined;
+  await knex('m_constraint_categories').insert({ name: category }).onConflict('name').ignore();
+
+  const result = await knex('m_constraint_categories').where({ name: category }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create category: ${category}`);
@@ -366,82 +199,84 @@ export function getOrCreateCategoryId(db: DatabaseType, category: string): numbe
 
 /**
  * Get layer ID by name
- * Does not auto-create (layers are predefined)
- *
- * @param db - Database instance
- * @param name - Layer name
- * @returns Layer ID or null if not found
  */
-export function getLayerId(db: DatabaseType, name: string): number | null {
-  const result = db.prepare('SELECT id FROM m_layers WHERE name = ?').get(name) as { id: number } | undefined;
+export async function getLayerId(
+  adapter: DatabaseAdapter,
+  name: string,
+  trx?: Knex.Transaction
+): Promise<number | null> {
+  const knex = trx || adapter.getKnex();
+  const result = await knex('m_layers').where({ name }).first('id');
   return result ? result.id : null;
 }
 
 /**
  * Get constraint category ID by name
- * Does not auto-create (categories are predefined)
- *
- * @param db - Database instance
- * @param name - Category name
- * @returns Category ID or null if not found
  */
-export function getCategoryId(db: DatabaseType, name: string): number | null {
-  const result = db.prepare('SELECT id FROM m_constraint_categories WHERE name = ?').get(name) as { id: number } | undefined;
+export async function getCategoryId(
+  adapter: DatabaseAdapter,
+  name: string,
+  trx?: Knex.Transaction
+): Promise<number | null> {
+  const knex = trx || adapter.getKnex();
+  const result = await knex('m_constraint_categories').where({ name }).first('id');
   return result ? result.id : null;
 }
 
 // ============================================================================
-// Configuration Management
+// Configuration Management (Async)
 // ============================================================================
 
 /**
  * Get configuration value from m_config table
- *
- * @param db - Database instance
- * @param key - Config key
- * @returns Config value as string or null if not found
  */
-export function getConfigValue(db: DatabaseType, key: string): string | null {
-  const result = db.prepare('SELECT value FROM m_config WHERE key = ?').get(key) as { value: string } | undefined;
+export async function getConfigValue(
+  adapter: DatabaseAdapter,
+  key: string
+): Promise<string | null> {
+  const knex = adapter.getKnex();
+  const result = await knex('m_config').where({ key }).first('value');
   return result ? result.value : null;
 }
 
 /**
  * Set configuration value in m_config table
- *
- * @param db - Database instance
- * @param key - Config key
- * @param value - Config value (will be converted to string)
  */
-export function setConfigValue(db: DatabaseType, key: string, value: string | number | boolean): void {
+export async function setConfigValue(
+  adapter: DatabaseAdapter,
+  key: string,
+  value: string | number | boolean
+): Promise<void> {
+  const knex = adapter.getKnex();
   const stringValue = String(value);
-  db.prepare('INSERT OR REPLACE INTO m_config (key, value) VALUES (?, ?)').run(key, stringValue);
+  await knex('m_config')
+    .insert({ key, value: stringValue })
+    .onConflict('key')
+    .merge({ value: stringValue });
 }
 
 /**
  * Get configuration value as boolean
- *
- * @param db - Database instance
- * @param key - Config key
- * @param defaultValue - Default value if key not found
- * @returns Boolean value
  */
-export function getConfigBool(db: DatabaseType, key: string, defaultValue: boolean = false): boolean {
-  const value = getConfigValue(db, key);
+export async function getConfigBool(
+  adapter: DatabaseAdapter,
+  key: string,
+  defaultValue: boolean = false
+): Promise<boolean> {
+  const value = await getConfigValue(adapter, key);
   if (value === null) return defaultValue;
   return value === '1' || value.toLowerCase() === 'true';
 }
 
 /**
  * Get configuration value as integer
- *
- * @param db - Database instance
- * @param key - Config key
- * @param defaultValue - Default value if key not found
- * @returns Integer value
  */
-export function getConfigInt(db: DatabaseType, key: string, defaultValue: number = 0): number {
-  const value = getConfigValue(db, key);
+export async function getConfigInt(
+  adapter: DatabaseAdapter,
+  key: string,
+  defaultValue: number = 0
+): Promise<number> {
+  const value = await getConfigValue(adapter, key);
   if (value === null) return defaultValue;
   const parsed = parseInt(value, 10);
   return isNaN(parsed) ? defaultValue : parsed;
@@ -449,12 +284,10 @@ export function getConfigInt(db: DatabaseType, key: string, defaultValue: number
 
 /**
  * Get all configuration as an object
- *
- * @param db - Database instance
- * @returns Object with all m_config key-value pairs
  */
-export function getAllConfig(db: DatabaseType): Record<string, string> {
-  const rows = db.prepare('SELECT key, value FROM m_config').all() as Array<{ key: string; value: string }>;
+export async function getAllConfig(adapter: DatabaseAdapter): Promise<Record<string, string>> {
+  const knex = adapter.getKnex();
+  const rows = await knex('m_config').select('key', 'value');
   const config: Record<string, string> = {};
   for (const row of rows) {
     config[row.key] = row.value;
@@ -463,38 +296,11 @@ export function getAllConfig(db: DatabaseType): Record<string, string> {
 }
 
 // ============================================================================
-// Transaction Helpers
-// ============================================================================
-
-/**
- * Execute a function within a transaction
- * Automatically handles commit/rollback
- *
- * @param db - Database instance
- * @param fn - Function to execute in transaction
- * @returns Result from function
- */
-export function transaction<T>(db: DatabaseType, fn: () => T): T {
-  db.exec('BEGIN TRANSACTION');
-
-  try {
-    const result = fn();
-    db.exec('COMMIT');
-    return result;
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
-}
-
-// ============================================================================
-// Decision Context Management (v3.2.2)
+// Decision Context Management (Async - v3.2.2)
 // ============================================================================
 
 /**
  * Validate JSON structure for alternatives array
- * @param alternatives - JSON string or null
- * @throws Error if JSON is invalid or not an array
  */
 function validateAlternativesJson(alternatives: string | null): void {
   if (alternatives === null || alternatives === undefined) return;
@@ -514,8 +320,6 @@ function validateAlternativesJson(alternatives: string | null): void {
 
 /**
  * Validate JSON structure for tradeoffs object
- * @param tradeoffs - JSON string or null
- * @throws Error if JSON is invalid or doesn't have pros/cons structure
  */
 function validateTradeoffsJson(tradeoffs: string | null): void {
   if (tradeoffs === null || tradeoffs === undefined) return;
@@ -525,7 +329,6 @@ function validateTradeoffsJson(tradeoffs: string | null): void {
     if (typeof parsed !== 'object' || parsed === null) {
       throw new Error('tradeoffs must be a JSON object');
     }
-    // Optional: Check for pros/cons keys if provided
     if (parsed.pros !== undefined && !Array.isArray(parsed.pros)) {
       throw new Error('tradeoffs.pros must be an array');
     }
@@ -542,19 +345,9 @@ function validateTradeoffsJson(tradeoffs: string | null): void {
 
 /**
  * Add decision context to a decision
- *
- * @param db - Database instance
- * @param decisionKey - Decision key to attach context to
- * @param rationale - Rationale for the decision (required)
- * @param alternatives - JSON array of alternatives considered (optional)
- * @param tradeoffs - JSON object with pros/cons (optional)
- * @param decidedBy - Agent name who decided (optional)
- * @param relatedTaskId - Related task ID (optional)
- * @param relatedConstraintId - Related constraint ID (optional)
- * @returns Context ID
  */
-export function addDecisionContext(
-  db: DatabaseType,
+export async function addDecisionContext(
+  adapter: DatabaseAdapter,
   decisionKey: string,
   rationale: string,
   alternatives: string | null = null,
@@ -562,44 +355,44 @@ export function addDecisionContext(
   decidedBy: string | null = null,
   relatedTaskId: number | null = null,
   relatedConstraintId: number | null = null
-): number {
+): Promise<number> {
   // Validate JSON inputs
   validateAlternativesJson(alternatives);
   validateTradeoffsJson(tradeoffs);
 
+  const knex = adapter.getKnex();
+
   // Get decision key ID
-  const keyId = getOrCreateContextKey(db, decisionKey);
+  const keyId = await getOrCreateContextKey(adapter, decisionKey);
 
   // Get agent ID if provided
   let agentId: number | null = null;
   if (decidedBy) {
-    agentId = getOrCreateAgent(db, decidedBy);
+    agentId = await getOrCreateAgent(adapter, decidedBy);
   }
 
   // Insert context
-  const result = db.prepare(`
-    INSERT INTO t_decision_context (
-      decision_key_id,
-      rationale,
-      alternatives_considered,
-      tradeoffs,
-      decided_by_agent_id,
-      related_task_id,
-      related_constraint_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(keyId, rationale, alternatives, tradeoffs, agentId, relatedTaskId, relatedConstraintId);
+  const [id] = await knex('t_decision_context').insert({
+    decision_key_id: keyId,
+    rationale,
+    alternatives_considered: alternatives,
+    tradeoffs,
+    decided_by_agent_id: agentId,
+    related_task_id: relatedTaskId,
+    related_constraint_id: relatedConstraintId,
+    decision_date: Math.floor(Date.now() / 1000),
+  });
 
-  return result.lastInsertRowid as number;
+  return id;
 }
 
 /**
  * Get decision with context
- *
- * @param db - Database instance
- * @param decisionKey - Decision key
- * @returns Decision with context or null if not found
  */
-export function getDecisionWithContext(db: DatabaseType, decisionKey: string): {
+export async function getDecisionWithContext(
+  adapter: DatabaseAdapter,
+  decisionKey: string
+): Promise<{
   key: string;
   value: string;
   version: string;
@@ -607,61 +400,7 @@ export function getDecisionWithContext(db: DatabaseType, decisionKey: string): {
   layer: string | null;
   decided_by: string | null;
   updated: string;
-  context: {
-    id: number;
-    rationale: string;
-    alternatives_considered: string | null;
-    tradeoffs: string | null;
-    decided_by: string | null;
-    decision_date: string;
-    related_task_id: number | null;
-    related_constraint_id: number | null;
-  }[];
-} | null {
-  // First get the decision
-  const decision = db.prepare(`
-    SELECT
-      k.key,
-      d.value,
-      d.version,
-      CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' ELSE 'draft' END as status,
-      l.name as layer,
-      a.name as decided_by,
-      datetime(d.ts, 'unixepoch') as updated
-    FROM t_decisions d
-    JOIN m_context_keys k ON d.key_id = k.id
-    LEFT JOIN m_layers l ON d.layer_id = l.id
-    LEFT JOIN m_agents a ON d.agent_id = a.id
-    WHERE k.key = ?
-  `).get(decisionKey) as {
-    key: string;
-    value: string;
-    version: string;
-    status: string;
-    layer: string | null;
-    decided_by: string | null;
-    updated: string;
-  } | undefined;
-
-  if (!decision) return null;
-
-  // Get all contexts for this decision
-  const contexts = db.prepare(`
-    SELECT
-      dc.id,
-      dc.rationale,
-      dc.alternatives_considered,
-      dc.tradeoffs,
-      a.name as decided_by,
-      datetime(dc.decision_date, 'unixepoch') as decision_date,
-      dc.related_task_id,
-      dc.related_constraint_id
-    FROM t_decision_context dc
-    JOIN m_context_keys k ON dc.decision_key_id = k.id
-    LEFT JOIN m_agents a ON dc.decided_by_agent_id = a.id
-    WHERE k.key = ?
-    ORDER BY dc.decision_date DESC
-  `).all(decisionKey) as Array<{
+  context: Array<{
     id: number;
     rationale: string;
     alternatives_considered: string | null;
@@ -671,6 +410,44 @@ export function getDecisionWithContext(db: DatabaseType, decisionKey: string): {
     related_task_id: number | null;
     related_constraint_id: number | null;
   }>;
+} | null> {
+  const knex = adapter.getKnex();
+
+  // First get the decision
+  const decision = await knex('t_decisions as d')
+    .join('m_context_keys as k', 'd.key_id', 'k.id')
+    .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
+    .leftJoin('m_agents as a', 'd.agent_id', 'a.id')
+    .where('k.key', decisionKey)
+    .select(
+      'k.key',
+      'd.value',
+      'd.version',
+      knex.raw(`CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' ELSE 'draft' END as status`),
+      'l.name as layer',
+      'a.name as decided_by',
+      knex.raw(`datetime(d.ts, 'unixepoch') as updated`)
+    )
+    .first();
+
+  if (!decision) return null;
+
+  // Get all contexts for this decision
+  const contexts = await knex('t_decision_context as dc')
+    .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
+    .leftJoin('m_agents as a', 'dc.decided_by_agent_id', 'a.id')
+    .where('k.key', decisionKey)
+    .select(
+      'dc.id',
+      'dc.rationale',
+      'dc.alternatives_considered',
+      'dc.tradeoffs',
+      'a.name as decided_by',
+      knex.raw(`datetime(dc.decision_date, 'unixepoch') as decision_date`),
+      'dc.related_task_id',
+      'dc.related_constraint_id'
+    )
+    .orderBy('dc.decision_date', 'desc');
 
   return {
     ...decision,
@@ -680,19 +457,18 @@ export function getDecisionWithContext(db: DatabaseType, decisionKey: string): {
 
 /**
  * List decision contexts with optional filters
- *
- * @param db - Database instance
- * @param filters - Optional filters
- * @returns Array of decision contexts
  */
-export function listDecisionContexts(db: DatabaseType, filters?: {
-  decisionKey?: string;
-  relatedTaskId?: number;
-  relatedConstraintId?: number;
-  decidedBy?: string;
-  limit?: number;
-  offset?: number;
-}): Array<{
+export async function listDecisionContexts(
+  adapter: DatabaseAdapter,
+  filters?: {
+    decisionKey?: string;
+    relatedTaskId?: number;
+    relatedConstraintId?: number;
+    decidedBy?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<Array<{
   id: number;
   decision_key: string;
   rationale: string;
@@ -702,67 +478,70 @@ export function listDecisionContexts(db: DatabaseType, filters?: {
   decision_date: string;
   related_task_id: number | null;
   related_constraint_id: number | null;
-}> {
-  let query = `
-    SELECT
-      dc.id,
-      k.key as decision_key,
-      dc.rationale,
-      dc.alternatives_considered,
-      dc.tradeoffs,
-      a.name as decided_by,
-      datetime(dc.decision_date, 'unixepoch') as decision_date,
-      dc.related_task_id,
-      dc.related_constraint_id
-    FROM t_decision_context dc
-    JOIN m_context_keys k ON dc.decision_key_id = k.id
-    LEFT JOIN m_agents a ON dc.decided_by_agent_id = a.id
-    WHERE 1=1
-  `;
+}>> {
+  const knex = adapter.getKnex();
 
-  const params: any[] = [];
+  let query = knex('t_decision_context as dc')
+    .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
+    .leftJoin('m_agents as a', 'dc.decided_by_agent_id', 'a.id')
+    .select(
+      'dc.id',
+      'k.key as decision_key',
+      'dc.rationale',
+      'dc.alternatives_considered',
+      'dc.tradeoffs',
+      'a.name as decided_by',
+      knex.raw(`datetime(dc.decision_date, 'unixepoch') as decision_date`),
+      'dc.related_task_id',
+      'dc.related_constraint_id'
+    );
 
   if (filters?.decisionKey) {
-    query += ' AND k.key = ?';
-    params.push(filters.decisionKey);
+    query = query.where('k.key', filters.decisionKey);
   }
 
   if (filters?.relatedTaskId !== undefined) {
-    query += ' AND dc.related_task_id = ?';
-    params.push(filters.relatedTaskId);
+    query = query.where('dc.related_task_id', filters.relatedTaskId);
   }
 
   if (filters?.relatedConstraintId !== undefined) {
-    query += ' AND dc.related_constraint_id = ?';
-    params.push(filters.relatedConstraintId);
+    query = query.where('dc.related_constraint_id', filters.relatedConstraintId);
   }
 
   if (filters?.decidedBy) {
-    query += ' AND a.name = ?';
-    params.push(filters.decidedBy);
+    query = query.where('a.name', filters.decidedBy);
   }
 
-  query += ' ORDER BY dc.decision_date DESC';
+  query = query.orderBy('dc.decision_date', 'desc');
 
   if (filters?.limit) {
-    query += ' LIMIT ?';
-    params.push(filters.limit);
+    query = query.limit(filters.limit);
   }
 
   if (filters?.offset) {
-    query += ' OFFSET ?';
-    params.push(filters.offset);
+    query = query.offset(filters.offset);
   }
 
-  return db.prepare(query).all(...params) as Array<{
-    id: number;
-    decision_key: string;
-    rationale: string;
-    alternatives_considered: string | null;
-    tradeoffs: string | null;
-    decided_by: string | null;
-    decision_date: string;
-    related_task_id: number | null;
-    related_constraint_id: number | null;
-  }>;
+  return await query;
 }
+
+/**
+ * Backwards compatibility alias for getAdapter
+ */
+export function getDatabase(): DatabaseAdapter {
+  return getAdapter();
+}
+
+/**
+ * Execute a function within a database transaction
+ */
+export async function transaction<T>(
+  callback: (trx: Knex.Transaction) => Promise<T>
+): Promise<T> {
+  const adapter = getAdapter();
+  const knex = adapter.getKnex();
+  return await knex.transaction(callback);
+}
+
+// Export adapter types for tool functions
+export { DatabaseAdapter };

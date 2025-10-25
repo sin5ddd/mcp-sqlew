@@ -46,13 +46,13 @@ export interface BatchResponse<T = any> {
  * );
  * ```
  */
-export function processBatch<TItem, TResult>(
+export async function processBatch<TItem, TResult>(
   db: Database,
   items: TItem[],
-  processor: (item: TItem, db: Database) => TResult,
+  processor: (item: TItem, db: Database) => TResult | Promise<TResult>,
   atomic: boolean = true,
   maxItems: number = 50
-): BatchResponse<TResult> {
+): Promise<BatchResponse<TResult>> {
   // Validate inputs
   if (!items || !Array.isArray(items)) {
     throw new Error('Items must be an array');
@@ -71,9 +71,9 @@ export function processBatch<TItem, TResult>(
   let failed = 0;
 
   // Helper to process a single item
-  const processSingleItem = (item: TItem): void => {
+  const processSingleItem = async (item: TItem): Promise<void> => {
     try {
-      const data = processor(item, db);
+      const data = await processor(item, db);
       results.push({
         success: true,
         data
@@ -97,9 +97,9 @@ export function processBatch<TItem, TResult>(
   try {
     if (atomic) {
       // Atomic mode: wrap in transaction, all succeed or all fail
-      return transaction(db, () => {
+      return await transaction(async () => {
         for (const item of items) {
-          processSingleItem(item);
+          await processSingleItem(item);
         }
 
         return {
@@ -112,7 +112,7 @@ export function processBatch<TItem, TResult>(
     } else {
       // Non-atomic mode: process all, return individual results
       for (const item of items) {
-        processSingleItem(item);
+        await processSingleItem(item);
       }
 
       return {
@@ -164,10 +164,10 @@ export function processBatch<TItem, TResult>(
  * ```
  */
 export function withTransaction<TParams, TResult>(
-  internalFn: (params: TParams, db: Database) => TResult,
+  internalFn: (params: TParams, db: Database) => TResult | Promise<TResult>,
   errorPrefix: string = 'Operation failed'
-): (params: TParams) => TResult {
-  return (params: TParams): TResult => {
+): (params: TParams) => Promise<TResult> {
+  return async (params: TParams): Promise<TResult> => {
     // Note: getDatabase() must be imported where this is used
     // We can't import it here to avoid circular dependencies
     const db = (global as any).__database;
@@ -176,7 +176,7 @@ export function withTransaction<TParams, TResult>(
     }
 
     try {
-      return transaction(db, () => internalFn(params, db));
+      return await transaction(async () => await internalFn(params, db));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`${errorPrefix}: ${message}`);

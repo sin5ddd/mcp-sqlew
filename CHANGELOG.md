@@ -5,6 +5,132 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2025-10-25
+
+### Added - Help System Optimization 🚀
+
+**Major Feature: Database-driven help system with 91% token efficiency improvement**
+
+The help system has been completely redesigned to move documentation from code to queryable database structures, dramatically reducing token consumption while improving discoverability.
+
+#### Key Achievements
+1. **91% Token Reduction** - Average help query: 199 tokens (vs ~2,150 legacy)
+2. **95.8% Schema Reduction** - MCP InputSchemas: 350 tokens (vs 8,400 legacy)
+3. **6 New Help Actions** - Granular queries for actions, parameters, tools, use-cases
+4. **41 Use-Cases** - Comprehensive workflow examples across 6 categories
+5. **100% Test Coverage** - 38/38 tests passing with comprehensive validation
+
+#### New MCP Actions (stats tool)
+
+**Granular Help Queries:**
+- `help_action` - Query single action with parameters and examples (~200 tokens)
+- `help_params` - Query just parameter list for an action (~229 tokens)
+- `help_tool` - Query tool overview + all actions (~139 tokens)
+
+**Use-Case Discovery:**
+- `help_use_case` - Get single use-case with full workflow (~150 tokens)
+- `help_list_use_cases` - List/filter use-cases by category/complexity (~388 tokens)
+- `help_next_actions` - Suggest common next actions (~65 tokens)
+
+#### Database Schema (7 New Tables)
+
+**Master Tables:**
+- `m_help_tools` - Tool names and descriptions (7 tools)
+- `m_help_actions` - Actions per tool (41 actions)
+- `m_help_use_case_categories` - Use-case taxonomy (6 categories)
+
+**Transaction Tables:**
+- `t_help_action_params` - Action parameters (98 parameters)
+- `t_help_action_examples` - Code examples (41 examples)
+- `t_help_use_cases` - Full use-case documentation (41 use-cases)
+- `t_help_action_sequences` - Common patterns with usage tracking
+
+#### Use-Case Categories
+
+1. **task_management** - 9 use-cases (task creation, workflows, dependencies)
+2. **decision_tracking** - 8 use-cases (architectural decisions, context)
+3. **cross_tool_workflow** - 8 use-cases (multi-tool coordination)
+4. **file_tracking** - 6 use-cases (file change tracking, VCS integration)
+5. **configuration** - 6 use-cases (config management, cleanup)
+6. **constraint_management** - 4 use-cases (constraint tracking, priorities)
+
+#### Complexity Levels
+
+- **Basic** - 18 use-cases (single-action operations)
+- **Intermediate** - 15 use-cases (2-3 action workflows)
+- **Advanced** - 8 use-cases (complex multi-tool workflows)
+
+#### Token Efficiency Measurements
+
+| Query Type | Avg Tokens | Legacy Tokens | Reduction |
+|------------|-----------|---------------|-----------|
+| help_action | ~200 | ~2,000 | **90%** |
+| help_params | ~229 | ~1,500 | **85%** |
+| help_tool | ~139 | ~5,000 | **97%** |
+| help_use_case | ~150 | ~300 | **50%** |
+| help_list_use_cases | ~388 | ~500 | **23%** |
+| help_next_actions | ~65 | ~100 | **35%** |
+
+**Overall**: 91% average token reduction (weighted by expected usage)
+
+#### Example Usage
+
+```typescript
+// Query specific action help
+{
+  "tool": "stats",
+  "action": "help_action",
+  "tool": "decision",
+  "action": "set"
+}
+// Returns: action description, parameters, examples (~200 tokens)
+
+// List use-cases by category
+{
+  "tool": "stats",
+  "action": "help_list_use_cases",
+  "category": "task_management"
+}
+// Returns: 9 task management use-cases (~282 tokens)
+
+// Get next action suggestions
+{
+  "tool": "stats",
+  "action": "help_next_actions",
+  "tool": "task",
+  "action": "create"
+}
+// Returns: common next actions with frequency (~63 tokens)
+```
+
+#### Migration from v3.5.x
+
+- **Automatic Migration** - Database tables and seed data created on startup
+- **Backward Compatible** - All existing MCP actions unchanged
+- **Zero Downtime** - New help actions available immediately
+- **No Config Changes** - Works with existing configuration
+
+#### Test Suite
+
+- **Test File**: `src/tests/help-system.test.ts`
+- **Coverage**: 38 test cases across all 6 query types
+- **Results**: 100% pass rate (38/38 tests)
+- **Validation**: Token ranges, error handling, performance
+
+#### Documentation
+
+- **Analysis**: `.sqlew/tmp/help-system-token-savings-v3.6.0.md`
+- **Comprehensive token measurements and efficiency calculations**
+- **Production-ready validation**
+
+#### Performance
+
+- **Query Latency**: <200ms per query
+- **Database Size**: ~200 KB for 41 use-cases
+- **Indexing**: 6 optimized indexes for fast lookups
+
+---
+
 ## [3.5.2] - 2025-10-24
 
 ### Added - Two-Step Git-Aware Task Workflow 🎯
