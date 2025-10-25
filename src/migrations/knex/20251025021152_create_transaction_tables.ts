@@ -162,6 +162,8 @@ export async function up(knex: Knex): Promise<void> {
     table.integer('priority').defaultTo(2);
     table.integer('assigned_agent_id');
     table.foreign('assigned_agent_id').references('m_agents.id');
+    table.integer('created_by_agent_id');
+    table.foreign('created_by_agent_id').references('m_agents.id');
     table.integer('layer_id');
     table.foreign('layer_id').references('m_layers.id');
     table.integer('created_ts').notNullable();

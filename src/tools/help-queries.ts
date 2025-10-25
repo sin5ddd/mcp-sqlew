@@ -103,16 +103,16 @@ interface HelpNextActionsResult {
  * Query single action with parameters and examples
  * Target: ~50-100 tokens (vs ~2,000 legacy)
  */
-export function queryHelpAction(adapter: DatabaseAdapter, tool: string, action: string): HelpActionResult | { error: string; available_actions?: string[] } {
+export function queryHelpAction(adapter: DatabaseAdapter, targetTool: string, targetAction: string): HelpActionResult | { error: string; available_actions?: string[] } {
   const db = getRawDb(adapter);
   try {
     // First, check if tool exists
-    const toolExists = db.prepare('SELECT tool_name FROM m_help_tools WHERE tool_name = ?').get(tool);
+    const toolExists = db.prepare('SELECT tool_name FROM m_help_tools WHERE tool_name = ?').get(targetTool);
     if (!toolExists) {
       const availableTools = db.prepare('SELECT tool_name FROM m_help_tools ORDER BY tool_name').all()
         .map((row: any) => row.tool_name);
       return {
-        error: `Tool "${tool}" not found`,
+        error: `Tool "${targetTool}" not found`,
         available_actions: availableTools
       };
     }
@@ -122,14 +122,14 @@ export function queryHelpAction(adapter: DatabaseAdapter, tool: string, action: 
       SELECT action_id, action_name, description
       FROM m_help_actions
       WHERE tool_name = ? AND action_name = ?
-    `).get(tool, action) as { action_id: number; action_name: string; description: string } | undefined;
+    `).get(targetTool, targetAction) as { action_id: number; action_name: string; description: string } | undefined;
 
     if (!actionRow) {
       const availableActions = db.prepare(`
         SELECT action_name FROM m_help_actions WHERE tool_name = ? ORDER BY action_name
-      `).all(tool).map((row: any) => row.action_name);
+      `).all(targetTool).map((row: any) => row.action_name);
       return {
-        error: `Action "${action}" not found for tool "${tool}"`,
+        error: `Action "${targetAction}" not found for tool "${targetTool}"`,
         available_actions: availableActions
       };
     }
@@ -175,7 +175,7 @@ export function queryHelpAction(adapter: DatabaseAdapter, tool: string, action: 
     }));
 
     return {
-      tool,
+      tool: targetTool,
       action: actionRow.action_name,
       description: actionRow.description,
       parameters,
@@ -192,16 +192,16 @@ export function queryHelpAction(adapter: DatabaseAdapter, tool: string, action: 
  * Query just parameter list for an action
  * Target: ~30-80 tokens (vs ~1,500 legacy)
  */
-export function queryHelpParams(adapter: DatabaseAdapter, tool: string, action: string): HelpParamsResult | { error: string; available_actions?: string[] } {
+export function queryHelpParams(adapter: DatabaseAdapter, targetTool: string, targetAction: string): HelpParamsResult | { error: string; available_actions?: string[] } {
   const db = getRawDb(adapter);
   try {
     // First, check if tool exists
-    const toolExists = db.prepare('SELECT tool_name FROM m_help_tools WHERE tool_name = ?').get(tool);
+    const toolExists = db.prepare('SELECT tool_name FROM m_help_tools WHERE tool_name = ?').get(targetTool);
     if (!toolExists) {
       const availableTools = db.prepare('SELECT tool_name FROM m_help_tools ORDER BY tool_name').all()
         .map((row: any) => row.tool_name);
       return {
-        error: `Tool "${tool}" not found`,
+        error: `Tool "${targetTool}" not found`,
         available_actions: availableTools
       };
     }
@@ -211,14 +211,14 @@ export function queryHelpParams(adapter: DatabaseAdapter, tool: string, action: 
       SELECT action_id
       FROM m_help_actions
       WHERE tool_name = ? AND action_name = ?
-    `).get(tool, action) as { action_id: number } | undefined;
+    `).get(targetTool, targetAction) as { action_id: number } | undefined;
 
     if (!actionRow) {
       const availableActions = db.prepare(`
         SELECT action_name FROM m_help_actions WHERE tool_name = ? ORDER BY action_name
-      `).all(tool).map((row: any) => row.action_name);
+      `).all(targetTool).map((row: any) => row.action_name);
       return {
-        error: `Action "${action}" not found for tool "${tool}"`,
+        error: `Action "${targetAction}" not found for tool "${targetTool}"`,
         available_actions: availableActions
       };
     }
@@ -246,8 +246,8 @@ export function queryHelpParams(adapter: DatabaseAdapter, tool: string, action: 
     }));
 
     return {
-      tool,
-      action,
+      tool: targetTool,
+      action: targetAction,
       parameters
     };
 
@@ -479,7 +479,7 @@ export function queryHelpListUseCases(
  * Analyzes action sequences from use-cases to suggest next steps
  * Target: ~30-50 tokens
  */
-export function queryHelpNextActions(adapter: DatabaseAdapter, tool: string, action: string): HelpNextActionsResult | { error: string } {
+export function queryHelpNextActions(adapter: DatabaseAdapter, targetTool: string, targetAction: string): HelpNextActionsResult | { error: string } {
   const db = getRawDb(adapter);
   try {
     // Verify tool and action exist
@@ -487,10 +487,10 @@ export function queryHelpNextActions(adapter: DatabaseAdapter, tool: string, act
       SELECT action_id
       FROM m_help_actions
       WHERE tool_name = ? AND action_name = ?
-    `).get(tool, action);
+    `).get(targetTool, targetAction);
 
     if (!actionRow) {
-      return { error: `Action "${tool}.${action}" not found in help system` };
+      return { error: `Action "${targetTool}.${targetAction}" not found in help system` };
     }
 
     // Find use-cases containing this action in their sequence
@@ -498,7 +498,7 @@ export function queryHelpNextActions(adapter: DatabaseAdapter, tool: string, act
       SELECT action_sequence, title, complexity
       FROM t_help_use_cases
       WHERE action_sequence LIKE ?
-    `).all(`%"${action}"%`) as Array<{
+    `).all(`%"${targetAction}"%`) as Array<{
       action_sequence: string;
       title: string;
       complexity: string;
@@ -506,8 +506,8 @@ export function queryHelpNextActions(adapter: DatabaseAdapter, tool: string, act
 
     if (useCases.length === 0) {
       return {
-        tool,
-        action,
+        tool: targetTool,
+        action: targetAction,
         next_actions: []
       };
     }
@@ -517,7 +517,7 @@ export function queryHelpNextActions(adapter: DatabaseAdapter, tool: string, act
 
     for (const useCase of useCases) {
       const sequence = JSON.parse(useCase.action_sequence) as string[];
-      const actionIndex = sequence.indexOf(action);
+      const actionIndex = sequence.indexOf(targetAction);
 
       if (actionIndex >= 0 && actionIndex < sequence.length - 1) {
         const nextAction = sequence[actionIndex + 1];
@@ -551,8 +551,8 @@ export function queryHelpNextActions(adapter: DatabaseAdapter, tool: string, act
     });
 
     return {
-      tool,
-      action,
+      tool: targetTool,
+      action: targetAction,
       next_actions
     };
 

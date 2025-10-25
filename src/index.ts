@@ -369,17 +369,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }); break;
           case 'flush': result = flushWAL(); break;
           case 'help_action':
-            if (!params.tool || !params.action) {
-              result = { error: 'Parameters "tool" and "action" are required' };
+            if (!params.target_tool || !params.target_action) {
+              result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpAction(db, params.tool, params.action);
+              result = queryHelpAction(db, params.target_tool, params.target_action);
             }
             break;
           case 'help_params':
-            if (!params.tool || !params.action) {
-              result = { error: 'Parameters "tool" and "action" are required' };
+            if (!params.target_tool || !params.target_action) {
+              result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpParams(db, params.tool, params.action);
+              result = queryHelpParams(db, params.target_tool, params.target_action);
             }
             break;
           case 'help_tool':
@@ -405,10 +405,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             });
             break;
           case 'help_next_actions':
-            if (!params.tool || !params.action) {
-              result = { error: 'Parameters "tool" and "action" are required' };
+            if (!params.target_tool || !params.target_action) {
+              result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpNextActions(db, params.tool, params.action);
+              result = queryHelpNextActions(db, params.target_tool, params.target_action);
             }
             break;
           case 'help':
