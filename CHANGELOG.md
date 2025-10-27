@@ -5,6 +5,44 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.3] - 2025-10-27
+
+### Fixed - Critical Bug Fixes & Git Add Detection
+
+**Transaction pool exhaustion and VCS-aware auto-complete implementation**
+
+#### Bug Fixes
+- **Task Move Transaction Bug** - Fixed `moveTask` using base `knex` instead of transaction `trx` (line 880)
+  - Caused "Knex: Timeout acquiring a connection" errors
+  - Now properly uses transaction object for `logTaskStatusChange`
+- **Task Link Transaction Bug** - Fixed `linkTask` using base `knex` instead of transaction `trx` (line 948)
+  - Same connection pool exhaustion issue
+  - Now properly uses transaction object for decision link insertion
+
+#### Features
+- **Git Add Detection** - Implemented `detectAndCompleteOnStaging()` for VCS-aware workflow
+  - Detects `git add` operations and auto-completes tasks (`waiting_review` → `done`)
+  - Supports Git, Mercurial, and SVN
+  - Configurable via `git_auto_complete_on_stage` and `require_all_files_staged`
+- **VCS Configuration** - Added comprehensive settings documentation to `config.example.toml`
+  - `git_auto_complete_on_stage` (default: true)
+  - `git_auto_archive_on_commit` (default: true)
+  - `require_all_files_staged` (default: true)
+  - `require_all_files_committed_for_archive` (default: true)
+
+#### Infrastructure
+- **Line Ending Fix** - Added `.gitattributes` to enforce LF endings for shell scripts
+  - Prevents CRLF issues in Husky hooks on Windows/WSL
+  - Applies to `*.sh` and `.husky/*` files
+- **Husky Hooks** - Fixed pre-commit/pre-push hooks (added shebang, normalized line endings)
+
+#### Impact
+- ✅ Task operations no longer fail with connection pool timeouts
+- ✅ Git add detection now functional (was stubbed in v3.5.2)
+- ✅ Cross-platform compatibility for git hooks (Windows/WSL/Linux/macOS)
+
+---
+
 ## [3.6.2] - 2025-10-27
 
 ### Changed - Migration System Modernization
