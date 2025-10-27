@@ -20,7 +20,11 @@ const config: { [key: string]: Knex.Config } = {
     },
     useNullAsDefault: true,
     migrations: {
-      directory: path.join(__dirname, 'migrations/knex'),
+      directory: [
+        path.join(__dirname, 'migrations/knex/bootstrap'),
+        path.join(__dirname, 'migrations/knex/upgrades'),
+        path.join(__dirname, 'migrations/knex/enhancements'),
+      ],
       extension: 'ts',
       tableName: 'knex_migrations',
       loadExtensions: ['.ts'],
@@ -49,7 +53,11 @@ const config: { [key: string]: Knex.Config } = {
     },
     useNullAsDefault: true,
     migrations: {
-      directory: path.join(__dirname, 'migrations/knex'),
+      directory: [
+        path.join(__dirname, 'migrations/knex/bootstrap'),
+        path.join(__dirname, 'migrations/knex/upgrades'),
+        path.join(__dirname, 'migrations/knex/enhancements'),
+      ],
       extension: 'ts',
       loadExtensions: ['.ts'],
     },
@@ -68,7 +76,11 @@ const config: { [key: string]: Knex.Config } = {
     },
     useNullAsDefault: true,
     migrations: {
-      directory: path.join(__dirname, 'migrations/knex'),
+      directory: [
+        path.join(__dirname, 'migrations/knex/bootstrap'),
+        path.join(__dirname, 'migrations/knex/upgrades'),
+        path.join(__dirname, 'migrations/knex/enhancements'),
+      ],
       extension: 'js',
       loadExtensions: ['.js'],
     },

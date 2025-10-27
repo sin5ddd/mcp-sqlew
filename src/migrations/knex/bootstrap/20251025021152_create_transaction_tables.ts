@@ -7,7 +7,7 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   // Decisions (String Values)
-  await knex.schema.createTable('t_decisions', (table) => {
+  await knex.schema.createTableIfNotExists('t_decisions', (table) => {
     table.integer('key_id').primary();
     table.foreign('key_id').references('m_context_keys.id');
     table.text('value').notNullable();
@@ -21,7 +21,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Decisions (Numeric Values)
-  await knex.schema.createTable('t_decisions_numeric', (table) => {
+  await knex.schema.createTableIfNotExists('t_decisions_numeric', (table) => {
     table.integer('key_id').primary();
     table.foreign('key_id').references('m_context_keys.id');
     table.double('value').notNullable();
@@ -35,7 +35,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Decision Version History
-  await knex.schema.createTable('t_decision_history', (table) => {
+  await knex.schema.createTableIfNotExists('t_decision_history', (table) => {
     table.increments('id').primary();
     table.integer('key_id');
     table.foreign('key_id').references('m_context_keys.id');
@@ -47,7 +47,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Decision Tagging (Many-to-Many)
-  await knex.schema.createTable('t_decision_tags', (table) => {
+  await knex.schema.createTableIfNotExists('t_decision_tags', (table) => {
     table.integer('decision_key_id');
     table.foreign('decision_key_id').references('m_context_keys.id');
     table.integer('tag_id');
@@ -56,7 +56,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Decision Scopes (Many-to-Many)
-  await knex.schema.createTable('t_decision_scopes', (table) => {
+  await knex.schema.createTableIfNotExists('t_decision_scopes', (table) => {
     table.integer('decision_key_id');
     table.foreign('decision_key_id').references('m_context_keys.id');
     table.integer('scope_id');
@@ -65,7 +65,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Agent Messages
-  await knex.schema.createTable('t_agent_messages', (table) => {
+  await knex.schema.createTableIfNotExists('t_agent_messages', (table) => {
     table.increments('id').primary();
     table.integer('from_agent_id');
     table.foreign('from_agent_id').references('m_agents.id');
@@ -80,7 +80,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // File Change Tracking
-  await knex.schema.createTable('t_file_changes', (table) => {
+  await knex.schema.createTableIfNotExists('t_file_changes', (table) => {
     table.increments('id').primary();
     table.integer('file_id');
     table.foreign('file_id').references('m_files.id');
@@ -94,7 +94,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Constraints
-  await knex.schema.createTable('t_constraints', (table) => {
+  await knex.schema.createTableIfNotExists('t_constraints', (table) => {
     table.increments('id').primary();
     table.integer('category_id');
     table.foreign('category_id').references('m_constraint_categories.id');
@@ -109,7 +109,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Constraint Tagging (Many-to-Many)
-  await knex.schema.createTable('t_constraint_tags', (table) => {
+  await knex.schema.createTableIfNotExists('t_constraint_tags', (table) => {
     table.integer('constraint_id');
     table.foreign('constraint_id').references('t_constraints.id');
     table.integer('tag_id');
@@ -118,7 +118,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Activity Log
-  await knex.schema.createTable('t_activity_log', (table) => {
+  await knex.schema.createTableIfNotExists('t_activity_log', (table) => {
     table.increments('id').primary();
     table.integer('agent_id');
     table.foreign('agent_id').references('m_agents.id');
@@ -131,7 +131,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Decision Templates
-  await knex.schema.createTable('t_decision_templates', (table) => {
+  await knex.schema.createTableIfNotExists('t_decision_templates', (table) => {
     table.increments('id').primary();
     table.string('name', 200).unique().notNullable();
     table.text('description');
@@ -140,7 +140,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Decision Context (v3.2.2)
-  await knex.schema.createTable('t_decision_context', (table) => {
+  await knex.schema.createTableIfNotExists('t_decision_context', (table) => {
     table.increments('id').primary();
     table.integer('decision_key_id');
     table.foreign('decision_key_id').references('m_context_keys.id');
@@ -154,7 +154,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Tasks (v3.0.0 Kanban system)
-  await knex.schema.createTable('t_tasks', (table) => {
+  await knex.schema.createTableIfNotExists('t_tasks', (table) => {
     table.increments('id').primary();
     table.string('title', 500).notNullable();
     table.integer('status_id').defaultTo(1); // 1=todo
@@ -172,7 +172,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Task Details
-  await knex.schema.createTable('t_task_details', (table) => {
+  await knex.schema.createTableIfNotExists('t_task_details', (table) => {
     table.integer('task_id').primary();
     table.foreign('task_id').references('t_tasks.id');
     table.text('description');
@@ -182,7 +182,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Task Tagging (Many-to-Many)
-  await knex.schema.createTable('t_task_tags', (table) => {
+  await knex.schema.createTableIfNotExists('t_task_tags', (table) => {
     table.integer('task_id');
     table.foreign('task_id').references('t_tasks.id');
     table.integer('tag_id');
@@ -191,7 +191,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Task-Decision Links
-  await knex.schema.createTable('t_task_decision_links', (table) => {
+  await knex.schema.createTableIfNotExists('t_task_decision_links', (table) => {
     table.integer('task_id');
     table.foreign('task_id').references('t_tasks.id');
     table.integer('decision_key_id');
@@ -200,7 +200,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Task-Constraint Links
-  await knex.schema.createTable('t_task_constraint_links', (table) => {
+  await knex.schema.createTableIfNotExists('t_task_constraint_links', (table) => {
     table.integer('task_id');
     table.foreign('task_id').references('t_tasks.id');
     table.integer('constraint_id');
@@ -209,7 +209,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Task-File Links
-  await knex.schema.createTable('t_task_file_links', (table) => {
+  await knex.schema.createTableIfNotExists('t_task_file_links', (table) => {
     table.integer('task_id');
     table.foreign('task_id').references('t_tasks.id');
     table.integer('file_id');
@@ -220,7 +220,7 @@ export async function up(knex: Knex): Promise<void> {
   // Task Dependencies (v3.2.0) - with CASCADE delete
   // Note: Using raw SQL because Knex doesn't properly generate ON DELETE CASCADE for SQLite
   await knex.raw(`
-    CREATE TABLE t_task_dependencies (
+    CREATE TABLE IF NOT EXISTS t_task_dependencies (
       task_id INTEGER,
       depends_on_task_id INTEGER,
       created_ts INTEGER NOT NULL,

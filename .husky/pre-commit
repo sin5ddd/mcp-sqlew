@@ -1,0 +1,15 @@
+echo "🔍 Running pre-commit checks..."
+
+echo "📦 Building TypeScript..."
+npm run build || {
+  echo "❌ Build failed! Please fix errors before committing."
+  exit 1
+}
+
+echo "🧪 Running tests..."
+npm test || {
+  echo "❌ Tests failed! Please fix failing tests before committing."
+  exit 1
+}
+
+echo "✅ Pre-commit checks passed!"
