@@ -40,6 +40,8 @@ const CONFIG_KEYS = {
   GIT_AUTO_COMPLETE_ENABLED: 'git_auto_complete_enabled',
   REQUIRE_ALL_FILES_COMMITTED: 'require_all_files_committed',
   STALE_REVIEW_NOTIFICATION_HOURS: 'stale_review_notification_hours',
+  GIT_AUTO_COMPLETE_ON_STAGE: 'git_auto_complete_on_stage',
+  REQUIRE_ALL_FILES_STAGED: 'require_all_files_staged',
 } as const;
 
 /**
@@ -315,10 +317,96 @@ export async function detectAndCompleteOnStaging(adapter?: DatabaseAdapter): Pro
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
-  // TODO: Convert this function to use Knex.js
-  // For now, return 0 as this function is not used by tasks.ts
-  console.warn('detectAndCompleteOnStaging not yet fully converted to Knex.js');
-  return 0;
+  // 1. Check if auto-complete on staging is enabled
+  const isEnabled = await getConfigBool(actualAdapter, CONFIG_KEYS.GIT_AUTO_COMPLETE_ON_STAGE, true);
+  if (!isEnabled) {
+    return 0;
+  }
+
+  const requireAllFilesStaged = await getConfigBool(actualAdapter, CONFIG_KEYS.REQUIRE_ALL_FILES_STAGED, true);
+
+  // 2. Find all waiting_review tasks
+  const candidateTasks = await knex('t_tasks as t')
+    .join('m_task_statuses as s', 't.status_id', 's.id')
+    .where('s.name', 'waiting_review')
+    .select('t.id', 't.created_ts') as Array<{ id: number; created_ts: number }>;
+
+  if (candidateTasks.length === 0) {
+    return 0;
+  }
+
+  let completed = 0;
+  const projectRoot = process.cwd();
+
+  // 3. Detect VCS type
+  const vcsAdapter = await detectVCS(projectRoot);
+  if (!vcsAdapter) {
+    // Not a VCS repository - skip VCS-aware completion
+    return 0;
+  }
+
+  // 4. For each candidate task, check if all watched files are staged
+  for (const task of candidateTasks) {
+    try {
+      // Get watched files for this task
+      const watchedFiles = await knex('t_task_file_links as tfl')
+        .join('m_files as f', 'tfl.file_id', 'f.id')
+        .where('tfl.task_id', task.id)
+        .select('f.path') as Array<{ path: string }>;
+
+      if (watchedFiles.length === 0) {
+        // No watched files - skip this task
+        continue;
+      }
+
+      const filePaths = watchedFiles.map(f => f.path);
+
+      // Get staged files from VCS
+      let stagedFiles: Set<string>;
+      try {
+        const stagedFilesList = await vcsAdapter.getStagedFiles();
+        stagedFiles = new Set(stagedFilesList);
+      } catch (error) {
+        // VCS query failed - skip this task
+        console.error(`  ⏸ Task #${task.id}: ${vcsAdapter.getVCSType()} staging query failed - ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+
+      // Check if all watched files are staged
+      const unstagedFiles: string[] = [];
+      for (const filePath of filePaths) {
+        if (!stagedFiles.has(filePath)) {
+          unstagedFiles.push(filePath);
+        }
+      }
+
+      // Determine if task should auto-complete
+      const shouldComplete = requireAllFilesStaged
+        ? unstagedFiles.length === 0  // ALL files must be staged
+        : stagedFiles.size > 0 && unstagedFiles.length < filePaths.length;  // At least SOME files staged
+
+      if (shouldComplete) {
+        // All watched files staged - transition to done
+        const currentTs = Math.floor(Date.now() / 1000);
+        await knex('t_tasks')
+          .where({ id: task.id })
+          .update({
+            status_id: TASK_STATUS.DONE,
+            completed_ts: currentTs,
+            updated_ts: currentTs
+          });
+
+        completed++;
+
+        console.error(`  ✓ Task #${task.id}: waiting_review → done (all ${filePaths.length} watched files staged)`);
+      }
+    } catch (error) {
+      console.error(`  ✗ Error checking task #${task.id} for staged files:`, error);
+      continue;
+    }
+  }
+
+  return completed;
 }
 
 /**

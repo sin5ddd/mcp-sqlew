@@ -877,7 +877,7 @@ export async function moveTask(params: {
       // Note: Using system agent (id=1) for status changes
       // In a real implementation, you'd pass the actual agent_id who made the change
       const systemAgentId = 1;
-      await logTaskStatusChange(knex, {
+      await logTaskStatusChange(trx, {
         task_id: params.task_id,
         old_status: currentStatusId,
         new_status: newStatusId,
@@ -945,7 +945,7 @@ export async function linkTask(params: {
         const keyId = await getOrCreateContextKey(actualAdapter, decisionKey, trx);
         const linkRelation = params.link_relation || 'implements';
 
-        await knex('t_task_decision_links').insert({
+        await trx('t_task_decision_links').insert({
           task_id: params.task_id,
           decision_key_id: keyId,
           link_type: linkRelation

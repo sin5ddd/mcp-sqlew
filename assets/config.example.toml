@@ -82,6 +82,34 @@ stale_hours_waiting_review = 24
 auto_stale_enabled = true
 
 # ============================================================================
+# VCS-Aware Auto-Complete Settings (v3.5.2)
+# ============================================================================
+[vcs]
+# Auto-complete tasks when files are staged (git add)
+# When true: waiting_review → done when files are staged
+# When false: Manual task completion required
+# Default: true
+git_auto_complete_on_stage = true
+
+# Auto-archive tasks when files are committed (git commit)
+# When true: done → archived when files are committed
+# When false: Manual task archiving required
+# Default: true
+git_auto_archive_on_commit = true
+
+# Require ALL watched files to be staged for auto-completion
+# When true: All files must be staged to trigger waiting_review → done
+# When false: At least one file staged is sufficient
+# Default: true
+require_all_files_staged = true
+
+# Require ALL watched files to be committed for auto-archiving
+# When true: All files must be committed to trigger done → archived
+# When false: At least one file committed is sufficient
+# Default: true
+require_all_files_committed_for_archive = true
+
+# ============================================================================
 # Example Configurations
 # ============================================================================
 
