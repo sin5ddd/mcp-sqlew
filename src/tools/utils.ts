@@ -106,7 +106,7 @@ export async function clearOldData(
       }
 
       // Release inactive generic agent slots (24 hours of inactivity)
-      const agentsReleased = await releaseInactiveAgents(actualAdapter, 24);
+      const agentsReleased = await releaseInactiveAgents(actualAdapter, 24, trx);
 
       return {
         success: true,
@@ -502,3 +502,5 @@ export function statsExample(): any {
     }
   };
 }
+
+

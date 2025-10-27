@@ -8,6 +8,14 @@ import knexConfig from './knexfile.js';
 import type { DatabaseAdapter } from './adapters/index.js';
 import { createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
 
+// Built-in Claude Code agent types that should be normalized/pooled
+const BUILTIN_AGENT_TYPES = [
+  'general-purpose',
+  'statusline-setup',
+  'output-style-setup',
+  'Explore'
+];
+
 // Global adapter instance
 let adapterInstance: DatabaseAdapter | null = null;
 
@@ -77,26 +85,34 @@ export async function closeDatabase(): Promise<void> {
 
 /**
  * Determines if an agent name is user-specified (meaningful) or generic
- * User-specified agents are preserved permanently, generic agents can be reused
+ *
+ * Agent Classification:
+ * - System agents: 'system', 'migration-manager' (not reusable, permanently protected)
+ * - Built-in agents: Claude Code default agents like 'Explore' (reusable, normalized)
+ * - User-defined agents: Custom agents like 'rust-architecture-expert' (reusable, exact name preserved)
+ * - Generic pool: Empty names or 'generic-N' pattern (reusable, automatically allocated)
+ *
+ * @returns true if agent should NOT be reusable (system agents only)
  */
 function isUserSpecifiedAgent(name: string): boolean {
-  // Empty names are generic
+  // Empty names use generic pool (reusable)
   if (!name || name.trim().length === 0) {
     return false;
   }
 
-  // Names matching 'generic-N' pattern are generic
-  if (/^generic-\d+$/i.test(name)) {
+  // Core system agents that should NOT be reusable
+  const systemAgents = ['system', 'migration-manager'];
+  if (systemAgents.includes(name.toLowerCase())) {
+    return true;
+  }
+
+  // Built-in Claude Code agents (reusable, normalized)
+  if (BUILTIN_AGENT_TYPES.includes(name)) {
     return false;
   }
 
-  // Names like 'agent-N', 'subagent-N' are generic
-  if (/^(sub)?agent-\d+$/i.test(name)) {
-    return false;
-  }
-
-  // Everything else is user-specified
-  return true;
+  // Everything else (user-defined agents, generic-N patterns) is reusable
+  return false;
 }
 
 /**
@@ -514,10 +530,11 @@ export async function addDecisionContext(
     rationale,
     alternatives_considered: alternatives,
     tradeoffs,
-    decided_by_agent_id: agentId,
+    agent_id: agentId,
     related_task_id: relatedTaskId,
     related_constraint_id: relatedConstraintId,
     decision_date: Math.floor(Date.now() / 1000),
+    ts: Math.floor(Date.now() / 1000),
   });
 
   return id;
@@ -572,7 +589,7 @@ export async function getDecisionWithContext(
   // Get all contexts for this decision
   const contexts = await knex('t_decision_context as dc')
     .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
-    .leftJoin('m_agents as a', 'dc.decided_by_agent_id', 'a.id')
+    .leftJoin('m_agents as a', 'dc.agent_id', 'a.id')
     .where('k.key', decisionKey)
     .select(
       'dc.id',
@@ -620,7 +637,7 @@ export async function listDecisionContexts(
 
   let query = knex('t_decision_context as dc')
     .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
-    .leftJoin('m_agents as a', 'dc.decided_by_agent_id', 'a.id')
+    .leftJoin('m_agents as a', 'dc.agent_id', 'a.id')
     .select(
       'dc.id',
       'k.key as decision_key',

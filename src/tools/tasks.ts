@@ -26,6 +26,7 @@ import {
   logTaskCreate,
   logTaskStatusChange
 } from '../utils/activity-logging.js';
+import { parseStringArray } from '../utils/param-parser.js';
 
 /**
  * Task status enum (matches m_task_statuses)
@@ -122,9 +123,9 @@ async function createTaskInternal(params: {
     assignedAgentId = await getOrCreateAgent(adapter, params.assigned_agent, trx);
   }
 
-  // Default to 'system' if no created_by_agent provided
-  // This ensures the activity log has a valid agent_id
-  const createdBy = params.created_by_agent || 'system';
+  // Default to generic agent pool if no created_by_agent provided
+  // Empty string triggers allocation from generic-N pool
+  const createdBy = params.created_by_agent || '';
   const createdByAgentId = await getOrCreateAgent(adapter, createdBy, trx);
 
   // Insert task
@@ -772,7 +773,9 @@ export async function listTasks(params: {
 
     // Filter by tags
     if (params.tags && params.tags.length > 0) {
-      for (const tag of params.tags) {
+      // Parse tags (handles both arrays and JSON strings from MCP)
+      const tags = parseStringArray(params.tags);
+      for (const tag of tags) {
         query = query.where(params.include_dependency_counts ? 'vt.tags' : 'tags', 'like', `%${tag}%`);
       }
     }
@@ -2242,3 +2245,5 @@ export function taskExample(): any {
     }
   };
 }
+
+

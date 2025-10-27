@@ -3,6 +3,7 @@
  * Calculates cutoff timestamps that skip weekends when configured
  */
 
+import { Knex } from 'knex';
 import { DatabaseAdapter } from '../adapters/index.js';
 import { getConfigBool, getConfigInt } from '../database.js';
 import { CONFIG_KEYS } from '../constants.js';
@@ -173,9 +174,10 @@ export function addBusinessDays(date: Date, days: number): Date {
  */
 export async function releaseInactiveAgents(
   adapter: DatabaseAdapter,
-  inactivityHours: number = 24
+  inactivityHours: number = 24,
+  trx?: Knex.Transaction
 ): Promise<number> {
-  const knex = adapter.getKnex();
+  const knex = trx || adapter.getKnex();
   const now = Math.floor(Date.now() / 1000);
   const cutoffTs = now - (inactivityHours * 3600);
 

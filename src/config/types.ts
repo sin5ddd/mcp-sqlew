@@ -51,6 +51,8 @@ export interface TaskConfig {
 export interface DebugConfig {
   /** Debug log file path (environment variable SQLEW_DEBUG takes precedence) */
   log_path?: string;
+  /** Log level: "error", "warn", "info", "debug" (case-insensitive, default: "info") */
+  log_level?: string;
 }
 
 /**

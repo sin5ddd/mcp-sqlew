@@ -27,6 +27,7 @@
     "clean": "rm -rf dist",
     "rebuild": "npm run clean && npm run build",
     "test": "npm run build && node --test dist/tests/tasks.dependencies.test.js",
+    "test:all-features": "npm run build && node dist/tests/all-features.test.js",
     "test:migrations": "npm run build && node dist/tests/migrations/test-v3.2-migration.js",
     "prepublishOnly": "npm run rebuild",
     "knex": "tsx node_modules/.bin/knex --knexfile src/knexfile.ts",
