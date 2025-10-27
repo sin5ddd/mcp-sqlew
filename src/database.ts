@@ -8,6 +8,14 @@ import knexConfig from './knexfile.js';
 import type { DatabaseAdapter } from './adapters/index.js';
 import { createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
 
+// Built-in Claude Code agent types that should be normalized/pooled
+const BUILTIN_AGENT_TYPES = [
+  'general-purpose',
+  'statusline-setup',
+  'output-style-setup',
+  'Explore'
+];
+
 // Global adapter instance
 let adapterInstance: DatabaseAdapter | null = null;
 
@@ -76,7 +84,43 @@ export async function closeDatabase(): Promise<void> {
 // ============================================================================
 
 /**
- * Get or create agent by name
+ * Determines if an agent name is user-specified (meaningful) or generic
+ *
+ * Agent Classification:
+ * - System agents: 'system', 'migration-manager' (not reusable, permanently protected)
+ * - Built-in agents: Claude Code default agents like 'Explore' (reusable, normalized)
+ * - User-defined agents: Custom agents like 'rust-architecture-expert' (reusable, exact name preserved)
+ * - Generic pool: Empty names or 'generic-N' pattern (reusable, automatically allocated)
+ *
+ * @returns true if agent should NOT be reusable (system agents only)
+ */
+function isUserSpecifiedAgent(name: string): boolean {
+  // Empty names use generic pool (reusable)
+  if (!name || name.trim().length === 0) {
+    return false;
+  }
+
+  // Core system agents that should NOT be reusable
+  const systemAgents = ['system', 'migration-manager'];
+  if (systemAgents.includes(name.toLowerCase())) {
+    return true;
+  }
+
+  // Built-in Claude Code agents (reusable, normalized)
+  if (BUILTIN_AGENT_TYPES.includes(name)) {
+    return false;
+  }
+
+  // Everything else (user-defined agents, generic-N patterns) is reusable
+  return false;
+}
+
+/**
+ * Get or create agent by name with reuse logic
+ *
+ * - Empty/whitespace names: Allocate reusable slot (find inactive or create new generic-N)
+ * - Named generic agents (e.g., 'generic-5', 'agent-123'): Create with exact name, mark reusable
+ * - User-specified agents (e.g., 'rust-expert'): Create permanently, non-reusable
  */
 export async function getOrCreateAgent(
   adapter: DatabaseAdapter,
@@ -84,9 +128,80 @@ export async function getOrCreateAgent(
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
+  const now = Math.floor(Date.now() / 1000);
 
+  // Empty name: allocate a reusable generic slot
+  if (!name || name.trim().length === 0) {
+    // Try to reuse an inactive slot
+    const inactiveSlot = await knex('m_agents')
+      .where({
+        is_reusable: true,
+        in_use: false
+      })
+      .orderBy('id', 'asc')
+      .first();
+
+    if (inactiveSlot) {
+      // Reuse this slot
+      await knex('m_agents')
+        .where({ id: inactiveSlot.id })
+        .update({
+          in_use: true,
+          last_active_ts: now
+        });
+
+      return inactiveSlot.id;
+    } else {
+      // No inactive slots available, create a new generic agent
+      const maxGeneric = await knex('m_agents')
+        .where('name', 'like', 'generic-%')
+        .orderBy('name', 'desc')
+        .first('name');
+
+      let nextNumber = 1;
+      if (maxGeneric && maxGeneric.name) {
+        const match = maxGeneric.name.match(/^generic-(\d+)$/);
+        if (match) {
+          nextNumber = parseInt(match[1], 10) + 1;
+        }
+      }
+
+      const genericName = `generic-${nextNumber}`;
+
+      const [id] = await knex('m_agents').insert({
+        name: genericName,
+        is_reusable: true,
+        in_use: true,
+        last_active_ts: now
+      });
+
+      return id;
+    }
+  }
+
+  // Check if this is a user-specified agent or a named generic agent
+  const isUserSpecified = isUserSpecifiedAgent(name);
+  const isReusable = !isUserSpecified;
+
+  // Named agent: create/get with exact name
   // Try to insert (will be ignored if exists)
-  await knex('m_agents').insert({ name }).onConflict('name').ignore();
+  await knex('m_agents')
+    .insert({
+      name,
+      is_reusable: isReusable,
+      in_use: true,
+      last_active_ts: now
+    })
+    .onConflict('name')
+    .ignore();
+
+  // Update activity timestamp and in_use flag
+  await knex('m_agents')
+    .where({ name })
+    .update({
+      in_use: true,
+      last_active_ts: now
+    });
 
   // Get the ID
   const result = await knex('m_agents').where({ name }).first('id');
@@ -96,6 +211,38 @@ export async function getOrCreateAgent(
   }
 
   return result.id;
+}
+
+/**
+ * Release an agent slot (mark as inactive)
+ * This allows generic agents to be reused
+ */
+export async function releaseAgent(
+  adapter: DatabaseAdapter,
+  agentId: number,
+  trx?: Knex.Transaction
+): Promise<void> {
+  const knex = trx || adapter.getKnex();
+
+  await knex('m_agents')
+    .where({ id: agentId, is_reusable: true })
+    .update({ in_use: false });
+}
+
+/**
+ * Update agent activity timestamp
+ */
+export async function updateAgentActivity(
+  adapter: DatabaseAdapter,
+  agentId: number,
+  trx?: Knex.Transaction
+): Promise<void> {
+  const knex = trx || adapter.getKnex();
+  const now = Math.floor(Date.now() / 1000);
+
+  await knex('m_agents')
+    .where({ id: agentId })
+    .update({ last_active_ts: now });
 }
 
 /**
@@ -383,10 +530,11 @@ export async function addDecisionContext(
     rationale,
     alternatives_considered: alternatives,
     tradeoffs,
-    decided_by_agent_id: agentId,
+    agent_id: agentId,
     related_task_id: relatedTaskId,
     related_constraint_id: relatedConstraintId,
     decision_date: Math.floor(Date.now() / 1000),
+    ts: Math.floor(Date.now() / 1000),
   });
 
   return id;
@@ -441,7 +589,7 @@ export async function getDecisionWithContext(
   // Get all contexts for this decision
   const contexts = await knex('t_decision_context as dc')
     .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
-    .leftJoin('m_agents as a', 'dc.decided_by_agent_id', 'a.id')
+    .leftJoin('m_agents as a', 'dc.agent_id', 'a.id')
     .where('k.key', decisionKey)
     .select(
       'dc.id',
@@ -489,7 +637,7 @@ export async function listDecisionContexts(
 
   let query = knex('t_decision_context as dc')
     .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
-    .leftJoin('m_agents as a', 'dc.decided_by_agent_id', 'a.id')
+    .leftJoin('m_agents as a', 'dc.agent_id', 'a.id')
     .select(
       'dc.id',
       'k.key as decision_key',

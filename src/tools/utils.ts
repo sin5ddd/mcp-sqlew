@@ -19,7 +19,7 @@ import type {
   LayerSummary,
   FlushWALResponse,
 } from '../types.js';
-import { calculateMessageCutoff, calculateFileChangeCutoff } from '../utils/retention.js';
+import { calculateMessageCutoff, calculateFileChangeCutoff, releaseInactiveAgents } from '../utils/retention.js';
 import { cleanupWithCustomRetention } from '../utils/cleanup.js';
 
 /**
@@ -105,11 +105,15 @@ export async function clearOldData(
           .delete();
       }
 
+      // Release inactive generic agent slots (24 hours of inactivity)
+      const agentsReleased = await releaseInactiveAgents(actualAdapter, 24, trx);
+
       return {
         success: true,
         messages_deleted: messagesDeleted,
         file_changes_deleted: fileChangesDeleted,
         activity_logs_deleted: activityLogsDeleted,
+        agents_released: agentsReleased,
       };
     });
   } catch (error) {
@@ -498,3 +502,5 @@ export function statsExample(): any {
     }
   };
 }
+
+

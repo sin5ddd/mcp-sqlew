@@ -22,6 +22,7 @@ import {
 } from '../constants.js';
 import { validateCategory, validatePriority } from '../utils/validators.js';
 import { logConstraintAdd } from '../utils/activity-logging.js';
+import { parseStringArray } from '../utils/param-parser.js';
 import { Knex } from 'knex';
 import type {
   AddConstraintParams,
@@ -81,13 +82,11 @@ export async function addConstraint(
 
     // Use transaction for multi-table insert
     const result = await actualAdapter.transaction(async (trx) => {
-      const knex = actualAdapter.getKnex();
-
       // Get or create category
       const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
 
-      // Get or create created_by agent
-      const createdBy = params.created_by || 'system';
+      // Get or create created_by agent (default to generic pool)
+      const createdBy = params.created_by || '';
       const agentId = await getOrCreateAgent(actualAdapter, createdBy, trx);
 
       // Calculate timestamp
@@ -100,13 +99,15 @@ export async function addConstraint(
         constraint_text: params.constraint_text,
         priority: priority,
         active: SQLITE_TRUE,
-        created_by: agentId,
+        agent_id: agentId,
         ts: ts
       });
 
       // Insert m_tags if provided
       if (params.tags && params.tags.length > 0) {
-        for (const tagName of params.tags) {
+        // Parse tags (handles both arrays and JSON strings from MCP)
+        const tags = parseStringArray(params.tags);
+        for (const tagName of tags) {
           const tagId = await getOrCreateTag(actualAdapter, tagName, trx);
           await trx('t_constraint_tags').insert({
             constraint_id: Number(constraintId),
@@ -116,7 +117,7 @@ export async function addConstraint(
       }
 
       // Activity logging (replaces trigger)
-      await logConstraintAdd(knex, {
+      await logConstraintAdd(trx, {
         constraint_id: Number(constraintId),
         category: params.category,
         constraint_text: params.constraint_text,
@@ -176,8 +177,10 @@ export async function getConstraints(
 
     // Filter by m_tags (OR logic - match ANY tag)
     if (params.tags && params.tags.length > 0) {
+      // Parse tags (handles both arrays and JSON strings from MCP)
+      const tags = parseStringArray(params.tags);
       query = query.where((builder) => {
-        for (const tag of params.tags!) {
+        for (const tag of tags) {
           builder.orWhere('tags', 'like', `%${tag}%`);
         }
       });
@@ -420,3 +423,5 @@ export function constraintExample(): any {
     }
   };
 }
+
+

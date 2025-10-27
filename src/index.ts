@@ -24,6 +24,7 @@ import { FileWatcher } from './watcher/index.js';
 import { trackAndReturnHelp } from './utils/help-tracking.js';
 import { queryHelpAction, queryHelpParams, queryHelpTool, queryHelpUseCase, queryHelpListUseCases, queryHelpNextActions } from './tools/help-queries.js';
 import { initDebugLogger, closeDebugLogger, debugLog, debugLogToolCall, debugLogToolResponse, debugLogError } from './utils/debug-logger.js';
+import { handleToolError, handleInitializationError, setupGlobalErrorHandlers } from './utils/error-handler.js';
 import { ensureSqlewDirectory } from './config/example-generator.js';
 
 // Parse command-line arguments
@@ -100,14 +101,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 Context Management - Store decisions with metadata (tags, layers, versions, scopes)
 
 Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.`,
+Use action: "example" for comprehensive usage examples.
+Use action: "use_case" for practical scenarios and when-to-use guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'add_decision_context', 'list_decision_contexts', 'help', 'example']
+              enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'add_decision_context', 'list_decision_contexts', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -120,14 +122,15 @@ Use action: "example" for comprehensive usage examples.`,
 Agent Messaging - Send messages between agents with priority levels and read tracking
 
 Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.`,
+Use action: "example" for comprehensive usage examples.
+Use action: "use_case" for practical scenarios and when-to-use guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['send', 'get', 'mark_read', 'send_batch', 'help', 'example']
+              enum: ['send', 'get', 'mark_read', 'send_batch', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -140,14 +143,15 @@ Use action: "example" for comprehensive usage examples.`,
 File Change Tracking - Track file changes with layer classification and lock detection
 
 Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.`,
+Use action: "example" for comprehensive usage examples.
+Use action: "use_case" for practical scenarios and when-to-use guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['record', 'get', 'check_lock', 'record_batch', 'help', 'example']
+              enum: ['record', 'get', 'check_lock', 'record_batch', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -160,14 +164,15 @@ Use action: "example" for comprehensive usage examples.`,
 Constraint Management - Manage architectural rules and requirements
 
 Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.`,
+Use action: "example" for comprehensive usage examples.
+Use action: "use_case" for practical scenarios and when-to-use guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['add', 'get', 'deactivate', 'help', 'example']
+              enum: ['add', 'get', 'deactivate', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -180,14 +185,15 @@ Use action: "example" for comprehensive usage examples.`,
 Statistics & Utilities - View stats, activity logs, manage data cleanup, and WAL checkpoints
 
 Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.`,
+Use action: "example" for comprehensive usage examples.
+Use action: "use_case" for practical scenarios and when-to-use guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'flush', 'help_action', 'help_params', 'help_tool', 'help_use_case', 'help_list_use_cases', 'help_next_actions', 'help', 'example']
+              enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'flush', 'help_action', 'help_params', 'help_tool', 'help_use_case', 'help_list_use_cases', 'help_next_actions', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -200,14 +206,15 @@ Use action: "example" for comprehensive usage examples.`,
 Configuration - Manage auto-deletion settings with weekend-aware retention
 
 Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.`,
+Use action: "example" for comprehensive usage examples.
+Use action: "use_case" for practical scenarios and when-to-use guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['get', 'update', 'help', 'example']
+              enum: ['get', 'update', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -220,14 +227,15 @@ Use action: "example" for comprehensive usage examples.`,
 Kanban Task Watcher - AI-optimized task management with auto-stale detection
 
 Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.`,
+Use action: "example" for comprehensive usage examples.
+Use action: "use_case" for practical scenarios and when-to-use guidance.`,
         inputSchema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               description: 'Action',
-              enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'add_dependency', 'remove_dependency', 'get_dependencies', 'watch_files', 'watcher', 'help', 'example']
+              enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'add_dependency', 'remove_dependency', 'get_dependencies', 'watch_files', 'watcher', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -252,14 +260,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case 'decision':
         switch (params.action) {
-          case 'set': result = setDecision(params); break;
-          case 'get': result = getDecision(params); break;
-          case 'list': result = getContext(params); break;
-          case 'search_tags': result = searchByTags({ tags: params.tags, match_mode: params.tag_match, status: params.status, layer: params.layer }); break;
-          case 'search_layer': result = searchByLayer({ layer: params.layer, status: params.status, include_tags: params.include_tags }); break;
-          case 'versions': result = getVersions(params); break;
-          case 'quick_set': result = quickSetDecision(params); break;
-          case 'search_advanced': result = searchAdvanced({
+          case 'set': result = await setDecision(params); break;
+          case 'get': result = await getDecision(params); break;
+          case 'list': result = await getContext(params); break;
+          case 'search_tags': result = await searchByTags({ tags: params.tags, match_mode: params.tag_match, status: params.status, layer: params.layer }); break;
+          case 'search_layer': result = await searchByLayer({ layer: params.layer, status: params.status, include_tags: params.include_tags }); break;
+          case 'versions': result = await getVersions(params); break;
+          case 'quick_set': result = await quickSetDecision(params); break;
+          case 'search_advanced': result = await searchAdvanced({
             layers: params.layers,
             tags_all: params.tags_all,
             tags_any: params.tags_any,
@@ -275,14 +283,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             limit: params.limit,
             offset: params.offset
           }); break;
-          case 'set_batch': result = setDecisionBatch({ decisions: params.decisions, atomic: params.atomic }); break;
-          case 'has_updates': result = hasUpdates({ agent_name: params.agent_name, since_timestamp: params.since_timestamp }); break;
-          case 'set_from_template': result = setFromTemplate(params); break;
-          case 'create_template': result = createTemplate(params); break;
-          case 'list_templates': result = listTemplates(params); break;
-          case 'hard_delete': result = hardDeleteDecision(params); break;
-          case 'add_decision_context': result = addDecisionContextAction(params); break;
-          case 'list_decision_contexts': result = listDecisionContextsAction(params); break;
+          case 'set_batch': result = await setDecisionBatch({ decisions: params.decisions, atomic: params.atomic }); break;
+          case 'has_updates': result = await hasUpdates({ agent_name: params.agent_name, since_timestamp: params.since_timestamp }); break;
+          case 'set_from_template': result = await setFromTemplate(params); break;
+          case 'create_template': result = await createTemplate(params); break;
+          case 'list_templates': result = await listTemplates(params); break;
+          case 'hard_delete': result = await hardDeleteDecision(params); break;
+          case 'add_decision_context': result = await addDecisionContextAction(params); break;
+          case 'list_decision_contexts': result = await listDecisionContextsAction(params); break;
           case 'help':
             const helpContent = decisionHelp();
             trackAndReturnHelp('decision', 'help', JSON.stringify(helpContent));
@@ -293,16 +301,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             trackAndReturnHelp('decision', 'example', JSON.stringify(exampleContent));
             result = exampleContent;
             break;
+          case 'use_case':
+            result = await queryHelpListUseCases(getAdapter(), {
+              category: params.category,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
+            break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
 
       case 'message':
         switch (params.action) {
-          case 'send': result = sendMessage(params); break;
-          case 'get': result = getMessages(params); break;
-          case 'mark_read': result = markRead(params); break;
-          case 'send_batch': result = sendMessageBatch({ messages: params.messages, atomic: params.atomic }); break;
+          case 'send': result = await sendMessage(params); break;
+          case 'get': result = await getMessages(params); break;
+          case 'mark_read': result = await markRead(params); break;
+          case 'send_batch': result = await sendMessageBatch({ messages: params.messages, atomic: params.atomic }); break;
           case 'help':
             const msgHelpContent = messageHelp();
             trackAndReturnHelp('message', 'help', JSON.stringify(msgHelpContent));
@@ -313,16 +329,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             trackAndReturnHelp('message', 'example', JSON.stringify(msgExampleContent));
             result = msgExampleContent;
             break;
+          case 'use_case':
+            result = await queryHelpListUseCases(getAdapter(), {
+              category: params.category,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
+            break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
 
       case 'file':
         switch (params.action) {
-          case 'record': result = recordFileChange(params); break;
-          case 'get': result = getFileChanges(params); break;
-          case 'check_lock': result = checkFileLock(params); break;
-          case 'record_batch': result = recordFileChangeBatch({ file_changes: params.file_changes, atomic: params.atomic }); break;
+          case 'record': result = await recordFileChange(params); break;
+          case 'get': result = await getFileChanges(params); break;
+          case 'check_lock': result = await checkFileLock(params); break;
+          case 'record_batch': result = await recordFileChangeBatch({ file_changes: params.file_changes, atomic: params.atomic }); break;
           case 'help':
             const fileHelpContent = fileHelp();
             trackAndReturnHelp('file', 'help', JSON.stringify(fileHelpContent));
@@ -333,15 +357,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             trackAndReturnHelp('file', 'example', JSON.stringify(fileExampleContent));
             result = fileExampleContent;
             break;
+          case 'use_case':
+            result = await queryHelpListUseCases(getAdapter(), {
+              category: params.category,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
+            break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
 
       case 'constraint':
         switch (params.action) {
-          case 'add': result = addConstraint(params); break;
-          case 'get': result = getConstraints(params); break;
-          case 'deactivate': result = deactivateConstraint(params); break;
+          case 'add': result = await addConstraint(params); break;
+          case 'get': result = await getConstraints(params); break;
+          case 'deactivate': result = await deactivateConstraint(params); break;
           case 'help':
             const constraintHelpContent = constraintHelp();
             trackAndReturnHelp('constraint', 'help', JSON.stringify(constraintHelpContent));
@@ -352,6 +384,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             trackAndReturnHelp('constraint', 'example', JSON.stringify(constraintExampleContent));
             result = constraintExampleContent;
             break;
+          case 'use_case':
+            result = await queryHelpListUseCases(getAdapter(), {
+              category: params.category,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
+            break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
@@ -360,44 +400,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         switch (params.action) {
           case 'layer_summary': result = await getLayerSummary(); break;
           case 'db_stats': result = await getStats(); break;
-          case 'clear': result = clearOldData(params); break;
-          case 'activity_log': result = getActivityLog({
+          case 'clear': result = await clearOldData(params); break;
+          case 'activity_log': result = await getActivityLog({
             since: params.since,
             agent_names: params.agent_names,
             actions: params.actions,
             limit: params.limit,
           }); break;
-          case 'flush': result = flushWAL(); break;
+          case 'flush': result = await flushWAL(); break;
           case 'help_action':
             if (!params.target_tool || !params.target_action) {
               result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpAction(getAdapter(), params.target_tool, params.target_action);
+              result = await queryHelpAction(getAdapter(), params.target_tool, params.target_action);
             }
             break;
           case 'help_params':
             if (!params.target_tool || !params.target_action) {
               result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpParams(getAdapter(), params.target_tool, params.target_action);
+              result = await queryHelpParams(getAdapter(), params.target_tool, params.target_action);
             }
             break;
           case 'help_tool':
             if (!params.tool) {
               result = { error: 'Parameter "tool" is required' };
             } else {
-              result = queryHelpTool(getAdapter(), params.tool);
+              result = await queryHelpTool(getAdapter(), params.tool);
             }
             break;
           case 'help_use_case':
             if (!params.use_case_id) {
               result = { error: 'Parameter "use_case_id" is required' };
             } else {
-              result = queryHelpUseCase(getAdapter(), params.use_case_id);
+              result = await queryHelpUseCase(getAdapter(), params.use_case_id);
             }
             break;
           case 'help_list_use_cases':
-            result = queryHelpListUseCases(getAdapter(), {
+            result = await queryHelpListUseCases(getAdapter(), {
               category: params.category,
               complexity: params.complexity,
               limit: params.limit,
@@ -408,7 +448,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!params.target_tool || !params.target_action) {
               result = { error: 'Parameters "target_tool" and "target_action" are required' };
             } else {
-              result = queryHelpNextActions(getAdapter(), params.target_tool, params.target_action);
+              result = await queryHelpNextActions(getAdapter(), params.target_tool, params.target_action);
             }
             break;
           case 'help':
@@ -421,14 +461,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             trackAndReturnHelp('stats', 'example', JSON.stringify(statsExampleContent));
             result = statsExampleContent;
             break;
+          case 'use_case':
+            result = await queryHelpListUseCases(getAdapter(), {
+              category: params.category,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
+            break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
 
       case 'config':
         switch (params.action) {
-          case 'get': result = getConfig(); break;
-          case 'update': result = updateConfig(params); break;
+          case 'get': result = await getConfig(); break;
+          case 'update': result = await updateConfig(params); break;
           case 'help':
             const configHelpContent = configHelp();
             trackAndReturnHelp('config', 'help', JSON.stringify(configHelpContent));
@@ -438,6 +486,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const configExampleContent = configExample();
             trackAndReturnHelp('config', 'example', JSON.stringify(configExampleContent));
             result = configExampleContent;
+            break;
+          case 'use_case':
+            result = await queryHelpListUseCases(getAdapter(), {
+              category: params.category,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
             break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
@@ -470,6 +526,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             trackAndReturnHelp('task', 'example', JSON.stringify(taskExampleContent));
             result = taskExampleContent;
             break;
+          case 'use_case':
+            result = await queryHelpListUseCases(getAdapter(), {
+              category: params.category,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
+            break;
           default: throw new Error(`Unknown action: ${params.action}`);
         }
         break;
@@ -485,46 +549,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-
-    // Debug logging: Error
-    debugLogError(`Tool ${name}.${action}`, error);
-    debugLogToolResponse(name, action, false, undefined, { message });
+    // Use centralized error handler
+    const { message, stack } = handleToolError(name, action, error, params);
+    debugLogToolResponse(name, action, false, undefined, { message, stack });
 
     return {
-      content: [{ type: 'text', text: JSON.stringify({ error: message }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ error: message, stack: stack }, null, 2) }],
       isError: true,
     };
   }
 });
 
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.error('\n✓ Shutting down MCP server...');
-  debugLog('INFO', 'Received SIGINT, shutting down gracefully');
+// Setup centralized global error handlers
+setupGlobalErrorHandlers(() => {
+  debugLog('INFO', 'Shutting down gracefully');
   try {
     const watcher = FileWatcher.getInstance();
-    await watcher.stop();
+    watcher.stop();
   } catch (error) {
     // Ignore watcher errors during shutdown
   }
   closeDatabase();
   closeDebugLogger();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.error('\n✓ Shutting down MCP server...');
-  debugLog('INFO', 'Received SIGTERM, shutting down gracefully');
-  try {
-    const watcher = FileWatcher.getInstance();
-    await watcher.stop();
-  } catch (error) {
-    // Ignore watcher errors during shutdown
-  }
-  closeDatabase();
-  closeDebugLogger();
-  process.exit(0);
 });
 
 // Start server with stdio transport
@@ -563,10 +609,12 @@ async function main() {
 
     // Initialize debug logger (priority: CLI arg > environment variable > config file)
     const debugLogPath = parsedArgs.debugLogPath || process.env.SQLEW_DEBUG || fileConfig.debug?.log_path;
-    initDebugLogger(debugLogPath);
+    const debugLogLevel = fileConfig.debug?.log_level || 'info';
+    initDebugLogger(debugLogPath, debugLogLevel);
     debugLog('INFO', 'MCP Shared Context Server initialized', {
       dbPath,
-      autoDeleteConfig: { messageHours, fileHistoryDays, ignoreWeekend }
+      autoDeleteConfig: { messageHours, fileHistoryDays, ignoreWeekend },
+      debugLogLevel: debugLogLevel
     });
 
     // 2. Connect MCP server
@@ -583,14 +631,21 @@ async function main() {
       console.error('  (Auto task tracking will be disabled)');
     }
   } catch (error) {
-    console.error('✗ Failed to initialize database:', error);
+    // Use centralized initialization error handler
+    handleInitializationError(error);
+
     closeDatabase();
+    closeDebugLogger();
     process.exit(1);
   }
 }
 
 main().catch((error) => {
-  console.error('✗ Fatal error:', error);
+  // Use centralized initialization error handler
+  console.error('\n❌ FATAL ERROR:');
+  handleInitializationError(error);
+
   closeDatabase();
+  closeDebugLogger();
   process.exit(1);
 });

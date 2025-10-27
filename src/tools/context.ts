@@ -22,7 +22,17 @@ import { processBatch } from '../utils/batch.js';
 import { validateRequired, validateStatus, validateLayer } from '../utils/validators.js';
 import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
 import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../utils/activity-logging.js';
+import { parseStringArray } from '../utils/param-parser.js';
 import { Knex } from 'knex';
+import {
+  debugLogFunctionEntry,
+  debugLogFunctionExit,
+  debugLogTransaction,
+  debugLogQuery,
+  debugLogValidation,
+  debugLogJSON,
+  debugLogCriticalError
+} from '../utils/debug-logger.js';
 import type {
   SetDecisionParams,
   GetContextParams,
@@ -130,11 +140,20 @@ async function setDecisionInternal(
     ts: ts
   };
 
-  await adapter.upsert(
-    tableName,
-    decisionData,
-    ['key_id']
+  // Use transaction-aware upsert instead of adapter.upsert to avoid connection pool timeout
+  const conflictColumns = ['key_id'];
+  const updateColumns = Object.keys(decisionData).filter(
+    key => !conflictColumns.includes(key)
   );
+  const updateData = updateColumns.reduce((acc, col) => {
+    acc[col] = decisionData[col as keyof typeof decisionData];
+    return acc;
+  }, {} as Record<string, any>);
+
+  await knex(tableName)
+    .insert(decisionData)
+    .onConflict(conflictColumns)
+    .merge(updateData);
 
   // Activity logging (replaces triggers)
   if (existingDecision) {
@@ -170,11 +189,14 @@ async function setDecisionInternal(
 
   // Handle m_tags (many-to-many)
   if (params.tags && params.tags.length > 0) {
+    // Parse tags (handles both arrays and JSON strings from MCP)
+    const tags = parseStringArray(params.tags);
+
     // Clear existing tags
     await knex('t_decision_tags').where({ decision_key_id: keyId }).delete();
 
     // Insert new tags
-    for (const tagName of params.tags) {
+    for (const tagName of tags) {
       const tagId = await getOrCreateTag(adapter, tagName, trx);
       await knex('t_decision_tags').insert({ decision_key_id: keyId, tag_id: tagId });
     }
@@ -182,11 +204,14 @@ async function setDecisionInternal(
 
   // Handle m_scopes (many-to-many)
   if (params.scopes && params.scopes.length > 0) {
+    // Parse scopes (handles both arrays and JSON strings from MCP)
+    const scopes = parseStringArray(params.scopes);
+
     // Clear existing scopes
     await knex('t_decision_scopes').where({ decision_key_id: keyId }).delete();
 
     // Insert new scopes
-    for (const scopeName of params.scopes) {
+    for (const scopeName of scopes) {
       const scopeId = await getOrCreateScope(adapter, scopeName, trx);
       await knex('t_decision_scopes').insert({ decision_key_id: keyId, scope_id: scopeId });
     }
@@ -214,15 +239,30 @@ export async function setDecision(
   params: SetDecisionParams,
   adapter?: DatabaseAdapter
 ): Promise<SetDecisionResponse> {
+  debugLogFunctionEntry('setDecision', params);
   const actualAdapter = adapter ?? getAdapter();
 
   try {
+    debugLogTransaction('START', 'setDecision');
+
     // Use transaction for atomicity
-    return await actualAdapter.transaction(async (trx) => {
-      return await setDecisionInternal(params, actualAdapter, trx);
+    const result = await actualAdapter.transaction(async (trx) => {
+      debugLogTransaction('COMMIT', 'setDecision-transaction-begin');
+      const internalResult = await setDecisionInternal(params, actualAdapter, trx);
+      debugLogTransaction('COMMIT', 'setDecision-transaction-end');
+      return internalResult;
     });
+
+    debugLogFunctionExit('setDecision', true, result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    debugLogCriticalError('setDecision', error, {
+      function: 'setDecision',
+      params
+    });
+    debugLogTransaction('ROLLBACK', 'setDecision');
+    debugLogFunctionExit('setDecision', false, undefined, error);
     throw new Error(`Failed to set decision: ${message}`);
   }
 }
@@ -397,19 +437,22 @@ export async function searchByTags(
   }
 
   try {
+    // Parse tags (handles both arrays and JSON strings from MCP)
+    const tags = parseStringArray(params.tags);
+
     const matchMode = params.match_mode || 'OR';
     let query = knex('v_tagged_decisions');
 
     // Apply tag filtering based on match mode
     if (matchMode === 'AND') {
       // All tags must be present
-      for (const tag of params.tags) {
+      for (const tag of tags) {
         query = query.where('tags', 'like', `%${tag}%`);
       }
     } else if (matchMode === 'OR') {
       // Any tag must be present
       query = query.where((builder) => {
-        for (const tag of params.tags) {
+        for (const tag of tags) {
           builder.orWhere('tags', 'like', `%${tag}%`);
         }
       });
@@ -801,7 +844,9 @@ export async function searchAdvanced(
 
     // Filter by tags_all (AND relationship - must have ALL tags)
     if (params.tags_all && params.tags_all.length > 0) {
-      for (const tag of params.tags_all) {
+      // Parse tags (handles both arrays and JSON strings from MCP)
+      const tagsAll = parseStringArray(params.tags_all);
+      for (const tag of tagsAll) {
         query = query.where((builder) => {
           builder.where('tags', 'like', `%${tag}%`).orWhere('tags', tag);
         });
@@ -810,7 +855,8 @@ export async function searchAdvanced(
 
     // Filter by tags_any (OR relationship - must have ANY tag)
     if (params.tags_any && params.tags_any.length > 0) {
-      const tagsAny = params.tags_any; // Capture for closure
+      // Parse tags (handles both arrays and JSON strings from MCP)
+      const tagsAny = parseStringArray(params.tags_any);
       query = query.where((builder) => {
         for (const tag of tagsAny) {
           builder.orWhere('tags', 'like', `%${tag}%`).orWhere('tags', tag);
@@ -820,7 +866,9 @@ export async function searchAdvanced(
 
     // Exclude tags
     if (params.exclude_tags && params.exclude_tags.length > 0) {
-      for (const tag of params.exclude_tags) {
+      // Parse tags (handles both arrays and JSON strings from MCP)
+      const excludeTags = parseStringArray(params.exclude_tags);
+      for (const tag of excludeTags) {
         query = query.where((builder) => {
           builder.whereNull('tags')
             .orWhere((subBuilder) => {
@@ -833,7 +881,8 @@ export async function searchAdvanced(
 
     // Filter by scopes with wildcard support
     if (params.scopes && params.scopes.length > 0) {
-      const scopes = params.scopes; // Capture for closure
+      // Parse scopes (handles both arrays and JSON strings from MCP)
+      const scopes = parseStringArray(params.scopes);
       query = query.where((builder) => {
         for (const scope of scopes) {
           if (scope.includes('*')) {
@@ -1486,12 +1535,29 @@ export async function addDecisionContextAction(
     let alternatives = params.alternatives_considered || null;
     let tradeoffs = params.tradeoffs || null;
 
-    // If already objects, stringify them
-    if (alternatives && typeof alternatives === 'object') {
-      alternatives = JSON.stringify(alternatives);
+    // Convert to JSON strings
+    if (alternatives !== null) {
+      if (typeof alternatives === 'object') {
+        alternatives = JSON.stringify(alternatives);
+      } else if (typeof alternatives === 'string') {
+        try {
+          JSON.parse(alternatives);
+        } catch {
+          alternatives = JSON.stringify([alternatives]);
+        }
+      }
     }
-    if (tradeoffs && typeof tradeoffs === 'object') {
-      tradeoffs = JSON.stringify(tradeoffs);
+
+    if (tradeoffs !== null) {
+      if (typeof tradeoffs === 'object') {
+        tradeoffs = JSON.stringify(tradeoffs);
+      } else if (typeof tradeoffs === 'string') {
+        try {
+          JSON.parse(tradeoffs);
+        } catch {
+          tradeoffs = JSON.stringify({ description: tradeoffs });
+        }
+      }
     }
 
     const contextId = await dbAddDecisionContext(

@@ -20,6 +20,13 @@ import {
 import { validateMessageType, validatePriority } from '../utils/validators.js';
 import { logMessageSend } from '../utils/activity-logging.js';
 import { Knex } from 'knex';
+import {
+  debugLogFunctionEntry,
+  debugLogFunctionExit,
+  debugLogSchemaOperation,
+  debugLogValidation,
+  debugLogCriticalError
+} from '../utils/debug-logger.js';
 import type {
   SendMessageParams,
   GetMessagesParams,
@@ -70,12 +77,28 @@ async function sendMessageInternal(
   // Current timestamp
   const ts = Math.floor(Date.now() / 1000);
 
+  debugLogSchemaOperation('INSERT', 't_agent_messages',
+    ['from_agent_id', 'to_agent_id', 'msg_type', 'priority', 'message', 'payload', 'read', 'ts'],
+    undefined,
+    {
+      from_agent_id: fromAgentId,
+      to_agent_id: toAgentId,
+      msg_type: msgTypeInt,
+      priority: priorityInt,
+      message: params.message,
+      payload: payloadStr,
+      read: 0,
+      ts: ts
+    }
+  );
+
   // Insert message
   const [messageId] = await knex('t_agent_messages').insert({
     from_agent_id: fromAgentId,
     to_agent_id: toAgentId,
     msg_type: msgTypeInt,
     priority: priorityInt,
+    message: params.message,
     payload: payloadStr,
     read: 0,
     ts: ts
@@ -110,14 +133,27 @@ export async function sendMessage(
   params: SendMessageParams,
   adapter?: DatabaseAdapter
 ): Promise<SendMessageResponse & { timestamp: string }> {
+  debugLogFunctionEntry('sendMessage', params);
+
+  // Validate that message field is provided
+  debugLogValidation('sendMessage', 'message', params.message, !!params.message, !params.message ? 'message field is required' : undefined);
+
   const actualAdapter = adapter ?? getAdapter();
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
+    const result = await actualAdapter.transaction(async (trx) => {
       return await sendMessageInternal(params, actualAdapter, trx);
     });
+
+    debugLogFunctionExit('sendMessage', true, result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    debugLogCriticalError('sendMessage', error, {
+      function: 'sendMessage',
+      params
+    });
+    debugLogFunctionExit('sendMessage', false, undefined, error);
     throw new Error(`Failed to send message: ${message}`);
   }
 }
@@ -513,3 +549,4 @@ export function messageExample(): any {
     }
   };
 }
+

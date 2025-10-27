@@ -44,6 +44,15 @@ file_history_days = 7
 # log_path = "/home/user/.sqlew/debug.log"
 # log_path = ".sqlew/debug.log"
 
+# Log level for debug output (case-insensitive)
+# Levels: "error", "warn", "info", "debug"
+# error: Only errors
+# warn: Errors and warnings
+# info: Errors, warnings, and informational messages
+# debug: All messages including debug details
+# Default: "info"
+# log_level = "info"
+
 # ============================================================================
 # Task Management Settings
 # ============================================================================

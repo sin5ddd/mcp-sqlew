@@ -23,7 +23,7 @@ import { resolve } from 'path';
  */
 export interface HelpUsageRecord {
   tool_name: string;
-  action_name: 'help' | 'example';
+  action_name: 'help' | 'example' | 'use_case';
   timestamp: string; // ISO 8601 format
   token_count: number; // Estimated request + response tokens
   context?: string; // Optional: what triggered the help action
@@ -75,7 +75,7 @@ export function logHelpUsage(record: HelpUsageRecord): void {
  */
 export function estimateHelpTokens(
   toolName: string,
-  actionName: 'help' | 'example',
+  actionName: 'help' | 'example' | 'use_case',
   responseLength: number
 ): number {
   // Request tokens: tool name + action parameter (~50 tokens)
@@ -99,7 +99,7 @@ export function estimateHelpTokens(
  */
 export function trackAndReturnHelp(
   toolName: string,
-  actionName: 'help' | 'example',
+  actionName: 'help' | 'example' | 'use_case',
   content: string,
   context?: string
 ): string {

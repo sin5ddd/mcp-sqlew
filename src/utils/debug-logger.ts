@@ -16,17 +16,46 @@ import * as path from 'path';
 let debugEnabled = false;
 let debugStream: fs.WriteStream | null = null;
 let currentLogPath: string | null = null;
+let currentLogLevel: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' = 'INFO';
+
+// Log level hierarchy (higher number = more verbose)
+const LOG_LEVELS = {
+  'ERROR': 1,
+  'WARN': 2,
+  'INFO': 3,
+  'DEBUG': 4
+};
+
+/**
+ * Check if a log level should be written
+ * @param level - Level to check
+ * @returns true if should log
+ */
+function shouldLog(level: string): boolean {
+  const levelValue = LOG_LEVELS[level.toUpperCase() as keyof typeof LOG_LEVELS] || 0;
+  const currentValue = LOG_LEVELS[currentLogLevel];
+  return levelValue <= currentValue;
+}
 
 /**
  * Initialize debug logger
  * @param debugLogPath - Log path (already resolved with priority: CLI > env > config)
+ * @param logLevel - Log level (case-insensitive: "error", "warn", "info", "debug")
  */
-export function initDebugLogger(debugLogPath?: string): void {
+export function initDebugLogger(debugLogPath?: string, logLevel?: string): void {
   if (!debugLogPath) {
     return;
   }
 
   currentLogPath = debugLogPath;
+
+  // Set log level (case-insensitive, default to INFO)
+  if (logLevel) {
+    const upperLevel = logLevel.toUpperCase() as 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+    if (LOG_LEVELS[upperLevel]) {
+      currentLogLevel = upperLevel;
+    }
+  }
 
   try {
     // Ensure directory exists
@@ -50,6 +79,7 @@ export function initDebugLogger(debugLogPath?: string): void {
     debugLog('INFO', `Timestamp: ${new Date().toISOString()}`);
     debugLog('INFO', `Process ID: ${process.pid}`);
     debugLog('INFO', `Debug Log Path: ${debugLogPath}`);
+    debugLog('INFO', `Log Level: ${currentLogLevel}`);
     debugLog('INFO', `Source: ${source} (${sourceDetail})`);
     debugLog('INFO', '='.repeat(80));
   } catch (error) {
@@ -66,6 +96,11 @@ export function initDebugLogger(debugLogPath?: string): void {
  */
 export function debugLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, data?: any): void {
   if (!debugEnabled || !debugStream) {
+    return;
+  }
+
+  // Check log level filtering
+  if (!shouldLog(level)) {
     return;
   }
 
@@ -107,11 +142,14 @@ export function debugLogToolResponse(toolName: string, action: string, success: 
 /**
  * Log error with stack trace
  */
-export function debugLogError(context: string, error: any): void {
+export function debugLogError(context: string, error: any, additionalContext?: any): void {
   const errorMessage = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error ? error.stack : undefined;
 
-  debugLog('ERROR', `${context}: ${errorMessage}`, { stack });
+  debugLog('ERROR', `${context}: ${errorMessage}`, {
+    stack,
+    ...additionalContext
+  });
 }
 
 /**
@@ -120,7 +158,7 @@ export function debugLogError(context: string, error: any): void {
 export function closeDebugLogger(): void {
   if (debugStream) {
     debugLog('INFO', 'MCP Shared Context Server Debug Log Ended');
-    debugLog('INFO', '='.repeat(80));
+    debugLog('INFO', '_'.repeat(80));
     debugStream.end();
     debugStream = null;
     debugEnabled = false;
@@ -132,4 +170,168 @@ export function closeDebugLogger(): void {
  */
 export function isDebugEnabled(): boolean {
   return debugEnabled;
+}
+
+// ============================================================================
+// Enhanced Debug Logging for Crash Investigation
+// ============================================================================
+
+/**
+ * Log database query execution with detailed information
+ */
+export function debugLogQuery(context: string, sql: string, params?: any, duration?: number): void {
+  if (!debugEnabled) return;
+
+  const logData: any = {
+    sql: sql.replace(/\s+/g, ' ').trim(),
+    params: params || null
+  };
+
+  if (duration !== undefined) {
+    logData.duration_ms = duration;
+  }
+
+  debugLog('DEBUG', `DB Query [${context}]`, logData);
+}
+
+/**
+ * Log connection pool state
+ */
+export function debugLogPoolState(context: string, poolState: {
+  numUsed?: number;
+  numFree?: number;
+  numPendingAcquires?: number;
+  numPendingCreates?: number;
+}): void {
+  if (!debugEnabled) return;
+
+  debugLog('DEBUG', `Connection Pool State [${context}]`, poolState);
+}
+
+/**
+ * Log transaction boundaries
+ */
+export function debugLogTransaction(action: 'START' | 'COMMIT' | 'ROLLBACK', context: string, transactionId?: string): void {
+  if (!debugEnabled) return;
+
+  debugLog('DEBUG', `Transaction ${action} [${context}]`, { transaction_id: transactionId });
+}
+
+/**
+ * Log parameter validation
+ */
+export function debugLogValidation(context: string, paramName: string, value: any, valid: boolean, errorMsg?: string): void {
+  if (!debugEnabled) return;
+
+  debugLog(
+    valid ? 'DEBUG' : 'WARN',
+    `Parameter Validation [${context}]`,
+    {
+      parameter: paramName,
+      value: typeof value === 'object' ? JSON.stringify(value) : value,
+      valid,
+      error: errorMsg || null
+    }
+  );
+}
+
+/**
+ * Log schema operation (insert, update, select)
+ */
+export function debugLogSchemaOperation(
+  operation: 'INSERT' | 'UPDATE' | 'SELECT' | 'DELETE',
+  table: string,
+  columns?: string[],
+  whereClause?: string,
+  values?: any
+): void {
+  if (!debugEnabled) return;
+
+  debugLog('DEBUG', `Schema Operation: ${operation} ${table}`, {
+    columns: columns || null,
+    where: whereClause || null,
+    values: values || null
+  });
+}
+
+/**
+ * Log JSON parsing/serialization
+ */
+export function debugLogJSON(context: string, operation: 'PARSE' | 'STRINGIFY', input: any, success: boolean, error?: string): void {
+  if (!debugEnabled) return;
+
+  debugLog(
+    success ? 'DEBUG' : 'ERROR',
+    `JSON ${operation} [${context}]`,
+    {
+      input: typeof input === 'string' ? input : JSON.stringify(input),
+      success,
+      error: error || null
+    }
+  );
+}
+
+/**
+ * Log function entry with parameters
+ */
+export function debugLogFunctionEntry(functionName: string, params: any): void {
+  if (!debugEnabled) return;
+
+  debugLog('DEBUG', `→ Function Entry: ${functionName}`, { params });
+}
+
+/**
+ * Log function exit with result
+ */
+export function debugLogFunctionExit(functionName: string, success: boolean, result?: any, error?: any): void {
+  if (!debugEnabled) return;
+
+  debugLog(
+    success ? 'DEBUG' : 'ERROR',
+    `← Function Exit: ${functionName} ${success ? 'SUCCESS' : 'FAILED'}`,
+    success ? { result } : { error: error instanceof Error ? error.message : String(error) }
+  );
+}
+
+/**
+ * Log connection acquisition
+ */
+export function debugLogConnectionAcquire(context: string, waitTime?: number): void {
+  if (!debugEnabled) return;
+
+  debugLog('DEBUG', `Connection Acquired [${context}]`, { wait_time_ms: waitTime || 0 });
+}
+
+/**
+ * Log connection release
+ */
+export function debugLogConnectionRelease(context: string, duration?: number): void {
+  if (!debugEnabled) return;
+
+  debugLog('DEBUG', `Connection Released [${context}]`, { duration_ms: duration || 0 });
+}
+
+/**
+ * Log critical error with full context
+ */
+export function debugLogCriticalError(
+  context: string,
+  error: any,
+  additionalContext?: {
+    function?: string;
+    params?: any;
+    sql?: string;
+    poolState?: any;
+  }
+): void {
+  if (!debugEnabled) return;
+
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
+
+  debugLog('ERROR', `💥 CRITICAL ERROR [${context}]`, {
+    error: errorMessage,
+    stack,
+    ...additionalContext
+  });
 }
