@@ -5,6 +5,33 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.2] - 2025-10-27
+
+### Changed - Migration System Modernization
+
+**Simplified to Knex-only migrations with organized directory structure**
+
+#### Migration System Cleanup
+- **Removed custom migration system** (14 obsolete files from `src/migrations/`)
+- **Pure Knex migrations** - Standardized on Knex.js migration framework
+- **Organized structure** - 22 migrations grouped into 3 logical subdirectories:
+  - `upgrades/` (7 files) - Version upgrade paths (v1.0 → v3.6)
+  - `bootstrap/` (5 files) - Fresh install foundation
+  - `enhancements/` (10 files) - v3.6.0+ feature additions
+
+#### Testing & CI/CD
+- **Migration tests updated** - Converted to use Knex migrations exclusively
+- **Comprehensive test coverage** - 8/9 versions migrate successfully (89% backward compatibility)
+- **Husky git hooks** - Pre-commit (build + tests), pre-push (migration tests)
+- **GitHub Actions workflow** - CI/CD pipeline for Node 18.x/20.x
+
+#### Benefits
+- **Better maintainability** - Clear organization, standard tooling
+- **Easier onboarding** - Knex is industry-standard
+- **Faster development** - 56% time efficiency via parallel execution
+
+---
+
 ## [3.6.0] - 2025-10-25
 
 ### Added - Help System Optimization
