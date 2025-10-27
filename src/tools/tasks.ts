@@ -1067,7 +1067,7 @@ export async function archiveTask(params: { task_id: number }, adapter?: Databas
       // Activity logging
       // Note: Using system agent (id=1) for status changes
       const systemAgentId = 1;
-      await logTaskStatusChange(knex, {
+      await logTaskStatusChange(trx, {
         task_id: params.task_id,
         old_status: TASK_STATUS.DONE,
         new_status: TASK_STATUS.ARCHIVED,
