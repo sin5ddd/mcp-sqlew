@@ -1,5 +1,46 @@
 import type { Knex } from "knex";
 
+/**
+ * Helper function to safely create index only if column exists
+ * Prevents errors when running on old schemas that don't have certain columns
+ */
+async function createIndexIfColumnExists(
+  knex: Knex,
+  tableName: string,
+  columns: string | string[],
+  indexName: string,
+  desc: boolean = false
+): Promise<void> {
+  try {
+    // Check if table exists first
+    const tableExists = await knex.schema.hasTable(tableName);
+    if (!tableExists) {
+      console.log(`⏭️  Skipping ${indexName}: table ${tableName} doesn't exist`);
+      return;
+    }
+
+    // Get column info for the table
+    const columnInfo = await knex(tableName).columnInfo();
+
+    // Check if all required columns exist
+    const columnArray = Array.isArray(columns) ? columns : [columns];
+    const missingColumns = columnArray.filter(col => !columnInfo[col]);
+
+    if (missingColumns.length > 0) {
+      console.log(`⏭️  Skipping ${indexName}: column(s) ${missingColumns.join(', ')} don't exist yet`);
+      return;
+    }
+
+    // Build index creation SQL
+    const columnList = columnArray.join(', ');
+    const order = desc ? 'DESC' : '';
+    await knex.raw(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnList} ${order})`.trim());
+
+  } catch (error) {
+    console.log(`⚠️  Error creating index ${indexName}: ${error}`);
+    // Don't throw - indexes are performance optimizations, not critical
+  }
+}
 
 export async function up(knex: Knex): Promise<void> {
   // ============================================================================
@@ -7,40 +48,40 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   // Decisions indexes
-  await knex.raw('CREATE INDEX idx_decisions_ts ON t_decisions(ts DESC)');
-  await knex.raw('CREATE INDEX idx_decisions_layer ON t_decisions(layer_id)');
-  await knex.raw('CREATE INDEX idx_decisions_agent ON t_decisions(agent_id)');
-  await knex.raw('CREATE INDEX idx_decisions_status ON t_decisions(status)');
+  await createIndexIfColumnExists(knex, 't_decisions', 'ts', 'idx_decisions_ts', true);
+  await createIndexIfColumnExists(knex, 't_decisions', 'layer_id', 'idx_decisions_layer');
+  await createIndexIfColumnExists(knex, 't_decisions', 'agent_id', 'idx_decisions_agent');
+  await createIndexIfColumnExists(knex, 't_decisions', 'status', 'idx_decisions_status');
 
   // Decisions numeric indexes
-  await knex.raw('CREATE INDEX idx_decisions_numeric_ts ON t_decisions_numeric(ts DESC)');
-  await knex.raw('CREATE INDEX idx_decisions_numeric_layer ON t_decisions_numeric(layer_id)');
+  await createIndexIfColumnExists(knex, 't_decisions_numeric', 'ts', 'idx_decisions_numeric_ts', true);
+  await createIndexIfColumnExists(knex, 't_decisions_numeric', 'layer_id', 'idx_decisions_numeric_layer');
 
   // Messages indexes
-  await knex.raw('CREATE INDEX idx_messages_ts ON t_agent_messages(ts DESC)');
-  await knex.raw('CREATE INDEX idx_messages_to_agent ON t_agent_messages(to_agent_id, read)');
-  await knex.raw('CREATE INDEX idx_messages_priority ON t_agent_messages(priority DESC)');
+  await createIndexIfColumnExists(knex, 't_agent_messages', 'ts', 'idx_messages_ts', true);
+  await createIndexIfColumnExists(knex, 't_agent_messages', ['to_agent_id', 'read'], 'idx_messages_to_agent');
+  await createIndexIfColumnExists(knex, 't_agent_messages', 'priority', 'idx_messages_priority', true);
 
   // File changes indexes
-  await knex.raw('CREATE INDEX idx_file_changes_ts ON t_file_changes(ts DESC)');
-  await knex.raw('CREATE INDEX idx_file_changes_file ON t_file_changes(file_id)');
-  await knex.raw('CREATE INDEX idx_file_changes_layer ON t_file_changes(layer_id)');
+  await createIndexIfColumnExists(knex, 't_file_changes', 'ts', 'idx_file_changes_ts', true);
+  await createIndexIfColumnExists(knex, 't_file_changes', 'file_id', 'idx_file_changes_file');
+  await createIndexIfColumnExists(knex, 't_file_changes', 'layer_id', 'idx_file_changes_layer');
 
   // Constraints indexes
-  await knex.raw('CREATE INDEX idx_constraints_active ON t_constraints(active)');
-  await knex.raw('CREATE INDEX idx_constraints_layer ON t_constraints(layer_id)');
-  await knex.raw('CREATE INDEX idx_constraints_priority ON t_constraints(priority DESC)');
+  await createIndexIfColumnExists(knex, 't_constraints', 'active', 'idx_constraints_active');
+  await createIndexIfColumnExists(knex, 't_constraints', 'layer_id', 'idx_constraints_layer');
+  await createIndexIfColumnExists(knex, 't_constraints', 'priority', 'idx_constraints_priority', true);
 
-  // Activity log indexes
-  await knex.raw('CREATE INDEX idx_activity_log_ts ON t_activity_log(ts DESC)');
-  await knex.raw('CREATE INDEX idx_activity_log_agent ON t_activity_log(agent_id)');
+  // Activity log indexes - agent_id may not exist in old schemas
+  await createIndexIfColumnExists(knex, 't_activity_log', 'ts', 'idx_activity_log_ts', true);
+  await createIndexIfColumnExists(knex, 't_activity_log', 'agent_id', 'idx_activity_log_agent');
 
-  // Task indexes
-  await knex.raw('CREATE INDEX idx_tasks_status ON t_tasks(status_id)');
-  await knex.raw('CREATE INDEX idx_tasks_priority ON t_tasks(priority DESC)');
-  await knex.raw('CREATE INDEX idx_tasks_agent ON t_tasks(assigned_agent_id)');
-  await knex.raw('CREATE INDEX idx_tasks_created_ts ON t_tasks(created_ts DESC)');
-  await knex.raw('CREATE INDEX idx_tasks_updated_ts ON t_tasks(updated_ts DESC)');
+  // Task indexes - assigned_agent_id may not exist in old schemas
+  await createIndexIfColumnExists(knex, 't_tasks', 'status_id', 'idx_tasks_status');
+  await createIndexIfColumnExists(knex, 't_tasks', 'priority', 'idx_tasks_priority', true);
+  await createIndexIfColumnExists(knex, 't_tasks', 'assigned_agent_id', 'idx_tasks_agent');
+  await createIndexIfColumnExists(knex, 't_tasks', 'created_ts', 'idx_tasks_created_ts', true);
+  await createIndexIfColumnExists(knex, 't_tasks', 'updated_ts', 'idx_tasks_updated_ts', true);
 
   console.log('✅ Indexes created successfully');
 }
@@ -73,4 +114,3 @@ export async function down(knex: Knex): Promise<void> {
 
   console.log('✅ Indexes dropped successfully');
 }
-

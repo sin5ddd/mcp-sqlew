@@ -4,54 +4,60 @@ import type { Knex } from "knex";
 export async function up(knex: Knex): Promise<void> {
   // ============================================================================
   // Initial Data Seeding
+  // Using INSERT OR IGNORE to prevent errors when data already exists
   // ============================================================================
 
   // Seed layers (5 predefined architecture layers)
-  await knex('m_layers').insert([
-    { id: 1, name: 'presentation' },
-    { id: 2, name: 'business' },
-    { id: 3, name: 'data' },
-    { id: 4, name: 'infrastructure' },
-    { id: 5, name: 'cross-cutting' },
-  ]);
+  await knex.raw(`
+    INSERT OR IGNORE INTO m_layers (id, name) VALUES
+      (1, 'presentation'),
+      (2, 'business'),
+      (3, 'data'),
+      (4, 'infrastructure'),
+      (5, 'cross-cutting')
+  `);
 
   // Seed constraint categories
-  await knex('m_constraint_categories').insert([
-    { name: 'architecture' },
-    { name: 'security' },
-    { name: 'performance' },
-    { name: 'compatibility' },
-    { name: 'maintainability' },
-  ]);
+  await knex.raw(`
+    INSERT OR IGNORE INTO m_constraint_categories (name) VALUES
+      ('architecture'),
+      ('security'),
+      ('performance'),
+      ('compatibility'),
+      ('maintainability')
+  `);
 
   // Seed common tags
-  await knex('m_tags').insert([
-    { name: 'authentication' },
-    { name: 'authorization' },
-    { name: 'validation' },
-    { name: 'error-handling' },
-    { name: 'logging' },
-    { name: 'performance' },
-    { name: 'security' },
-    { name: 'testing' },
-  ]);
+  await knex.raw(`
+    INSERT OR IGNORE INTO m_tags (name) VALUES
+      ('authentication'),
+      ('authorization'),
+      ('validation'),
+      ('error-handling'),
+      ('logging'),
+      ('performance'),
+      ('security'),
+      ('testing')
+  `);
 
   // Seed configuration defaults
-  await knex('m_config').insert([
-    { key: 'autodelete_ignore_weekend', value: '1' },
-    { key: 'autodelete_message_hours', value: '24' },
-    { key: 'autodelete_file_history_days', value: '7' },
-  ]);
+  await knex.raw(`
+    INSERT OR IGNORE INTO m_config (key, value) VALUES
+      ('autodelete_ignore_weekend', '1'),
+      ('autodelete_message_hours', '24'),
+      ('autodelete_file_history_days', '7')
+  `);
 
   // Seed task statuses
-  await knex('m_task_statuses').insert([
-    { id: 1, name: 'todo' },
-    { id: 2, name: 'in_progress' },
-    { id: 3, name: 'waiting_review' },
-    { id: 4, name: 'blocked' },
-    { id: 5, name: 'done' },
-    { id: 6, name: 'archived' },
-  ]);
+  await knex.raw(`
+    INSERT OR IGNORE INTO m_task_statuses (id, name) VALUES
+      (1, 'todo'),
+      (2, 'in_progress'),
+      (3, 'waiting_review'),
+      (4, 'blocked'),
+      (5, 'done'),
+      (6, 'archived')
+  `);
 
   console.log('✅ Master data seeded successfully');
 }
@@ -67,4 +73,3 @@ export async function down(knex: Knex): Promise<void> {
 
   console.log('✅ Master data cleared');
 }
-

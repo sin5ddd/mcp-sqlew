@@ -29,6 +29,8 @@
     "test": "npm run build && node --test dist/tests/tasks.dependencies.test.js",
     "test:all-features": "npm run build && node dist/tests/all-features.test.js",
     "test:migrations": "npm run build && node dist/tests/migrations/test-v3.2-migration.js",
+    "test:migrations:all": "npm run build && node dist/tests/migrations/test-all-versions-real.js",
+    "prepare": "husky",
     "prepublishOnly": "npm run rebuild",
     "knex": "tsx node_modules/.bin/knex --knexfile src/knexfile.ts",
     "migrate:make": "npm run knex migrate:make",
@@ -76,6 +78,7 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/knex": "^0.15.2",
     "@types/node": "^20.0.0",
+    "husky": "^9.1.7",
     "tsx": "^4.20.6",
     "typescript": "^5.0.0"
   }
