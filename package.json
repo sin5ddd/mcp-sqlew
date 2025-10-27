@@ -1,6 +1,6 @@
 {
   "name": "sqlew",
-  "version": "3.6.1",
+  "version": "3.6.2",
   "description": "MCP server for efficient context sharing between Claude Code sub-agents with database-driven help system (60-70% token reduction), Kanban Task Watcher, Git-aware auto-complete, Decision Context, and streamlined documentation",
   "main": "dist/index.js",
   "type": "module",

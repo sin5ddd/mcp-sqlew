@@ -64,7 +64,7 @@ const RELEASED_VERSIONS = [
   '3.6.0',
 ];
 
-const CURRENT_VERSION = '3.6.1';
+const CURRENT_VERSION = '3.6.2';
 
 /**
  * Simple version detection based on table existence

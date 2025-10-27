@@ -54,7 +54,7 @@ const SKIP_VERSIONS = [
              // Real users got v3.0.2 via migrations (not schema.sql), so upgrade path works fine
 ];
 
-const CURRENT_VERSION = '3.6.1';
+const CURRENT_VERSION = '3.6.2';
 
 /**
  * Extract schema SQL from a git tag

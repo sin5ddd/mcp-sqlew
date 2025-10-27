@@ -1,5 +1,18 @@
 # Migration Chain Documentation
 
+> **⚠️ HISTORICAL DOCUMENT (v1.0.0 - v2.1.0)**
+>
+> This document describes the **old custom migration system** used before v3.6.2.
+>
+> **As of v3.6.2**, sqlew uses **Knex.js migrations only**. See the migration files in:
+> - `src/migrations/knex/upgrades/` - Version upgrade paths
+> - `src/migrations/knex/bootstrap/` - Fresh install schema
+> - `src/migrations/knex/enhancements/` - Feature additions
+>
+> This document is kept for historical reference only.
+
+---
+
 This document describes the complete migration path from v1.0.0 to v2.1.0 for mcp-sqlew databases.
 
 ## Schema Version History
