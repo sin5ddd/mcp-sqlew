@@ -640,6 +640,7 @@ export interface ClearOldDataResponse {
   messages_deleted: number;
   file_changes_deleted: number;
   activity_logs_deleted: number;
+  agents_released: number;
 }
 
 export interface GetStatsResponse {

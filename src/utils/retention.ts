@@ -162,3 +162,28 @@ export function addBusinessDays(date: Date, days: number): Date {
 
   return result;
 }
+
+/**
+ * Release inactive generic agent slots for reuse
+ * Marks generic agents as inactive if they haven't been active for the specified hours
+ *
+ * @param adapter - Database adapter instance
+ * @param inactivityHours - Hours of inactivity before releasing (default: 24)
+ * @returns Number of agents released
+ */
+export async function releaseInactiveAgents(
+  adapter: DatabaseAdapter,
+  inactivityHours: number = 24
+): Promise<number> {
+  const knex = adapter.getKnex();
+  const now = Math.floor(Date.now() / 1000);
+  const cutoffTs = now - (inactivityHours * 3600);
+
+  const result = await knex('m_agents')
+    .where('is_reusable', true)
+    .where('in_use', true)
+    .where('last_active_ts', '<', cutoffTs)
+    .update({ in_use: false });
+
+  return result;
+}

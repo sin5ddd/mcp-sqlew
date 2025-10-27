@@ -76,7 +76,35 @@ export async function closeDatabase(): Promise<void> {
 // ============================================================================
 
 /**
- * Get or create agent by name
+ * Determines if an agent name is user-specified (meaningful) or generic
+ * User-specified agents are preserved permanently, generic agents can be reused
+ */
+function isUserSpecifiedAgent(name: string): boolean {
+  // Empty names are generic
+  if (!name || name.trim().length === 0) {
+    return false;
+  }
+
+  // Names matching 'generic-N' pattern are generic
+  if (/^generic-\d+$/i.test(name)) {
+    return false;
+  }
+
+  // Names like 'agent-N', 'subagent-N' are generic
+  if (/^(sub)?agent-\d+$/i.test(name)) {
+    return false;
+  }
+
+  // Everything else is user-specified
+  return true;
+}
+
+/**
+ * Get or create agent by name with reuse logic
+ *
+ * - Empty/whitespace names: Allocate reusable slot (find inactive or create new generic-N)
+ * - Named generic agents (e.g., 'generic-5', 'agent-123'): Create with exact name, mark reusable
+ * - User-specified agents (e.g., 'rust-expert'): Create permanently, non-reusable
  */
 export async function getOrCreateAgent(
   adapter: DatabaseAdapter,
@@ -84,9 +112,80 @@ export async function getOrCreateAgent(
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
+  const now = Math.floor(Date.now() / 1000);
 
+  // Empty name: allocate a reusable generic slot
+  if (!name || name.trim().length === 0) {
+    // Try to reuse an inactive slot
+    const inactiveSlot = await knex('m_agents')
+      .where({
+        is_reusable: true,
+        in_use: false
+      })
+      .orderBy('id', 'asc')
+      .first();
+
+    if (inactiveSlot) {
+      // Reuse this slot
+      await knex('m_agents')
+        .where({ id: inactiveSlot.id })
+        .update({
+          in_use: true,
+          last_active_ts: now
+        });
+
+      return inactiveSlot.id;
+    } else {
+      // No inactive slots available, create a new generic agent
+      const maxGeneric = await knex('m_agents')
+        .where('name', 'like', 'generic-%')
+        .orderBy('name', 'desc')
+        .first('name');
+
+      let nextNumber = 1;
+      if (maxGeneric && maxGeneric.name) {
+        const match = maxGeneric.name.match(/^generic-(\d+)$/);
+        if (match) {
+          nextNumber = parseInt(match[1], 10) + 1;
+        }
+      }
+
+      const genericName = `generic-${nextNumber}`;
+
+      const [id] = await knex('m_agents').insert({
+        name: genericName,
+        is_reusable: true,
+        in_use: true,
+        last_active_ts: now
+      });
+
+      return id;
+    }
+  }
+
+  // Check if this is a user-specified agent or a named generic agent
+  const isUserSpecified = isUserSpecifiedAgent(name);
+  const isReusable = !isUserSpecified;
+
+  // Named agent: create/get with exact name
   // Try to insert (will be ignored if exists)
-  await knex('m_agents').insert({ name }).onConflict('name').ignore();
+  await knex('m_agents')
+    .insert({
+      name,
+      is_reusable: isReusable,
+      in_use: true,
+      last_active_ts: now
+    })
+    .onConflict('name')
+    .ignore();
+
+  // Update activity timestamp and in_use flag
+  await knex('m_agents')
+    .where({ name })
+    .update({
+      in_use: true,
+      last_active_ts: now
+    });
 
   // Get the ID
   const result = await knex('m_agents').where({ name }).first('id');
@@ -96,6 +195,38 @@ export async function getOrCreateAgent(
   }
 
   return result.id;
+}
+
+/**
+ * Release an agent slot (mark as inactive)
+ * This allows generic agents to be reused
+ */
+export async function releaseAgent(
+  adapter: DatabaseAdapter,
+  agentId: number,
+  trx?: Knex.Transaction
+): Promise<void> {
+  const knex = trx || adapter.getKnex();
+
+  await knex('m_agents')
+    .where({ id: agentId, is_reusable: true })
+    .update({ in_use: false });
+}
+
+/**
+ * Update agent activity timestamp
+ */
+export async function updateAgentActivity(
+  adapter: DatabaseAdapter,
+  agentId: number,
+  trx?: Knex.Transaction
+): Promise<void> {
+  const knex = trx || adapter.getKnex();
+  const now = Math.floor(Date.now() / 1000);
+
+  await knex('m_agents')
+    .where({ id: agentId })
+    .update({ last_active_ts: now });
 }
 
 /**

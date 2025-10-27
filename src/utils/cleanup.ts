@@ -7,20 +7,26 @@
 
 import { DatabaseAdapter } from '../adapters/index.js';
 import { Knex } from 'knex';
-import { calculateMessageCutoff, calculateFileChangeCutoff } from './retention.js';
+import { calculateMessageCutoff, calculateFileChangeCutoff, releaseInactiveAgents } from './retention.js';
 
 /**
  * Perform automatic cleanup of old data
  * Deletes old messages, file changes, and activity logs based on m_config settings
+ * Also releases inactive generic agent slots for reuse
  *
  * @param adapter - Database adapter instance
  * @param trx - Optional transaction
- * @returns Object with counts of deleted records
+ * @returns Object with counts of deleted records and released agents
  */
 export async function performAutoCleanup(
   adapter: DatabaseAdapter,
   trx?: Knex.Transaction
-): Promise<{ messagesDeleted: number; fileChangesDeleted: number; activityLogsDeleted: number }> {
+): Promise<{
+  messagesDeleted: number;
+  fileChangesDeleted: number;
+  activityLogsDeleted: number;
+  agentsReleased: number;
+}> {
   const messageCutoff = await calculateMessageCutoff(adapter);
   const fileChangeCutoff = await calculateFileChangeCutoff(adapter);
 
@@ -29,7 +35,10 @@ export async function performAutoCleanup(
   // Activity log uses same retention as messages (constraint #4)
   const activityLogsDeleted = await cleanupActivityLogs(adapter, messageCutoff, trx);
 
-  return { messagesDeleted, fileChangesDeleted, activityLogsDeleted };
+  // Release inactive generic agent slots (24 hours of inactivity)
+  const agentsReleased = await releaseInactiveAgents(adapter, 24);
+
+  return { messagesDeleted, fileChangesDeleted, activityLogsDeleted, agentsReleased };
 }
 
 /**
