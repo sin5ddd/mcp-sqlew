@@ -7,6 +7,7 @@ import { Knex } from 'knex';
 import knexConfig from './knexfile.js';
 import type { DatabaseAdapter } from './adapters/index.js';
 import { createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
+import { syncAgentsWithConfig } from './sync-agents.js';
 
 // Built-in Claude Code agent types that should be normalized/pooled
 const BUILTIN_AGENT_TYPES = [
@@ -53,6 +54,9 @@ export async function initializeDatabase(
   await knex.migrate.latest();
 
   console.log(`✓ Database initialized with Knex adapter (${environment})`);
+
+  // Sync agents with config.toml
+  syncAgentsWithConfig();
 
   adapterInstance = adapter;
   return adapter;
