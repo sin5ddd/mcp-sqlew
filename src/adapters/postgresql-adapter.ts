@@ -1,13 +1,20 @@
 // src/adapters/postgresql-adapter.ts
 import knexLib from 'knex';
 import type { Knex } from 'knex';
-import type { DatabaseAdapter } from './types.js';
+import { BaseAdapter } from './base-adapter.js';
+import type { DatabaseConfig } from '../config/types.js';
 
 const { knex } = knexLib;
 
-export class PostgreSQLAdapter implements DatabaseAdapter {
-  private knexInstance: Knex | null = null;
-
+/**
+ * PostgreSQL adapter implementation with authentication support.
+ *
+ * This adapter will be fully implemented in Phase 3 of the multi-RDBMS migration.
+ * Currently throws "not implemented" errors for all operations.
+ *
+ * @extends BaseAdapter
+ */
+export class PostgreSQLAdapter extends BaseAdapter {
   // Feature detection
   readonly supportsReturning = true;
   readonly supportsJSON = true;
@@ -17,7 +24,19 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
   readonly supportsSavepoints = true;
   readonly databaseName = 'postgresql' as const;
 
-  async connect(config: Knex.Config): Promise<Knex> {
+  constructor(config: DatabaseConfig) {
+    super(config);
+  }
+
+  getDialect(): string {
+    return 'pg';
+  }
+
+  async initialize(): Promise<void> {
+    throw new Error('PostgreSQL adapter not implemented yet. Planned for Phase 3.');
+  }
+
+  async connect(config?: Knex.Config): Promise<Knex> {
     throw new Error('PostgreSQL adapter not implemented yet. Planned for Phase 3.');
   }
 

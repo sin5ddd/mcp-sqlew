@@ -8,10 +8,48 @@
 # Database Settings
 # ============================================================================
 [database]
+# SQLite Configuration (default, local development)
 # Database file path (relative to project root or absolute)
 # Default: ".sqlew/sqlew.db"
 # path = ".sqlew/custom.db"
 # path = "/absolute/path/to/database.db"
+
+# PostgreSQL/MySQL Configuration (multi-agent production)
+# Uncomment and configure for remote database access
+# type = "postgres"  # or "mysql"
+
+# Connection settings (required for postgres/mysql)
+# [database.connection]
+# host = "localhost"
+# port = 5432  # PostgreSQL: 5432, MySQL: 3306
+# database = "sqlew"
+
+# Authentication settings (required for postgres/mysql)
+# [database.auth]
+# type = "direct"  # Options: "direct", "ssh", "aws-iam", "gcp-iam"
+# user = "postgres"
+# password = "your-password"
+
+# SSL/TLS Configuration (optional, for encrypted connections)
+# [database.auth.ssl]
+# ca = "/path/to/ca-cert.pem"  # or inline certificate content
+# cert = "/path/to/client-cert.pem"  # for mutual TLS
+# key = "/path/to/client-key.pem"  # for mutual TLS
+# rejectUnauthorized = true  # set to false for self-signed certs (not recommended for production)
+
+# SSH Tunnel Configuration (when type = "ssh")
+# Used for bastion host / jump server access
+# [database.auth.ssh]
+# host = "bastion.example.com"
+# port = 22
+# username = "deploy"
+# privateKeyPath = "/home/user/.ssh/id_rsa"  # or use password
+# password = "ssh-password"  # alternative to privateKeyPath
+# passphrase = "key-passphrase"  # if private key is encrypted
+# timeout = 30000  # SSH connection timeout in ms
+# keepalive = true
+# keepaliveInterval = 10000
+# localPort = 50000  # auto-allocated from 50000-60000 if not specified
 
 # ============================================================================
 # Auto-Deletion Settings
@@ -153,6 +191,59 @@ architect = true
 # ============================================================================
 # Example Configurations
 # ============================================================================
+
+# Example 1: PostgreSQL with Direct Authentication + SSL
+# [database]
+# type = "postgres"
+# [database.connection]
+# host = "db.example.com"
+# port = 5432
+# database = "sqlew_production"
+# [database.auth]
+# type = "direct"
+# user = "postgres"
+# password = "secure-password"
+# [database.auth.ssl]
+# ca = "/path/to/ca-cert.pem"
+# rejectUnauthorized = true
+
+# Example 2: PostgreSQL through SSH Tunnel
+# [database]
+# type = "postgres"
+# [database.connection]
+# host = "db.internal.example.com"
+# port = 5432
+# database = "sqlew_production"
+# [database.auth]
+# type = "ssh"
+# user = "postgres"
+# password = "db-password"
+# [database.auth.ssh]
+# host = "bastion.example.com"
+# username = "deploy"
+# privateKeyPath = "/home/user/.ssh/id_rsa"
+
+# Example 3: MySQL with SSL and SSH
+# [database]
+# type = "mysql"
+# [database.connection]
+# host = "mysql.internal.example.com"
+# port = 3306
+# database = "sqlew_db"
+# [database.auth]
+# type = "ssh"
+# user = "mysql_user"
+# password = "db-password"
+# [database.auth.ssl]
+# ca = "-----BEGIN CERTIFICATE-----\nMIIE...\n-----END CERTIFICATE-----"
+# rejectUnauthorized = true
+# [database.auth.ssh]
+# host = "jump.example.com"
+# port = 22
+# username = "deploy"
+# privateKeyPath = "/home/user/.ssh/deploy_key"
+# passphrase = "key-passphrase"
+# localPort = 53306
 
 # Aggressive cleanup (development)
 # [autodelete]
