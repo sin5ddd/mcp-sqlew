@@ -50,9 +50,17 @@ See [docs/TASK_OVERVIEW.md](docs/TASK_OVERVIEW.md) and [docs/DECISION_CONTEXT.md
 
 ### Quick Install
 
+**Recommended (npx):**
+```bash
+npx sqlew
+```
+
+**Or install per project:**
 ```bash
 npm install sqlew
 ```
+
+**Note**: Global install (`npm install -g`) is **not recommended** because sqlew requires an independent database per project. Each project should maintain its own context database in `.sqlew/sqlew.db`.
 
 ### Add to Claude Desktop
 
@@ -108,6 +116,40 @@ All tools require an `action` parameter. Example:
 ```
 
 For detailed examples, see [docs/TOOL_REFERENCE.md](docs/TOOL_REFERENCE.md).
+
+## Specialized Agents
+
+sqlew provides three specialized agents for efficient multi-agent coordination in Claude Code:
+
+| Agent | Purpose | Token Cost | Use When |
+|-------|---------|------------|----------|
+| **Scrum Master** | Multi-agent coordination, task management, sprint planning | 12KB/conversation | Coordinating complex features, managing dependencies, tracking progress |
+| **Researcher** | Query decisions, analyze patterns, investigate context | 14KB/conversation | Understanding past decisions, onboarding new members, sprint retrospectives |
+| **Architect** | Document decisions, enforce constraints, maintain standards | 20KB/conversation | Making architectural choices, establishing rules, validating compliance |
+
+### Installation
+
+**By default, all three specialized agents are automatically installed** to your project's `.claude/agents/` directory on first run.
+
+To disable specific agents, create `.sqlew/config.toml`:
+
+```toml
+[agents]
+scrum_master = true   # Coordination specialist (12KB)
+researcher = false    # Disable this agent
+architect = true      # Documentation specialist (20KB)
+```
+
+**Note**: Set an agent to `false` in the config file to prevent it from being installed.
+
+**Usage**: Invoke agents with the `@` prefix: `@sqlew-scrum-master`, `@sqlew-researcher`, `@sqlew-architect`
+
+**Recommendation**: Use all three agents together - they're complementary specialists (46KB total).
+
+**Token Optimization** (if needed): Disable unused agents in config.
+Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
+
+**See [docs/SPECIALIZED_AGENTS.md](docs/SPECIALIZED_AGENTS.md) for complete installation guide, usage examples, and customization.**
 
 ### Available Tools
 

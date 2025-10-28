@@ -110,6 +110,47 @@ require_all_files_staged = true
 require_all_files_committed_for_archive = true
 
 # ============================================================================
+# Specialized Agents Settings
+# ============================================================================
+[agents]
+# Which specialized agents to enable for your project
+# Set to false to skip agents you don't need (reduces token consumption)
+# Install by manually copying files from assets/sample-agents/ to ~/.claude/agents/
+# Note: Agents are only loaded into Claude Code conversations, not the MCP server
+
+# Scrum Master: Multi-agent coordination, task management, sprint planning
+# Token cost: ~12KB per conversation when loaded in Claude Code
+# Use when: Coordinating complex features, managing dependencies, tracking progress
+# Default: true
+scrum_master = true
+
+# Researcher: Query decisions, analyze patterns, investigate context
+# Token cost: ~14KB per conversation when loaded in Claude Code
+# Use when: Understanding past decisions, onboarding new members, sprint retrospectives
+# Default: true
+researcher = true
+
+# Architect: Document decisions, enforce constraints, maintain standards
+# Token cost: ~20KB per conversation when loaded in Claude Code
+# Use when: Making architectural choices, establishing rules, validating compliance
+# Default: true
+architect = true
+
+# Example: Minimal installation (only Scrum Master for task management)
+# [agents]
+# scrum_master = true
+# researcher = false
+# architect = false
+
+# Token Impact Examples:
+# - All 3 agents: ~46KB loaded per conversation (scrum 12KB + researcher 14KB + architect 20KB)
+# - Scrum + Architect: ~32KB (30% reduction)
+# - Scrum only: ~12KB (74% reduction)
+
+# NOTE: Documentation is centralized in docs/SPECIALIZED_AGENTS.md
+# See: https://github.com/sin5ddd/mcp-sqlew/blob/main/docs/SPECIALIZED_AGENTS.md
+
+# ============================================================================
 # Example Configurations
 # ============================================================================
 

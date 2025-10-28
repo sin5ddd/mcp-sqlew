@@ -6,7 +6,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import type { DatabaseAdapter } from '../adapters/types.js';
-import { initializeDatabase, getOrCreateAgent, releaseAgent, updateAgentActivity, closeDatabase } from '../database.js';
+import { initializeDatabase, getOrCreateAgent, updateAgentActivity, closeDatabase } from '../database.js';
 import { releaseInactiveAgents } from '../utils/retention.js';
 import { clearOldData } from '../tools/utils.js';
 
