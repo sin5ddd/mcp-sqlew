@@ -5,6 +5,54 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.5] - 2025-10-28
+
+### Changed - Agent System Simplification & CI/CD Fix
+
+**Removed messaging system and eliminated agent pooling complexity**
+
+#### Agent System Cleanup
+- **Removed messaging system** - `t_agent_messages` table dropped, `message` MCP tool deprecated
+  - Messaging system was unused and added unnecessary complexity
+  - Simplified agent architecture to single-purpose registry
+- **Eliminated agent pooling** - Code no longer uses `in_use` and `is_reusable` columns
+  - Removed race conditions and UNIQUE constraint errors
+  - Each agent name creates one permanent record (no reuse/pooling)
+  - Generic agents (`generic-N`) auto-allocated for empty names
+- **6 MCP Tools** - Down from 7 (messaging removed)
+  - `decision`, `file`, `constraint`, `stats`, `config`, `task`
+
+#### Infrastructure
+- **CI/CD Workflow** - Removed npm publish step from GitHub Actions
+  - npm publish requires 2FA authentication
+  - Publishing must be done manually to prevent workflow failures
+
+#### Impact
+- ✅ Simplified agent management (no pooling overhead)
+- ✅ Reduced complexity (messaging system removed)
+- ✅ CI/CD workflow no longer fails on npm publish
+
+---
+
+## [3.6.4] - 2025-10-28
+
+### Fixed - WSL Git Add Detection
+
+**WSL-specific polling workaround for chokidar file watcher**
+
+#### Changes
+- **1-second polling for WSL** - Added platform-specific chokidar configuration
+  - WSL filesystem events are unreliable with native watching
+  - Polling ensures git add operations are detected consistently
+- **Platform detection** - Automatic WSL detection via `/proc/version`
+- **Backward compatible** - Non-WSL platforms use native file watching (no polling)
+
+#### Impact
+- ✅ Git add detection now works reliably on WSL
+- ✅ VCS-aware auto-complete functional across all platforms
+
+---
+
 ## [3.6.3] - 2025-10-27
 
 ### Fixed - Critical Bug Fixes & Git Add Detection

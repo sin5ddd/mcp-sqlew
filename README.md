@@ -27,7 +27,7 @@ Traditional code tells you **WHAT** and **HOW**. sqlew adds **WHY**:
 **60-75% token reduction** in multi-session projects through structured data storage and selective querying.
 
 ### 🎯 Key Features
-- **7 Specialized Tools**: decisions, messages, tasks, files, constraints, stats, config
+- **6 Specialized Tools**: decisions, tasks, files, constraints, stats, config
 - **Metadata-Driven**: Tag, layer, scope, and version everything
 - **Decision Context**: Document WHY with rationale, alternatives, and trade-offs
 - **Task Dependencies**: Blocking relationships with circular detection
@@ -156,7 +156,6 @@ Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
 | Tool | Purpose | Example Use |
 |------|---------|------------|
 | **decision** | Record choices | "We chose PostgreSQL" |
-| **message** | Agent communication | "Task completed" |
 | **task** | Track work | "Implement feature X" |
 | **file** | Track changes | "Modified auth.ts" |
 | **constraint** | Define rules | "API must be <100ms" |
@@ -226,7 +225,7 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.3.0**
+Current version: **3.6.5**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License

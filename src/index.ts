@@ -117,9 +117,12 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
       },
       {
         name: 'message',
-        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+        description: `⚠️ DEPRECATED (v3.6.5) - This tool is deprecated and will be removed in future versions.
 
-Agent Messaging - Send messages between agents with priority levels and read tracking
+The messaging system was unused and has been removed. The t_agent_messages table no longer exists.
+All actions will return deprecation warnings and are non-operational.
+
+**REQUIRED PARAMETER**: action (must be specified in ALL calls)
 
 Use action: "help" for detailed documentation.
 Use action: "example" for comprehensive usage examples.
