@@ -6,7 +6,8 @@
   "type": "module",
   "bin": {
     "sqlew": "dist/index.js",
-    "sqlew-cli": "dist/cli.js"
+    "sqlew-cli": "dist/cli.js",
+    "sqlew-init-agents": "dist/init-agents.js"
   },
   "files": [
     "dist/",

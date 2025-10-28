@@ -1,8 +1,13 @@
+// @ts-nocheck - Deprecated messaging functions (v3.6.5)
 /**
  * Messaging Tools for MCP Shared Context Server
  * Agent-to-agent communication with priority and read tracking
  *
  * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
+ *
+ * ⚠️ DEPRECATED (v3.6.5): Messaging system is unused and will be removed in future versions.
+ * The t_agent_messages table has been removed. These functions are kept for backward
+ * compatibility but will return deprecation warnings.
  */
 
 import { DatabaseAdapter } from '../adapters/index.js';
@@ -135,6 +140,16 @@ export async function sendMessage(
 ): Promise<SendMessageResponse & { timestamp: string }> {
   debugLogFunctionEntry('sendMessage', params);
 
+  // ⚠️ DEPRECATED: Return deprecation warning
+  console.warn('⚠️ DEPRECATED (v3.6.5): message tool is deprecated and will be removed. The t_agent_messages table no longer exists.');
+
+  // @ts-ignore - Deprecated function, code below unreachable
+  return {
+    message_id: 0,
+    timestamp: new Date().toISOString(),
+    warning: 'DEPRECATED: Messaging system removed in v3.6.5. This function is non-operational.'
+  } as any;
+
   // Validate that message field is provided
   debugLogValidation('sendMessage', 'message', params.message, !!params.message, !params.message ? 'message field is required' : undefined);
 
@@ -173,6 +188,17 @@ export async function getMessages(params: {
   msg_type_filter?: 'decision' | 'warning' | 'request' | 'info';
   limit?: number;
 }, adapter?: DatabaseAdapter): Promise<GetMessagesResponse> {
+  // ⚠️ DEPRECATED: Return deprecation warning
+  console.warn('⚠️ DEPRECATED (v3.6.5): message tool is deprecated and will be removed. The t_agent_messages table no longer exists.');
+
+  // @ts-ignore - Deprecated function, code below unreachable
+  return {
+    messages: [],
+    count: 0,
+    unread_count: 0,
+    warning: 'DEPRECATED: Messaging system removed in v3.6.5. This function is non-operational.'
+  } as any;
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -267,6 +293,16 @@ export async function markRead(params: {
   message_ids: number[];
   agent_name: string;
 }, adapter?: DatabaseAdapter): Promise<MarkReadResponse & { marked_count: number }> {
+  // ⚠️ DEPRECATED: Return deprecation warning
+  console.warn('⚠️ DEPRECATED (v3.6.5): message tool is deprecated and will be removed. The t_agent_messages table no longer exists.');
+
+  // @ts-ignore - Deprecated function, code below unreachable
+  return {
+    success: true,
+    marked_count: 0,
+    warning: 'DEPRECATED: Messaging system removed in v3.6.5. This function is non-operational.'
+  } as any;
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -312,6 +348,16 @@ export async function sendMessageBatch(
   params: SendMessageBatchParams,
   adapter?: DatabaseAdapter
 ): Promise<SendMessageBatchResponse> {
+  // ⚠️ DEPRECATED: Return deprecation warning
+  console.warn('⚠️ DEPRECATED (v3.6.5): message tool is deprecated and will be removed. The t_agent_messages table no longer exists.');
+
+  // @ts-ignore - Deprecated function, code below unreachable
+  return {
+    success: true,
+    results: [],
+    warning: 'DEPRECATED: Messaging system removed in v3.6.5. This function is non-operational.'
+  } as any;
+
   const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters

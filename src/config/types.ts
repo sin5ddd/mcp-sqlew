@@ -56,6 +56,18 @@ export interface DebugConfig {
 }
 
 /**
+ * Specialized agents configuration
+ */
+export interface AgentsConfig {
+  /** Install Scrum Master agent (coordination, tasks, sprints) - ~12KB tokens */
+  scrum_master?: boolean;
+  /** Install Researcher agent (query decisions, analyze patterns) - ~14KB tokens */
+  researcher?: boolean;
+  /** Install Architect agent (document decisions, enforce constraints) - ~20KB tokens */
+  architect?: boolean;
+}
+
+/**
  * Complete configuration structure
  * Maps to .sqlew/config.toml sections
  */
@@ -68,6 +80,8 @@ export interface SqlewConfig {
   tasks?: TaskConfig;
   /** Debug logging settings */
   debug?: DebugConfig;
+  /** Specialized agents settings */
+  agents?: AgentsConfig;
 }
 
 /**
@@ -114,5 +128,10 @@ export const DEFAULT_CONFIG: SqlewConfig = {
     review_require_all_files_modified: true,
     review_require_tests_pass: true,
     review_require_compile: true,
+  },
+  agents: {
+    scrum_master: true,
+    researcher: true,
+    architect: true,
   },
 };

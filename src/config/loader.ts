@@ -54,6 +54,10 @@ export function loadConfigFile(configPath?: string): SqlewConfig {
         ...DEFAULT_CONFIG.debug,
         ...parsed.debug,
       },
+      agents: {
+        ...DEFAULT_CONFIG.agents,
+        ...parsed.agents,
+      },
     };
 
     return merged;
@@ -160,6 +164,17 @@ export function validateConfig(config: SqlewConfig): { valid: boolean; errors: s
       if (config.tasks.stale_hours_waiting_review < 1 || config.tasks.stale_hours_waiting_review > 720) {
         errors.push('tasks.stale_hours_waiting_review must be between 1 and 720 (30 days)');
       }
+    }
+  }
+
+  // Validate agents settings
+  if (config.agents) {
+    const validKeys = ['scrum_master', 'researcher', 'architect'];
+    const configKeys = Object.keys(config.agents);
+    const invalidKeys = configKeys.filter(k => !validKeys.includes(k));
+
+    if (invalidKeys.length > 0) {
+      errors.push(`agents section has invalid keys: ${invalidKeys.join(', ')}`);
     }
   }
 

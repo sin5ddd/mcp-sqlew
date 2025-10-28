@@ -7,14 +7,8 @@ import { Knex } from 'knex';
 import knexConfig from './knexfile.js';
 import type { DatabaseAdapter } from './adapters/index.js';
 import { createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
+import { syncAgentsWithConfig } from './sync-agents.js';
 
-// Built-in Claude Code agent types that should be normalized/pooled
-const BUILTIN_AGENT_TYPES = [
-  'general-purpose',
-  'statusline-setup',
-  'output-style-setup',
-  'Explore'
-];
 
 // Global adapter instance
 let adapterInstance: DatabaseAdapter | null = null;
@@ -54,6 +48,9 @@ export async function initializeDatabase(
 
   console.log(`✓ Database initialized with Knex adapter (${environment})`);
 
+  // Sync agents with config.toml
+  syncAgentsWithConfig();
+
   adapterInstance = adapter;
   return adapter;
 }
@@ -84,43 +81,13 @@ export async function closeDatabase(): Promise<void> {
 // ============================================================================
 
 /**
- * Determines if an agent name is user-specified (meaningful) or generic
+ * Get or create agent by name (simplified registry pattern)
  *
- * Agent Classification:
- * - System agents: 'system', 'migration-manager' (not reusable, permanently protected)
- * - Built-in agents: Claude Code default agents like 'Explore' (reusable, normalized)
- * - User-defined agents: Custom agents like 'rust-architecture-expert' (reusable, exact name preserved)
- * - Generic pool: Empty names or 'generic-N' pattern (reusable, automatically allocated)
+ * Creates a simple registry of agent names for attribution purposes.
+ * No pooling, no reuse logic - each unique name gets exactly one record.
  *
- * @returns true if agent should NOT be reusable (system agents only)
- */
-function isUserSpecifiedAgent(name: string): boolean {
-  // Empty names use generic pool (reusable)
-  if (!name || name.trim().length === 0) {
-    return false;
-  }
-
-  // Core system agents that should NOT be reusable
-  const systemAgents = ['system', 'migration-manager'];
-  if (systemAgents.includes(name.toLowerCase())) {
-    return true;
-  }
-
-  // Built-in Claude Code agents (reusable, normalized)
-  if (BUILTIN_AGENT_TYPES.includes(name)) {
-    return false;
-  }
-
-  // Everything else (user-defined agents, generic-N patterns) is reusable
-  return false;
-}
-
-/**
- * Get or create agent by name with reuse logic
- *
- * - Empty/whitespace names: Allocate reusable slot (find inactive or create new generic-N)
- * - Named generic agents (e.g., 'generic-5', 'agent-123'): Create with exact name, mark reusable
- * - User-specified agents (e.g., 'rust-expert'): Create permanently, non-reusable
+ * - Empty/whitespace names: Generate unique generic-N name
+ * - Named agents: Use exact name provided
  */
 export async function getOrCreateAgent(
   adapter: DatabaseAdapter,
@@ -130,103 +97,46 @@ export async function getOrCreateAgent(
   const knex = trx || adapter.getKnex();
   const now = Math.floor(Date.now() / 1000);
 
-  // Empty name: allocate a reusable generic slot
+  // Handle empty names by generating unique generic-N identifier
+  let agentName = name;
   if (!name || name.trim().length === 0) {
-    // Try to reuse an inactive slot
-    const inactiveSlot = await knex('m_agents')
-      .where({
-        is_reusable: true,
-        in_use: false
-      })
-      .orderBy('id', 'asc')
-      .first();
+    // Find highest generic-N number and increment
+    const maxGeneric = await knex('m_agents')
+      .where('name', 'like', 'generic-%')
+      .orderBy('name', 'desc')
+      .first('name');
 
-    if (inactiveSlot) {
-      // Reuse this slot
-      await knex('m_agents')
-        .where({ id: inactiveSlot.id })
-        .update({
-          in_use: true,
-          last_active_ts: now
-        });
-
-      return inactiveSlot.id;
-    } else {
-      // No inactive slots available, create a new generic agent
-      const maxGeneric = await knex('m_agents')
-        .where('name', 'like', 'generic-%')
-        .orderBy('name', 'desc')
-        .first('name');
-
-      let nextNumber = 1;
-      if (maxGeneric && maxGeneric.name) {
-        const match = maxGeneric.name.match(/^generic-(\d+)$/);
-        if (match) {
-          nextNumber = parseInt(match[1], 10) + 1;
-        }
+    let nextNumber = 1;
+    if (maxGeneric && maxGeneric.name) {
+      const match = maxGeneric.name.match(/^generic-(\d+)$/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
       }
-
-      const genericName = `generic-${nextNumber}`;
-
-      const [id] = await knex('m_agents').insert({
-        name: genericName,
-        is_reusable: true,
-        in_use: true,
-        last_active_ts: now
-      });
-
-      return id;
     }
+
+    agentName = `generic-${nextNumber}`;
   }
 
-  // Check if this is a user-specified agent or a named generic agent
-  const isUserSpecified = isUserSpecifiedAgent(name);
-  const isReusable = !isUserSpecified;
-
-  // Named agent: create/get with exact name
-  // Try to insert (will be ignored if exists)
+  // Insert or update agent with upsert pattern
+  // This handles both new agents and existing agents
   await knex('m_agents')
     .insert({
-      name,
-      is_reusable: isReusable,
-      in_use: true,
+      name: agentName,
       last_active_ts: now
     })
     .onConflict('name')
-    .ignore();
+    .merge({ last_active_ts: now });
 
-  // Update activity timestamp and in_use flag
-  await knex('m_agents')
-    .where({ name })
-    .update({
-      in_use: true,
-      last_active_ts: now
-    });
-
-  // Get the ID
-  const result = await knex('m_agents').where({ name }).first('id');
+  // Get the agent ID
+  const result = await knex('m_agents')
+    .where({ name: agentName })
+    .first('id');
 
   if (!result) {
-    throw new Error(`Failed to get or create agent: ${name}`);
+    throw new Error(`Failed to get or create agent: ${agentName}`);
   }
 
   return result.id;
-}
-
-/**
- * Release an agent slot (mark as inactive)
- * This allows generic agents to be reused
- */
-export async function releaseAgent(
-  adapter: DatabaseAdapter,
-  agentId: number,
-  trx?: Knex.Transaction
-): Promise<void> {
-  const knex = trx || adapter.getKnex();
-
-  await knex('m_agents')
-    .where({ id: agentId, is_reusable: true })
-    .update({ in_use: false });
 }
 
 /**
