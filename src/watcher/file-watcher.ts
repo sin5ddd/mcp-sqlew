@@ -60,7 +60,8 @@ export class FileWatcher {
   private projectRoot: string;
   private lastModifiedTimes: Map<number, number> = new Map(); // taskId -> timestamp
   private filesModifiedSet: Map<number, Set<string>> = new Map(); // taskId -> modified files
-  private vcsDetectionInterval: NodeJS.Timeout | null = null; // Periodic VCS re-detection (v3.5.3)
+  private vcsDetectionInterval: NodeJS.Timeout | null = null; // Periodic VCS re-detection
+  private stagingPollInterval: NodeJS.Timeout | null = null; // WSL staging detection polling
 
   private constructor() {
     // Private constructor for singleton
@@ -91,7 +92,7 @@ export class FileWatcher {
   }
 
   /**
-   * Initialize and start the file watcher (v3.5.1 - Chokidar v4)
+   * Initialize and start the file watcher (Chokidar v4)
    */
   public async start(): Promise<void> {
     if (this.isRunning) {
@@ -158,15 +159,24 @@ export class FileWatcher {
       this.lastModifiedTimes.clear();
       this.filesModifiedSet.clear();
 
-      // Watch VCS index files for commit detection (v3.4.0 VCS-aware auto-complete)
+      // Watch VCS index files for commit detection (VCS-aware auto-complete)
       await this.watchVCSIndexFiles();
 
-      // Periodic VCS re-detection (v3.5.3)
+      // Periodic VCS re-detection
       // Handles case where git is initialized after watcher starts
       // Check every 5 minutes for new VCS initialization
       this.vcsDetectionInterval = setInterval(async () => {
         await this.refreshVCSWatching();
       }, 5 * 60 * 1000); // 5 minutes
+
+      // WSL-specific: Periodic staging detection
+      // Workaround for chokidar not reliably detecting .git/index changes on WSL
+      if (isWSL) {
+        this.stagingPollInterval = setInterval(async () => {
+          await this.pollStagingArea();
+        }, 1000); // Poll every 1 second
+        console.error('✓ WSL periodic staging detection enabled (1s interval)');
+      }
 
       this.isRunning = true;
       console.error('✓ File watcher started successfully');
@@ -196,10 +206,16 @@ export class FileWatcher {
       this.lastModifiedTimes.clear();
       this.filesModifiedSet.clear();
 
-      // Clear VCS detection interval (v3.5.3)
+      // Clear VCS detection interval
       if (this.vcsDetectionInterval) {
         clearInterval(this.vcsDetectionInterval);
         this.vcsDetectionInterval = null;
+      }
+
+      // Clear WSL staging poll interval
+      if (this.stagingPollInterval) {
+        clearInterval(this.stagingPollInterval);
+        this.stagingPollInterval = null;
       }
 
       // Close watcher
@@ -306,7 +322,7 @@ export class FileWatcher {
   }
 
   /**
-   * Get VCS index file path for given VCS type (v3.5.3)
+   * Get VCS index file path for given VCS type
    * Centralized mapping for easier extension to Mercurial/SVN
    * @param vcsType - VCS type string (Git, Mercurial, SVN)
    * @returns Absolute path to VCS index file, or null if VCS has no local index
@@ -322,7 +338,7 @@ export class FileWatcher {
   }
 
   /**
-   * Re-detect VCS and start watching index files (v3.5.3)
+   * Re-detect VCS and start watching index files
    * Called when VCS might be initialized after watcher starts
    * Public method for external triggering (e.g., after git init)
    */
@@ -358,7 +374,7 @@ export class FileWatcher {
 
     if (existsSync(indexPath) && this.watcher) {
       this.watcher.add(indexPath);
-      console.error(`✓ Watching ${indexPath} for ${vcsType} commits (v3.5.3)`);
+      console.error(`✓ Watching ${indexPath} for ${vcsType} commits`);
     } else if (!existsSync(indexPath)) {
       console.error(`⚠ ${vcsType} index file not found: ${indexPath}`);
     }
@@ -455,10 +471,10 @@ export class FileWatcher {
   }
 
   /**
-   * Handle VCS index file change - triggers two-step Git-aware workflow (v3.5.2)
+   * Handle VCS index file change - triggers two-step Git-aware workflow
    * Step 1: Staging (git add) → waiting_review → done
    * Step 2: Commit (git commit) → done → archived
-   * Fallback: If files already committed (not in staging), use v3.4.0 logic
+   * Fallback: If files already committed (not in staging), use legacy logic
    */
   private async handleVCSIndexChange(filePath: string): Promise<void> {
     console.error('\n🔄 VCS index changed - checking for tasks ready to auto-transition');
@@ -495,6 +511,27 @@ export class FileWatcher {
       }
     } catch (error) {
       console.error(`  ✗ Error during VCS-aware auto-transition:`, error);
+    }
+  }
+
+  /**
+   * Poll staging area for changes (WSL workaround)
+   * Called periodically on WSL where chokidar doesn't reliably detect .git/index changes
+   */
+  private async pollStagingArea(): Promise<void> {
+    try {
+      const db = getAdapter();
+      const { detectAndCompleteOnStaging } = await import('../utils/task-stale-detection.js');
+      
+      const completedCount = await detectAndCompleteOnStaging(db);
+      
+      // Only log if tasks were actually completed (reduce noise)
+      if (completedCount > 0) {
+        console.error(`\n🔄 WSL polling detected staging → ${completedCount} task(s) auto-completed`);
+      }
+    } catch (error) {
+      // Silently ignore errors to avoid spamming console
+      // The next poll will retry
     }
   }
 
