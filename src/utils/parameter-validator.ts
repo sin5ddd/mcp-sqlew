@@ -124,7 +124,7 @@ export function validateActionParams(
   // Get action specification
   const spec = getActionSpec(tool, action);
   if (!spec) {
-    throw new Error(`Unknown action "${action}" for tool "${tool}". Use action: "help" to see available actions.`);
+    throw new Error(`Unknown action "${action}" for tool "${tool}". Use action: "help" to see available actions, or action: "use_case" for comprehensive scenarios.`);
   }
 
   // Check for missing required parameters
@@ -157,7 +157,8 @@ export function validateActionParams(
       you_provided: providedParams,
       did_you_mean: Object.keys(typoSuggestions).length > 0 ? typoSuggestions : undefined,
       example: spec.example,
-      hint: spec.hint
+      hint: spec.hint,
+      need_help: `For comprehensive scenarios and examples, try: ${tool}({ action: "use_case" })`
     };
 
     // Throw error with JSON-formatted details for easy parsing by AI agents

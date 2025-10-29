@@ -93,22 +93,16 @@ export async function clearOldData(
         activityLogsDeleted = result.activityLogsDeleted;
       } else {
         // No parameters: use config-based weekend-aware retention
-        const messagesThreshold = await calculateMessageCutoff(actualAdapter);
         const fileChangesThreshold = await calculateFileChangeCutoff(actualAdapter);
-
-        // Delete messages
-        messagesDeleted = await trx('t_agent_messages')
-          .where('ts', '<', messagesThreshold)
-          .delete();
 
         // Delete file changes
         fileChangesDeleted = await trx('t_file_changes')
           .where('ts', '<', fileChangesThreshold)
           .delete();
 
-        // Delete activity logs (uses same threshold as messages per constraint #4)
+        // Delete activity logs (uses same threshold as file changes)
         activityLogsDeleted = await trx('t_activity_log')
-          .where('ts', '<', messagesThreshold)
+          .where('ts', '<', fileChangesThreshold)
           .delete();
       }
 
@@ -167,9 +161,6 @@ export async function getStats(
     const active_decisions = await getCount('t_decisions', 'status = 1');
     const total_decisions = await getCount('t_decisions');
 
-    // Messages
-    const messages = await getCount('t_agent_messages');
-
     // File changes
     const file_changes = await getCount('t_file_changes');
 
@@ -217,7 +208,6 @@ export async function getStats(
       context_keys,
       active_decisions,
       total_decisions,
-      messages,
       file_changes,
       active_constraints,
       total_constraints,
@@ -435,7 +425,7 @@ export function statsExample(): any {
         title: 'Database Statistics',
         example: {
           request: '{ action: "db_stats" }',
-          response_structure: '{ decisions: N, messages: N, file_changes: N, constraints: N, db_size_mb: N }',
+          response_structure: '{ decisions: N, file_changes: N, constraints: N, tasks: N, db_size_mb: N }',
           use_case: 'Monitor database growth and table sizes'
         }
       },

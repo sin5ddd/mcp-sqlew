@@ -70,6 +70,7 @@ export interface ValidationError {
   did_you_mean?: Record<string, string>;
   example: any;
   hint?: string;
+  need_help?: string;  // Guidance to use action: "use_case" for comprehensive scenarios
 }
 
 // ============================================================================
@@ -670,7 +671,6 @@ export interface GetStatsResponse {
   context_keys: number;
   active_decisions: number;
   total_decisions: number;
-  messages: number;
   file_changes: number;
   active_constraints: number;
   total_constraints: number;
@@ -822,6 +822,7 @@ export interface ValidationError {
   did_you_mean?: Record<string, string>;  // Typo suggestions (Levenshtein ≤2)
   example: any;
   hint?: string;
+  need_help?: string;  // Guidance to use action: "use_case" for comprehensive scenarios
 }
 
 /**
