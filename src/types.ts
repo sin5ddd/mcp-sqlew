@@ -52,6 +52,28 @@ export enum ChangeType {
 }
 
 // ============================================================================
+// Parameter Validation Types
+// ============================================================================
+
+/**
+ * Structured validation error response for MCP tool parameter validation
+ * Used by parameter-validator.ts to provide detailed error information
+ * with examples, typo suggestions, and required/optional parameter lists
+ */
+export interface ValidationError {
+  error: string;
+  action: string;
+  missing_params?: string[];
+  required_params: string[];
+  optional_params: string[];
+  you_provided: string[];
+  did_you_mean?: Record<string, string>;
+  example: any;
+  hint?: string;
+  need_help?: string;  // Guidance to use action: "use_case" for comprehensive scenarios
+}
+
+// ============================================================================
 // Master Table Entities
 // ============================================================================
 
@@ -649,7 +671,6 @@ export interface GetStatsResponse {
   context_keys: number;
   active_decisions: number;
   total_decisions: number;
-  messages: number;
   file_changes: number;
   active_constraints: number;
   total_constraints: number;
@@ -782,6 +803,122 @@ export interface ListTemplatesResponse {
   }>;
   count: number;
 }
+
+// ============================================================================
+// Parameter Validation Error Types (MCP Tool Usability Enhancement)
+// ============================================================================
+
+/**
+ * Structured validation error for MCP tool parameter validation
+ * Used by all tools to provide consistent, helpful error messages
+ */
+export interface ValidationError {
+  error: string;
+  action: string;
+  missing_params?: string[];
+  required_params: string[];
+  optional_params: string[];
+  you_provided: string[];
+  did_you_mean?: Record<string, string>;  // Typo suggestions (Levenshtein ≤2)
+  example: any;
+  hint?: string;
+  need_help?: string;  // Guidance to use action: "use_case" for comprehensive scenarios
+}
+
+/**
+ * Batch validation error for batch operations
+ * Reports validation failures across multiple items
+ */
+export interface BatchValidationError {
+  error: string;
+  batch_param: string;
+  item_errors: Array<{
+    index: number;
+    error: string | ValidationError;
+  }>;
+  total_items: number;
+  failed_items: number;
+}
+
+/**
+ * Action not found error
+ * Thrown when an invalid action is specified
+ */
+export interface ActionNotFoundError {
+  error: string;
+  tool: string;
+  action_provided: string;
+  available_actions: string[];
+  did_you_mean?: string[];  // Similar action suggestions
+}
+
+// ============================================================================
+// MCP Tool Action Types (String Literal Unions for Compile-Time Safety)
+// ============================================================================
+
+/**
+ * Decision tool actions
+ * Provides compile-time type checking for action parameters without breaking MCP wire protocol
+ */
+export type DecisionAction =
+  | 'set' | 'get' | 'list' | 'search_tags' | 'search_layer'
+  | 'versions' | 'quick_set' | 'search_advanced' | 'set_batch'
+  | 'has_updates' | 'set_from_template' | 'create_template'
+  | 'list_templates' | 'hard_delete' | 'add_decision_context'
+  | 'list_decision_contexts' | 'help' | 'example' | 'use_case';
+
+/**
+ * Task tool actions
+ * Provides compile-time type checking for action parameters
+ */
+export type TaskAction =
+  | 'create' | 'update' | 'get' | 'list' | 'move' | 'link'
+  | 'archive' | 'batch_create' | 'add_dependency' | 'remove_dependency'
+  | 'get_dependencies' | 'watch_files' | 'get_pruned_files' | 'link_pruned_file'
+  | 'watcher'
+  | 'help' | 'example' | 'use_case';
+
+/**
+ * File tool actions
+ * Provides compile-time type checking for action parameters
+ */
+export type FileAction =
+  | 'record' | 'get' | 'check_lock' | 'record_batch'
+  | 'help' | 'example' | 'use_case';
+
+/**
+ * Constraint tool actions
+ * Provides compile-time type checking for action parameters
+ */
+export type ConstraintAction =
+  | 'add' | 'get' | 'deactivate'
+  | 'help' | 'example' | 'use_case';
+
+/**
+ * Stats tool actions
+ * Provides compile-time type checking for action parameters
+ */
+export type StatsAction =
+  | 'layer_summary' | 'db_stats' | 'clear' | 'activity_log' | 'flush'
+  | 'help_action' | 'help_params' | 'help_tool' | 'help_use_case'
+  | 'help_list_use_cases' | 'help_next_actions'
+  | 'help' | 'example' | 'use_case';
+
+/**
+ * Config tool actions
+ * Provides compile-time type checking for action parameters
+ */
+export type ConfigAction =
+  | 'get' | 'update'
+  | 'help' | 'example' | 'use_case';
+
+/**
+ * Message tool actions
+ * @deprecated Messaging system removed in v3.6.5. This type remains for backward compatibility.
+ */
+export type MessageAction =
+  | 'send' | 'get' | 'mark_read' | 'send_batch'
+  | 'help' | 'example' | 'use_case';
 
 // ============================================================================
 // Database Connection Type

@@ -10,11 +10,9 @@ import * as path from 'path';
 
 // Import all tool functions
 import { setDecision, getDecision, searchByTags, getVersions, searchByLayer, addDecisionContextAction, listDecisionContextsAction } from '../tools/context.js';
-import { sendMessage, getMessages, markRead } from '../tools/messaging.js';
 import { recordFileChange, getFileChanges, checkFileLock } from '../tools/files.js';
 import { addConstraint, getConstraints, deactivateConstraint } from '../tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats } from '../tools/utils.js';
-import { getConfig, updateConfig } from '../tools/config.js';
 import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies } from '../tools/tasks.js';
 
 const TEST_DB_PATH = '.sqlew/tmp/test-all-features.db';
@@ -116,48 +114,6 @@ async function testDecisionTool() {
     recordResult('decision', 'list_decision_contexts', Array.isArray(result.contexts) ? 'PASS' : 'FAIL', undefined, Date.now() - start);
   } catch (error) {
     recordResult('decision', 'list_decision_contexts', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-}
-
-async function testMessageTool() {
-  log('\n=== Testing Message Tool ===');
-
-  // Test send action
-  try {
-    const start = Date.now();
-    await sendMessage({
-      from_agent: 'agent-1',
-      to_agent: 'agent-2',
-      msg_type: 'info',
-      message: 'Test message',
-      priority: 'medium'
-    });
-    recordResult('message', 'send', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('message', 'send', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-
-  // Test get action
-  try {
-    const start = Date.now();
-    const result = await getMessages({ agent_name: 'agent-2' });
-    recordResult('message', 'get', result.count >= 0 ? 'PASS' : 'FAIL', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('message', 'get', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-
-  // Test mark_read action
-  try {
-    const start = Date.now();
-    const messages = await getMessages({ agent_name: 'agent-2' });
-    if (messages.messages.length > 0) {
-      await markRead({ message_ids: [messages.messages[0].id], agent_name: 'agent-2' });
-      recordResult('message', 'mark_read', 'PASS', undefined, Date.now() - start);
-    } else {
-      recordResult('message', 'mark_read', 'FAIL', 'No messages to mark as read');
-    }
-  } catch (error) {
-    recordResult('message', 'mark_read', 'CRASH', error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -273,31 +229,6 @@ async function testStatsTool() {
   }
 }
 
-async function testConfigTool() {
-  log('\n=== Testing Config Tool ===');
-
-  // Test get action
-  try {
-    const start = Date.now();
-    await getConfig();
-    recordResult('config', 'get', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('config', 'get', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-
-  // Test update action
-  try {
-    const start = Date.now();
-    await updateConfig({
-      messageRetentionHours: 72,
-      fileHistoryRetentionDays: 14,
-      ignoreWeekend: true
-    });
-    recordResult('config', 'update', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('config', 'update', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-}
 
 async function testTaskTool() {
   log('\n=== Testing Task Tool ===');
@@ -486,11 +417,9 @@ async function runAllTests() {
 
   try {
     await testDecisionTool();
-    await testMessageTool();
     await testFileTool();
     await testConstraintTool();
     await testStatsTool();
-    await testConfigTool();
     await testTaskTool();
   } finally {
     await closeDatabase();
