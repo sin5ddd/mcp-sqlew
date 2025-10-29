@@ -33,11 +33,80 @@
 
 ---
 
+## Parameter Validation Patterns
+
+**NEW in dev branch**: sqlew provides comprehensive parameter validation with helpful error messages.
+
+### How Validation Helps
+
+1. **Catch Typos Early** - Get instant feedback on misspelled parameter names
+2. **Learn by Example** - Every error includes a working example
+3. **Clear Requirements** - Know exactly which parameters are required vs optional
+4. **Visual Markers** - Help responses show 🔴 REQUIRED and ⚪ OPTIONAL
+
+### Common Validation Errors and Fixes
+
+**Missing Required Parameter:**
+```javascript
+// ❌ ERROR: Missing required parameter 'value'
+{ action: "set", key: "auth_method" }
+
+// ✅ FIX: Add required parameter
+{ action: "set", key: "auth_method", value: "JWT authentication chosen" }
+```
+
+**Typo in Parameter Name:**
+```javascript
+// ❌ ERROR: Unknown parameter 'tgas' (did you mean 'tags'?)
+{ action: "set", key: "api/v2", value: "New API", tgas: ["api"] }
+
+// ✅ FIX: Correct the typo
+{ action: "set", key: "api/v2", value: "New API", tags: ["api"] }
+```
+
+**Wrong Action Name:**
+```javascript
+// ❌ ERROR: Unknown action 'create_task' (did you mean 'create'?)
+{ action: "create_task", title: "Implement auth" }
+
+// ✅ FIX: Use correct action name
+{ action: "create", title: "Implement auth" }
+```
+
+**Parameters from Wrong Action:**
+```javascript
+// ❌ ERROR: Unknown parameter 'task_id' for action 'create'
+{ action: "create", task_id: 5, title: "New task" }
+
+// ✅ FIX: Use 'update' action instead
+{ action: "update", task_id: 5, title: "Updated task" }
+```
+
+### Reading Validation Error Messages
+
+Error messages provide structured guidance:
+
+```json
+{
+  "error": "Missing required parameter for action 'set': value",
+  "missing_params": ["value"],              // What you're missing
+  "required_params": ["key", "value"],      // All required fields
+  "optional_params": ["agent", "layer"],    // All optional fields
+  "you_provided": ["key", "layer"],         // What you actually sent
+  "example": { ... },                       // Working example
+  "hint": "Use 'quick_set' for simpler..."  // Helpful tip
+}
+```
+
+---
+
 ## Common Errors
 
 | Error | Cause | Solution |
 |-------|-------|----------|
 | "Unknown action: undefined" | Missing `action` | Always include `action` parameter |
+| "Missing required parameter" | Omitted required field | Check `required_params` in error message |
+| "Unknown parameter" | Typo or wrong action | Check `did_you_mean` suggestions |
 | "Parameter 'value' is required" | Using `defaults` with templates | Pass parameters directly, not in `defaults` |
 | "Invalid layer" | Wrong layer name | Use: presentation, business, data, infrastructure, cross-cutting |
 | "Invalid status" | Wrong status | Use: active, deprecated, draft |

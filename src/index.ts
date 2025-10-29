@@ -18,7 +18,6 @@ import { sendMessage, getMessages, markRead, sendMessageBatch, messageHelp, mess
 import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch, fileHelp, fileExample } from './tools/files.js';
 import { addConstraint, getConstraints, deactivateConstraint, constraintHelp, constraintExample } from './tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL, statsHelp, statsExample } from './tools/utils.js';
-import { getConfig, updateConfig, configHelp, configExample } from './tools/config.js';
 import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies, watchFiles, getPrunedFiles, linkPrunedFile, taskHelp, taskExample, watcherStatus } from './tools/tasks.js';
 import { FileWatcher } from './watcher/index.js';
 import { trackAndReturnHelp } from './utils/help-tracking.js';
@@ -197,27 +196,6 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
               type: 'string',
               description: 'Action',
               enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'flush', 'help_action', 'help_params', 'help_tool', 'help_use_case', 'help_list_use_cases', 'help_next_actions', 'help', 'example', 'use_case']
-            }
-          },
-          required: ['action'],
-        },
-      },
-      {
-        name: 'config',
-        description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
-
-Configuration - Manage auto-deletion settings with weekend-aware retention
-
-Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.
-Use action: "use_case" for practical scenarios and when-to-use guidance.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            action: {
-              type: 'string',
-              description: 'Action',
-              enum: ['get', 'update', 'help', 'example', 'use_case']
             }
           },
           required: ['action'],
@@ -463,32 +441,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const statsExampleContent = statsExample();
             trackAndReturnHelp('stats', 'example', JSON.stringify(statsExampleContent));
             result = statsExampleContent;
-            break;
-          case 'use_case':
-            result = await queryHelpListUseCases(getAdapter(), {
-              category: params.category,
-              complexity: params.complexity,
-              limit: params.limit,
-              offset: params.offset
-            });
-            break;
-          default: throw new Error(`Unknown action: ${params.action}`);
-        }
-        break;
-
-      case 'config':
-        switch (params.action) {
-          case 'get': result = await getConfig(); break;
-          case 'update': result = await updateConfig(params); break;
-          case 'help':
-            const configHelpContent = configHelp();
-            trackAndReturnHelp('config', 'help', JSON.stringify(configHelpContent));
-            result = configHelpContent;
-            break;
-          case 'example':
-            const configExampleContent = configExample();
-            trackAndReturnHelp('config', 'example', JSON.stringify(configExampleContent));
-            result = configExampleContent;
             break;
           case 'use_case':
             result = await queryHelpListUseCases(getAdapter(), {

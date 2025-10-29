@@ -52,6 +52,27 @@ export enum ChangeType {
 }
 
 // ============================================================================
+// Parameter Validation Types
+// ============================================================================
+
+/**
+ * Structured validation error response for MCP tool parameter validation
+ * Used by parameter-validator.ts to provide detailed error information
+ * with examples, typo suggestions, and required/optional parameter lists
+ */
+export interface ValidationError {
+  error: string;
+  action: string;
+  missing_params?: string[];
+  required_params: string[];
+  optional_params: string[];
+  you_provided: string[];
+  did_you_mean?: Record<string, string>;
+  example: any;
+  hint?: string;
+}
+
+// ============================================================================
 // Master Table Entities
 // ============================================================================
 
@@ -781,6 +802,53 @@ export interface ListTemplatesResponse {
     created_at: string;
   }>;
   count: number;
+}
+
+// ============================================================================
+// Parameter Validation Error Types (MCP Tool Usability Enhancement)
+// ============================================================================
+
+/**
+ * Structured validation error for MCP tool parameter validation
+ * Used by all tools to provide consistent, helpful error messages
+ */
+export interface ValidationError {
+  error: string;
+  action: string;
+  missing_params?: string[];
+  required_params: string[];
+  optional_params: string[];
+  you_provided: string[];
+  did_you_mean?: Record<string, string>;  // Typo suggestions (Levenshtein ≤2)
+  example: any;
+  hint?: string;
+}
+
+/**
+ * Batch validation error for batch operations
+ * Reports validation failures across multiple items
+ */
+export interface BatchValidationError {
+  error: string;
+  batch_param: string;
+  item_errors: Array<{
+    index: number;
+    error: string | ValidationError;
+  }>;
+  total_items: number;
+  failed_items: number;
+}
+
+/**
+ * Action not found error
+ * Thrown when an invalid action is specified
+ */
+export interface ActionNotFoundError {
+  error: string;
+  tool: string;
+  action_provided: string;
+  available_actions: string[];
+  did_you_mean?: string[];  // Similar action suggestions
 }
 
 // ============================================================================

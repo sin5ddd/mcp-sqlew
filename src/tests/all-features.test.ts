@@ -14,7 +14,6 @@ import { sendMessage, getMessages, markRead } from '../tools/messaging.js';
 import { recordFileChange, getFileChanges, checkFileLock } from '../tools/files.js';
 import { addConstraint, getConstraints, deactivateConstraint } from '../tools/constraints.js';
 import { getLayerSummary, clearOldData, getStats } from '../tools/utils.js';
-import { getConfig, updateConfig } from '../tools/config.js';
 import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies } from '../tools/tasks.js';
 
 const TEST_DB_PATH = '.sqlew/tmp/test-all-features.db';
@@ -273,31 +272,6 @@ async function testStatsTool() {
   }
 }
 
-async function testConfigTool() {
-  log('\n=== Testing Config Tool ===');
-
-  // Test get action
-  try {
-    const start = Date.now();
-    await getConfig();
-    recordResult('config', 'get', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('config', 'get', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-
-  // Test update action
-  try {
-    const start = Date.now();
-    await updateConfig({
-      messageRetentionHours: 72,
-      fileHistoryRetentionDays: 14,
-      ignoreWeekend: true
-    });
-    recordResult('config', 'update', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('config', 'update', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-}
 
 async function testTaskTool() {
   log('\n=== Testing Task Tool ===');
@@ -490,7 +464,6 @@ async function runAllTests() {
     await testFileTool();
     await testConstraintTool();
     await testStatsTool();
-    await testConfigTool();
     await testTaskTool();
   } finally {
     await closeDatabase();

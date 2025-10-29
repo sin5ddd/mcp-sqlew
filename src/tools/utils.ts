@@ -21,6 +21,7 @@ import type {
 } from '../types.js';
 import { calculateMessageCutoff, calculateFileChangeCutoff, releaseInactiveAgents } from '../utils/retention.js';
 import { cleanupWithCustomRetention } from '../utils/cleanup.js';
+import { validateActionParams } from '../utils/parameter-validator.js';
 
 /**
  * Get summary statistics for all architecture layers
@@ -36,6 +37,9 @@ export async function getLayerSummary(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Validate parameters
+    validateActionParams('stats', 'layer_summary', {});
+
     const summary = await knex('v_layer_summary')
       .select('layer', 'decisions_count', 'file_changes_count', 'constraints_count')
       .orderBy('layer') as LayerSummary[];
@@ -68,6 +72,9 @@ export async function clearOldData(
   const actualAdapter = adapter ?? getAdapter();
 
   try {
+    // Validate parameters
+    validateActionParams('stats', 'clear', params || {});
+
     return await actualAdapter.transaction(async (trx) => {
       let messagesDeleted = 0;
       let fileChangesDeleted = 0;
@@ -136,6 +143,9 @@ export async function getStats(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Validate parameters
+    validateActionParams('stats', 'db_stats', {});
+
     // Helper to get count from a table
     const getCount = async (table: string, where?: string): Promise<number> => {
       let query = knex(table).count('* as count');
@@ -242,6 +252,9 @@ export async function getActivityLog(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Validate parameters
+    validateActionParams('stats', 'activity_log', params || {});
+
     let sinceTimestamp: number | null = null;
 
     if (params?.since) {
@@ -343,6 +356,9 @@ export async function flushWAL(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Validate parameters
+    validateActionParams('stats', 'flush', {});
+
     // Execute TRUNCATE checkpoint - most aggressive mode
     // Blocks until complete, ensures all WAL data written to main DB file
     // Returns array: [[busy, log, checkpointed]]

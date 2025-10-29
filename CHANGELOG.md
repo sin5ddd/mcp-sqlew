@@ -5,6 +5,43 @@ All notable changes to sqlew will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - dev branch
+
+### Added - Parameter Validation & Error Handling
+
+**Comprehensive parameter validation with helpful error messages**
+
+#### Parameter Validation
+- **Required/Optional Detection** - Clear indication of required vs optional parameters
+- **Typo Suggestions** - Levenshtein distance-based "did you mean" suggestions for mistyped parameters
+- **Structured Error Messages** - JSON format with examples showing correct usage
+- **Visual Markers** - Help responses show 🔴 REQUIRED and ⚪ OPTIONAL parameter markers
+- **Action Specs Registry** - Centralized action specification in `src/utils/action-specs.ts`
+- **Comprehensive Test Suite** - 49 validation tests across all 5 tools
+
+### Removed - Config Tool Deprecated
+
+**Config MCP tool removed in favor of file-based configuration**
+
+#### Why Removed
+- Messaging system deprecated (primary use case eliminated)
+- File-based configuration (`.sqlew/config.toml`) is clearer and more maintainable
+- Runtime updates caused configuration drift between `m_config` table and config file
+- Confusing UX (changes lost on restart unless manually synced)
+
+#### Migration Path
+- ✅ Use `.sqlew/config.toml` for all configuration (persistent, version-controlled)
+- ✅ Use CLI arguments for one-time overrides
+- ❌ Do not use `config` tool (will error)
+
+#### Impact
+- ✅ 5 MCP tools (down from 6): `decision`, `task`, `file`, `constraint`, `stats`
+- ✅ Clearer configuration workflow (single source of truth)
+- ✅ Better developer experience (validation errors with examples)
+- ✅ Reduced cognitive load (no config drift issues)
+
+---
+
 ## [3.6.5] - 2025-10-28
 
 ### Changed - Agent System Simplification & CI/CD Fix
