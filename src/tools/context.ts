@@ -64,7 +64,8 @@ import type {
   HasUpdatesParams,
   HasUpdatesResponse,
   HardDeleteDecisionParams,
-  HardDeleteDecisionResponse
+  HardDeleteDecisionResponse,
+  DecisionAction
 } from '../types.js';
 
 /**

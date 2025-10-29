@@ -13,7 +13,16 @@
  */
 
 import { getActionSpec, ACTION_SPECS_BY_TOOL } from './action-specs.js';
-import type { ValidationError } from '../types.js';
+import type {
+  ValidationError,
+  DecisionAction,
+  TaskAction,
+  FileAction,
+  ConstraintAction,
+  StatsAction,
+  ConfigAction,
+  MessageAction
+} from '../types.js';
 
 /**
  * Calculate Levenshtein distance between two strings
@@ -57,8 +66,73 @@ function levenshteinDistance(a: string, b: string): number {
 }
 
 /**
+ * Common abbreviation patterns for AI parameter typos
+ * Maps abbreviated/shortened names to their full parameter names
+ */
+const COMMON_ABBREVIATIONS: Record<string, string[]> = {
+  desc: ['description'],
+  val: ['value'],
+  prio: ['priority'],
+  pri: ['priority'],
+  config: ['configuration'],
+  msg: ['message'],
+  crit: ['criteria', 'critical'],
+  req: ['required'],
+  opt: ['optional'],
+  param: ['parameter', 'params'],
+  arg: ['argument', 'args'],
+  attr: ['attribute', 'attributes'],
+  prop: ['property', 'properties'],
+  stat: ['status', 'statistics'],
+  info: ['information'],
+  temp: ['template'],
+  rel: ['related', 'relation'],
+  deps: ['dependencies'],
+  dep: ['dependency'],
+  ref: ['reference'],
+  ctx: ['context'],
+  db: ['database'],
+};
+
+/**
+ * Check if provided parameter matches any common abbreviation pattern
+ *
+ * @param provided Parameter name provided by user (potentially abbreviated)
+ * @param validParams List of valid parameters to match against
+ * @returns Matched full parameter name, or null if no match
+ */
+function checkAbbreviation(provided: string, validParams: string[]): string | null {
+  const lowerProvided = provided.toLowerCase();
+
+  // Direct abbreviation match
+  if (COMMON_ABBREVIATIONS[lowerProvided]) {
+    for (const fullForm of COMMON_ABBREVIATIONS[lowerProvided]) {
+      // Check if any valid parameter contains this full form
+      const match = validParams.find(v => v.toLowerCase().includes(fullForm));
+      if (match) {
+        return match;
+      }
+    }
+  }
+
+  // Check if provided is a prefix abbreviation (e.g., "desc" → "description")
+  for (const valid of validParams) {
+    if (valid.length > provided.length &&
+        valid.toLowerCase().startsWith(lowerProvided) &&
+        provided.length >= 3) {  // Minimum 3 chars for prefix matching
+      return valid;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Find typo suggestions for provided parameters
- * Suggests valid parameter names within Levenshtein distance ≤ 2
+ * Uses:
+ * 1. Abbreviation dictionary for common AI shortcuts
+ * 2. Prefix matching for partial parameter names
+ * 3. Levenshtein distance ≤ 2 for typos
  *
  * @param providedParams Parameters actually provided by user
  * @param validParams All valid parameters (required + optional)
@@ -81,7 +155,14 @@ function findTypoSuggestions(
       continue;
     }
 
-    // Find closest match within distance ≤ 2
+    // 1. Check abbreviation dictionary first (highest priority)
+    const abbreviationMatch = checkAbbreviation(provided, validParams);
+    if (abbreviationMatch) {
+      suggestions[provided] = abbreviationMatch;
+      continue;
+    }
+
+    // 2. Find closest match within Levenshtein distance ≤ 2
     let bestMatch: string | null = null;
     let bestDistance = Infinity;
 
@@ -105,13 +186,13 @@ function findTypoSuggestions(
  * Validate action parameters and throw structured error if invalid
  *
  * @param tool Tool name (e.g., 'decision', 'task', 'file', 'constraint', 'stats')
- * @param action Action name (e.g., 'set', 'create', 'record', 'add')
+ * @param action Action name (accepts both typed action enums and strings for backward compatibility)
  * @param params Parameters provided by user
  * @throws Error with structured ValidationError JSON if validation fails
  */
 export function validateActionParams(
   tool: string,
-  action: string,
+  action: DecisionAction | TaskAction | FileAction | ConstraintAction | StatsAction | ConfigAction | MessageAction | string,
   params: any
 ): void {
   // Skip validation for help actions

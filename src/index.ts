@@ -25,6 +25,7 @@ import { queryHelpAction, queryHelpParams, queryHelpTool, queryHelpUseCase, quer
 import { initDebugLogger, closeDebugLogger, debugLog, debugLogToolCall, debugLogToolResponse, debugLogError } from './utils/debug-logger.js';
 import { handleToolError, handleInitializationError, setupGlobalErrorHandlers } from './utils/error-handler.js';
 import { ensureSqlewDirectory } from './config/example-generator.js';
+import { DecisionAction, TaskAction, FileAction, ConstraintAction, StatsAction, MessageAction } from './types.js';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
@@ -239,8 +240,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result;
 
     switch (name) {
-      case 'decision':
-        switch (params.action) {
+      case 'decision': {
+        const action = params.action as DecisionAction;
+        switch (action) {
           case 'set': result = await setDecision(params); break;
           case 'get': result = await getDecision(params); break;
           case 'list': result = await getContext(params); break;
@@ -290,12 +292,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               offset: params.offset
             });
             break;
-          default: throw new Error(`Unknown action: ${params.action}`);
+          default: throw new Error(`Unknown action: ${action}`);
         }
         break;
+      }
 
-      case 'message':
-        switch (params.action) {
+      case 'message': {
+        const action = params.action as MessageAction;
+        switch (action) {
           case 'send': result = await sendMessage(params); break;
           case 'get': result = await getMessages(params); break;
           case 'mark_read': result = await markRead(params); break;
@@ -318,12 +322,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               offset: params.offset
             });
             break;
-          default: throw new Error(`Unknown action: ${params.action}`);
+          default: throw new Error(`Unknown action: ${action}`);
         }
         break;
+      }
 
-      case 'file':
-        switch (params.action) {
+      case 'file': {
+        const action = params.action as FileAction;
+        switch (action) {
           case 'record': result = await recordFileChange(params); break;
           case 'get': result = await getFileChanges(params); break;
           case 'check_lock': result = await checkFileLock(params); break;
@@ -346,12 +352,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               offset: params.offset
             });
             break;
-          default: throw new Error(`Unknown action: ${params.action}`);
+          default: throw new Error(`Unknown action: ${action}`);
         }
         break;
+      }
 
-      case 'constraint':
-        switch (params.action) {
+      case 'constraint': {
+        const action = params.action as ConstraintAction;
+        switch (action) {
           case 'add': result = await addConstraint(params); break;
           case 'get': result = await getConstraints(params); break;
           case 'deactivate': result = await deactivateConstraint(params); break;
@@ -373,12 +381,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               offset: params.offset
             });
             break;
-          default: throw new Error(`Unknown action: ${params.action}`);
+          default: throw new Error(`Unknown action: ${action}`);
         }
         break;
+      }
 
-      case 'stats':
-        switch (params.action) {
+      case 'stats': {
+        const action = params.action as StatsAction;
+        switch (action) {
           case 'layer_summary': result = await getLayerSummary(); break;
           case 'db_stats': result = await getStats(); break;
           case 'clear': result = await clearOldData(params); break;
@@ -450,12 +460,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               offset: params.offset
             });
             break;
-          default: throw new Error(`Unknown action: ${params.action}`);
+          default: throw new Error(`Unknown action: ${action}`);
         }
         break;
+      }
 
-      case 'task':
-        switch (params.action) {
+      case 'task': {
+        const action = params.action as TaskAction;
+        switch (action) {
           case 'create': result = await createTask(params); break;
           case 'update': result = await updateTask(params); break;
           case 'get': result = await getTask(params); break;
@@ -489,9 +501,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               offset: params.offset
             });
             break;
-          default: throw new Error(`Unknown action: ${params.action}`);
+          default: throw new Error(`Unknown action: ${action}`);
         }
         break;
+      }
 
       default:
         throw new Error(`Unknown tool: ${name}`);
