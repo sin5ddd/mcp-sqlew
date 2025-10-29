@@ -28,7 +28,25 @@ export async function initializeDatabase(
   }
 
   const dbType = config?.databaseType || 'sqlite';
-  const adapter = createDatabaseAdapter(dbType);
+
+  // Build DatabaseConfig for adapter
+  // For MySQL/PostgreSQL, use provided connection config with auth
+  // For SQLite, use traditional file path
+  const databaseConfig = config?.connection
+    ? ({
+        type: (dbType === 'postgresql' ? 'postgres' : dbType) as 'sqlite' | 'mysql' | 'postgres',
+        connection: config.connection,
+        auth: config.connection.user
+          ? {
+              type: 'direct' as const,
+              user: config.connection.user,
+              password: config.connection.password,
+            }
+          : undefined,
+      } as const)
+    : undefined;
+
+  const adapter = createDatabaseAdapter(dbType, databaseConfig as any);
 
   // Determine if running from compiled code (dist/) or source (src/)
   const isCompiledCode = import.meta.url.includes('/dist/');
@@ -40,11 +58,16 @@ export async function initializeDatabase(
     ? { ...baseConfig, connection: config.connection }
     : baseConfig;
 
+  // Note: adapter.connect() uses this.config internally (set in constructor)
+  // The knexConnConfig here is primarily for TypeScript and backward compatibility
   await adapter.connect(knexConnConfig);
 
   // Run migrations if needed
   const knex = adapter.getKnex();
-  await knex.migrate.latest();
+
+  // Extract migrations config from baseConfig and pass to migrate()
+  const migrationsConfig = baseConfig.migrations || {};
+  await knex.migrate.latest(migrationsConfig);
 
   console.log(`✓ Database initialized with Knex adapter (${environment})`);
 

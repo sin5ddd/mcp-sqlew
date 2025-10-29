@@ -4,12 +4,15 @@ import type { Knex } from "knex";
 export async function up(knex: Knex): Promise<void> {
   // ============================================================================
   // Initial Data Seeding
-  // Using INSERT OR IGNORE to prevent errors when data already exists
+  // Database-aware INSERT syntax: SQLite uses "INSERT OR IGNORE", MySQL/MariaDB use "INSERT IGNORE"
   // ============================================================================
+
+  const isMySQL = knex.client.config.client === 'mysql2';
+  const insertIgnore = isMySQL ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
 
   // Seed layers (5 predefined architecture layers)
   await knex.raw(`
-    INSERT OR IGNORE INTO m_layers (id, name) VALUES
+    ${insertIgnore} INTO m_layers (id, name) VALUES
       (1, 'presentation'),
       (2, 'business'),
       (3, 'data'),
@@ -19,7 +22,7 @@ export async function up(knex: Knex): Promise<void> {
 
   // Seed constraint categories
   await knex.raw(`
-    INSERT OR IGNORE INTO m_constraint_categories (name) VALUES
+    ${insertIgnore} INTO m_constraint_categories (name) VALUES
       ('architecture'),
       ('security'),
       ('performance'),
@@ -29,7 +32,7 @@ export async function up(knex: Knex): Promise<void> {
 
   // Seed common tags
   await knex.raw(`
-    INSERT OR IGNORE INTO m_tags (name) VALUES
+    ${insertIgnore} INTO m_tags (name) VALUES
       ('authentication'),
       ('authorization'),
       ('validation'),
@@ -41,8 +44,12 @@ export async function up(knex: Knex): Promise<void> {
   `);
 
   // Seed configuration defaults
+  // Note: 'key' and 'value' are MySQL reserved words, so we escape them with backticks for MySQL/MariaDB
+  const keyCol = isMySQL ? '`key`' : 'key';
+  const valueCol = isMySQL ? '`value`' : 'value';
+
   await knex.raw(`
-    INSERT OR IGNORE INTO m_config (key, value) VALUES
+    ${insertIgnore} INTO m_config (${keyCol}, ${valueCol}) VALUES
       ('autodelete_ignore_weekend', '1'),
       ('autodelete_message_hours', '24'),
       ('autodelete_file_history_days', '7')
@@ -50,7 +57,7 @@ export async function up(knex: Knex): Promise<void> {
 
   // Seed task statuses
   await knex.raw(`
-    INSERT OR IGNORE INTO m_task_statuses (id, name) VALUES
+    ${insertIgnore} INTO m_task_statuses (id, name) VALUES
       (1, 'todo'),
       (2, 'in_progress'),
       (3, 'waiting_review'),

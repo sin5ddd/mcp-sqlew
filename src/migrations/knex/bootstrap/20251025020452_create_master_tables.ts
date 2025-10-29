@@ -13,9 +13,14 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // File Path Management
+  // MySQL UTF8MB4 index key limit: 3072 bytes (768 chars × 4 bytes)
+  // SQLite/PostgreSQL: Can handle 1000 chars
+  const isMySQL = knex.client.config.client === 'mysql2';
+  const pathLength = isMySQL ? 768 : 1000;
+
   await knex.schema.createTableIfNotExists('m_files', (table) => {
     table.increments('id').primary();
-    table.string('path', 1000).unique().notNullable();
+    table.string('path', pathLength).unique().notNullable();
   });
 
   // Context Key Management
@@ -58,7 +63,8 @@ export async function up(knex: Knex): Promise<void> {
   const hasTaskStatuses = await knex.schema.hasTable('m_task_statuses');
   if (!hasTaskStatuses) {
     await knex.schema.createTable('m_task_statuses', (table) => {
-      table.integer('id').primary();
+      // Use increments for MySQL compatibility (unsigned auto-increment)
+      table.increments('id').primary();
       table.string('name', 50).unique().notNullable();
     });
   }

@@ -590,7 +590,19 @@ async function main() {
     ensureSqlewDirectory();
 
     // 1. Initialize database
-    const config = dbPath ? { connection: { filename: dbPath } } : undefined;
+    // Build config from fileConfig (which includes database type and auth)
+    const config = fileConfig.database?.type && fileConfig.database.type !== 'sqlite'
+      ? {
+          databaseType: fileConfig.database.type as 'mysql' | 'postgresql',
+          connection: {
+            ...fileConfig.database.connection,
+            user: fileConfig.database.auth?.user,
+            password: fileConfig.database.auth?.password,
+          },
+        }
+      : dbPath
+        ? { connection: { filename: dbPath } }
+        : undefined;
     db = await initializeDatabase(config);
 
     // Apply CLI config overrides if provided

@@ -1,6 +1,6 @@
 # Docker Testing Guide
 
-Quick guide for testing MySQL and PostgreSQL adapters with Docker.
+Quick guide for testing MySQL, MariaDB, and PostgreSQL adapters with Docker.
 
 ## Prerequisites
 
@@ -93,6 +93,32 @@ docker-compose stop mysql
 docker-compose down -v
 ```
 
+## MariaDB 10.5 Testing
+
+### 1. Start MariaDB Container
+
+```bash
+docker-compose up -d mariadb
+```
+
+Wait for health check:
+```bash
+docker-compose ps mariadb
+```
+
+### 2. Run MCP Server with MariaDB
+
+```bash
+node dist/index.js --config=.sqlew/config.mariadb-test.toml
+```
+
+### 3. Verify MariaDB Data
+
+```bash
+# Connect to MariaDB
+docker exec mcp-sqlew-mariadb-test mysql -u mcp_user -pmcp_pass mcp_test -e "SHOW TABLES;"
+```
+
 ## PostgreSQL Testing (Future)
 
 ```bash
@@ -102,9 +128,17 @@ docker-compose up -d postgres
 
 ## Test Credentials
 
-**MySQL:**
+**MySQL 8.0:**
 - Host: localhost
 - Port: 3306
+- Database: mcp_test
+- User: mcp_user
+- Password: mcp_pass
+- Root password: rootpass
+
+**MariaDB 10.5:**
+- Host: localhost
+- Port: 3307
 - Database: mcp_test
 - User: mcp_user
 - Password: mcp_pass

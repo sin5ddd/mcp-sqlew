@@ -26,6 +26,32 @@ services:
       retries: 10
       start_period: 30s
 
+  # MariaDB 10.5 for compatibility testing
+  mariadb:
+    image: mariadb:10.5
+    container_name: mcp-sqlew-mariadb-test
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: mcp_test
+      MYSQL_USER: mcp_user
+      MYSQL_PASSWORD: mcp_pass
+      TZ: UTC
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./data/mariadb:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-time-zone='+00:00'
+      --sql-mode=TRADITIONAL
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
   # PostgreSQL for future testing
   postgres:
     image: postgres:16-alpine
