@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - dev branch
 
+---
+
+## [3.6.6] - 2025-10-29
+
 ### Added - Parameter Validation & Error Handling
 
 **Comprehensive parameter validation with helpful error messages**
