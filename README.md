@@ -27,7 +27,8 @@ Traditional code tells you **WHAT** and **HOW**. sqlew adds **WHY**:
 **60-75% token reduction** in multi-session projects through structured data storage and selective querying.
 
 ### 🎯 Key Features
-- **6 Specialized Tools**: decisions, tasks, files, constraints, stats, config
+- **5 Specialized Tools**: decisions, tasks, files, constraints, stats (config tool removed in dev)
+- **Parameter Validation**: Typo detection, required/optional markers, helpful error messages (NEW in dev)
 - **Metadata-Driven**: Tag, layer, scope, and version everything
 - **Decision Context**: Document WHY with rationale, alternatives, and trade-offs
 - **Task Dependencies**: Blocking relationships with circular detection
@@ -225,7 +226,7 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.6.5**
+Current version: **3.6.6**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License

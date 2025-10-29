@@ -23,6 +23,63 @@
 
 ---
 
+## Parameter Validation
+
+**NEW in dev branch**: sqlew now provides comprehensive parameter validation with helpful error messages.
+
+### Validation Features
+
+1. **Required vs Optional Detection** - Clear indication of which parameters must be provided
+2. **Typo Suggestions** - Levenshtein distance-based suggestions for mistyped parameter names
+3. **Structured Error Messages** - JSON format with examples showing correct usage
+4. **Visual Markers** - Help responses show 🔴 REQUIRED and ⚪ OPTIONAL parameter markers
+
+### Example Error Message
+
+```json
+{
+  "error": "Missing required parameter for action 'set': value",
+  "action": "set",
+  "missing_params": ["value"],
+  "required_params": ["key", "value"],
+  "optional_params": ["agent", "layer", "tags", "status", "version", "scopes"],
+  "you_provided": ["key", "layer"],
+  "example": {
+    "action": "set",
+    "key": "database/postgresql-choice",
+    "value": "Selected PostgreSQL over MongoDB",
+    "layer": "data",
+    "tags": ["database", "architecture"]
+  },
+  "hint": "Use 'quick_set' for simpler usage with auto-inferred metadata"
+}
+```
+
+### Typo Detection Example
+
+```json
+{
+  "error": "Unknown parameter for action 'set': tgas",
+  "action": "set",
+  "invalid_params": ["tgas"],
+  "did_you_mean": {
+    "tgas": "tags"
+  },
+  "valid_params": ["action", "key", "value", "agent", "layer", "tags", "status", "version", "scopes"],
+  "hint": "Parameter names are case-sensitive"
+}
+```
+
+### Common Validation Errors
+
+| Error Type | Cause | Solution |
+|------------|-------|----------|
+| Missing required parameter | Omitted required field | Check error message for required_params list |
+| Unknown parameter | Typo or invalid field | Check did_you_mean suggestions |
+| Wrong parameter for action | Using parameter from different action | Verify action name and consult example |
+
+---
+
 ## Quick Start
 
 ### Basic Decision Workflow
@@ -77,6 +134,123 @@
   message_ids: [1, 2, 3]
 }
 ```
+
+---
+
+## Parameter Validation (v3.7.0)
+
+sqlew provides structured error messages with examples and typo suggestions to help you fix parameter errors quickly.
+
+### Structured Error Format
+
+When required parameters are missing or incorrect, sqlew returns a detailed JSON error response:
+
+```json
+{
+  "error": "Missing required parameters for 'set': key",
+  "action": "set",
+  "missing_params": ["key"],
+  "required_params": ["key", "value"],
+  "optional_params": ["agent", "layer", "tags", "status", "version", "scopes"],
+  "you_provided": ["action", "context_key", "value"],
+  "did_you_mean": {
+    "context_key": "key"
+  },
+  "example": {
+    "action": "set",
+    "key": "database/pre-existence-requirement",
+    "value": "Database must pre-exist before connection...",
+    "layer": "infrastructure",
+    "tags": ["database", "security"]
+  },
+  "hint": "💡 TIP: Use 'quick_set' action for simpler usage with smart defaults"
+}
+```
+
+### Error Response Fields
+
+| Field | Description |
+|-------|-------------|
+| **error** | Human-readable error message |
+| **action** | The action that was attempted |
+| **missing_params** | List of missing required parameters |
+| **required_params** | All required parameters for this action |
+| **optional_params** | All optional parameters for this action |
+| **you_provided** | Parameters you actually provided |
+| **did_you_mean** | Typo suggestions (parameter name → correct name) |
+| **example** | Working example showing correct usage |
+| **hint** | Optional helpful tip for this action |
+
+### Example Error Scenarios
+
+#### Scenario 1: Wrong Parameter Name
+
+```javascript
+// ❌ Wrong
+{ action: "set", context_key: "db/feature", value: "..." }
+
+// Error Response:
+{
+  "error": "Missing required parameter 'key' for action 'set'",
+  "did_you_mean": { "context_key": "key" },
+  "example": { action: "set", key: "db/feature", value: "..." }
+}
+```
+
+#### Scenario 2: Missing Required Parameter
+
+```javascript
+// ❌ Wrong
+{ action: "add", category: "architecture", constraint_text: "..." }
+
+// Error Response:
+{
+  "error": "Missing required parameter 'priority' for action 'add'",
+  "required_params": ["category", "constraint_text", "priority"],
+  "optional_params": ["layer", "tags", "created_by"],
+  "example": {
+    action: "add",
+    category: "architecture",
+    constraint_text: "...",
+    priority: "critical"
+  }
+}
+```
+
+#### Scenario 3: Typo Detection
+
+```javascript
+// ❌ Wrong
+{ action: "add", cat: "architecture", constraint_text: "...", priority: "high" }
+
+// Error Response:
+{
+  "error": "Missing required parameter 'category' for action 'add'",
+  "did_you_mean": { "cat": "category" },
+  "example": { ... }
+}
+```
+
+### Typo Detection
+
+sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
+
+| Common Typo | Suggestion |
+|-------------|------------|
+| context_key | key |
+| constraint | constraint_text |
+| cat | category |
+| prio | priority |
+| msg | message |
+| desc | description |
+
+### Best Practices
+
+1. **Read the error response** - It includes everything you need to fix the issue
+2. **Check `did_you_mean`** - Often catches simple typos
+3. **Copy the example** - Use it as a template for your call
+4. **Verify required params** - Make sure you provide all items in `required_params`
+5. **Use hints** - Look for simpler alternatives (e.g., `quick_set` vs `set`)
 
 ---
 
@@ -139,6 +313,10 @@
 | **flush** | action | - |
 
 ### `config` Tool
+
+> ⚠️ **DEPRECATED in v3.7.0** - This tool will be removed in a future version.
+> Use `.sqlew/config.toml` file instead for configuration.
+> See [CONFIGURATION.md](CONFIGURATION.md) for migration guide.
 
 | Action | Required | Optional |
 |--------|----------|----------|

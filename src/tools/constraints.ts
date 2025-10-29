@@ -21,6 +21,7 @@ import {
   SQLITE_FALSE
 } from '../constants.js';
 import { validateCategory, validatePriority } from '../utils/validators.js';
+import { validateActionParams } from '../utils/parameter-validator.js';
 import { logConstraintAdd } from '../utils/activity-logging.js';
 import { parseStringArray } from '../utils/param-parser.js';
 import { Knex } from 'knex';
@@ -54,10 +55,8 @@ export async function addConstraint(
   const actualAdapter = adapter ?? getAdapter();
 
   try {
-    // Validate required parameters
-    if (!params.category || !params.constraint_text) {
-      throw new Error('category and constraint_text are required');
-    }
+    // Validate parameters
+    validateActionParams('constraint', 'add', params);
 
     // Validate category
     validateCategory(params.category);
@@ -156,6 +155,9 @@ export async function getConstraints(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Validate parameters
+    validateActionParams('constraint', 'get', params);
+
     // Build query using v_tagged_constraints view (already filters active=1)
     let query = knex('v_tagged_constraints');
 
@@ -226,10 +228,8 @@ export async function deactivateConstraint(
   const knex = actualAdapter.getKnex();
 
   try {
-    // Validate constraint_id
-    if (!params.constraint_id || typeof params.constraint_id !== 'number') {
-      throw new Error('constraint_id is required and must be a number');
-    }
+    // Validate parameters
+    validateActionParams('constraint', 'deactivate', params);
 
     // Check if constraint exists
     const constraint = await knex('t_constraints')

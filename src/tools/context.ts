@@ -23,6 +23,7 @@ import { validateRequired, validateStatus, validateLayer } from '../utils/valida
 import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
 import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../utils/activity-logging.js';
 import { parseStringArray } from '../utils/param-parser.js';
+import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
 import { Knex } from 'knex';
 import {
   debugLogFunctionEntry,
@@ -63,7 +64,8 @@ import type {
   HasUpdatesParams,
   HasUpdatesResponse,
   HardDeleteDecisionParams,
-  HardDeleteDecisionResponse
+  HardDeleteDecisionResponse,
+  DecisionAction
 } from '../types.js';
 
 /**
@@ -240,6 +242,14 @@ export async function setDecision(
   adapter?: DatabaseAdapter
 ): Promise<SetDecisionResponse> {
   debugLogFunctionEntry('setDecision', params);
+
+  // Validate parameters
+  try {
+    validateActionParams('decision', 'set', params);
+  } catch (error) {
+    throw error;
+  }
+
   const actualAdapter = adapter ?? getAdapter();
 
   try {
@@ -280,6 +290,13 @@ export async function getContext(
   params: GetContextParams = {},
   adapter?: DatabaseAdapter
 ): Promise<GetContextResponse> {
+  // Validate parameters
+  try {
+    validateActionParams('decision', 'list', params);
+  } catch (error) {
+    throw error;
+  }
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -354,6 +371,13 @@ export async function getDecision(
   params: GetDecisionParams & { include_context?: boolean },
   adapter?: DatabaseAdapter
 ): Promise<GetDecisionResponse> {
+  // Validate parameters
+  try {
+    validateActionParams('decision', 'get', params);
+  } catch (error) {
+    throw error;
+  }
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -428,6 +452,13 @@ export async function searchByTags(
   params: SearchByTagsParams,
   adapter?: DatabaseAdapter
 ): Promise<SearchByTagsResponse> {
+  // Validate parameters
+  try {
+    validateActionParams('decision', 'search_tags', params);
+  } catch (error) {
+    throw error;
+  }
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -506,6 +537,13 @@ export async function getVersions(
   params: GetVersionsParams,
   adapter?: DatabaseAdapter
 ): Promise<GetVersionsResponse> {
+  // Validate parameters
+  try {
+    validateActionParams('decision', 'versions', params);
+  } catch (error) {
+    throw error;
+  }
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -579,6 +617,13 @@ export async function searchByLayer(
   params: SearchByLayerParams,
   adapter?: DatabaseAdapter
 ): Promise<SearchByLayerResponse> {
+  // Validate parameters
+  try {
+    validateActionParams('decision', 'search_layer', params);
+  } catch (error) {
+    throw error;
+  }
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -698,6 +743,13 @@ export async function quickSetDecision(
   params: QuickSetDecisionParams,
   adapter?: DatabaseAdapter
 ): Promise<QuickSetDecisionResponse> {
+  // Validate parameters
+  try {
+    validateActionParams('decision', 'quick_set', params);
+  } catch (error) {
+    throw error;
+  }
+
   // Validate required parameters
   if (!params.key || params.key.trim() === '') {
     throw new Error('Parameter "key" is required and cannot be empty');
@@ -806,6 +858,9 @@ export async function searchAdvanced(
   params: SearchAdvancedParams = {},
   adapter?: DatabaseAdapter
 ): Promise<SearchAdvancedResponse> {
+  // Validate parameters
+  validateActionParams('decision', 'search_advanced', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -994,12 +1049,10 @@ export async function setDecisionBatch(
   params: SetDecisionBatchParams,
   adapter?: DatabaseAdapter
 ): Promise<SetDecisionBatchResponse> {
-  const actualAdapter = adapter ?? getAdapter();
+  // Validate batch parameters
+  validateBatchParams('decision', 'decisions', params.decisions, 'set', 50);
 
-  // Validate required parameters
-  if (!params.decisions || !Array.isArray(params.decisions)) {
-    throw new Error('Parameter "decisions" is required and must be an array');
-  }
+  const actualAdapter = adapter ?? getAdapter();
 
   if (params.decisions.length === 0) {
     return {
@@ -1106,17 +1159,11 @@ export async function hasUpdates(
   params: HasUpdatesParams,
   adapter?: DatabaseAdapter
 ): Promise<HasUpdatesResponse> {
+  // Validate parameters
+  validateActionParams('decision', 'has_updates', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
-
-  // Validate required parameters
-  if (!params.agent_name || params.agent_name.trim() === '') {
-    throw new Error('Parameter "agent_name" is required and cannot be empty');
-  }
-
-  if (!params.since_timestamp || params.since_timestamp.trim() === '') {
-    throw new Error('Parameter "since_timestamp" is required and cannot be empty');
-  }
 
   try {
     // Parse ISO timestamp to Unix epoch
@@ -1196,21 +1243,11 @@ export async function setFromTemplate(
   params: SetFromTemplateParams,
   adapter?: DatabaseAdapter
 ): Promise<SetFromTemplateResponse> {
+  // Validate parameters
+  validateActionParams('decision', 'set_from_template', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
-
-  // Validate required parameters
-  if (!params.template || params.template.trim() === '') {
-    throw new Error('Parameter "template" is required and cannot be empty');
-  }
-
-  if (!params.key || params.key.trim() === '') {
-    throw new Error('Parameter "key" is required and cannot be empty');
-  }
-
-  if (params.value === undefined || params.value === null) {
-    throw new Error('Parameter "value" is required');
-  }
 
   try {
     // Get template
@@ -1306,17 +1343,11 @@ export async function createTemplate(
   params: CreateTemplateParams,
   adapter?: DatabaseAdapter
 ): Promise<CreateTemplateResponse> {
+  // Validate parameters
+  validateActionParams('decision', 'create_template', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
-
-  // Validate required parameters
-  if (!params.name || params.name.trim() === '') {
-    throw new Error('Parameter "name" is required and cannot be empty');
-  }
-
-  if (!params.defaults || typeof params.defaults !== 'object') {
-    throw new Error('Parameter "defaults" is required and must be an object');
-  }
 
   try {
     return await actualAdapter.transaction(async (trx) => {
@@ -1376,6 +1407,9 @@ export async function listTemplates(
   params: ListTemplatesParams = {},
   adapter?: DatabaseAdapter
 ): Promise<ListTemplatesResponse> {
+  // Validate parameters
+  validateActionParams('decision', 'list_templates', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -1439,13 +1473,11 @@ export async function hardDeleteDecision(
   params: HardDeleteDecisionParams,
   adapter?: DatabaseAdapter
 ): Promise<HardDeleteDecisionResponse> {
+  // Validate parameters
+  validateActionParams('decision', 'hard_delete', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
-
-  // Validate parameter
-  if (!params.key || params.key.trim() === '') {
-    throw new Error('Parameter "key" is required and cannot be empty');
-  }
 
   try {
     return await actualAdapter.transaction(async (trx) => {
@@ -1519,16 +1551,10 @@ export async function addDecisionContextAction(
   params: any,
   adapter?: DatabaseAdapter
 ): Promise<any> {
+  // Validate parameters
+  validateActionParams('decision', 'add_decision_context', params);
+
   const actualAdapter = adapter ?? getAdapter();
-
-  // Validate required parameters
-  if (!params.key || params.key.trim() === '') {
-    throw new Error('Parameter "key" is required and cannot be empty');
-  }
-
-  if (!params.rationale || params.rationale.trim() === '') {
-    throw new Error('Parameter "rationale" is required and cannot be empty');
-  }
 
   try {
     // Parse JSON if provided as strings
@@ -1595,6 +1621,9 @@ export async function listDecisionContextsAction(
   params: any,
   adapter?: DatabaseAdapter
 ): Promise<any> {
+  // Validate parameters
+  validateActionParams('decision', 'list_decision_contexts', params);
+
   const actualAdapter = adapter ?? getAdapter();
 
   try {
