@@ -30,6 +30,7 @@ import { ensureSqlewDirectory } from './config/example-generator.js';
 // Parse command-line arguments
 const args = process.argv.slice(2);
 const parsedArgs: {
+  configPath?: string;
   dbPath?: string;
   autodeleteIgnoreWeekend?: boolean;
   autodeleteMessageHours?: number;
@@ -40,7 +41,11 @@ const parsedArgs: {
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
 
-  if (arg.startsWith('--db-path=')) {
+  if (arg.startsWith('--config=')) {
+    parsedArgs.configPath = arg.split('=')[1];
+  } else if (arg === '--config' && i + 1 < args.length) {
+    parsedArgs.configPath = args[++i];
+  } else if (arg.startsWith('--db-path=')) {
     parsedArgs.dbPath = arg.split('=')[1];
   } else if (arg === '--db-path' && i + 1 < args.length) {
     parsedArgs.dbPath = args[++i];
@@ -70,8 +75,10 @@ for (let i = 0; i < args.length; i++) {
 }
 
 // Load config file and determine database path
+// Priority: CLI --config > SQLEW_CONFIG env > default (.sqlew/config.toml)
 // Priority: CLI --db-path > config file > default
-const fileConfig = loadConfigFile();
+const configPath = parsedArgs.configPath || process.env.SQLEW_CONFIG;
+const fileConfig = loadConfigFile(configPath);
 const dbPath = parsedArgs.dbPath || fileConfig.database?.path;
 
 // Initialize database (will be set after async init completes)
