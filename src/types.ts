@@ -914,7 +914,7 @@ export type ConfigAction =
 
 /**
  * Message tool actions
- * @deprecated Messaging system removed in v3.6.5. This type remains for backward compatibility.
+ * @deprecated Messaging system removed in v3.6.6. This type remains for backward compatibility.
  */
 export type MessageAction =
   | 'send' | 'get' | 'mark_read' | 'send_batch'

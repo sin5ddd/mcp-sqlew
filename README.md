@@ -226,7 +226,7 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.6.5**
+Current version: **3.6.6**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License

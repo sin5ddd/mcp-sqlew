@@ -81,7 +81,7 @@ let db: DatabaseAdapter;
 const server = new Server(
   {
     name: 'mcp-sqlew',
-    version: '3.2.2',
+    version: '3.6.6',
   },
   {
     capabilities: {
@@ -117,7 +117,7 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
       },
       {
         name: 'message',
-        description: `⚠️ DEPRECATED (v3.6.5) - This tool is deprecated and will be removed in future versions.
+        description: `⚠️ DEPRECATED (v3.6.6) - This tool is deprecated and will be removed in future versions.
 
 The messaging system was unused and has been removed. The t_agent_messages table no longer exists.
 All actions will return deprecation warnings and are non-operational.

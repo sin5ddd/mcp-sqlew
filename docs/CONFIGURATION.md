@@ -647,7 +647,7 @@ message_hours = 48  # Messaging system deprecated, but config preserved for back
 3. **Clear documentation** - Config file documents project requirements
 4. **Type safety** - TOML validation catches errors at startup
 
-### Configuration Persistence (Legacy - v3.6.5 and earlier)
+### Configuration Persistence (Legacy - v3.6.6 and earlier)
 
 **How it worked (DEPRECATED):**
 1. Config file loaded on startup
