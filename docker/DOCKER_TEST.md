@@ -34,29 +34,33 @@ docker exec -it mcp-sqlew-mysql-test mysql -u mcp_user -pmcp_pass mcp_test
 
 ### 3. Run MCP Server with MySQL
 
-Set config path and run:
+**Option A: Using environment variable**
 ```bash
-export MCP_SQLEW_CONFIG_PATH=.sqlew/config.mysql-test.toml
+export SQLEW_CONFIG=.sqlew/config.mysql-test.toml
 node dist/index.js
 ```
 
-Or with MCP Inspector:
+**Option B: Using CLI flag**
 ```bash
-export MCP_SQLEW_CONFIG_PATH=.sqlew/config.mysql-test.toml
+node dist/index.js --config=.sqlew/config.mysql-test.toml
+```
+
+**With MCP Inspector:**
+```bash
+# Environment variable
+export SQLEW_CONFIG=.sqlew/config.mysql-test.toml
 npx @modelcontextprotocol/inspector node dist/index.js
+
+# Or CLI flag
+npx @modelcontextprotocol/inspector node dist/index.js --config=.sqlew/config.mysql-test.toml
 ```
 
-### 4. Test with CLI
+### 4. Test MCP Tools
 
-```bash
-# Set config and test tools
-export MCP_SQLEW_CONFIG_PATH=.sqlew/config.mysql-test.toml
-
-# Run server and use MCP Inspector to:
-# - Call decision.set to create a decision
-# - Call task.create to create tasks
-# - Call stats.db_stats to verify database operations
-```
+Use MCP Inspector to test tools:
+- Call `decision.set` to create a decision
+- Call `task.create` to create tasks
+- Call `stats.db_stats` to verify database operations
 
 ### 5. Verify MySQL Data
 
