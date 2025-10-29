@@ -144,6 +144,33 @@ export class MySQLAdapter extends BaseAdapter {
   async initialize(): Promise<void> {
     const knex = this.getKnex();
 
+    // Validate database exists
+    const dbName = this.config.connection?.database;
+    if (!dbName) {
+      throw new Error('MySQL adapter requires database name in configuration');
+    }
+
+    try {
+      // Query to check if we can access the database
+      const result = await knex.raw('SELECT DATABASE() as db');
+      const currentDb = result[0]?.[0]?.db;
+      
+      if (!currentDb || currentDb !== dbName) {
+        throw new Error(
+          `Database '${dbName}' does not exist or cannot be accessed. ` +
+          `Please create it manually: CREATE DATABASE ${dbName} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+        );
+      }
+    } catch (error: any) {
+      if (error.code === 'ER_BAD_DB_ERROR') {
+        throw new Error(
+          `Database '${dbName}' does not exist. ` +
+          `Please create it manually before connecting. Required privileges: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES`
+        );
+      }
+      throw error;
+    }
+
     // Configure character set and collation for full Unicode support
     await knex.raw("SET NAMES 'utf8mb4' COLLATE 'utf8mb4_unicode_ci'");
 

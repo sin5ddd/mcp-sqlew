@@ -14,20 +14,22 @@
 # path = ".sqlew/custom.db"
 # path = "/absolute/path/to/database.db"
 
-# PostgreSQL/MySQL Configuration (multi-agent production)
+# PostgreSQL/MySQL/MariaDB Configuration (multi-agent production)
 # Uncomment and configure for remote database access
-# type = "postgres"  # or "mysql"
+# type = "postgres"  # or "mysql" (also works with MariaDB 10.5+)
 
-# Connection settings (required for postgres/mysql)
+# Connection settings (required for postgres/mysql/mariadb)
+# IMPORTANT: Database must already exist! User does NOT need CREATE DATABASE privilege.
 # [database.connection]
 # host = "localhost"
-# port = 5432  # PostgreSQL: 5432, MySQL: 3306
-# database = "sqlew"
+# port = 5432  # PostgreSQL: 5432, MySQL/MariaDB: 3306
+# database = "sqlew"  # Must be created beforehand!
 
-# Authentication settings (required for postgres/mysql)
+# Authentication settings (required for postgres/mysql/mariadb)
+# Required user privileges: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES
 # [database.auth]
 # type = "direct"  # Options: "direct", "ssh", "aws-iam", "gcp-iam"
-# user = "postgres"
+# user = "postgres"  # or mysql_user, etc.
 # password = "your-password"
 
 # SSL/TLS Configuration (optional, for encrypted connections)

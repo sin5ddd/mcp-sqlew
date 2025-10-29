@@ -8,6 +8,20 @@ Quick guide for testing MySQL, MariaDB, and PostgreSQL adapters with Docker.
 - Node.js 18+ installed
 - Project built (`npm run build`)
 
+## Important: Database Pre-Creation
+
+**IMPORTANT**: In production environments, database users typically do NOT have `CREATE DATABASE` privilege. The mcp-sqlew server expects databases to already exist before connection.
+
+**For Docker testing:**
+- Databases are automatically created via `MYSQL_DATABASE` environment variable in docker-compose.yml
+- This simulates a production scenario where the database already exists
+- The server connects to pre-existing databases and creates only tables/indexes
+
+**For production:**
+- Database must be manually created beforehand by a DBA or privileged user
+- Application user only needs: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `INDEX`, `DROP`, `REFERENCES`
+- Application user does NOT need: `CREATE DATABASE`
+
 ## MySQL Testing
 
 ### 1. Start MySQL Container
