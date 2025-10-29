@@ -613,37 +613,53 @@ stale_hours_in_progress = 200   # ❌ Error: must be <= 168
 
 ## Runtime Configuration
 
-### Update via MCP Tools
+### ⚠️ Config Tool Removed (dev branch)
 
-Use the `config` tool to change settings at runtime:
+**DEPRECATED**: The `config` MCP tool has been removed in the dev branch.
 
-```javascript
-// Get current configuration
-{
-  action: "get"
-}
+**Why removed:**
+- Messaging system deprecated (primary use case eliminated)
+- File-based configuration (`.sqlew/config.toml`) is clearer and more maintainable
+- Runtime updates were confusing (changes lost on restart unless manually synced to file)
+- Configuration drift between `m_config` table and config file
 
-// Update settings (persists to m_config table)
-{
-  action: "update",
-  autodelete_message_hours: 48,
-  autodelete_ignore_weekend: true
-}
+**Migration path:**
+- ✅ **Use `.sqlew/config.toml`** for all configuration (persistent, version-controlled)
+- ✅ **Use CLI arguments** for one-time overrides (`--autodelete-message-hours=48`)
+- ❌ **Do NOT use** `config` tool (removed in dev, will error)
+
+### File-Based Configuration (Recommended)
+
+Edit `.sqlew/config.toml` directly:
+
+```toml
+[database]
+path = ".sqlew/custom.db"
+
+[autodelete]
+ignore_weekend = true
+message_hours = 48  # Messaging system deprecated, but config preserved for backward compatibility
 ```
 
-### Configuration Persistence
+**Benefits:**
+1. **Version control** - Commit config to git, share with team
+2. **No drift** - Single source of truth (no table vs file conflicts)
+3. **Clear documentation** - Config file documents project requirements
+4. **Type safety** - TOML validation catches errors at startup
 
-**How it works:**
+### Configuration Persistence (Legacy - v3.6.5 and earlier)
+
+**How it worked (DEPRECATED):**
 1. Config file loaded on startup
 2. Values merged with CLI arguments
 3. Final config written to `m_config` table
 4. MCP `config` tool updates `m_config` table
 5. Changes persist until next startup (then config file reloads)
 
-**To persist runtime changes:**
-1. Update values via MCP `config` tool
-2. Manually update `.sqlew/config.toml` to match
-3. Or regenerate config file from database (manual export)
+**Migration to file-based:**
+1. Remove all `config` tool calls from workflows
+2. Update `.sqlew/config.toml` directly
+3. Restart MCP server to apply changes
 
 ---
 

@@ -19,6 +19,7 @@ import {
   DEFAULT_QUERY_LIMIT
 } from '../constants.js';
 import { validateChangeType } from '../utils/validators.js';
+import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
 import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
 import { logFileRecord } from '../utils/activity-logging.js';
 import { Knex } from 'knex';
@@ -117,6 +118,9 @@ export async function recordFileChange(
   const actualAdapter = adapter ?? getAdapter();
 
   try {
+    // Validate parameters
+    validateActionParams('file', 'record', params);
+
     // Use transaction for atomicity
     return await actualAdapter.transaction(async (trx) => {
       return await recordFileChangeInternal(params, actualAdapter, trx);
@@ -143,6 +147,9 @@ export async function getFileChanges(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Validate parameters
+    validateActionParams('file', 'get', params);
+
     const limit = params.limit || DEFAULT_QUERY_LIMIT;
 
     // Build filter conditions using query builder
@@ -265,6 +272,9 @@ export async function checkFileLock(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Validate parameters
+    validateActionParams('file', 'check_lock', params);
+
     const lockDuration = params.lock_duration || 300; // Default 5 minutes
     const currentTime = Math.floor(Date.now() / 1000);
     const lockThreshold = currentTime - lockDuration;
@@ -325,10 +335,8 @@ export async function recordFileChangeBatch(
 ): Promise<RecordFileChangeBatchResponse> {
   const actualAdapter = adapter ?? getAdapter();
 
-  // Validate required parameters
-  if (!params.file_changes || !Array.isArray(params.file_changes)) {
-    throw new Error('Parameter "file_changes" is required and must be an array');
-  }
+  // Validate batch parameters
+  validateBatchParams('file', 'file_changes', params.file_changes, 'record', 50);
 
   if (params.file_changes.length === 0) {
     return {
@@ -337,10 +345,6 @@ export async function recordFileChangeBatch(
       failed: 0,
       results: []
     };
-  }
-
-  if (params.file_changes.length > 50) {
-    throw new Error('Parameter "file_changes" must contain at most 50 items');
   }
 
   const atomic = params.atomic !== undefined ? params.atomic : true;

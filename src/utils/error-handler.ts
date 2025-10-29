@@ -6,6 +6,23 @@
 import { debugLog, debugLogError } from './debug-logger.js';
 
 /**
+ * Safe console error wrapper that prevents EPIPE errors from crashing the error handler
+ * When the pipe to Claude Code is broken, console.error throws EPIPE
+ * This wrapper silently fails instead of creating cascading errors
+ */
+function safeConsoleError(...args: any[]): void {
+  try {
+    // Check if stderr is writable before attempting to write
+    if (process.stderr && process.stderr.writable) {
+      console.error(...args);
+    }
+  } catch (error) {
+    // Silently ignore EPIPE and other write errors
+    // The debug logger will still capture the original error
+  }
+}
+
+/**
  * Format error details for logging and reporting
  */
 function formatErrorDetails(error: any): {
@@ -41,17 +58,17 @@ export function handleToolError(
     stack: stack
   });
 
-  // Log to stderr for immediate visibility
-  console.error(`\n❌ ERROR in ${toolName}.${action}:`);
-  console.error(`   Message: ${message}`);
+  // Log to stderr for immediate visibility (pipe-safe)
+  safeConsoleError(`\n❌ ERROR in ${toolName}.${action}:`);
+  safeConsoleError(`   Message: ${message}`);
   if (stack) {
-    console.error(`   Stack trace:`);
-    console.error(stack.split('\n').map(line => `     ${line}`).join('\n'));
+    safeConsoleError(`   Stack trace:`);
+    safeConsoleError(stack.split('\n').map(line => `     ${line}`).join('\n'));
   }
   if (params) {
-    console.error(`   Params: ${JSON.stringify(params, null, 2)}`);
+    safeConsoleError(`   Params: ${JSON.stringify(params, null, 2)}`);
   }
-  console.error('');
+  safeConsoleError('');
 
   return { message, stack };
 }
@@ -68,13 +85,13 @@ export function handleInitializationError(error: any): string {
     stack: stack
   });
 
-  console.error('\n❌ INITIALIZATION ERROR:');
-  console.error(`   Message: ${message}`);
+  safeConsoleError('\n❌ INITIALIZATION ERROR:');
+  safeConsoleError(`   Message: ${message}`);
   if (stack) {
-    console.error(`   Stack trace:`);
-    console.error(stack.split('\n').map(line => `     ${line}`).join('\n'));
+    safeConsoleError(`   Stack trace:`);
+    safeConsoleError(stack.split('\n').map(line => `     ${line}`).join('\n'));
   }
-  console.error('');
+  safeConsoleError('');
 
   return message;
 }
@@ -90,28 +107,28 @@ export function setupGlobalErrorHandlers(
   process.on('uncaughtException', (error: Error) => {
     const { message, stack, errorType } = formatErrorDetails(error);
 
-    console.error('\n❌ UNCAUGHT EXCEPTION (server continuing):');
-    console.error(`   Message: ${message}`);
-    console.error(`   Stack trace:`);
-    console.error(stack?.split('\n').map(line => `     ${line}`).join('\n'));
+    safeConsoleError('\n❌ UNCAUGHT EXCEPTION (server continuing):');
+    safeConsoleError(`   Message: ${message}`);
+    safeConsoleError(`   Stack trace:`);
+    safeConsoleError(stack?.split('\n').map(line => `     ${line}`).join('\n'));
 
     debugLogError('UNCAUGHT_EXCEPTION', error, {
       errorType: errorType,
       stack: stack
     });
 
-    console.error('   ⚠️  Server continuing despite error\n');
+    safeConsoleError('   ⚠️  Server continuing despite error\n');
   });
 
   // Handle unhandled promise rejections
   process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
     const { message, stack, errorType } = formatErrorDetails(reason);
 
-    console.error('\n❌ UNHANDLED PROMISE REJECTION (server continuing):');
-    console.error(`   Reason: ${message}`);
+    safeConsoleError('\n❌ UNHANDLED PROMISE REJECTION (server continuing):');
+    safeConsoleError(`   Reason: ${message}`);
     if (stack) {
-      console.error(`   Stack trace:`);
-      console.error(stack.split('\n').map(line => `     ${line}`).join('\n'));
+      safeConsoleError(`   Stack trace:`);
+      safeConsoleError(stack.split('\n').map(line => `     ${line}`).join('\n'));
     }
 
     debugLogError('UNHANDLED_REJECTION', reason, {
@@ -120,12 +137,12 @@ export function setupGlobalErrorHandlers(
       promise: String(promise)
     });
 
-    console.error('   ⚠️  Server continuing despite error\n');
+    safeConsoleError('   ⚠️  Server continuing despite error\n');
   });
 
   // Handle graceful shutdown
   process.on('SIGINT', async () => {
-    console.error('\n✓ Shutting down MCP server...');
+    safeConsoleError('\n✓ Shutting down MCP server...');
     if (onCleanup) {
       onCleanup();
     }
@@ -133,7 +150,7 @@ export function setupGlobalErrorHandlers(
   });
 
   process.on('SIGTERM', async () => {
-    console.error('\n✓ Shutting down MCP server...');
+    safeConsoleError('\n✓ Shutting down MCP server...');
     if (onCleanup) {
       onCleanup();
     }

@@ -148,13 +148,16 @@ export function queryHelpAction(adapter: DatabaseAdapter, targetTool: string, ta
       default_value: string | null;
     }>;
 
-    const parameters: HelpParameter[] = paramRows.map(row => ({
-      name: row.param_name,
-      type: row.param_type,
-      required: row.required === 1,
-      description: row.description,
-      ...(row.default_value !== null && { default: row.default_value })
-    }));
+    const parameters: HelpParameter[] = paramRows.map(row => {
+      const marker = row.required === 1 ? '🔴 REQUIRED' : '⚪ OPTIONAL';
+      return {
+        name: row.param_name,
+        type: row.param_type,
+        required: row.required === 1,
+        description: `${marker}: ${row.description}`,
+        ...(row.default_value !== null && { default: row.default_value })
+      };
+    });
 
     // Get examples
     const exampleRows = db.prepare(`
@@ -237,13 +240,16 @@ export function queryHelpParams(adapter: DatabaseAdapter, targetTool: string, ta
       default_value: string | null;
     }>;
 
-    const parameters: HelpParameter[] = paramRows.map(row => ({
-      name: row.param_name,
-      type: row.param_type,
-      required: row.required === 1,
-      description: row.description,
-      ...(row.default_value !== null && { default: row.default_value })
-    }));
+    const parameters: HelpParameter[] = paramRows.map(row => {
+      const marker = row.required === 1 ? '🔴 REQUIRED' : '⚪ OPTIONAL';
+      return {
+        name: row.param_name,
+        type: row.param_type,
+        required: row.required === 1,
+        description: `${marker}: ${row.description}`,
+        ...(row.default_value !== null && { default: row.default_value })
+      };
+    });
 
     return {
       tool: targetTool,

@@ -27,6 +27,7 @@ import {
   logTaskStatusChange
 } from '../utils/activity-logging.js';
 import { parseStringArray } from '../utils/param-parser.js';
+import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
 
 /**
  * Task status enum (matches m_task_statuses)
@@ -314,6 +315,8 @@ export async function createTask(params: {
   status?: string;
   watch_files?: string[];  // Array of file paths to watch (v3.4.1)
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'create', params);
+
   const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
@@ -347,6 +350,8 @@ export async function updateTask(params: {
   notes?: string;
   watch_files?: string[];  // Array of file paths to watch (v3.4.1)
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'update', params);
+
   const actualAdapter = adapter ?? getAdapter();
 
   // Validate required parameters
@@ -608,6 +613,8 @@ export async function getTask(params: {
   task_id: number;
   include_dependencies?: boolean;
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'get', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -714,6 +721,8 @@ export async function listTasks(params: {
   offset?: number;
   include_dependency_counts?: boolean;
 } = {}, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'list', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -816,6 +825,8 @@ export async function moveTask(params: {
   task_id: number;
   new_status: string;
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'move', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -917,6 +928,8 @@ export async function linkTask(params: {
   target_id: string | number;
   link_relation?: string;
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'link', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -1036,6 +1049,8 @@ export async function linkTask(params: {
  * Archive completed task
  */
 export async function archiveTask(params: { task_id: number }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'archive', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -1101,6 +1116,8 @@ export async function addDependency(params: {
   blocker_task_id: number;
   blocked_task_id: number;
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'add_dependency', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -1233,6 +1250,8 @@ export async function removeDependency(params: {
   blocker_task_id: number;
   blocked_task_id: number;
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'remove_dependency', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -1269,6 +1288,8 @@ export async function getDependencies(params: {
   task_id: number;
   include_details?: boolean;
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'get_dependencies', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
@@ -1317,6 +1338,8 @@ export async function batchCreateTasks(params: {
   }>;
   atomic?: boolean;
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateBatchParams('task', 'tasks', params.tasks, 'create', 50);
+
   const actualAdapter = adapter ?? getAdapter();
 
   if (!params.tasks || !Array.isArray(params.tasks)) {
@@ -1412,6 +1435,8 @@ export async function watchFiles(params: {
   action: 'watch' | 'unwatch' | 'list';
   file_paths?: string[];
 }, adapter?: DatabaseAdapter): Promise<any> {
+  validateActionParams('task', 'watch_files', params);
+
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
