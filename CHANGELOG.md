@@ -9,6 +9,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.6.9] - 2025-10-30
 
+### Added - Environment Variable Support for Project Root
+
+**New `SQLEW_PROJECT_ROOT` environment variable for project-relative databases**
+
+#### Problem
+- Junie AI and other MCP clients require absolute paths in configuration
+- Users had to hardcode project-specific paths in MCP server config
+- No easy way to use project-relative database paths
+
+#### Solution
+- Added `SQLEW_PROJECT_ROOT` environment variable support (inspired by serena-mcp pattern)
+- MCP clients can now pass project directory via environment variable
+- Database automatically created at `$SQLEW_PROJECT_ROOT/.sqlew/sqlew.db`
+
+#### Priority Order
+1. `SQLEW_PROJECT_ROOT` environment variable (NEW - highest priority)
+2. `--db-path` CLI argument (absolute path)
+3. `--config-path` CLI argument (absolute path)
+4. `database.path` in config file (absolute path)
+5. `process.cwd()` fallback
+
+#### Junie AI Configuration Example
+```json
+{
+  "mcpServers": {
+    "sqlew": {
+      "command": "npx",
+      "args": ["sqlew"],
+      "env": {
+        "SQLEW_PROJECT_ROOT": "{projectDir}"
+      }
+    }
+  }
+}
+```
+
+**Note:** Junie AI uses `{projectDir}` variable which expands to the current project's absolute path. This ensures each project gets its own isolated database without hardcoded paths. Other MCP clients may use different variable names like `${workspaceFolder}` (VS Code/Cline) - check your client's documentation.
+
+#### Impact
+- ✅ **Project-relative databases** without hardcoded absolute paths
+- ✅ **Cleaner MCP configuration** (no per-project path updates needed)
+- ✅ **Compatible with Junie AI, Claude Desktop, and other MCP clients**
+- ✅ **No breaking changes** (environment variable is optional)
+
+---
+
+### Fixed - MCP Protocol Compliance (EPIPE Fix)
+
+**Eliminated console output for strict JSON-RPC protocol compliance**
+
+#### Problem
+- EPIPE (broken pipe) errors when running with Junie AI on Windows
+- Console output to stdout/stderr violated MCP JSON-RPC protocol requirements
+- Strict MCP clients (like Junie AI) expect pure JSON-RPC on stdio streams
+
+#### Changes
+- **Redirected all diagnostic output to debug log file** - stdout/stderr reserved exclusively for JSON-RPC
+- Modified `safeConsoleError()` to write to debug log instead of stderr
+- Replaced 50+ console.log/console.error calls across codebase:
+  - `src/database.ts` - Database initialization messages
+  - `src/watcher/file-watcher.ts` - File watcher status and events
+  - `src/watcher/gitignore-parser.ts` - .gitignore loading warnings
+  - `src/tools/tasks.ts` - Task file registration warnings
+  - `src/config/example-generator.ts` - First launch messages
+
+#### Technical Details
+- **MCP Protocol Requirement**: stdin/stdout/stderr must carry only JSON-RPC messages
+- **Debug Logging**: All diagnostic messages now use `debugLog()` with appropriate levels (INFO, WARN, ERROR)
+- **Zero stdout pollution**: Server starts silently, waits for JSON-RPC requests
+- **Tested with Junie AI**: Confirmed no EPIPE errors on Windows
+
+#### Impact
+- ✅ **Works with strict MCP clients** (Junie AI, etc.)
+- ✅ **Maintains full diagnostics** via debug log file
+- ✅ **Pure JSON-RPC protocol** compliance
+- ✅ **No breaking changes** to MCP tool functionality
+
+---
+
 ### Fixed - Windows Absolute Path Handling
 
 **Fixed path normalization for Windows environments**

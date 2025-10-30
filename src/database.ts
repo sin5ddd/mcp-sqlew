@@ -8,6 +8,7 @@ import knexConfig from './knexfile.js';
 import type { DatabaseAdapter } from './adapters/index.js';
 import { createDatabaseAdapter, SQLiteAdapter } from './adapters/index.js';
 import { syncAgentsWithConfig } from './sync-agents.js';
+import { debugLog } from './utils/debug-logger.js';
 
 
 // Global adapter instance
@@ -69,7 +70,7 @@ export async function initializeDatabase(
   const migrationsConfig = baseConfig.migrations || {};
   await knex.migrate.latest(migrationsConfig);
 
-  console.log(`✓ Database initialized with Knex adapter (${environment})`);
+  debugLog('INFO', `Database initialized with Knex adapter (${environment})`);
 
   // Sync agents with config.toml
   syncAgentsWithConfig();
@@ -95,7 +96,7 @@ export async function closeDatabase(): Promise<void> {
   if (adapterInstance) {
     await adapterInstance.disconnect();
     adapterInstance = null;
-    console.log('✓ Database connection closed');
+    debugLog('INFO', 'Database connection closed');
   }
 }
 
