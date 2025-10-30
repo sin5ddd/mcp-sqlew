@@ -10,7 +10,7 @@ import { debugLog, debugLogError } from './debug-logger.js';
  * When the pipe to Claude Code is broken, console.error throws EPIPE
  * This wrapper silently fails instead of creating cascading errors
  */
-function safeConsoleError(...args: any[]): void {
+export function safeConsoleError(...args: any[]): void {
   try {
     // Check if stderr is writable before attempting to write
     if (process.stderr && process.stderr.writable) {
