@@ -12,6 +12,7 @@
 import ignore, { Ignore } from 'ignore';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { debugLog } from '../utils/debug-logger.js';
 
 /**
  * VCS index files that must NEVER be ignored (v3.5.3)
@@ -126,7 +127,7 @@ export class GitIgnoreParser {
         const gitignoreContent = readFileSync(gitignorePath, 'utf-8');
         this.ig.add(gitignoreContent);
       } catch (error) {
-        console.error('⚠ Failed to load .gitignore:', error);
+        debugLog('WARN', 'Failed to load .gitignore', { error });
       }
     }
 

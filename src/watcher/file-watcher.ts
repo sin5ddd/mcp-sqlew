@@ -24,6 +24,7 @@ import { checkReadyForReview } from '../utils/quality-checks.js';
 import { CONFIG_KEYS } from '../constants.js';
 import { detectAndCompleteReviewedTasks, detectAndCompleteOnStaging, detectAndArchiveOnCommit } from '../utils/task-stale-detection.js';
 import { detectVCS } from '../utils/vcs-adapter.js';
+import { debugLog } from '../utils/debug-logger.js';
 
 /**
  * Helper to get raw better-sqlite3 Database instance from adapter
@@ -106,7 +107,7 @@ export class FileWatcher {
    */
   public async start(): Promise<void> {
     if (this.isRunning) {
-      console.error('⚠ File watcher already running');
+      debugLog('WARN', 'File watcher already running');
       return;
     }
 
@@ -117,7 +118,7 @@ export class FileWatcher {
       // Detect WSL (informational only - chokidar v4 handles WSL automatically)
       const isWSL = this.isWSL();
       if (isWSL) {
-        console.error('✓ WSL detected - chokidar v4 handles WSL automatically');
+        debugLog('INFO', 'WSL detected - chokidar v4 handles WSL automatically');
       }
 
       // Initialize chokidar v4 with debouncing and gitignore support
@@ -159,7 +160,7 @@ export class FileWatcher {
       });
 
       this.watcher.on('error', (error: unknown) => {
-        console.error('File watcher error:', error);
+        debugLog('ERROR', 'File watcher error', { error });
       });
 
       // Load existing task-file links from database
@@ -185,16 +186,18 @@ export class FileWatcher {
         this.stagingPollInterval = setInterval(async () => {
           await this.pollStagingArea();
         }, 1000); // Poll every 1 second
-        console.error('✓ WSL periodic staging detection enabled (1s interval)');
+        debugLog('INFO', 'WSL periodic staging detection enabled (1s interval)');
       }
 
       this.isRunning = true;
-      console.error('✓ File watcher started successfully');
-      console.error(`  Project root: ${this.projectRoot}`);
-      console.error(`  Watching ${this.watchedFiles.size} files for ${this.getTotalTaskCount()} tasks`);
-      console.error(`  .gitignore patterns loaded: ${existsSync(this.projectRoot + '/.gitignore') ? 'Yes' : 'No'}`);
+      debugLog('INFO', 'File watcher started successfully', {
+        projectRoot: this.projectRoot,
+        filesWatched: this.watchedFiles.size,
+        tasksWatched: this.getTotalTaskCount(),
+        gitignoreLoaded: existsSync(this.projectRoot + '/.gitignore')
+      });
     } catch (error) {
-      console.error('Failed to start file watcher:', error);
+      debugLog('ERROR', 'Failed to start file watcher', { error });
       throw error;
     }
   }
@@ -235,9 +238,9 @@ export class FileWatcher {
       }
 
       this.isRunning = false;
-      console.error('✓ File watcher stopped');
+      debugLog('INFO', 'File watcher stopped');
     } catch (error) {
-      console.error('Error stopping file watcher:', error);
+      debugLog('ERROR', 'Error stopping file watcher', { error });
       throw error;
     }
   }
@@ -247,7 +250,7 @@ export class FileWatcher {
    */
   public registerFile(filePath: string, taskId: number, taskTitle: string, currentStatus: string): void {
     if (!this.watcher) {
-      console.error('Cannot register file: watcher not initialized');
+      debugLog('WARN', 'Cannot register file: watcher not initialized');
       return;
     }
 
@@ -290,7 +293,7 @@ export class FileWatcher {
     if (filtered.length === 0) {
       // No more tasks watching this file
       this.watchedFiles.delete(normalizedPath);
-      console.error(`  Removed task mapping for: ${basename(normalizedPath)}`);
+      debugLog('INFO', `Removed task mapping for: ${basename(normalizedPath)}`);
     } else {
       this.watchedFiles.set(normalizedPath, filtered);
     }
@@ -354,11 +357,11 @@ export class FileWatcher {
    */
   public async refreshVCSWatching(): Promise<void> {
     if (!this.watcher || !this.isRunning) {
-      console.error('⚠ Cannot refresh VCS watching: watcher not running');
+      debugLog('WARN', 'Cannot refresh VCS watching: watcher not running');
       return;
     }
 
-    console.error('\n🔍 Re-detecting VCS...');
+    debugLog('INFO', 'Re-detecting VCS...');
     await this.watchVCSIndexFiles();
   }
 
@@ -370,7 +373,7 @@ export class FileWatcher {
     const vcsAdapter = await detectVCS(this.projectRoot);
 
     if (!vcsAdapter) {
-      console.error('ℹ No VCS detected - skipping VCS index watching');
+      debugLog('INFO', 'No VCS detected - skipping VCS index watching');
       return;
     }
 
@@ -378,15 +381,15 @@ export class FileWatcher {
     const indexPath = this.getVCSIndexPath(vcsType);
 
     if (indexPath === null) {
-      console.error(`ℹ ${vcsType} detected - no local index file to watch (commits are remote)`);
+      debugLog('INFO', `${vcsType} detected - no local index file to watch (commits are remote)`);
       return;
     }
 
     if (existsSync(indexPath) && this.watcher) {
       this.watcher.add(indexPath);
-      console.error(`✓ Watching ${indexPath} for ${vcsType} commits`);
+      debugLog('INFO', `Watching ${indexPath} for ${vcsType} commits`);
     } else if (!existsSync(indexPath)) {
-      console.error(`⚠ ${vcsType} index file not found: ${indexPath}`);
+      debugLog('WARN', `${vcsType} index file not found: ${indexPath}`);
     }
   }
 
@@ -401,7 +404,7 @@ export class FileWatcher {
       return;
     }
 
-    console.error(`\n📝 File changed: ${basename(normalizedPath)}`);
+    debugLog('INFO', `File changed: ${basename(normalizedPath)}`);
 
     const adapter = getAdapter();
     const db = getRawDb();
@@ -425,7 +428,7 @@ export class FileWatcher {
           const inProgressStatusId = db.prepare('SELECT id FROM m_task_statuses WHERE name = ?').get('in_progress') as { id: number } | undefined;
 
           if (!todoStatusId || !inProgressStatusId) {
-            console.error('Cannot find task status IDs');
+            debugLog('ERROR', 'Cannot find task status IDs');
             return;
           }
 
@@ -439,7 +442,7 @@ export class FileWatcher {
           // Update in-memory status
           mapping.currentStatus = 'in_progress';
 
-          console.error(`  ✓ Task #${taskId} "${taskTitle}": todo → in_progress`);
+          debugLog('INFO', `Task #${taskId} "${taskTitle}": todo → in_progress`);
 
           // Log to activity log
           const agentId = db.prepare('SELECT assigned_agent_id FROM t_tasks WHERE id = ?').get(taskId) as { assigned_agent_id: number | null } | undefined;
@@ -460,7 +463,7 @@ export class FileWatcher {
             );
           }
         } catch (error) {
-          console.error(`Error auto-transitioning task #${taskId}:`, error);
+          debugLog('ERROR', `Error auto-transitioning task #${taskId}`, { error });
         }
       }
 
@@ -475,7 +478,7 @@ export class FileWatcher {
           await this.checkAndTransitionToReview(taskId);
         }, idleMinutes * 60 * 1000);
       } else {
-        console.error(`  • Task #${taskId} "${taskTitle}": status ${currentStatus}`);
+        debugLog('INFO', `Task #${taskId} "${taskTitle}": status ${currentStatus}`);
       }
     }
   }
@@ -487,7 +490,7 @@ export class FileWatcher {
    * Fallback: If files already committed (not in staging), use legacy logic
    */
   private async handleVCSIndexChange(filePath: string): Promise<void> {
-    console.error('\n🔄 VCS index changed - checking for tasks ready to auto-transition');
+    debugLog('INFO', 'VCS index changed - checking for tasks ready to auto-transition');
 
     const db = getAdapter();
 
@@ -515,12 +518,12 @@ export class FileWatcher {
       }
 
       if (transitions.length > 0) {
-        console.error(`  ✓ ${transitions.join(', ')}`);
+        debugLog('INFO', `VCS auto-transition: ${transitions.join(', ')}`);
       } else {
-        console.error(`  ℹ No tasks ready for auto-transition`);
+        debugLog('INFO', 'No tasks ready for auto-transition');
       }
     } catch (error) {
-      console.error(`  ✗ Error during VCS-aware auto-transition:`, error);
+      debugLog('ERROR', 'Error during VCS-aware auto-transition', { error });
     }
   }
 
@@ -534,10 +537,10 @@ export class FileWatcher {
       const { detectAndCompleteOnStaging } = await import('../utils/task-stale-detection.js');
       
       const completedCount = await detectAndCompleteOnStaging(db);
-      
+
       // Only log if tasks were actually completed (reduce noise)
       if (completedCount > 0) {
-        console.error(`\n🔄 WSL polling detected staging → ${completedCount} task(s) auto-completed`);
+        debugLog('INFO', `WSL polling detected staging → ${completedCount} task(s) auto-completed`);
       }
     } catch (error) {
       // Silently ignore errors to avoid spamming console
@@ -574,7 +577,7 @@ export class FileWatcher {
         return;
       }
 
-      console.error(`  🔍 Checking acceptance criteria for task #${taskId}...`);
+      debugLog('INFO', `Checking acceptance criteria for task #${taskId}...`);
 
       // Execute all checks
       const { allPassed, results } = await executeAcceptanceCriteria(checks);
@@ -582,10 +585,8 @@ export class FileWatcher {
       // Log individual check results
       results.forEach((result, index) => {
         const icon = result.success ? '✓' : '✗';
-        console.error(`    ${icon} Check ${index + 1}: ${result.message}`);
-        if (result.details) {
-          console.error(`      Details: ${result.details}`);
-        }
+        const message = `${icon} Check ${index + 1}: ${result.message}`;
+        debugLog(result.success ? 'INFO' : 'WARN', message, result.details ? { details: result.details } : undefined);
       });
 
       if (allPassed) {
@@ -594,7 +595,7 @@ export class FileWatcher {
         const doneStatusId = db.prepare('SELECT id FROM m_task_statuses WHERE name = ?').get('done') as { id: number } | undefined;
 
         if (!inProgressStatusId || !doneStatusId) {
-          console.error('Cannot find task status IDs');
+          debugLog('ERROR', 'Cannot find task status IDs');
           return;
         }
 
@@ -607,7 +608,7 @@ export class FileWatcher {
         // Update in-memory status
         mapping.currentStatus = 'done';
 
-        console.error(`  🎉 Task #${taskId} "${taskTitle}": in_progress → done (all checks passed!)`);
+        debugLog('INFO', `Task #${taskId} "${taskTitle}": in_progress → done (all checks passed!)`);
 
         // Unregister from watcher (done tasks don't need watching)
         this.unregisterTask(taskId);
@@ -632,10 +633,10 @@ export class FileWatcher {
         }
       } else {
         const failedCount = results.filter(r => !r.success).length;
-        console.error(`  ⏳ Task #${taskId}: ${failedCount}/${results.length} checks failed, staying in_progress`);
+        debugLog('INFO', `Task #${taskId}: ${failedCount}/${results.length} checks failed, staying in_progress`);
       }
     } catch (error) {
-      console.error(`Error checking acceptance criteria for task #${taskId}:`, error);
+      debugLog('ERROR', `Error checking acceptance criteria for task #${taskId}`, { error });
     }
   }
 
@@ -672,9 +673,9 @@ export class FileWatcher {
         this.registerFile(link.file_path, link.task_id, link.task_title, link.status);
       });
 
-      console.error(`  Loaded ${links.length} task-file links from database`);
+      debugLog('INFO', `Loaded ${links.length} task-file links from database`);
     } catch (error) {
-      console.error('Error loading task-file links:', error);
+      debugLog('ERROR', 'Error loading task-file links', { error });
       throw error;
     }
   }
@@ -793,11 +794,11 @@ export class FileWatcher {
 
       if (ready) {
         // All quality gates passed - transition to waiting_review
-        console.error(`  ✓ Quality checks passed for task #${taskId}`);
+        debugLog('INFO', `Quality checks passed for task #${taskId}`);
 
         // Log individual results
         results.forEach(({ check, result }) => {
-          console.error(`    • ${check}: ${result.message}`);
+          debugLog('INFO', `${check}: ${result.message}`);
         });
 
         // Update task status
@@ -808,7 +809,7 @@ export class FileWatcher {
           WHERE id = ?
         `).run(taskId);
 
-        console.error(`  → Task #${taskId} auto-transitioned to waiting_review`);
+        debugLog('INFO', `Task #${taskId} auto-transitioned to waiting_review`);
 
         // Clear tracking for this task
         this.lastModifiedTimes.delete(taskId);
@@ -816,17 +817,15 @@ export class FileWatcher {
       } else {
         // Some checks failed - log details
         const failedChecks = results.filter(({ result }) => !result.passed);
-        console.error(`  ℹ Task #${taskId} not ready for review (${failedChecks.length} checks failed)`);
+        debugLog('INFO', `Task #${taskId} not ready for review (${failedChecks.length} checks failed)`);
         failedChecks.forEach(({ check, result }) => {
-          console.error(`    • ${check}: ${result.message}`);
-          if (result.details) {
-            console.error(`      ${result.details}`);
-          }
+          const details = result.details ? { details: result.details } : undefined;
+          debugLog('INFO', `${check}: ${result.message}`, details);
         });
       }
     } catch (error) {
       // Log error but don't crash the watcher
-      console.error(`Error checking review readiness for task #${taskId}:`, error);
+      debugLog('ERROR', `Error checking review readiness for task #${taskId}`, { error });
     }
   }
 

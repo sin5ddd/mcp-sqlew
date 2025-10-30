@@ -6,20 +6,22 @@
 import { debugLog, debugLogError } from './debug-logger.js';
 
 /**
- * Safe console error wrapper that prevents EPIPE errors from crashing the error handler
- * When the pipe to Claude Code is broken, console.error throws EPIPE
- * This wrapper silently fails instead of creating cascading errors
+ * Safe console error wrapper for MCP server mode
+ *
+ * Design: MCP servers should reserve stdin/stdout/stderr for JSON-RPC protocol only.
+ * All diagnostic messages are written to debug log file instead.
+ * This prevents EPIPE errors with strict JSON-RPC clients (e.g., Junie AI on Windows).
+ *
+ * @param args - Message arguments to log (written to debug log, NOT stderr)
  */
-function safeConsoleError(...args: any[]): void {
-  try {
-    // Check if stderr is writable before attempting to write
-    if (process.stderr && process.stderr.writable) {
-      console.error(...args);
-    }
-  } catch (error) {
-    // Silently ignore EPIPE and other write errors
-    // The debug logger will still capture the original error
-  }
+export function safeConsoleError(...args: any[]): void {
+  // Write to debug log file instead of stderr
+  // This keeps stdin/stdout/stderr clean for JSON-RPC protocol
+  const message = args.map(arg =>
+    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+  ).join(' ');
+
+  debugLog('INFO', message);
 }
 
 /**

@@ -23,14 +23,16 @@ import { FileWatcher } from './watcher/index.js';
 import { trackAndReturnHelp } from './utils/help-tracking.js';
 import { queryHelpAction, queryHelpParams, queryHelpTool, queryHelpUseCase, queryHelpListUseCases, queryHelpNextActions } from './tools/help-queries.js';
 import { initDebugLogger, closeDebugLogger, debugLog, debugLogToolCall, debugLogToolResponse, debugLogError } from './utils/debug-logger.js';
-import { handleToolError, handleInitializationError, setupGlobalErrorHandlers } from './utils/error-handler.js';
+import { handleToolError, handleInitializationError, setupGlobalErrorHandlers, safeConsoleError } from './utils/error-handler.js';
 import { ensureSqlewDirectory } from './config/example-generator.js';
 import { DecisionAction, TaskAction, FileAction, ConstraintAction, StatsAction, MessageAction } from './types.js';
+import { determineProjectRoot } from './utils/project-root.js';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
 const parsedArgs: {
   dbPath?: string;
+  configPath?: string;
   autodeleteIgnoreWeekend?: boolean;
   autodeleteMessageHours?: number;
   autodeleteFileHistoryDays?: number;
@@ -44,6 +46,10 @@ for (let i = 0; i < args.length; i++) {
     parsedArgs.dbPath = arg.split('=')[1];
   } else if (arg === '--db-path' && i + 1 < args.length) {
     parsedArgs.dbPath = args[++i];
+  } else if (arg.startsWith('--config-path=')) {
+    parsedArgs.configPath = arg.split('=')[1];
+  } else if (arg === '--config-path' && i + 1 < args.length) {
+    parsedArgs.configPath = args[++i];
   } else if (arg.startsWith('--autodelete-ignore-weekend=')) {
     const value = arg.split('=')[1].toLowerCase();
     parsedArgs.autodeleteIgnoreWeekend = value === 'true' || value === '1';
@@ -69,9 +75,29 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-// Load config file and determine database path
-// Priority: CLI --db-path > config file > default
-const fileConfig = loadConfigFile();
+// Determine project root with correct priority order
+// Phase 1: Try to determine from CLI arguments only (absolute paths)
+const initialProjectRoot = determineProjectRoot({
+  cliDbPath: parsedArgs.dbPath,
+  cliConfigPath: parsedArgs.configPath,
+});
+
+// Phase 2: Load config file from determined project root
+const fileConfig = loadConfigFile(initialProjectRoot, parsedArgs.configPath);
+
+// Phase 3: Refine project root if config has absolute database.path
+const finalProjectRoot = determineProjectRoot({
+  cliDbPath: parsedArgs.dbPath,
+  cliConfigPath: parsedArgs.configPath,
+  configDbPath: fileConfig.database?.path,
+});
+
+// Ensure .sqlew directory exists in the correct project root
+// This must happen BEFORE database initialization to prevent System32 errors
+ensureSqlewDirectory(finalProjectRoot);
+
+// Determine final database path
+// Priority: CLI --db-path > config file database.path > default
 const dbPath = parsedArgs.dbPath || fileConfig.database?.path;
 
 // Initialize database (will be set after async init completes)
@@ -544,14 +570,12 @@ setupGlobalErrorHandlers(() => {
 // Start server with stdio transport
 async function main() {
   try {
-    // 0. Ensure .sqlew directory and config template exist (first launch)
-    ensureSqlewDirectory();
-
-    // 1. Initialize database
+    // 1. Initialize database (SILENT - no stderr writes yet)
+    // Note: .sqlew directory already created above with correct project root
     const config = dbPath ? { connection: { filename: dbPath } } : undefined;
     db = await initializeDatabase(config);
 
-    // Apply CLI config overrides if provided
+    // 2. Apply CLI config overrides (SILENT)
     if (parsedArgs.autodeleteIgnoreWeekend !== undefined) {
       await setConfigValue(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, parsedArgs.autodeleteIgnoreWeekend ? '1' : '0');
     }
@@ -562,20 +586,14 @@ async function main() {
       await setConfigValue(db, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(parsedArgs.autodeleteFileHistoryDays));
     }
 
-    // Display current config
+    // 3. Read config values for diagnostics (SILENT)
     const configValues = await getAllConfig(db);
     const ignoreWeekend = configValues[CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND] === '1';
     const messageHours = configValues[CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS];
     const fileHistoryDays = configValues[CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS];
 
-    console.error('✓ MCP Shared Context Server initialized');
-    if (dbPath) {
-      const source = parsedArgs.dbPath ? 'CLI' : 'config file';
-      console.error(`  Database: ${dbPath} (from ${source})`);
-    }
-    console.error(`  Auto-delete config: messages=${messageHours}h, file_history=${fileHistoryDays}d, ignore_weekend=${ignoreWeekend}`);
-
-    // Initialize debug logger (priority: CLI arg > environment variable > config file)
+    // 4. Initialize debug logger EARLY (file-based logging, no stderr)
+    // Priority: CLI arg > environment variable > config file
     const debugLogPath = parsedArgs.debugLogPath || process.env.SQLEW_DEBUG || fileConfig.debug?.log_path;
     const debugLogLevel = fileConfig.debug?.log_level || 'info';
     initDebugLogger(debugLogPath, debugLogLevel);
@@ -585,18 +603,26 @@ async function main() {
       debugLogLevel: debugLogLevel
     });
 
-    // 2. Connect MCP server
+    // 5. Connect MCP server transport FIRST (before any stderr writes)
+    // This prevents EPIPE errors with clients expecting pure JSON-RPC protocol
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error('✓ MCP Shared Context Server running on stdio');
 
-    // 3. Start file watcher for auto-task-tracking (after database is ready)
+    // 6. NOW safe to write diagnostic messages (using EPIPE-safe wrapper)
+    safeConsoleError('✓ MCP Shared Context Server running on stdio');
+    if (dbPath) {
+      const source = parsedArgs.dbPath ? 'CLI' : 'config file';
+      safeConsoleError(`  Database: ${dbPath} (from ${source})`);
+    }
+    safeConsoleError(`  Auto-delete config: messages=${messageHours}h, file_history=${fileHistoryDays}d, ignore_weekend=${ignoreWeekend}`);
+
+    // 7. Start file watcher for auto-task-tracking (after database is ready)
     try {
       const watcher = FileWatcher.getInstance();
       await watcher.start();
     } catch (error) {
-      console.error('⚠ Failed to start file watcher:', error);
-      console.error('  (Auto task tracking will be disabled)');
+      safeConsoleError('⚠ Failed to start file watcher:', error);
+      safeConsoleError('  (Auto task tracking will be disabled)');
     }
   } catch (error) {
     // Use centralized initialization error handler
@@ -610,7 +636,7 @@ async function main() {
 
 main().catch((error) => {
   // Use centralized initialization error handler
-  console.error('\n❌ FATAL ERROR:');
+  safeConsoleError('\n❌ FATAL ERROR:');
   handleInitializationError(error);
 
   closeDatabase();
