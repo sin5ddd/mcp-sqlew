@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { debugLog } from '../utils/debug-logger.js';
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -36,7 +37,7 @@ export function ensureSqlewDirectory(projectRoot: string = process.cwd()): boole
     // First launch - create directory
     fs.mkdirSync(sqlewDir, { recursive: true });
     isFirstLaunch = true;
-    console.error('✓ Created .sqlew directory (first launch)');
+    debugLog('INFO', 'Created .sqlew directory (first launch)');
   }
 
   // Copy config.example.toml if it doesn't exist
@@ -45,9 +46,9 @@ export function ensureSqlewDirectory(projectRoot: string = process.cwd()): boole
 
     if (fs.existsSync(templatePath)) {
       fs.copyFileSync(templatePath, configExamplePath);
-      console.error('✓ Copied config.example.toml to .sqlew/');
+      debugLog('INFO', 'Copied config.example.toml to .sqlew/');
     } else {
-      console.error('⚠ Warning: Template file not found at', templatePath);
+      debugLog('WARN', 'Template file not found', { templatePath });
     }
   }
 
