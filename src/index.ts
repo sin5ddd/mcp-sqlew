@@ -26,11 +26,13 @@ import { initDebugLogger, closeDebugLogger, debugLog, debugLogToolCall, debugLog
 import { handleToolError, handleInitializationError, setupGlobalErrorHandlers } from './utils/error-handler.js';
 import { ensureSqlewDirectory } from './config/example-generator.js';
 import { DecisionAction, TaskAction, FileAction, ConstraintAction, StatsAction, MessageAction } from './types.js';
+import { determineProjectRoot } from './utils/project-root.js';
 
 // Parse command-line arguments
 const args = process.argv.slice(2);
 const parsedArgs: {
   dbPath?: string;
+  configPath?: string;
   autodeleteIgnoreWeekend?: boolean;
   autodeleteMessageHours?: number;
   autodeleteFileHistoryDays?: number;
@@ -44,6 +46,10 @@ for (let i = 0; i < args.length; i++) {
     parsedArgs.dbPath = arg.split('=')[1];
   } else if (arg === '--db-path' && i + 1 < args.length) {
     parsedArgs.dbPath = args[++i];
+  } else if (arg.startsWith('--config-path=')) {
+    parsedArgs.configPath = arg.split('=')[1];
+  } else if (arg === '--config-path' && i + 1 < args.length) {
+    parsedArgs.configPath = args[++i];
   } else if (arg.startsWith('--autodelete-ignore-weekend=')) {
     const value = arg.split('=')[1].toLowerCase();
     parsedArgs.autodeleteIgnoreWeekend = value === 'true' || value === '1';
@@ -69,9 +75,29 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-// Load config file and determine database path
-// Priority: CLI --db-path > config file > default
-const fileConfig = loadConfigFile();
+// Determine project root with correct priority order
+// Phase 1: Try to determine from CLI arguments only (absolute paths)
+const initialProjectRoot = determineProjectRoot({
+  cliDbPath: parsedArgs.dbPath,
+  cliConfigPath: parsedArgs.configPath,
+});
+
+// Phase 2: Load config file from determined project root
+const fileConfig = loadConfigFile(initialProjectRoot, parsedArgs.configPath);
+
+// Phase 3: Refine project root if config has absolute database.path
+const finalProjectRoot = determineProjectRoot({
+  cliDbPath: parsedArgs.dbPath,
+  cliConfigPath: parsedArgs.configPath,
+  configDbPath: fileConfig.database?.path,
+});
+
+// Ensure .sqlew directory exists in the correct project root
+// This must happen BEFORE database initialization to prevent System32 errors
+ensureSqlewDirectory(finalProjectRoot);
+
+// Determine final database path
+// Priority: CLI --db-path > config file database.path > default
 const dbPath = parsedArgs.dbPath || fileConfig.database?.path;
 
 // Initialize database (will be set after async init completes)
@@ -544,10 +570,8 @@ setupGlobalErrorHandlers(() => {
 // Start server with stdio transport
 async function main() {
   try {
-    // 0. Ensure .sqlew directory and config template exist (first launch)
-    ensureSqlewDirectory();
-
     // 1. Initialize database
+    // Note: .sqlew directory already created above with correct project root
     const config = dbPath ? { connection: { filename: dbPath } } : undefined;
     db = await initializeDatabase(config);
 
