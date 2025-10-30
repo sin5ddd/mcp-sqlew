@@ -19,10 +19,29 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // Create index for finding inactive reusable agents
-  await knex.raw('CREATE INDEX IF NOT EXISTS idx_agents_reusable ON m_agents(is_reusable, in_use, last_active_ts)');
+  const client = knex.client.config.client;
+
+  if (client === 'mysql' || client === 'mysql2' || client === 'pg') {
+    // MySQL and PostgreSQL: Check if index exists first
+    try {
+      await knex.schema.alterTable('m_agents', (table) => {
+        table.index(['is_reusable', 'in_use', 'last_active_ts'], 'idx_agents_reusable');
+      });
+      console.log('✓ Created index idx_agents_reusable');
+    } catch (error: any) {
+      if (error.message.includes('Duplicate key name') || error.message.includes('already exists')) {
+        console.log('✓ Index idx_agents_reusable already exists');
+      } else {
+        throw error;
+      }
+    }
+  } else {
+    // SQLite: Use IF NOT EXISTS
+    await knex.raw('CREATE INDEX IF NOT EXISTS idx_agents_reusable ON m_agents(is_reusable, in_use, last_active_ts)');
+    console.log('✓ Created index idx_agents_reusable');
+  }
 
   console.log('✓ Added agent reuse columns to m_agents');
-  console.log('✓ Created index idx_agents_reusable');
 }
 
 export async function down(knex: Knex): Promise<void> {

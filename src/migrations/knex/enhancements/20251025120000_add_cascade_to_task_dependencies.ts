@@ -6,6 +6,15 @@ import type { Knex } from "knex";
  */
 
 export async function up(knex: Knex): Promise<void> {
+  const client = knex.client.config.client;
+
+  // This migration is SQLite-specific
+  // MySQL and PostgreSQL already have CASCADE constraints from the bootstrap migration
+  if (client === 'mysql' || client === 'mysql2' || client === 'pg') {
+    console.log('✓ CASCADE constraints already exist in MySQL/PostgreSQL, skipping migration');
+    return;
+  }
+
   // SQLite doesn't support ALTER TABLE to modify foreign keys
   // We need to recreate the table with CASCADE constraints
   // Must use raw SQL because Knex doesn't properly generate ON DELETE CASCADE for SQLite
