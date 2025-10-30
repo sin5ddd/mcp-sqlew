@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [3.6.9] - 2025-10-30
+## [3.6.10] - 2025-10-30
 
 ### Added - Environment Variable Support for Project Root
 
