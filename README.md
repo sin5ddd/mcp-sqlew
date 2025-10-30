@@ -83,31 +83,9 @@ Restart Claude Desktop. Done!
 **Custom database path:** Add path as argument: `"args": ["sqlew", "/path/to/db.db"]`
 **Default location:** `.sqlew/sqlew.db`
 
-### Add to Jetbrains Junie AI
+### Jetbrains Junie AI
 
-**Recommended:** Use `SQLEW_PROJECT_ROOT` with Junie's `{projectDir}` variable:
-
-```json
-{
-  "mcpServers": {
-    "sqlew": {
-      "command": "npx",
-      "args": ["sqlew"],
-      "env": {
-        "SQLEW_PROJECT_ROOT": "{projectDir}"
-      }
-    }
-  }
-}
-```
-
-Junie will automatically expand `{projectDir}` to the current project's absolute path, creating a separate database for each project at `{projectDir}/.sqlew/sqlew.db`.
-
-**Benefits:**
-- ✅ One global config works for all projects
-- ✅ Each project gets its own isolated database
-- ✅ No hardcoded paths needed
-- ✅ Avoids Windows System32 working directory issues
+**⚠️ Not Supported:** Junie AI cannot use relative paths in MCP server configurations, which makes it incompatible with sqlew's project-based database model. Each project requires its own isolated database at `.sqlew/sqlew.db`, but Junie AI's global MCP configuration cannot handle per-project database paths.
 
 ## Configuration
 
