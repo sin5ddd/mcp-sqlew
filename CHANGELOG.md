@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.6.7] - 2025-10-30
+
+### Fixed - Dependency Update
+
+**Removed deprecated dependency**
+
+#### Changes
+- Removed deprecated dependency to ensure compatibility with latest ecosystem
+- Maintenance update for long-term stability
+
+---
+
 ## [3.6.6] - 2025-10-29
 
 ### Added - Parameter Validation & Error Handling
