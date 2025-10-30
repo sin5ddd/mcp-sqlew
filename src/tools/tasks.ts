@@ -28,6 +28,7 @@ import {
 } from '../utils/activity-logging.js';
 import { parseStringArray } from '../utils/param-parser.js';
 import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
+import { debugLog } from '../utils/debug-logger.js';
 
 /**
  * Task status enum (matches m_task_statuses)
@@ -286,7 +287,7 @@ async function createTaskInternal(params: {
       }
     } catch (error) {
       // Watcher may not be initialized yet, ignore
-      console.error('Warning: Could not register files with watcher:', error);
+      debugLog('WARN', 'Could not register files with watcher', { error });
     }
   }
 
@@ -534,7 +535,7 @@ export async function updateTask(params: {
           }
         } catch (error) {
           // Watcher may not be initialized yet, ignore
-          console.error('Warning: Could not register files with watcher:', error);
+          debugLog('WARN', 'Could not register files with watcher', { error });
         }
       }
 
@@ -997,9 +998,7 @@ export async function linkTask(params: {
 
       } else if (params.link_type === 'file') {
         // Deprecation warning (v3.4.1)
-        console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.`);
-        console.warn(`   Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead.`);
-        console.warn(`   Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
+        debugLog('WARN', `DEPRECATION: task.link(link_type="file") is deprecated as of v3.4.1. Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead. Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
 
         const filePath = String(params.target_id);
         const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
@@ -1023,7 +1022,7 @@ export async function linkTask(params: {
           }
         } catch (error) {
           // Watcher may not be initialized yet, ignore
-          console.error('Warning: Could not register file with watcher:', error);
+          debugLog('WARN', 'Could not register file with watcher', { error });
         }
 
         return {
@@ -1492,7 +1491,7 @@ export async function watchFiles(params: {
           }
         } catch (error) {
           // Watcher may not be initialized yet, ignore
-          console.error('Warning: Could not register files with watcher:', error);
+          debugLog('WARN', 'Could not register files with watcher', { error });
         }
 
         return {

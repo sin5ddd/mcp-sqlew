@@ -19,12 +19,13 @@ export const DEFAULT_CONFIG_PATH = '.sqlew/config.toml';
  *
  * Priority: File config → Defaults
  *
+ * @param projectRoot - Project root directory (defaults to process.cwd())
  * @param configPath - Path to config file (optional, defaults to .sqlew/config.toml)
  * @returns Parsed and merged configuration
  */
-export function loadConfigFile(configPath?: string): SqlewConfig {
+export function loadConfigFile(projectRoot: string = process.cwd(), configPath?: string): SqlewConfig {
   const finalPath = configPath || DEFAULT_CONFIG_PATH;
-  const absolutePath = resolve(process.cwd(), finalPath);
+  const absolutePath = resolve(projectRoot, finalPath);
 
   // If file doesn't exist, return defaults
   if (!existsSync(absolutePath)) {
@@ -116,11 +117,12 @@ export function flattenConfig(config: SqlewConfig): FlatConfig {
  * Load config file and prepare for database insertion
  * Combines loading and flattening in one call
  *
+ * @param projectRoot - Project root directory (defaults to process.cwd())
  * @param configPath - Optional path to config file
  * @returns Flattened configuration ready for database
  */
-export function loadAndFlattenConfig(configPath?: string): FlatConfig {
-  const config = loadConfigFile(configPath);
+export function loadAndFlattenConfig(projectRoot: string = process.cwd(), configPath?: string): FlatConfig {
+  const config = loadConfigFile(projectRoot, configPath);
   return flattenConfig(config);
 }
 
