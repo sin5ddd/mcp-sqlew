@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.6.9] - 2025-10-30
 
+### Fixed - MCP Protocol Compliance (EPIPE Fix)
+
+**Eliminated console output for strict JSON-RPC protocol compliance**
+
+#### Problem
+- EPIPE (broken pipe) errors when running with Junie AI on Windows
+- Console output to stdout/stderr violated MCP JSON-RPC protocol requirements
+- Strict MCP clients (like Junie AI) expect pure JSON-RPC on stdio streams
+
+#### Changes
+- **Redirected all diagnostic output to debug log file** - stdout/stderr reserved exclusively for JSON-RPC
+- Modified `safeConsoleError()` to write to debug log instead of stderr
+- Replaced 50+ console.log/console.error calls across codebase:
+  - `src/database.ts` - Database initialization messages
+  - `src/watcher/file-watcher.ts` - File watcher status and events
+  - `src/watcher/gitignore-parser.ts` - .gitignore loading warnings
+  - `src/tools/tasks.ts` - Task file registration warnings
+  - `src/config/example-generator.ts` - First launch messages
+
+#### Technical Details
+- **MCP Protocol Requirement**: stdin/stdout/stderr must carry only JSON-RPC messages
+- **Debug Logging**: All diagnostic messages now use `debugLog()` with appropriate levels (INFO, WARN, ERROR)
+- **Zero stdout pollution**: Server starts silently, waits for JSON-RPC requests
+- **Tested with Junie AI**: Confirmed no EPIPE errors on Windows
+
+#### Impact
+- ✅ **Works with strict MCP clients** (Junie AI, etc.)
+- ✅ **Maintains full diagnostics** via debug log file
+- ✅ **Pure JSON-RPC protocol** compliance
+- ✅ **No breaking changes** to MCP tool functionality
+
+---
+
 ### Fixed - Windows Absolute Path Handling
 
 **Fixed path normalization for Windows environments**
