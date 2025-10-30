@@ -110,7 +110,10 @@ export class GitIgnoreParser {
    * @param customPatterns - Additional patterns to ignore (optional)
    */
   constructor(projectRoot: string, customPatterns: string[] = []) {
-    this.projectRoot = projectRoot;
+    // Normalize path to use forward slashes for cross-platform consistency
+    // This ensures startsWith() check works correctly on Windows where
+    // process.cwd() returns backslashes but chokidar may provide forward slashes
+    this.projectRoot = projectRoot.replace(/\\/g, '/');
     this.ig = ignore();
 
     // Add built-in patterns
@@ -139,20 +142,22 @@ export class GitIgnoreParser {
    * @returns true if file should be ignored, false otherwise
    */
   shouldIgnore(filePath: string): boolean {
-    // Normalize path: convert to relative path from project root
-    let relativePath = filePath;
+    // Normalize incoming path to forward slashes for cross-platform consistency
+    const normalizedPath = filePath.replace(/\\/g, '/');
 
-    if (filePath.startsWith(this.projectRoot)) {
-      relativePath = filePath.substring(this.projectRoot.length);
+    // Convert to relative path from project root
+    let relativePath = normalizedPath;
+
+    if (normalizedPath.startsWith(this.projectRoot)) {
+      relativePath = normalizedPath.substring(this.projectRoot.length);
 
       // Remove leading slash
-      if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+      if (relativePath.startsWith('/')) {
         relativePath = relativePath.substring(1);
       }
     }
 
-    // Convert Windows backslashes to forward slashes
-    relativePath = relativePath.replace(/\\/g, '/');
+    // Path is already normalized to forward slashes above
 
     // Handle empty path (project root itself) - never ignore it
     if (!relativePath || relativePath === '') {
@@ -163,8 +168,7 @@ export class GitIgnoreParser {
     // This ensures .git/index and other VCS files can be explicitly watched
     const isVCSIndexFile = VCS_WATCH_WHITELIST.some(pattern =>
       relativePath === pattern ||
-      relativePath.endsWith('/' + pattern) ||
-      relativePath.endsWith('\\' + pattern)
+      relativePath.endsWith('/' + pattern)
     );
 
     if (isVCSIndexFile) {

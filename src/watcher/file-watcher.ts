@@ -83,10 +83,20 @@ export class FileWatcher {
    * Detect if running on WSL (Windows Subsystem for Linux)
    */
   private isWSL(): boolean {
+    // WSL only exists on Linux platform, not on native Windows
+    if (process.platform !== 'linux') {
+      return false;
+    }
+
+    // On Linux, check if it's actually WSL by examining uname
     try {
-      const result = execSync('uname -r', { encoding: 'utf-8' });
+      const result = execSync('uname -r', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'ignore']  // stdin, stdout, stderr (ignore)
+      });
       return result.toLowerCase().includes('microsoft') || result.toLowerCase().includes('wsl');
     } catch {
+      // Command failed - not WSL
       return false;
     }
   }
