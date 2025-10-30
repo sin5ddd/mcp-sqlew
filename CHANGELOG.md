@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.6.8] - 2025-10-30
+
+### Fixed - Windows Environment Compatibility
+
+**Updated better-sqlite3 for Windows support**
+
+#### Changes
+- Updated `better-sqlite3` from `^11.0.0` to `^12.4.1`
+- Fixes Windows environment compatibility issues
+- Improves cross-platform stability
+
+---
+
 ## [3.6.7] - 2025-10-30
 
 ### Fixed - Dependency Update
