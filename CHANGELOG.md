@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.6.9] - 2025-10-30
+
+### Fixed - Windows Absolute Path Handling
+
+**Fixed path normalization for Windows environments**
+
+#### Changes
+- Fixed absolute path to relative path conversion in `gitignore-parser.ts`
+- Prevented `uname` Unix command calls on Windows
+- Resolved "path should be a `path.relative()`d string" error on Windows
+- Improved cross-platform path handling in file watcher
+
+#### Technical Details
+- Enhanced path normalization logic to handle Windows drive letters (`C:/`)
+- Added proper Windows-specific path handling checks
+- Fixed compatibility with `ignore` library path requirements
+
+---
+
 ## [3.6.8] - 2025-10-30
 
 ### Fixed - Windows Environment Compatibility
