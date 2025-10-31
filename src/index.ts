@@ -574,7 +574,13 @@ setupGlobalErrorHandlers(() => {
 // Start server with stdio transport
 async function main() {
   try {
-    // 1. Initialize database (SILENT - no stderr writes yet)
+    // 1. Initialize debug logger FIRST (file-based logging, safe to do early)
+    // Priority: CLI arg > environment variable > config file
+    const debugLogPath = parsedArgs.debugLogPath || process.env.SQLEW_DEBUG || fileConfig.debug?.log_path;
+    const debugLogLevel = fileConfig.debug?.log_level || 'info';
+    initDebugLogger(debugLogPath, debugLogLevel);
+
+    // 2. Initialize database (SILENT - no stderr writes yet)
     // Note: .sqlew directory already created above with correct project root
     // Build config from fileConfig (which includes database type and auth for multi-RDBMS)
     const config = fileConfig.database?.type && fileConfig.database.type !== 'sqlite'
@@ -591,7 +597,7 @@ async function main() {
         : undefined;
     db = await initializeDatabase(config);
 
-    // 2. Apply CLI config overrides (SILENT)
+    // 3. Apply CLI config overrides (SILENT)
     if (parsedArgs.autodeleteIgnoreWeekend !== undefined) {
       await setConfigValue(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, parsedArgs.autodeleteIgnoreWeekend ? '1' : '0');
     }
@@ -602,17 +608,13 @@ async function main() {
       await setConfigValue(db, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(parsedArgs.autodeleteFileHistoryDays));
     }
 
-    // 3. Read config values for diagnostics (SILENT)
+    // 4. Read config values for diagnostics (SILENT)
     const configValues = await getAllConfig(db);
     const ignoreWeekend = configValues[CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND] === '1';
     const messageHours = configValues[CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS];
     const fileHistoryDays = configValues[CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS];
 
-    // 4. Initialize debug logger EARLY (file-based logging, no stderr)
-    // Priority: CLI arg > environment variable > config file
-    const debugLogPath = parsedArgs.debugLogPath || process.env.SQLEW_DEBUG || fileConfig.debug?.log_path;
-    const debugLogLevel = fileConfig.debug?.log_level || 'info';
-    initDebugLogger(debugLogPath, debugLogLevel);
+    // Log successful initialization
     debugLog('INFO', 'MCP Shared Context Server initialized', {
       dbPath,
       autoDeleteConfig: { messageHours, fileHistoryDays, ignoreWeekend },

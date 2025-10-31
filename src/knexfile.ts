@@ -99,6 +99,69 @@ const config: { [key: string]: Knex.Config } = {
       },
     },
   },
+
+  // MySQL/MariaDB configuration for data migration
+  mysql: {
+    client: 'mysql2',
+    connection: {
+      host: process.env.MYSQL_HOST || '127.0.0.1',
+      port: parseInt(process.env.MYSQL_PORT || '3306'),
+      user: process.env.MYSQL_USER || 'root',
+      password: process.env.MYSQL_PASSWORD || '',
+      database: process.env.MYSQL_DATABASE || 'mcp_context',
+      charset: 'utf8mb4',
+    },
+    migrations: {
+      directory: [
+        path.join(__dirname, 'migrations/knex/bootstrap'),
+        path.join(__dirname, 'migrations/knex/upgrades'),
+        path.join(__dirname, 'migrations/knex/enhancements'),
+      ],
+      extension: 'ts',
+      tableName: 'knex_migrations',
+      loadExtensions: ['.ts'],
+    },
+    seeds: {
+      directory: path.join(__dirname, 'seeds'),
+      extension: 'ts',
+      loadExtensions: ['.ts'],
+    },
+    pool: {
+      min: 2,
+      max: 10,
+    },
+  },
+
+  // PostgreSQL configuration for data migration
+  postgresql: {
+    client: 'pg',
+    connection: {
+      host: process.env.PG_HOST || 'localhost',
+      port: parseInt(process.env.PG_PORT || '5432'),
+      user: process.env.PG_USER || 'postgres',
+      password: process.env.PG_PASSWORD || '',
+      database: process.env.PG_DATABASE || 'mcp_context',
+    },
+    migrations: {
+      directory: [
+        path.join(__dirname, 'migrations/knex/bootstrap'),
+        path.join(__dirname, 'migrations/knex/upgrades'),
+        path.join(__dirname, 'migrations/knex/enhancements'),
+      ],
+      extension: 'ts',
+      tableName: 'knex_migrations',
+      loadExtensions: ['.ts'],
+    },
+    seeds: {
+      directory: path.join(__dirname, 'seeds'),
+      extension: 'ts',
+      loadExtensions: ['.ts'],
+    },
+    pool: {
+      min: 2,
+      max: 10,
+    },
+  },
 };
 
 export default config;

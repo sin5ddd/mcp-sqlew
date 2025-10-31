@@ -205,6 +205,7 @@ All tools support:
 ### For Developers
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
+- [Database Migration](docs/DATABASE_MIGRATION.md) - SQLite → MySQL/PostgreSQL migration
 - [Building from Source](docs/ARCHITECTURE.md#development) - Setup instructions
 - [Migration Guides](docs/MIGRATION_v2.md) - Version upgrade guides
 

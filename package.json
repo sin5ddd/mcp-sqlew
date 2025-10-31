@@ -40,7 +40,8 @@
         "migrate:rollback:all": "npm run knex migrate:rollback --all",
         "migrate:status": "npm run knex migrate:status",
         "seed:make": "npm run knex seed:make",
-        "seed:run": "npm run knex seed:run"
+        "seed:run": "npm run knex seed:run",
+        "db:dump": "node dist/cli.js db:dump"
     },
     "engines": {
         "node": ">=18.0.0"
@@ -79,6 +80,8 @@
         "@types/knex": "^0.15.2",
         "@types/node": "^20.0.0",
         "husky": "^9.1.7",
+        "mysql2": "^3.15.3",
+        "pg": "^8.16.3",
         "tsx": "^4.20.6",
         "typescript": "^5.0.0"
     }

@@ -68,7 +68,22 @@ export async function initializeDatabase(
 
   // Extract migrations config from baseConfig and pass to migrate()
   const migrationsConfig = baseConfig.migrations || {};
-  await knex.migrate.latest(migrationsConfig);
+
+  try {
+    await knex.migrate.latest(migrationsConfig);
+  } catch (migrationError: any) {
+    // Log migration error to debug log (if initialized) and stderr
+    const errorMessage = `Migration failed: ${migrationError.message || String(migrationError)}`;
+    debugLog('ERROR', errorMessage, {
+      error: migrationError,
+      stack: migrationError.stack
+    });
+
+    // Re-throw with more context
+    const enhancedError = new Error(errorMessage);
+    enhancedError.cause = migrationError;
+    throw enhancedError;
+  }
 
   debugLog('INFO', `Database initialized with Knex adapter (${environment})`);
 
