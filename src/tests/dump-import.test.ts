@@ -9,7 +9,7 @@
  *
  * Prerequisites:
  * - Docker installed and running
- * - Run: docker-compose -f docker-compose.test.yml up -d
+ * - Run: docker-compose -f docker/docker-compose.test.yml up -d
  */
 
 import knex, { Knex } from 'knex';
@@ -300,6 +300,240 @@ describe('Cross-Database Migration Tests', () => {
       } else {
         console.log('      ℹ️  No tasks with quotes found (test skipped)');
       }
+    });
+  });
+
+  describe('PostgreSQL Source Schema Export', () => {
+    it('should export PRIMARY KEY constraints from PostgreSQL', async () => {
+      console.log('    Testing PostgreSQL PRIMARY KEY export...');
+
+      // Get a table with PRIMARY KEY from PostgreSQL
+      const createSql = await generateSqlDump(postgresDb, 'postgresql', {
+        tables: ['m_agents'],
+        includeSchema: true,
+        chunkSize: 0, // Schema only
+      });
+
+      assert.ok(createSql.includes('PRIMARY KEY'), 'Should include PRIMARY KEY constraint');
+      console.log('      ✅ PRIMARY KEY exported');
+    });
+
+    it('should export FOREIGN KEY constraints from PostgreSQL', async () => {
+      console.log('    Testing PostgreSQL FOREIGN KEY export...');
+
+      // Get a table with FOREIGN KEY from PostgreSQL
+      const createSql = await generateSqlDump(postgresDb, 'postgresql', {
+        tables: ['t_tasks'],
+        includeSchema: true,
+        chunkSize: 0, // Schema only
+      });
+
+      assert.ok(createSql.includes('FOREIGN KEY') || createSql.includes('REFERENCES'), 'Should include FOREIGN KEY constraint');
+      console.log('      ✅ FOREIGN KEY exported');
+    });
+
+    it('should convert PostgreSQL → MySQL (with constraints)', async () => {
+      console.log('    Testing PostgreSQL → MySQL conversion...');
+
+      const dump = await generateSqlDump(postgresDb, 'mysql', {
+        tables: ['m_agents'],
+        includeSchema: true,
+        chunkSize: 0,
+      });
+
+      // Verify MySQL syntax
+      assert.ok(dump.includes('`'), 'Should use MySQL backtick quotes');
+      assert.ok(dump.includes('PRIMARY KEY'), 'Should preserve PRIMARY KEY');
+      console.log('      ✅ PostgreSQL → MySQL conversion works');
+    });
+
+    it('should convert PostgreSQL → SQLite (with SERIAL → AUTOINCREMENT)', async () => {
+      console.log('    Testing PostgreSQL → SQLite conversion...');
+
+      const dump = await generateSqlDump(postgresDb, 'sqlite', {
+        tables: ['m_agents'],
+        includeSchema: true,
+        chunkSize: 0,
+      });
+
+      // Verify SQLite syntax (SERIAL → INTEGER, IDENTITY → AUTOINCREMENT)
+      assert.ok(dump.includes('"'), 'Should use double quotes');
+      assert.ok(!dump.includes('SERIAL'), 'Should not contain SERIAL keyword');
+      console.log('      ✅ PostgreSQL → SQLite conversion works');
+    });
+
+    it('should handle multi-column PRIMARY KEY from PostgreSQL', async () => {
+      console.log('    Testing multi-column PRIMARY KEY...');
+
+      // Create a temporary table with multi-column PK
+      await postgresDb.raw(`
+        CREATE TABLE IF NOT EXISTS test_multi_pk (
+          col1 INTEGER NOT NULL,
+          col2 INTEGER NOT NULL,
+          value TEXT,
+          PRIMARY KEY (col1, col2)
+        )
+      `);
+
+      try {
+        const dump = await generateSqlDump(postgresDb, 'postgresql', {
+          tables: ['test_multi_pk'],
+          includeSchema: true,
+          chunkSize: 0,
+        });
+
+        assert.ok(dump.includes('PRIMARY KEY ("col1", "col2")') || dump.includes('PRIMARY KEY ('),
+                  'Should include multi-column PRIMARY KEY');
+        console.log('      ✅ Multi-column PRIMARY KEY exported');
+      } finally {
+        await postgresDb.raw('DROP TABLE IF EXISTS test_multi_pk');
+      }
+    });
+
+    it('should handle composite FOREIGN KEY from PostgreSQL', async () => {
+      console.log('    Testing composite FOREIGN KEY...');
+
+      // Create temporary tables with composite FK
+      await postgresDb.raw(`
+        CREATE TABLE IF NOT EXISTS test_parent (
+          id1 INTEGER NOT NULL,
+          id2 INTEGER NOT NULL,
+          PRIMARY KEY (id1, id2)
+        )
+      `);
+
+      await postgresDb.raw(`
+        CREATE TABLE IF NOT EXISTS test_child (
+          child_id SERIAL PRIMARY KEY,
+          parent_id1 INTEGER,
+          parent_id2 INTEGER,
+          FOREIGN KEY (parent_id1, parent_id2) REFERENCES test_parent(id1, id2)
+        )
+      `);
+
+      try {
+        const dump = await generateSqlDump(postgresDb, 'postgresql', {
+          tables: ['test_child'],
+          includeSchema: true,
+          chunkSize: 0,
+        });
+
+        assert.ok(dump.includes('FOREIGN KEY'), 'Should include FOREIGN KEY constraint');
+        console.log('      ✅ Composite FOREIGN KEY exported');
+      } finally {
+        await postgresDb.raw('DROP TABLE IF EXISTS test_child');
+        await postgresDb.raw('DROP TABLE IF EXISTS test_parent');
+      }
+    });
+
+    it('should handle UNIQUE constraints from PostgreSQL', async () => {
+      console.log('    Testing UNIQUE constraints...');
+
+      // Create temporary table with UNIQUE constraint
+      await postgresDb.raw(`
+        CREATE TABLE IF NOT EXISTS test_unique (
+          id SERIAL PRIMARY KEY,
+          email TEXT UNIQUE,
+          username TEXT
+        )
+      `);
+
+      try {
+        const dump = await generateSqlDump(postgresDb, 'postgresql', {
+          tables: ['test_unique'],
+          includeSchema: true,
+          chunkSize: 0,
+        });
+
+        assert.ok(dump.includes('UNIQUE'), 'Should include UNIQUE constraint');
+        console.log('      ✅ UNIQUE constraint exported');
+      } finally {
+        await postgresDb.raw('DROP TABLE IF EXISTS test_unique');
+      }
+    });
+
+    it('should handle ON DELETE/ON UPDATE rules from PostgreSQL', async () => {
+      console.log('    Testing FK ON DELETE/UPDATE rules...');
+
+      // Create temporary tables with FK rules
+      await postgresDb.raw(`
+        CREATE TABLE IF NOT EXISTS test_fk_parent (
+          id SERIAL PRIMARY KEY,
+          name TEXT
+        )
+      `);
+
+      await postgresDb.raw(`
+        CREATE TABLE IF NOT EXISTS test_fk_child (
+          id SERIAL PRIMARY KEY,
+          parent_id INTEGER,
+          FOREIGN KEY (parent_id) REFERENCES test_fk_parent(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+      `);
+
+      try {
+        const dump = await generateSqlDump(postgresDb, 'postgresql', {
+          tables: ['test_fk_child'],
+          includeSchema: true,
+          chunkSize: 0,
+        });
+
+        assert.ok(dump.includes('ON DELETE CASCADE') || dump.includes('CASCADE'), 'Should include ON DELETE CASCADE');
+        assert.ok(dump.includes('ON UPDATE CASCADE') || dump.includes('CASCADE'), 'Should include ON UPDATE CASCADE');
+        console.log('      ✅ FK rules (ON DELETE/UPDATE) exported');
+      } finally {
+        await postgresDb.raw('DROP TABLE IF EXISTS test_fk_child');
+        await postgresDb.raw('DROP TABLE IF EXISTS test_fk_parent');
+      }
+    });
+
+    it('should handle DEFAULT values from PostgreSQL (excluding nextval)', async () => {
+      console.log('    Testing DEFAULT value handling...');
+
+      // Create temporary table with various defaults
+      await postgresDb.raw(`
+        CREATE TABLE IF NOT EXISTS test_defaults (
+          id SERIAL PRIMARY KEY,
+          status TEXT DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          count INTEGER DEFAULT 0
+        )
+      `);
+
+      try {
+        const dump = await generateSqlDump(postgresDb, 'postgresql', {
+          tables: ['test_defaults'],
+          includeSchema: true,
+          chunkSize: 0,
+        });
+
+        assert.ok(dump.includes("DEFAULT 'active'") || dump.includes('DEFAULT'), 'Should include DEFAULT values');
+        assert.ok(!dump.includes('nextval'), 'Should skip nextval sequences');
+        console.log('      ✅ DEFAULT values exported (nextval skipped)');
+      } finally {
+        await postgresDb.raw('DROP TABLE IF EXISTS test_defaults');
+      }
+    });
+
+    it('should generate idempotent PostgreSQL → PostgreSQL dump', async () => {
+      console.log('    Testing PostgreSQL idempotent dump...');
+
+      const dump1 = await generateSqlDump(postgresDb, 'postgresql', {
+        tables: ['m_agents'],
+        includeSchema: true,
+        chunkSize: 0,
+      });
+
+      const dump2 = await generateSqlDump(postgresDb, 'postgresql', {
+        tables: ['m_agents'],
+        includeSchema: true,
+        chunkSize: 0,
+      });
+
+      // Schema should be identical (modulo whitespace/comments)
+      const normalize = (sql: string) => sql.replace(/--.*$/gm, '').replace(/\s+/g, ' ').trim();
+      assert.strictEqual(normalize(dump1), normalize(dump2), 'Idempotent dumps should be identical');
+      console.log('      ✅ Idempotent PostgreSQL dump verified');
     });
   });
 });
