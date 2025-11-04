@@ -3,6 +3,7 @@
  * Database statistics, layer summaries, and manual cleanup
  *
  * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
+ * MULTI-PROJECT: All queries scoped by project_id (Constraint #38)
  */
 
 import { DatabaseAdapter } from '../adapters/index.js';
@@ -22,10 +23,12 @@ import type {
 import { calculateMessageCutoff, calculateFileChangeCutoff, releaseInactiveAgents } from '../utils/retention.js';
 import { cleanupWithCustomRetention } from '../utils/cleanup.js';
 import { validateActionParams } from '../utils/parameter-validator.js';
+import { getProjectContext } from '../utils/project-context.js';
 
 /**
  * Get summary statistics for all architecture layers
  * Uses the v_layer_summary view for token efficiency
+ * PROJECT-SCOPED: Only returns data for current project (Constraint #38)
  *
  * @param adapter - Optional database adapter (for testing)
  * @returns Layer summaries for all 5 standard layers
@@ -40,8 +43,12 @@ export async function getLayerSummary(
     // Validate parameters
     validateActionParams('stats', 'layer_summary', {});
 
+    // Get current project ID (Constraint #38 - project-scoped by default)
+    const projectId = getProjectContext().getProjectId();
+
     const summary = await knex('v_layer_summary')
       .select('layer', 'decisions_count', 'file_changes_count', 'constraints_count')
+      .where('project_id', projectId)
       .orderBy('layer') as LayerSummary[];
 
     return {
@@ -57,6 +64,7 @@ export async function getLayerSummary(
  * Clear old data from the database
  * Deletes messages and file changes older than specified thresholds
  * Preserves decision_history, constraints, and core decisions
+ * PROJECT-SCOPED: Only deletes data from current project (Constraint #40)
  *
  * If parameters are not provided, uses config-based weekend-aware retention.
  * If parameters are provided, they override m_config settings (no weekend-awareness).
@@ -74,6 +82,9 @@ export async function clearOldData(
   try {
     // Validate parameters
     validateActionParams('stats', 'clear', params || {});
+
+    // Get current project ID (Constraint #40 - respect project boundaries)
+    const projectId = getProjectContext().getProjectId();
 
     return await actualAdapter.transaction(async (trx) => {
       let messagesDeleted = 0;
@@ -95,13 +106,15 @@ export async function clearOldData(
         // No parameters: use config-based weekend-aware retention
         const fileChangesThreshold = await calculateFileChangeCutoff(actualAdapter);
 
-        // Delete file changes
+        // Delete file changes (project-scoped)
         fileChangesDeleted = await trx('t_file_changes')
+          .where('project_id', projectId)
           .where('ts', '<', fileChangesThreshold)
           .delete();
 
-        // Delete activity logs (uses same threshold as file changes)
+        // Delete activity logs (uses same threshold as file changes, project-scoped)
         activityLogsDeleted = await trx('t_activity_log')
+          .where('project_id', projectId)
           .where('ts', '<', fileChangesThreshold)
           .delete();
       }
@@ -126,6 +139,7 @@ export async function clearOldData(
 /**
  * Get comprehensive database statistics
  * Returns counts for all major tables and database health metrics
+ * PROJECT-SCOPED: Only returns counts for current project (Constraint #38)
  *
  * @param adapter - Optional database adapter (for testing)
  * @returns Complete database statistics
@@ -140,66 +154,94 @@ export async function getStats(
     // Validate parameters
     validateActionParams('stats', 'db_stats', {});
 
-    // Helper to get count from a table
-    const getCount = async (table: string, where?: string): Promise<number> => {
-      let query = knex(table).count('* as count');
+    // Get current project ID (Constraint #38 - project-scoped by default)
+    const projectId = getProjectContext().getProjectId();
 
-      if (where) {
-        query = query.whereRaw(where);
+    // Helper to get count from a table with project_id filtering
+    const getCount = async (table: string, additionalWhere?: Record<string, any>): Promise<number> => {
+      let query = knex(table)
+        .count('* as count')
+        .where('project_id', projectId);
+
+      if (additionalWhere) {
+        query = query.where(additionalWhere);
       }
 
       const result = await query.first() as { count: number };
       return result.count;
     };
 
-    // Get all statistics (note: all await calls!)
-    const agents = await getCount('m_agents');
-    const files = await getCount('m_files');
-    const context_keys = await getCount('m_context_keys');
+    // Helper to get count from master tables (no project_id)
+    const getMasterCount = async (table: string): Promise<number> => {
+      const result = await knex(table)
+        .count('* as count')
+        .first() as { count: number };
+      return result.count;
+    };
 
-    // Decisions (active vs total)
-    const active_decisions = await getCount('t_decisions', 'status = 1');
+    // Get all statistics (note: all await calls!)
+    // Master tables - no project_id filtering
+    const agents = await getMasterCount('m_agents');
+    const files = await getMasterCount('m_files');
+    const context_keys = await getMasterCount('m_context_keys');
+    const tags = await getMasterCount('m_tags');
+    const scopes = await getMasterCount('m_scopes');
+    const layers = await getMasterCount('m_layers');
+
+    // Decisions (active vs total) - project-scoped
+    const active_decisions = await getCount('t_decisions', { status: 1 });
     const total_decisions = await getCount('t_decisions');
 
-    // File changes
+    // File changes - project-scoped
     const file_changes = await getCount('t_file_changes');
 
-    // Constraints (active vs total)
-    const active_constraints = await getCount('t_constraints', 'active = 1');
+    // Constraints (active vs total) - project-scoped
+    const active_constraints = await getCount('t_constraints', { active: 1 });
     const total_constraints = await getCount('t_constraints');
 
-    // Metadata
-    const tags = await getCount('m_tags');
-    const scopes = await getCount('m_scopes');
-    const layers = await getCount('m_layers');
-
-    // Task statistics (v3.x)
+    // Task statistics (v3.x) - project-scoped
     const total_tasks = await getCount('t_tasks');
-    const active_tasks = await getCount('t_tasks', 'status_id NOT IN (5, 6)'); // Exclude done and archived
+
+    // Active tasks (exclude done and archived)
+    const active_tasks = await knex('t_tasks')
+      .count('* as count')
+      .where('project_id', projectId)
+      .whereNotIn('status_id', [5, 6])
+      .first() as { count: number };
 
     // Tasks by status (1=todo, 2=in_progress, 3=waiting_review, 4=blocked, 5=done, 6=archived)
     const tasks_by_status = {
-      todo: await getCount('t_tasks', 'status_id = 1'),
-      in_progress: await getCount('t_tasks', 'status_id = 2'),
-      waiting_review: await getCount('t_tasks', 'status_id = 3'),
-      blocked: await getCount('t_tasks', 'status_id = 4'),
-      done: await getCount('t_tasks', 'status_id = 5'),
-      archived: await getCount('t_tasks', 'status_id = 6'),
+      todo: await getCount('t_tasks', { status_id: 1 }),
+      in_progress: await getCount('t_tasks', { status_id: 2 }),
+      waiting_review: await getCount('t_tasks', { status_id: 3 }),
+      blocked: await getCount('t_tasks', { status_id: 4 }),
+      done: await getCount('t_tasks', { status_id: 5 }),
+      archived: await getCount('t_tasks', { status_id: 6 }),
     };
 
     // Tasks by priority (1=low, 2=medium, 3=high, 4=critical)
     const tasks_by_priority = {
-      low: await getCount('t_tasks', 'priority = 1'),
-      medium: await getCount('t_tasks', 'priority = 2'),
-      high: await getCount('t_tasks', 'priority = 3'),
-      critical: await getCount('t_tasks', 'priority = 4'),
+      low: await getCount('t_tasks', { priority: 1 }),
+      medium: await getCount('t_tasks', { priority: 2 }),
+      high: await getCount('t_tasks', { priority: 3 }),
+      critical: await getCount('t_tasks', { priority: 4 }),
     };
 
     // Review status (v3.4.0) - tasks in waiting_review awaiting git commits
+    // Overdue review: tasks in waiting_review for >24h (may need attention)
+    const now = Math.floor(Date.now() / 1000);
+    const overdueThreshold = now - 86400; // 24 hours ago
+
+    const overdue_review_result = await knex('t_tasks')
+      .count('* as count')
+      .where('project_id', projectId)
+      .where('status_id', 3)
+      .where('updated_ts', '<', overdueThreshold)
+      .first() as { count: number };
+
     const review_status = {
       awaiting_commit: tasks_by_status.waiting_review,
-      // Tasks in waiting_review for >24h (may need attention)
-      overdue_review: await getCount('t_tasks', `status_id = 3 AND updated_ts < unixepoch() - 86400`),
+      overdue_review: overdue_review_result.count,
     };
 
     return {
@@ -215,7 +257,7 @@ export async function getStats(
       scopes,
       layers,
       total_tasks,
-      active_tasks,
+      active_tasks: active_tasks.count,
       tasks_by_status,
       tasks_by_priority,
       review_status, // v3.4.0: Enhanced review visibility
@@ -229,6 +271,7 @@ export async function getStats(
 /**
  * Get activity log entries with filtering
  * Supports time-based filtering (relative or absolute) and agent/action filtering
+ * PROJECT-SCOPED: Only returns activity for current project (Constraint #38)
  *
  * @param params - Filter parameters (since, agent_names, actions, limit)
  * @param adapter - Optional database adapter (for testing)
@@ -244,6 +287,9 @@ export async function getActivityLog(
   try {
     // Validate parameters
     validateActionParams('stats', 'activity_log', params || {});
+
+    // Get current project ID (Constraint #38 - project-scoped by default)
+    const projectId = getProjectContext().getProjectId();
 
     let sinceTimestamp: number | null = null;
 
@@ -285,7 +331,8 @@ export async function getActivityLog(
         'al.target',
         'l.name as layer',
         'al.details'
-      );
+      )
+      .where('al.project_id', projectId);
 
     if (sinceTimestamp !== null) {
       query = query.where('al.ts', '>=', sinceTimestamp);

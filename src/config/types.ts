@@ -317,10 +317,40 @@ export interface AgentsConfig {
 }
 
 /**
+ * Project configuration (v3.7.0+)
+ *
+ * Multi-project support requires explicit project identification.
+ * Once set in config.toml, the project_name becomes the authoritative source.
+ *
+ * @since v3.7.0
+ * @see Constraint #23, #24: Config.toml as source of truth
+ */
+export interface ProjectConfig {
+  /**
+   * Project name (alphanumeric + hyphens/underscores, max 64 chars).
+   *
+   * Once written to config.toml on first run, this becomes the permanent
+   * project identifier. Changing this requires MCP server restart.
+   *
+   * @see Constraint #37: Project name validation
+   * @see Constraint #31: Restart required to switch projects
+   */
+  name: string;
+
+  /**
+   * Human-readable project display name (optional).
+   * Can include spaces and special characters.
+   */
+  display_name?: string;
+}
+
+/**
  * Complete configuration structure
  * Maps to .sqlew/config.toml sections
  */
 export interface SqlewConfig {
+  /** Project identification (v3.7.0+) */
+  project?: ProjectConfig;
   /** Database settings */
   database?: DatabaseConfig;
   /** Auto-deletion settings */

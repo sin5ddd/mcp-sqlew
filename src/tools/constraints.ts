@@ -24,6 +24,7 @@ import { validateCategory, validatePriority } from '../utils/validators.js';
 import { validateActionParams } from '../utils/parameter-validator.js';
 import { logConstraintAdd } from '../utils/activity-logging.js';
 import { parseStringArray } from '../utils/param-parser.js';
+import { getProjectContext } from '../utils/project-context.js';
 import { Knex } from 'knex';
 import type {
   AddConstraintParams,
@@ -55,6 +56,9 @@ export async function addConstraint(
   const actualAdapter = adapter ?? getAdapter();
 
   try {
+    // Fail-fast project_id validation (Constraint #29)
+    const projectId = getProjectContext().getProjectId();
+
     // Validate parameters
     validateActionParams('constraint', 'add', params);
 
@@ -91,7 +95,7 @@ export async function addConstraint(
       // Calculate timestamp
       const ts = Math.floor(Date.now() / 1000);
 
-      // Insert constraint
+      // Insert constraint with project_id
       const [constraintId] = await trx('t_constraints').insert({
         category_id: categoryId,
         layer_id: layerId,
@@ -99,7 +103,8 @@ export async function addConstraint(
         priority: priority,
         active: SQLITE_TRUE,
         agent_id: agentId,
-        ts: ts
+        ts: ts,
+        project_id: projectId
       });
 
       // Insert m_tags if provided
@@ -155,11 +160,15 @@ export async function getConstraints(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Fail-fast project_id validation (Constraint #29)
+    const projectId = getProjectContext().getProjectId();
+
     // Validate parameters
     validateActionParams('constraint', 'get', params);
 
     // Build query using v_tagged_constraints view (already filters active=1)
-    let query = knex('v_tagged_constraints');
+    let query = knex('v_tagged_constraints')
+      .where('project_id', projectId);
 
     // Filter by category
     if (params.category) {
@@ -228,12 +237,15 @@ export async function deactivateConstraint(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Fail-fast project_id validation (Constraint #29)
+    const projectId = getProjectContext().getProjectId();
+
     // Validate parameters
     validateActionParams('constraint', 'deactivate', params);
 
-    // Check if constraint exists
+    // Check if constraint exists in current project
     const constraint = await knex('t_constraints')
-      .where({ id: params.constraint_id })
+      .where({ id: params.constraint_id, project_id: projectId })
       .select('id', 'active')
       .first() as { id: number; active: number } | undefined;
 
@@ -241,9 +253,9 @@ export async function deactivateConstraint(
       throw new Error(`Constraint not found: ${params.constraint_id}`);
     }
 
-    // Update constraint to inactive (idempotent)
+    // Update constraint to inactive (idempotent) with project_id filter
     await knex('t_constraints')
-      .where({ id: params.constraint_id })
+      .where({ id: params.constraint_id, project_id: projectId })
       .update({ active: SQLITE_FALSE });
 
     return {

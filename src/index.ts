@@ -12,7 +12,10 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { initializeDatabase, closeDatabase, setConfigValue, getAllConfig, DatabaseAdapter, getAdapter } from './database.js';
 import { CONFIG_KEYS } from './constants.js';
-import { loadConfigFile } from './config/loader.js';
+import { loadConfigFile, DEFAULT_CONFIG_PATH } from './config/loader.js';
+import { hasProjectName, ensureProjectConfig } from './config/writer.js';
+import { ProjectContext } from './utils/project-context.js';
+import { detectVCS } from './utils/vcs-adapter.js';
 import { setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer, quickSetDecision, searchAdvanced, setDecisionBatch, hasUpdates, setFromTemplate, createTemplate, listTemplates, hardDeleteDecision, addDecisionContextAction, listDecisionContextsAction, decisionHelp, decisionExample } from './tools/context.js';
 import { sendMessage, getMessages, markRead, sendMessageBatch, messageHelp, messageExample } from './tools/messaging.js';
 import { recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch, fileHelp, fileExample } from './tools/files.js';
@@ -33,6 +36,7 @@ const args = process.argv.slice(2);
 const parsedArgs: {
   configPath?: string;
   dbPath?: string;
+  projectName?: string;
   autodeleteIgnoreWeekend?: boolean;
   autodeleteMessageHours?: number;
   autodeleteFileHistoryDays?: number;
@@ -71,6 +75,10 @@ for (let i = 0; i < args.length; i++) {
     parsedArgs.debugLogPath = arg.split('=')[1];
   } else if (arg === '--debug-log' && i + 1 < args.length) {
     parsedArgs.debugLogPath = args[++i];
+  } else if (arg.startsWith('--project-name=')) {
+    parsedArgs.projectName = arg.split('=')[1];
+  } else if (arg === '--project-name' && i + 1 < args.length) {
+    parsedArgs.projectName = args[++i];
   } else if (!arg.startsWith('--')) {
     // Backward compatibility: first non-flag argument is dbPath
     if (!parsedArgs.dbPath) {
@@ -79,35 +87,10 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-// Determine project root with correct priority order
-// Phase 1: Try to determine from CLI arguments only (absolute paths)
-const initialProjectRoot = determineProjectRoot({
-  cliDbPath: parsedArgs.dbPath,
-  cliConfigPath: parsedArgs.configPath,
-});
-
-// Phase 2: Load config file from determined project root
-const fileConfig = loadConfigFile(initialProjectRoot, parsedArgs.configPath);
-
-// Phase 3: Refine project root if config has absolute database.path
-const finalProjectRoot = determineProjectRoot({
-  cliDbPath: parsedArgs.dbPath,
-  cliConfigPath: parsedArgs.configPath,
-  configDbPath: fileConfig.database?.path,
-});
-
-// Ensure .sqlew directory exists in the correct project root
-// This must happen BEFORE database initialization to prevent System32 errors
-ensureSqlewDirectory(finalProjectRoot);
-
-// Determine final database path
-// Priority: CLI --db-path > config file database.path > default
-const dbPath = parsedArgs.dbPath || fileConfig.database?.path;
-
 // Initialize database (will be set after async init completes)
 let db: DatabaseAdapter;
 
-// Create MCP server
+// Create MCP server (will be initialized in main())
 const server = new Server(
   {
     name: 'mcp-sqlew',
@@ -574,11 +557,35 @@ setupGlobalErrorHandlers(() => {
 // Start server with stdio transport
 async function main() {
   try {
-    // 1. Initialize debug logger FIRST (file-based logging, safe to do early)
+    // 0. Determine project root and load config (BEFORE logger init)
+    // This must happen first to get debug log path from config
+    const initialProjectRoot = determineProjectRoot({
+      cliDbPath: parsedArgs.dbPath,
+      cliConfigPath: parsedArgs.configPath,
+    });
+
+    const fileConfig = loadConfigFile(initialProjectRoot, parsedArgs.configPath);
+
+    const finalProjectRoot = determineProjectRoot({
+      cliDbPath: parsedArgs.dbPath,
+      cliConfigPath: parsedArgs.configPath,
+      configDbPath: fileConfig.database?.path,
+    });
+
+    ensureSqlewDirectory(finalProjectRoot);
+
+    // Determine final database path
+    // Priority: CLI --db-path > config file database.path > default
+    const dbPath = parsedArgs.dbPath || fileConfig.database?.path;
+
+    // 1. Initialize debug logger (file-based logging, after config loaded)
     // Priority: CLI arg > environment variable > config file
     const debugLogPath = parsedArgs.debugLogPath || process.env.SQLEW_DEBUG || fileConfig.debug?.log_path;
     const debugLogLevel = fileConfig.debug?.log_level || 'info';
     initDebugLogger(debugLogPath, debugLogLevel);
+
+    debugLog('INFO', 'Project root determined', { finalProjectRoot });
+    debugLog('INFO', 'Config loaded', { dbPath });
 
     // 2. Initialize database (SILENT - no stderr writes yet)
     // Note: .sqlew directory already created above with correct project root
@@ -614,9 +621,82 @@ async function main() {
     const messageHours = configValues[CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS];
     const fileHistoryDays = configValues[CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS];
 
+    // 4.5. Initialize ProjectContext (v3.7.0+ multi-project support)
+    // Must happen AFTER database init, BEFORE server.connect()
+    // Satisfies Constraints #23, #24, #41
+    const knex = getAdapter().getKnex();
+    let projectName: string;
+    let detectionSource: 'cli' | 'config' | 'git' | 'metadata' | 'directory' = 'directory';
+
+    // Priority order: CLI --project-name > config.toml > git remote > directory name
+    if (parsedArgs.projectName) {
+      // CLI argument takes highest priority (for testing/override scenarios)
+      projectName = parsedArgs.projectName;
+      detectionSource = 'cli';
+      debugLog('INFO', 'Project name from CLI argument', { projectName });
+    } else if (fileConfig.project?.name) {
+      // Config.toml is authoritative source (Constraint #24)
+      projectName = fileConfig.project.name;
+      detectionSource = 'config';
+      debugLog('INFO', 'Project name from config.toml', { projectName });
+    } else {
+      // Detect from VCS or directory
+      const vcsAdapter = await detectVCS(finalProjectRoot);
+
+      if (vcsAdapter) {
+        const detectedName = await vcsAdapter.extractProjectName();
+        if (detectedName) {
+          projectName = detectedName;
+          detectionSource = 'git';
+          debugLog('INFO', 'Project name detected from VCS', { projectName, vcs: vcsAdapter.getVCSType() });
+        } else {
+          // Fallback to directory name
+          const dirSegments = finalProjectRoot.split('/').filter(s => s.length > 0);
+          projectName = dirSegments[dirSegments.length - 1] || 'default';
+          detectionSource = 'directory';
+          debugLog('INFO', 'Project name from directory', { projectName });
+        }
+      } else {
+        // No VCS detected, use directory name
+        const dirSegments = finalProjectRoot.split('/').filter(s => s.length > 0);
+        projectName = dirSegments[dirSegments.length - 1] || 'default';
+        detectionSource = 'directory';
+        debugLog('INFO', 'Project name from directory (no VCS)', { projectName });
+      }
+
+      // Write to config.toml if not present AND not CLI override (Constraint #23)
+      // Don't write if CLI override is used (temporary override scenario)
+      if (!parsedArgs.projectName) {
+        const configWritten = ensureProjectConfig(finalProjectRoot, projectName, {
+          configPath: parsedArgs.configPath,
+        });
+
+        if (configWritten) {
+          debugLog('INFO', 'Project name written to config.toml', {
+            projectName,
+            detectionSource,
+            configPath: parsedArgs.configPath || DEFAULT_CONFIG_PATH
+          });
+        }
+      }
+    }
+
+    // Initialize ProjectContext singleton (Constraint #41)
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, projectName, detectionSource, {
+      projectRootPath: finalProjectRoot,
+    });
+
+    debugLog('INFO', 'ProjectContext initialized', {
+      projectId: projectContext.getProjectId(),
+      projectName: projectContext.getProjectName(),
+    });
+
     // Log successful initialization
     debugLog('INFO', 'MCP Shared Context Server initialized', {
       dbPath,
+      projectId: projectContext.getProjectId(),
+      projectName: projectContext.getProjectName(),
       autoDeleteConfig: { messageHours, fileHistoryDays, ignoreWeekend },
       debugLogLevel: debugLogLevel
     });
@@ -632,6 +712,7 @@ async function main() {
       const source = parsedArgs.dbPath ? 'CLI' : 'config file';
       safeConsoleError(`  Database: ${dbPath} (from ${source})`);
     }
+    safeConsoleError(`  Project: ${projectContext.getProjectName()} (ID: ${projectContext.getProjectId()}, source: ${detectionSource})`);
     safeConsoleError(`  Auto-delete config: messages=${messageHours}h, file_history=${fileHistoryDays}d, ignore_weekend=${ignoreWeekend}`);
 
     // 7. Start file watcher for auto-task-tracking (after database is ready)

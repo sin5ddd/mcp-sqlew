@@ -22,6 +22,7 @@ import { validateChangeType } from '../utils/validators.js';
 import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
 import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
 import { logFileRecord } from '../utils/activity-logging.js';
+import { getProjectContext } from '../utils/project-context.js';
 import { Knex } from 'knex';
 import type {
   RecordFileChangeParams,
@@ -51,6 +52,9 @@ async function recordFileChangeInternal(
 ): Promise<RecordFileChangeResponse> {
   const knex = trx || adapter.getKnex();
 
+  // Fail-fast: Validate project context is initialized (Constraint #29)
+  const projectId = getProjectContext().getProjectId();
+
   // Validate change_type
   validateChangeType(params.change_type);
   const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
@@ -76,13 +80,14 @@ async function recordFileChangeInternal(
   // Current timestamp
   const ts = Math.floor(Date.now() / 1000);
 
-  // Insert file change record
+  // Insert file change record with project_id
   const [changeId] = await knex('t_file_changes').insert({
     file_id: fileId,
     agent_id: agentId,
     layer_id: layerId,
     change_type: changeTypeInt,
     description: params.description || null,
+    project_id: projectId,
     ts: ts
   });
 
@@ -147,6 +152,9 @@ export async function getFileChanges(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Fail-fast: Validate project context is initialized (Constraint #29)
+    const projectId = getProjectContext().getProjectId();
+
     // Validate parameters
     validateActionParams('file', 'get', params);
 
@@ -186,8 +194,10 @@ export async function getFileChanges(
     }
 
     // Use view if no specific filters (token efficient)
+    // Note: View already includes project_id filtering in application layer
     if (filterConditions.length === 0) {
       const rows = await knex('v_recent_file_changes')
+        .where('project_id', projectId)
         .limit(limit)
         .select('*') as RecentFileChange[];
 
@@ -205,6 +215,7 @@ export async function getFileChanges(
       .join('m_files as f', 'fc.file_id', 'f.id')
       .join('m_agents as a', 'fc.agent_id', 'a.id')
       .leftJoin('m_layers as l', 'fc.layer_id', 'l.id')
+      .where('fc.project_id', projectId)
       .select(
         'f.path',
         'a.name as changed_by',
@@ -272,6 +283,9 @@ export async function checkFileLock(
   const knex = actualAdapter.getKnex();
 
   try {
+    // Fail-fast: Validate project context is initialized (Constraint #29)
+    const projectId = getProjectContext().getProjectId();
+
     // Validate parameters
     validateActionParams('file', 'check_lock', params);
 
@@ -279,11 +293,12 @@ export async function checkFileLock(
     const currentTime = Math.floor(Date.now() / 1000);
     const lockThreshold = currentTime - lockDuration;
 
-    // Get the most recent change to this file
+    // Get the most recent change to this file within current project
     const result = await knex('t_file_changes as fc')
       .join('m_files as f', 'fc.file_id', 'f.id')
       .join('m_agents as a', 'fc.agent_id', 'a.id')
       .where('f.path', params.file_path)
+      .where('fc.project_id', projectId)
       .select('a.name as agent', 'fc.change_type', 'fc.ts')
       .orderBy('fc.ts', 'desc')
       .limit(1)

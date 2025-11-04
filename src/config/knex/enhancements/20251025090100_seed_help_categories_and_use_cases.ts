@@ -11,6 +11,14 @@ import type { Knex } from "knex";
  */
 
 export async function up(knex: Knex): Promise<void> {
+  // Check if categories already exist
+  const existingCategories = await knex('m_help_use_case_categories').select('category_name');
+
+  if (existingCategories.length > 0) {
+    console.log('✓ Help categories already seeded, skipping');
+    return;
+  }
+
   // =========================================================================
   // 1. Seed Use Case Categories (6 categories)
   // =========================================================================

@@ -14,6 +14,14 @@
 import { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
+  // Check if is_reusable column exists (depends on previous migration)
+  const hasColumn = await knex.schema.hasColumn('m_agents', 'is_reusable');
+
+  if (!hasColumn) {
+    console.log('✓ Column is_reusable does not exist, skipping update');
+    return;
+  }
+
   // Core system agents that should NOT be reusable
   const systemAgents = ['system', 'migration-manager'];
 

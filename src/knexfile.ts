@@ -3,13 +3,29 @@ import type { Knex } from 'knex';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { parse as parseTOML } from 'smol-toml';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Default database path: .sqlew/sqlew.db in project root
-// Can be overridden via config file (.sqlew/config.toml) or CLI args
-const DEFAULT_DB_PATH = process.env.SQLEW_DB_PATH || '.sqlew/sqlew.db';
+// Read database path from config.toml (same as MCP server does)
+// Priority: Environment variable > config.toml > default
+let configDbPath: string | undefined;
+const projectRoot = path.resolve(__dirname, '..');
+const configPath = path.join(projectRoot, '.sqlew/config.toml');
+
+if (existsSync(configPath)) {
+  try {
+    const content = readFileSync(configPath, 'utf-8');
+    const parsed = parseTOML(content) as any;
+    configDbPath = parsed.database?.path;
+  } catch (error) {
+    // Ignore config parsing errors, use default
+  }
+}
+
+const DEFAULT_DB_PATH = process.env.SQLEW_DB_PATH || configDbPath || '.sqlew/sqlew.db';
 
 const config: { [key: string]: Knex.Config } = {
   development: {
@@ -21,9 +37,9 @@ const config: { [key: string]: Knex.Config } = {
     useNullAsDefault: true,
     migrations: {
       directory: [
-        path.join(__dirname, 'migrations/knex/bootstrap'),
-        path.join(__dirname, 'migrations/knex/upgrades'),
-        path.join(__dirname, 'migrations/knex/enhancements'),
+        path.join(__dirname, 'config/knex/bootstrap'),
+        path.join(__dirname, 'config/knex/upgrades'),
+        path.join(__dirname, 'config/knex/enhancements'),
       ],
       extension: 'ts',
       tableName: 'knex_migrations',
@@ -54,9 +70,9 @@ const config: { [key: string]: Knex.Config } = {
     useNullAsDefault: true,
     migrations: {
       directory: [
-        path.join(__dirname, 'migrations/knex/bootstrap'),
-        path.join(__dirname, 'migrations/knex/upgrades'),
-        path.join(__dirname, 'migrations/knex/enhancements'),
+        path.join(__dirname, 'config/knex/bootstrap'),
+        path.join(__dirname, 'config/knex/upgrades'),
+        path.join(__dirname, 'config/knex/enhancements'),
       ],
       extension: 'ts',
       loadExtensions: ['.ts'],
@@ -77,9 +93,9 @@ const config: { [key: string]: Knex.Config } = {
     useNullAsDefault: true,
     migrations: {
       directory: [
-        path.join(__dirname, 'migrations/knex/bootstrap'),
-        path.join(__dirname, 'migrations/knex/upgrades'),
-        path.join(__dirname, 'migrations/knex/enhancements'),
+        path.join(__dirname, 'config/knex/bootstrap'),
+        path.join(__dirname, 'config/knex/upgrades'),
+        path.join(__dirname, 'config/knex/enhancements'),
       ],
       extension: 'js',
       loadExtensions: ['.js'],
@@ -113,9 +129,9 @@ const config: { [key: string]: Knex.Config } = {
     },
     migrations: {
       directory: [
-        path.join(__dirname, 'migrations/knex/bootstrap'),
-        path.join(__dirname, 'migrations/knex/upgrades'),
-        path.join(__dirname, 'migrations/knex/enhancements'),
+        path.join(__dirname, 'config/knex/bootstrap'),
+        path.join(__dirname, 'config/knex/upgrades'),
+        path.join(__dirname, 'config/knex/enhancements'),
       ],
       extension: 'ts',
       tableName: 'knex_migrations',
@@ -144,9 +160,9 @@ const config: { [key: string]: Knex.Config } = {
     },
     migrations: {
       directory: [
-        path.join(__dirname, 'migrations/knex/bootstrap'),
-        path.join(__dirname, 'migrations/knex/upgrades'),
-        path.join(__dirname, 'migrations/knex/enhancements'),
+        path.join(__dirname, 'config/knex/bootstrap'),
+        path.join(__dirname, 'config/knex/upgrades'),
+        path.join(__dirname, 'config/knex/enhancements'),
       ],
       extension: 'ts',
       tableName: 'knex_migrations',

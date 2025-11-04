@@ -11,12 +11,20 @@ import type { Knex } from 'knex';
  * - last_active_ts: Last activity timestamp for cleanup
  */
 export async function up(knex: Knex): Promise<void> {
-  // Add columns for agent reuse system
-  await knex.schema.alterTable('m_agents', (table) => {
-    table.boolean('is_reusable').defaultTo(false);
-    table.boolean('in_use').defaultTo(false);
-    table.integer('last_active_ts').defaultTo(0);
-  });
+  // Check if columns already exist
+  const hasReusable = await knex.schema.hasColumn('m_agents', 'is_reusable');
+
+  if (!hasReusable) {
+    // Add columns for agent reuse system
+    await knex.schema.alterTable('m_agents', (table) => {
+      table.boolean('is_reusable').defaultTo(false);
+      table.boolean('in_use').defaultTo(false);
+      table.integer('last_active_ts').defaultTo(0);
+    });
+    console.log('✓ Added agent reuse columns to m_agents');
+  } else {
+    console.log('✓ Agent reuse columns already exist, skipping');
+  }
 
   // Create index for finding inactive reusable agents
   const client = knex.client.config.client;
@@ -40,8 +48,6 @@ export async function up(knex: Knex): Promise<void> {
     await knex.raw('CREATE INDEX IF NOT EXISTS idx_agents_reusable ON m_agents(is_reusable, in_use, last_active_ts)');
     console.log('✓ Created index idx_agents_reusable');
   }
-
-  console.log('✓ Added agent reuse columns to m_agents');
 }
 
 export async function down(knex: Knex): Promise<void> {

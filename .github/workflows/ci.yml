@@ -33,8 +33,10 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run unit tests
-        run: npm test
+      - name: Run unit tests (CI - no Docker)
+        run: npm run test:ci
+        env:
+          CI: true
 
       - name: Upload build artifacts
         if: matrix.node-version == '20.x'
@@ -45,7 +47,7 @@ jobs:
           retention-days: 7
 
   migration-tests:
-    name: Migration Tests
+    name: Migration Tests (SQLite only)
     runs-on: ubuntu-latest
     needs: build-and-test
 
@@ -67,8 +69,11 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run comprehensive migration tests
-        run: npm run test:migrations:all
+      - name: Run migration tests (SQLite only - no Docker)
+        run: npm run test:migrations:ci
+        env:
+          CI: true
+          SKIP_DOCKER_TESTS: true
 
       - name: Upload migration test results
         if: always()
@@ -77,3 +82,46 @@ jobs:
           name: migration-test-results
           path: .sqlew/tmp/real-migration-test-report.json
           retention-days: 30
+
+  migration-safety-tests:
+    name: Migration Safety Tests (Upgrade Paths & Idempotency)
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for complete migration testing
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run migration upgrade path tests (v3.5→v3.6→v3.7)
+        run: npm run test:migration-upgrade-paths
+        env:
+          CI: true
+
+      - name: Run migration idempotency tests (run twice scenarios)
+        run: npm run test:migration-idempotency
+        env:
+          CI: true
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-safety-test-artifacts
+          path: |
+            .tmp-test-migrations/
+            .tmp-test-idempotency/
+          retention-days: 7

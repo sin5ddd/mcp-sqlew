@@ -29,7 +29,7 @@ export function showDbDumpHelp(): void {
 sqlew db:dump - Generate SQL dump for database migration
 
 USAGE:
-  sqlew-cli db:dump --format=<format> [options]
+  npx sqlew db:dump --format=<format> [options]
 
 REQUIRED OPTIONS:
   --format <format>        Target database format: mysql, postgresql, or sqlite
@@ -70,29 +70,29 @@ ENVIRONMENT VARIABLES (for MySQL/PostgreSQL sources):
 
 EXAMPLES:
   # SQLite → MySQL (default source)
-  sqlew-cli db:dump --format mysql --output dump-mysql.sql
+  npx sqlew db:dump --format mysql --output dump-mysql.sql
 
   # MySQL → SQLite (reverse migration)
-  sqlew-cli db:dump --from mysql --format sqlite --output dump-sqlite.sql
+  npx sqlew db:dump --from mysql --format sqlite --output dump-sqlite.sql
 
   # PostgreSQL → MySQL (cross-database)
-  sqlew-cli db:dump --from postgresql --format mysql --output dump-mysql.sql
+  npx sqlew db:dump --from postgresql --format mysql --output dump-mysql.sql
 
   # MySQL → PostgreSQL (cross-database)
-  sqlew-cli db:dump --from mysql --format postgresql --output dump-pg.sql
+  npx sqlew db:dump --from mysql --format postgresql --output dump-pg.sql
 
   # Dump specific tables from PostgreSQL
-  sqlew-cli db:dump --from postgresql --format sqlite --tables t_decisions,t_tasks
+  npx sqlew db:dump --from postgresql --format sqlite --tables t_decisions,t_tasks
 
   # Split dump for MariaDB batch mode (1000 statement limit)
-  sqlew-cli db:dump --format mysql --output dump.sql --max-statements=900
+  npx sqlew db:dump --format mysql --output dump.sql --max-statements=900
 
 MIGRATION WORKFLOW:
   1. Create schema on target database:
      npm run migrate:latest --env=<target>
 
   2. Generate SQL dump from source:
-     sqlew-cli db:dump --from=<source> --format=<target> --output=dump.sql
+     npx sqlew db:dump --from=<source> --format=<target> --output=dump.sql
 
   3. Import data into target database:
      mysql < dump.sql    # for MySQL
@@ -289,7 +289,7 @@ export async function executeDbDump(args: DbDumpArgs): Promise<void> {
   const validationError = validateArgs(args);
   if (validationError) {
     console.error(validationError);
-    console.error('Run "sqlew-cli db:dump --help" for usage information.');
+    console.error('Run "npx sqlew db:dump --help" for usage information.');
     process.exit(1);
   }
 

@@ -14,6 +14,7 @@ import {
   getLayerId,
   getOrCreateFile
 } from '../database.js';
+import { getProjectContext } from '../utils/project-context.js';
 import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndCompleteReviewedTasks, detectAndArchiveOnCommit } from '../utils/task-stale-detection.js';
 import { FileWatcher } from '../watcher/index.js';
 import {
@@ -99,6 +100,9 @@ async function createTaskInternal(params: {
 }, adapter: DatabaseAdapter, trx?: Knex.Transaction): Promise<any> {
   const knex = trx || adapter.getKnex();
 
+  // Fail-fast project_id validation (Constraint #29)
+  const projectId = getProjectContext().getProjectId();
+
   // Validate priority
   const priority = params.priority !== undefined ? params.priority : 2;
   validatePriorityRange(priority);
@@ -133,6 +137,7 @@ async function createTaskInternal(params: {
   // Insert task
   const now = Math.floor(Date.now() / 1000);
   const [taskId] = await knex('t_tasks').insert({
+    project_id: projectId,
     title: params.title,
     status_id: statusId,
     priority: priority,
@@ -180,6 +185,7 @@ async function createTaskInternal(params: {
   // Insert task details if provided
   if (params.description || acceptanceCriteriaString || acceptanceCriteriaJson || params.notes) {
     await knex('t_task_details').insert({
+      project_id: projectId,
       task_id: Number(taskId),
       description: params.description || null,
       acceptance_criteria: acceptanceCriteriaString,
@@ -224,9 +230,10 @@ async function createTaskInternal(params: {
     for (const tagName of tagsParsed) {
       const tagId = await getOrCreateTag(adapter, tagName, trx);
       await knex('t_task_tags').insert({
+        project_id: projectId,
         task_id: Number(taskId),
         tag_id: tagId
-      }).onConflict(['task_id', 'tag_id']).ignore();
+      }).onConflict(['project_id', 'task_id', 'tag_id']).ignore();
     }
   }
 
@@ -274,9 +281,10 @@ async function createTaskInternal(params: {
     for (const filePath of watchFilesParsed) {
       const fileId = await getOrCreateFile(adapter, filePath, trx);
       await knex('t_task_file_links').insert({
+        project_id: projectId,
         task_id: Number(taskId),
         file_id: fileId
-      }).onConflict(['task_id', 'file_id']).ignore();
+      }).onConflict(['project_id', 'task_id', 'file_id']).ignore();
     }
 
     // Register files with watcher for auto-tracking
@@ -360,12 +368,17 @@ export async function updateTask(params: {
     throw new Error('Parameter "task_id" is required');
   }
 
+  // Fail-fast project_id validation (Constraint #29)
+  const projectId = getProjectContext().getProjectId();
+
   try {
     return await actualAdapter.transaction(async (trx) => {
       const knex = actualAdapter.getKnex();
 
-      // Check if task exists
-      const taskExists = await trx('t_tasks').where({ id: params.task_id }).first();
+      // Check if task exists with project_id isolation
+      const taskExists = await trx('t_tasks')
+        .where({ id: params.task_id, project_id: projectId })
+        .first();
       if (!taskExists) {
         throw new Error(`Task with id ${params.task_id} not found`);
       }
@@ -399,10 +412,10 @@ export async function updateTask(params: {
         updateData.layer_id = layerId;
       }
 
-      // Update t_tasks if any updates
+      // Update t_tasks if any updates (with project_id isolation)
       if (Object.keys(updateData).length > 0) {
         await trx('t_tasks')
-          .where({ id: params.task_id })
+          .where({ id: params.task_id, project_id: projectId })
           .update(updateData);
 
         // TODO: Add activity logging for updates if needed
@@ -446,8 +459,10 @@ export async function updateTask(params: {
           }
         }
 
-        // Check if details exist
-        const detailsExist = await trx('t_task_details').where({ task_id: params.task_id }).first();
+        // Check if details exist (with project_id isolation)
+        const detailsExist = await trx('t_task_details')
+          .where({ task_id: params.task_id, project_id: projectId })
+          .first();
 
         const detailsUpdate: any = {};
         if (params.description !== undefined) {
@@ -464,13 +479,14 @@ export async function updateTask(params: {
         }
 
         if (detailsExist && Object.keys(detailsUpdate).length > 0) {
-          // Update existing details
+          // Update existing details (with project_id isolation)
           await trx('t_task_details')
-            .where({ task_id: params.task_id })
+            .where({ task_id: params.task_id, project_id: projectId })
             .update(detailsUpdate);
         } else if (!detailsExist) {
           // Insert new details
           await trx('t_task_details').insert({
+            project_id: projectId,
             task_id: params.task_id,
             description: params.description || null,
             acceptance_criteria: acceptanceCriteriaString !== undefined ? acceptanceCriteriaString : null,
@@ -514,16 +530,17 @@ export async function updateTask(params: {
         for (const filePath of watchFilesParsed) {
           const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
           await trx('t_task_file_links').insert({
+            project_id: projectId,
             task_id: params.task_id,
             file_id: fileId
-          }).onConflict(['task_id', 'file_id']).ignore();
+          }).onConflict(['project_id', 'task_id', 'file_id']).ignore();
         }
 
         // Register files with watcher for auto-tracking
         try {
           const taskData = await trx('t_tasks as t')
             .join('m_task_statuses as s', 't.status_id', 's.id')
-            .where('t.id', params.task_id)
+            .where({ 't.id': params.task_id, 't.project_id': projectId })
             .select('t.title', 's.name as status')
             .first() as { title: string; status: string } | undefined;
 
@@ -556,6 +573,7 @@ export async function updateTask(params: {
  */
 async function queryTaskDependencies(adapter: DatabaseAdapter, taskId: number, includeDetails: boolean = false): Promise<{ blockers: any[], blocking: any[] }> {
   const knex = adapter.getKnex();
+  const projectId = getProjectContext().getProjectId();
 
   // Build query based on include_details flag
   const selectFields = includeDetails
@@ -576,30 +594,38 @@ async function queryTaskDependencies(adapter: DatabaseAdapter, taskId: number, i
         't.priority'
       ];
 
-  // Get blockers (tasks that block this task)
+  // Get blockers (tasks that block this task) - with project_id isolation
   let blockersQuery = knex('t_tasks as t')
     .join('t_task_dependencies as d', 't.id', 'd.blocker_task_id')
     .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
     .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
-    .where('d.blocked_task_id', taskId)
+    .where({ 'd.blocked_task_id': taskId, 'd.project_id': projectId, 't.project_id': projectId })
     .select(selectFields);
 
   if (includeDetails) {
-    blockersQuery = blockersQuery.leftJoin('t_task_details as td', 't.id', 'td.task_id');
+    blockersQuery = blockersQuery
+      .leftJoin('t_task_details as td', function() {
+        this.on('t.id', '=', 'td.task_id')
+            .andOn('t.project_id', '=', 'td.project_id');
+      });
   }
 
   const blockers = await blockersQuery;
 
-  // Get blocking (tasks this task blocks)
+  // Get blocking (tasks this task blocks) - with project_id isolation
   let blockingQuery = knex('t_tasks as t')
     .join('t_task_dependencies as d', 't.id', 'd.blocked_task_id')
     .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
     .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
-    .where('d.blocker_task_id', taskId)
+    .where({ 'd.blocker_task_id': taskId, 'd.project_id': projectId, 't.project_id': projectId })
     .select(selectFields);
 
   if (includeDetails) {
-    blockingQuery = blockingQuery.leftJoin('t_task_details as td', 't.id', 'td.task_id');
+    blockingQuery = blockingQuery
+      .leftJoin('t_task_details as td', function() {
+        this.on('t.id', '=', 'td.task_id')
+            .andOn('t.project_id', '=', 'td.project_id');
+      });
   }
 
   const blocking = await blockingQuery;
@@ -623,15 +649,21 @@ export async function getTask(params: {
     throw new Error('Parameter "task_id" is required');
   }
 
+  // Fail-fast project_id validation (Constraint #29)
+  const projectId = getProjectContext().getProjectId();
+
   try {
-    // Get task with details
+    // Get task with details (with project_id isolation)
     const task = await knex('t_tasks as t')
       .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
       .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
       .leftJoin('m_agents as ca', 't.created_by_agent_id', 'ca.id')
       .leftJoin('m_layers as l', 't.layer_id', 'l.id')
-      .leftJoin('t_task_details as td', 't.id', 'td.task_id')
-      .where('t.id', params.task_id)
+      .leftJoin('t_task_details as td', function() {
+        this.on('t.id', '=', 'td.task_id')
+            .andOn('t.project_id', '=', 'td.project_id');
+      })
+      .where({ 't.id': params.task_id, 't.project_id': projectId })
       .select(
         't.id',
         't.title',
@@ -727,6 +759,9 @@ export async function listTasks(params: {
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Get current project ID for filtering (Constraint #22)
+  const projectId = getProjectContext().getProjectId();
+
   try {
     // Run auto-stale detection, git-aware completion, and auto-archive before listing
     const transitionCount = await detectAndTransitionStaleTasks(actualAdapter);
@@ -762,6 +797,9 @@ export async function listTasks(params: {
       // Standard query without dependency counts
       query = knex('v_task_board');
     }
+
+    // Filter by project_id (Constraint #22: Multi-project isolation)
+    query = query.where(params.include_dependency_counts ? 'vt.project_id' : 'project_id', projectId);
 
     // Filter by status
     if (params.status) {
@@ -1438,6 +1476,7 @@ export async function watchFiles(params: {
 
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
+  const projectId = getProjectContext().getProjectId();
 
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
@@ -1449,10 +1488,10 @@ export async function watchFiles(params: {
 
   try {
     return await actualAdapter.transaction(async (trx) => {
-      // Check if task exists
+      // Check if task exists (project-scoped)
       const taskData = await trx('t_tasks as t')
         .join('m_task_statuses as s', 't.status_id', 's.id')
-        .where('t.id', params.task_id)
+        .where({ 't.id': params.task_id, 't.project_id': projectId })
         .select('t.id', 't.title', 's.name as status')
         .first() as { id: number; title: string; status: string } | undefined;
 
@@ -1949,6 +1988,7 @@ export function taskHelp(): any {
 export async function watcherStatus(args: any, adapter?: DatabaseAdapter): Promise<any> {
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
+  const projectId = getProjectContext().getProjectId();
   const subaction = args.subaction || 'status';
   const watcher = FileWatcher.getInstance();
 
@@ -1995,10 +2035,14 @@ export async function watcherStatus(args: any, adapter?: DatabaseAdapter): Promi
 
   if (subaction === 'list_files') {
     const fileLinks = await knex('t_task_file_links as tfl')
-      .join('t_tasks as t', 'tfl.task_id', 't.id')
+      .join('t_tasks as t', function() {
+        this.on('tfl.task_id', '=', 't.id')
+            .andOn('tfl.project_id', '=', 't.project_id');
+      })
       .join('m_task_statuses as ts', 't.status_id', 'ts.id')
       .join('m_files as f', 'tfl.file_id', 'f.id')
-      .where('t.status_id', '!=', 6)  // Exclude archived tasks
+      .where('t.project_id', projectId)
+      .whereNot('t.status_id', STATUS_TO_ID['archived'])  // Exclude archived tasks
       .select('f.path as file_path', 't.id', 't.title', 'ts.name as status_name')
       .orderBy(['f.path', 't.id']) as Array<{ file_path: string; id: number; title: string; status_name: string }>;
 
@@ -2033,9 +2077,13 @@ export async function watcherStatus(args: any, adapter?: DatabaseAdapter): Promi
   if (subaction === 'list_tasks') {
     const taskLinks = await knex('t_tasks as t')
       .join('m_task_statuses as ts', 't.status_id', 'ts.id')
-      .join('t_task_file_links as tfl', 't.id', 'tfl.task_id')
+      .join('t_task_file_links as tfl', function() {
+        this.on('t.id', '=', 'tfl.task_id')
+            .andOn('t.project_id', '=', 'tfl.project_id');
+      })
       .join('m_files as f', 'tfl.file_id', 'f.id')
-      .where('t.status_id', '!=', 6)  // Exclude archived tasks
+      .where('t.project_id', projectId)
+      .whereNot('t.status_id', STATUS_TO_ID['archived'])  // Exclude archived tasks
       .groupBy('t.id', 't.title', 'ts.name')
       .select(
         't.id',

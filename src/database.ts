@@ -330,15 +330,42 @@ export async function getCategoryId(
 // ============================================================================
 
 /**
- * Get configuration value from m_config table
+ * Get configuration value from m_config table with per-project inheritance
+ *
+ * Lookup priority:
+ * 1. Project-specific config (project_id = provided projectId)
+ * 2. Global config (project_id = NULL)
+ *
+ * @param adapter - Database adapter
+ * @param key - Config key
+ * @param projectId - Optional project ID (if not provided, only checks global config)
+ * @returns Config value or null if not found
  */
 export async function getConfigValue(
   adapter: DatabaseAdapter,
-  key: string
+  key: string,
+  projectId?: number | null
 ): Promise<string | null> {
   const knex = adapter.getKnex();
-  const result = await knex('m_config').where({ key }).first('value');
-  return result ? result.value : null;
+
+  // If projectId provided, try project-specific config first
+  if (projectId !== undefined && projectId !== null) {
+    const projectConfig = await knex('m_config')
+      .where({ key, project_id: projectId })
+      .first<{ value: string }>();
+
+    if (projectConfig) {
+      return projectConfig.value;
+    }
+  }
+
+  // Fallback to global config (project_id = NULL)
+  const globalConfig = await knex('m_config')
+    .where({ key })
+    .whereNull('project_id')
+    .first<{ value: string }>();
+
+  return globalConfig ? globalConfig.value : null;
 }
 
 /**

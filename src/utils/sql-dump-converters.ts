@@ -187,6 +187,7 @@ export function convertBooleanDefaults(sql: string, targetFormat: DatabaseFormat
  *
  * Type conversions:
  * - SQLite TEXT → MySQL VARCHAR(255) (when used with DEFAULT)
+ * - SQLite TEXT PRIMARY KEY → MySQL VARCHAR(191) PRIMARY KEY (MariaDB 10.5 compatibility)
  * - SQLite datetime → PostgreSQL TIMESTAMP
  * - MySQL TEXT → VARCHAR for compatibility
  *
@@ -200,12 +201,22 @@ export function convertBooleanDefaults(sql: string, targetFormat: DatabaseFormat
  * // Returns: "name VARCHAR(255) NOT NULL default 'anonymous'"
  *
  * @example
+ * // SQLite → MySQL (TEXT PRIMARY KEY not allowed in MariaDB 10.5)
+ * convertDataTypes("tool_name TEXT PRIMARY KEY", 'mysql')
+ * // Returns: "tool_name VARCHAR(191) PRIMARY KEY"
+ *
+ * @example
  * // SQLite → PostgreSQL
  * convertDataTypes("created_at datetime", 'postgresql')
  * // Returns: "created_at TIMESTAMP"
  */
 export function convertDataTypes(sql: string, targetFormat: DatabaseFormat): string {
   if (targetFormat === 'mysql') {
+    // MariaDB 10.5 and MySQL don't allow TEXT columns as PRIMARY KEY
+    // Convert TEXT PRIMARY KEY to VARCHAR(191) PRIMARY KEY
+    // 191 is the safe max for utf8mb4 with InnoDB index prefix limit (767 bytes / 4 bytes per char)
+    sql = sql.replace(/\bTEXT(\s+PRIMARY\s+KEY)/gi, 'VARCHAR(191)$1');
+
     // MySQL doesn't allow DEFAULT values on TEXT columns
     // Convert TEXT with defaults to VARCHAR(255)
     // Pattern: TEXT followed by optional NOT NULL, then default

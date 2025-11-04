@@ -17,6 +17,14 @@ import type { Knex } from "knex";
  */
 
 export async function up(knex: Knex): Promise<void> {
+  // Check if help system tables already exist
+  const hasHelpTools = await knex.schema.hasTable('m_help_tools');
+
+  if (hasHelpTools) {
+    console.log('✓ Help system tables already exist, skipping creation');
+    return;
+  }
+
   // 1. Create m_help_tools (Master table for tool names)
   await knex.schema.createTable('m_help_tools', (table) => {
     table.string('tool_name', 100).primary();

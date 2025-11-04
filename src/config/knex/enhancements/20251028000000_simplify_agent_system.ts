@@ -30,6 +30,14 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
+  // Check if table already exists
+  const hasTable = await knex.schema.hasTable('t_agent_messages');
+
+  if (hasTable) {
+    console.log('✓ t_agent_messages table already exists, skipping');
+    return;
+  }
+
   // Recreate t_agent_messages table
   await knex.schema.createTable('t_agent_messages', (table) => {
     table.increments('id').primary();

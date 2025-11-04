@@ -13,6 +13,14 @@ import type { Knex } from "knex";
  */
 
 export async function up(knex: Knex): Promise<void> {
+  // Check if help metadata already seeded
+  const existingTools = await knex('m_help_tools').select('tool_name');
+
+  if (existingTools.length > 0) {
+    console.log('✓ Help metadata already seeded, skipping');
+    return;
+  }
+
   // =========================================================================
   // 1. Seed Tools (7 tools)
   // =========================================================================

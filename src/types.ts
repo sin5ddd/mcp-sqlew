@@ -301,6 +301,7 @@ export interface GetContextParams {
   status?: 'active' | 'deprecated' | 'draft';
   scope?: string;
   tag_match?: 'AND' | 'OR';
+  _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
 export interface GetDecisionParams {
@@ -326,6 +327,7 @@ export interface SearchByLayerParams {
   layer: string;
   status?: 'active' | 'deprecated' | 'draft';
   include_tags?: boolean;
+  _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
 export interface SearchAdvancedParams {

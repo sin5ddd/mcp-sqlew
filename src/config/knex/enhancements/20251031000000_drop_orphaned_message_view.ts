@@ -16,6 +16,26 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
+  // Check if view already exists
+  const client = knex.client.config.client;
+
+  let viewExists = false;
+  if (client === 'better-sqlite3' || client === 'sqlite3') {
+    const result = await knex.raw(`SELECT name FROM sqlite_master WHERE type='view' AND name='v_unread_messages_by_priority'`);
+    viewExists = result.length > 0;
+  } else if (client === 'mysql' || client === 'mysql2') {
+    const result = await knex.raw(`SHOW TABLES LIKE 'v_unread_messages_by_priority'`);
+    viewExists = result[0].length > 0;
+  } else if (client === 'pg') {
+    const result = await knex.raw(`SELECT viewname FROM pg_views WHERE viewname='v_unread_messages_by_priority'`);
+    viewExists = result.rows.length > 0;
+  }
+
+  if (viewExists) {
+    console.log('✓ v_unread_messages_by_priority view already exists, skipping');
+    return;
+  }
+
   // Recreate the view (for rollback compatibility)
   await knex.raw(`
     CREATE VIEW v_unread_messages_by_priority AS

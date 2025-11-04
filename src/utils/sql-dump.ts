@@ -12,9 +12,57 @@ import {
   removeSqliteDefaultFunctions,
   type DatabaseFormat,
 } from './sql-dump-converters.js';
+import { debugLog } from './debug-logger.js';
 
 export type { DatabaseFormat };
 export type ConflictMode = 'error' | 'ignore' | 'replace';
+
+/**
+ * Enforce NOT NULL constraints on PRIMARY KEY columns
+ * MySQL and PostgreSQL require all PRIMARY KEY columns to be NOT NULL
+ */
+function enforceNotNullOnPrimaryKey(createSql: string, pkColumns: string[]): string {
+  if (pkColumns.length === 0) {
+    return createSql;
+  }
+
+  // Split the CREATE TABLE statement to process column definitions
+  const lines = createSql.split('\n');
+  const processedLines = lines.map((line) => {
+    // Check if this line defines one of the PRIMARY KEY columns
+    for (const pkCol of pkColumns) {
+      // Match column definition (handle different quote styles)
+      const colPattern = new RegExp(`^\\s*[\`"']?${pkCol}[\`"']?\\s+`, 'i');
+      if (colPattern.test(line)) {
+        // Check if NOT NULL is already present
+        if (!/NOT\s+NULL/i.test(line)) {
+          // Find position to insert NOT NULL (before DEFAULT, FOREIGN KEY, CHECK, or comma/closing paren)
+          const insertBeforePatterns = [
+            /\s+DEFAULT/i,
+            /\s+FOREIGN\s+KEY/i,
+            /\s+CHECK/i,
+            /,\s*$/,
+            /\)\s*$/,
+          ];
+
+          let insertPos = line.length;
+          for (const pattern of insertBeforePatterns) {
+            const match = line.match(pattern);
+            if (match && match.index !== undefined) {
+              insertPos = Math.min(insertPos, match.index);
+            }
+          }
+
+          // Insert NOT NULL
+          return line.slice(0, insertPos) + ' NOT NULL' + line.slice(insertPos);
+        }
+      }
+    }
+    return line;
+  });
+
+  return processedLines.join('\n');
+}
 
 /**
  * Get primary key columns for a table
@@ -84,6 +132,12 @@ export async function getCreateTableStatement(knex: Knex, table: string, targetF
       createSql = removeCheckConstraints(createSql);
       createSql = removeSqliteDefaultFunctions(createSql);
 
+      // Get PRIMARY KEY columns and ensure they have NOT NULL constraints
+      const pkColumns = await getPrimaryKeyColumns(knex, table);
+      if (pkColumns.length > 0) {
+        createSql = enforceNotNullOnPrimaryKey(createSql, pkColumns);
+      }
+
       // Handle PRIMARY KEY constraints with long VARCHAR columns
       // MySQL has a 768 byte limit for InnoDB PRIMARY KEYs (with utf8mb4, that's ~191 chars)
       const pkMatch = createSql.match(/primary key\s*\(([^)]+)\)/i);
@@ -123,6 +177,12 @@ export async function getCreateTableStatement(knex: Knex, table: string, targetF
       createSql = convertDataTypes(createSql, 'postgresql');
       createSql = convertBooleanDefaults(createSql, 'postgresql');
       createSql = removeSqliteDefaultFunctions(createSql);
+
+      // Get PRIMARY KEY columns and ensure they have NOT NULL constraints
+      const pkColumns = await getPrimaryKeyColumns(knex, table);
+      if (pkColumns.length > 0) {
+        createSql = enforceNotNullOnPrimaryKey(createSql, pkColumns);
+      }
     }
 
     return createSql + ';';
@@ -1297,8 +1357,10 @@ export async function generateSequenceResets(knex: Knex, tables: string[]): Prom
 /**
  * Get foreign key dependencies for tables
  * Returns a map of table -> array of tables it depends on
+ *
+ * @internal Exported for testing purposes
  */
-async function getTableDependencies(knex: Knex, tables: string[]): Promise<Map<string, string[]>> {
+export async function getTableDependencies(knex: Knex, tables: string[]): Promise<Map<string, string[]>> {
   const dependencies = new Map<string, string[]>();
   const client = knex.client.config.client;
 
@@ -1377,8 +1439,10 @@ async function getTableDependencies(knex: Knex, tables: string[]): Promise<Map<s
 /**
  * Topologically sort tables by foreign key dependencies
  * Returns tables in order where parent tables come before child tables
+ *
+ * @internal Exported for testing purposes
  */
-function topologicalSort(tables: string[], dependencies: Map<string, string[]>): string[] {
+export function topologicalSort(tables: string[], dependencies: Map<string, string[]>): string[] {
   const sorted: string[] = [];
   const visited = new Set<string>();
   const visiting = new Set<string>();
@@ -1386,7 +1450,8 @@ function topologicalSort(tables: string[], dependencies: Map<string, string[]>):
   function visit(table: string) {
     if (visited.has(table)) return;
     if (visiting.has(table)) {
-      // Circular dependency detected - just continue
+      // Circular dependency detected - log warning and continue
+      debugLog('WARN', `Circular foreign key dependency detected involving table: ${table}`);
       return;
     }
 
