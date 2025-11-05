@@ -26,6 +26,7 @@ import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../uti
 import { parseStringArray } from '../utils/param-parser.js';
 import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
 import { Knex } from 'knex';
+import connectionManager from '../utils/connection-manager.js';
 import {
   debugLog,
   debugLogFunctionEntry,
@@ -273,12 +274,14 @@ export async function setDecision(
   try {
     debugLogTransaction('START', 'setDecision');
 
-    // Use transaction for atomicity
-    const result = await actualAdapter.transaction(async (trx) => {
-      debugLogTransaction('COMMIT', 'setDecision-transaction-begin');
-      const internalResult = await setDecisionInternal(params, actualAdapter, trx);
-      debugLogTransaction('COMMIT', 'setDecision-transaction-end');
-      return internalResult;
+    // Use transaction for atomicity with connection retry
+    const result = await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        debugLogTransaction('COMMIT', 'setDecision-transaction-begin');
+        const internalResult = await setDecisionInternal(params, actualAdapter, trx);
+        debugLogTransaction('COMMIT', 'setDecision-transaction-end');
+        return internalResult;
+      });
     });
 
     debugLogFunctionExit('setDecision', true, result);
@@ -1154,8 +1157,9 @@ export async function setDecisionBatch(
   try {
     if (atomic) {
       // Atomic mode: All or nothing
-      const results = await actualAdapter.transaction(async (trx) => {
-        const processedResults = [];
+      const results = await connectionManager.executeWithRetry(async () => {
+        return await actualAdapter.transaction(async (trx) => {
+          const processedResults = [];
 
         for (const decision of params.decisions) {
           try {
@@ -1173,7 +1177,8 @@ export async function setDecisionBatch(
           }
         }
 
-        return processedResults;
+          return processedResults;
+        });
       });
 
       return {
@@ -1190,8 +1195,10 @@ export async function setDecisionBatch(
 
       for (const decision of params.decisions) {
         try {
-          const result = await actualAdapter.transaction(async (trx) => {
-            return await setDecisionInternal(decision, actualAdapter, trx);
+          const result = await connectionManager.executeWithRetry(async () => {
+            return await actualAdapter.transaction(async (trx) => {
+              return await setDecisionInternal(decision, actualAdapter, trx);
+            });
           });
 
           results.push({
@@ -1444,9 +1451,10 @@ export async function createTemplate(
   const projectId = getProjectContext().getProjectId();
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Validate layer if provided in defaults
-      if (params.defaults.layer) {
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Validate layer if provided in defaults
+        if (params.defaults.layer) {
         const layerId = await getLayerId(actualAdapter, params.defaults.layer, trx);
         if (layerId === null) {
           throw new Error(`Invalid layer in defaults: ${params.defaults.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
@@ -1477,12 +1485,13 @@ export async function createTemplate(
         created_by: createdById
       });
 
-      return {
-        success: true,
-        template_id: id,
-        template_name: params.name,
-        message: `Template "${params.name}" created successfully`
-      };
+        return {
+          success: true,
+          template_id: id,
+          template_name: params.name,
+          message: `Template "${params.name}" created successfully`
+        };
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1582,20 +1591,21 @@ export async function hardDeleteDecision(
   const projectId = getProjectContext().getProjectId();
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Get key_id
-      const keyResult = await trx('m_context_keys')
-        .where({ key: params.key })
-        .first('id') as { id: number } | undefined;
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Get key_id
+        const keyResult = await trx('m_context_keys')
+          .where({ key: params.key })
+          .first('id') as { id: number } | undefined;
 
-      if (!keyResult) {
-        // Key doesn't exist - still return success (idempotent)
-        return {
-          success: true,
-          key: params.key,
-          message: `Decision "${params.key}" not found (already deleted or never existed)`
-        };
-      }
+        if (!keyResult) {
+          // Key doesn't exist - still return success (idempotent)
+          return {
+            success: true,
+            key: params.key,
+            message: `Decision "${params.key}" not found (already deleted or never existed)`
+          };
+        }
 
       const keyId = keyResult.id;
 
@@ -1636,11 +1646,12 @@ export async function hardDeleteDecision(
         };
       }
 
-      return {
-        success: true,
-        key: params.key,
-        message: `Decision "${params.key}" permanently deleted (${totalDeleted} record${totalDeleted === 1 ? '' : 's'})`
-      };
+        return {
+          success: true,
+          key: params.key,
+          message: `Decision "${params.key}" permanently deleted (${totalDeleted} record${totalDeleted === 1 ? '' : 's'})`
+        };
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -23,6 +23,7 @@ import { validateActionParams, validateBatchParams } from '../utils/parameter-va
 import { buildWhereClause, type FilterCondition } from '../utils/query-builder.js';
 import { logFileRecord } from '../utils/activity-logging.js';
 import { getProjectContext } from '../utils/project-context.js';
+import connectionManager from '../utils/connection-manager.js';
 import { Knex } from 'knex';
 import type {
   RecordFileChangeParams,
@@ -126,9 +127,11 @@ export async function recordFileChange(
     // Validate parameters
     validateActionParams('file', 'record', params);
 
-    // Use transaction for atomicity
-    return await actualAdapter.transaction(async (trx) => {
-      return await recordFileChangeInternal(params, actualAdapter, trx);
+    // Use transaction for atomicity with connection retry
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        return await recordFileChangeInternal(params, actualAdapter, trx);
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -149,7 +152,6 @@ export async function getFileChanges(
   adapter?: DatabaseAdapter
 ): Promise<GetFileChangesResponse> {
   const actualAdapter = adapter ?? getAdapter();
-  const knex = actualAdapter.getKnex();
 
   try {
     // Fail-fast: Validate project context is initialized (Constraint #29)
@@ -158,109 +160,112 @@ export async function getFileChanges(
     // Validate parameters
     validateActionParams('file', 'get', params);
 
-    const limit = params.limit || DEFAULT_QUERY_LIMIT;
+    // Execute with connection retry
+    return await connectionManager.executeWithRetry(async () => {
+      const knex = actualAdapter.getKnex();
+      const limit = params.limit || DEFAULT_QUERY_LIMIT;
 
-    // Build filter conditions using query builder
-    const filterConditions: FilterCondition[] = [];
+      // Build filter conditions using query builder
+      const filterConditions: FilterCondition[] = [];
 
-    if (params.file_path) {
-      filterConditions.push({ type: 'equals', field: 'f.path', value: params.file_path });
-    }
-
-    if (params.agent_name) {
-      filterConditions.push({ type: 'equals', field: 'a.name', value: params.agent_name });
-    }
-
-    if (params.layer) {
-      // Validate layer
-      if (!STANDARD_LAYERS.includes(params.layer as any)) {
-        throw new Error(
-          `Invalid layer: ${params.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
-        );
+      if (params.file_path) {
+        filterConditions.push({ type: 'equals', field: 'f.path', value: params.file_path });
       }
-      filterConditions.push({ type: 'equals', field: 'l.name', value: params.layer });
-    }
 
-    if (params.change_type) {
-      validateChangeType(params.change_type);
-      const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
-      filterConditions.push({ type: 'equals', field: 'fc.change_type', value: changeTypeInt });
-    }
+      if (params.agent_name) {
+        filterConditions.push({ type: 'equals', field: 'a.name', value: params.agent_name });
+      }
 
-    if (params.since) {
-      // Convert ISO 8601 to Unix epoch
-      const sinceEpoch = Math.floor(new Date(params.since).getTime() / 1000);
-      filterConditions.push({ type: 'greaterThanOrEqual', field: 'fc.ts', value: sinceEpoch });
-    }
+      if (params.layer) {
+        // Validate layer
+        if (!STANDARD_LAYERS.includes(params.layer as any)) {
+          throw new Error(
+            `Invalid layer: ${params.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
+          );
+        }
+        filterConditions.push({ type: 'equals', field: 'l.name', value: params.layer });
+      }
 
-    // Use view if no specific filters (token efficient)
-    // Note: View already includes project_id filtering in application layer
-    if (filterConditions.length === 0) {
-      const rows = await knex('v_recent_file_changes')
-        .where('project_id', projectId)
-        .limit(limit)
-        .select('*') as RecentFileChange[];
+      if (params.change_type) {
+        validateChangeType(params.change_type);
+        const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
+        filterConditions.push({ type: 'equals', field: 'fc.change_type', value: changeTypeInt });
+      }
+
+      if (params.since) {
+        // Convert ISO 8601 to Unix epoch
+        const sinceEpoch = Math.floor(new Date(params.since).getTime() / 1000);
+        filterConditions.push({ type: 'greaterThanOrEqual', field: 'fc.ts', value: sinceEpoch });
+      }
+
+      // Use view if no specific filters (token efficient)
+      // Note: View already includes project_id filtering in application layer
+      if (filterConditions.length === 0) {
+        const rows = await knex('v_recent_file_changes')
+          .where('project_id', projectId)
+          .limit(limit)
+          .select('*') as RecentFileChange[];
+
+        return {
+          changes: rows,
+          count: rows.length,
+        };
+      }
+
+      // Build WHERE clause using query builder
+      const { whereClause, params: queryParams } = buildWhereClause(filterConditions);
+
+      // Build query dynamically with filters
+      let query = knex('t_file_changes as fc')
+        .join('m_files as f', 'fc.file_id', 'f.id')
+        .join('m_agents as a', 'fc.agent_id', 'a.id')
+        .leftJoin('m_layers as l', 'fc.layer_id', 'l.id')
+        .where('fc.project_id', projectId)
+        .select(
+          'f.path',
+          'a.name as changed_by',
+          'l.name as layer',
+          knex.raw(`CASE fc.change_type
+            WHEN 1 THEN 'created'
+            WHEN 2 THEN 'modified'
+            ELSE 'deleted'
+          END as change_type`),
+          'fc.description',
+          knex.raw(`datetime(fc.ts, 'unixepoch') as changed_at`)
+        )
+        .orderBy('fc.ts', 'desc')
+        .limit(limit);
+
+      // Apply filter conditions
+      if (params.file_path) {
+        query = query.where('f.path', params.file_path);
+      }
+
+      if (params.agent_name) {
+        query = query.where('a.name', params.agent_name);
+      }
+
+      if (params.layer) {
+        query = query.where('l.name', params.layer);
+      }
+
+      if (params.change_type) {
+        const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
+        query = query.where('fc.change_type', changeTypeInt);
+      }
+
+      if (params.since) {
+        const sinceEpoch = Math.floor(new Date(params.since).getTime() / 1000);
+        query = query.where('fc.ts', '>=', sinceEpoch);
+      }
+
+      const rows = await query as RecentFileChange[];
 
       return {
         changes: rows,
         count: rows.length,
       };
-    }
-
-    // Build WHERE clause using query builder
-    const { whereClause, params: queryParams } = buildWhereClause(filterConditions);
-
-    // Build query dynamically with filters
-    let query = knex('t_file_changes as fc')
-      .join('m_files as f', 'fc.file_id', 'f.id')
-      .join('m_agents as a', 'fc.agent_id', 'a.id')
-      .leftJoin('m_layers as l', 'fc.layer_id', 'l.id')
-      .where('fc.project_id', projectId)
-      .select(
-        'f.path',
-        'a.name as changed_by',
-        'l.name as layer',
-        knex.raw(`CASE fc.change_type
-          WHEN 1 THEN 'created'
-          WHEN 2 THEN 'modified'
-          ELSE 'deleted'
-        END as change_type`),
-        'fc.description',
-        knex.raw(`datetime(fc.ts, 'unixepoch') as changed_at`)
-      )
-      .orderBy('fc.ts', 'desc')
-      .limit(limit);
-
-    // Apply filter conditions
-    if (params.file_path) {
-      query = query.where('f.path', params.file_path);
-    }
-
-    if (params.agent_name) {
-      query = query.where('a.name', params.agent_name);
-    }
-
-    if (params.layer) {
-      query = query.where('l.name', params.layer);
-    }
-
-    if (params.change_type) {
-      const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
-      query = query.where('fc.change_type', changeTypeInt);
-    }
-
-    if (params.since) {
-      const sinceEpoch = Math.floor(new Date(params.since).getTime() / 1000);
-      query = query.where('fc.ts', '>=', sinceEpoch);
-    }
-
-    const rows = await query as RecentFileChange[];
-
-    return {
-      changes: rows,
-      count: rows.length,
-    };
-
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to get file changes: ${message}`);
@@ -280,7 +285,6 @@ export async function checkFileLock(
   adapter?: DatabaseAdapter
 ): Promise<CheckFileLockResponse> {
   const actualAdapter = adapter ?? getAdapter();
-  const knex = actualAdapter.getKnex();
 
   try {
     // Fail-fast: Validate project context is initialized (Constraint #29)
@@ -289,46 +293,49 @@ export async function checkFileLock(
     // Validate parameters
     validateActionParams('file', 'check_lock', params);
 
-    const lockDuration = params.lock_duration || 300; // Default 5 minutes
-    const currentTime = Math.floor(Date.now() / 1000);
-    const lockThreshold = currentTime - lockDuration;
+    // Execute with connection retry
+    return await connectionManager.executeWithRetry(async () => {
+      const knex = actualAdapter.getKnex();
+      const lockDuration = params.lock_duration || 300; // Default 5 minutes
+      const currentTime = Math.floor(Date.now() / 1000);
+      const lockThreshold = currentTime - lockDuration;
 
-    // Get the most recent change to this file within current project
-    const result = await knex('t_file_changes as fc')
-      .join('m_files as f', 'fc.file_id', 'f.id')
-      .join('m_agents as a', 'fc.agent_id', 'a.id')
-      .where('f.path', params.file_path)
-      .where('fc.project_id', projectId)
-      .select('a.name as agent', 'fc.change_type', 'fc.ts')
-      .orderBy('fc.ts', 'desc')
-      .limit(1)
-      .first() as { agent: string; change_type: number; ts: number } | undefined;
+      // Get the most recent change to this file within current project
+      const result = await knex('t_file_changes as fc')
+        .join('m_files as f', 'fc.file_id', 'f.id')
+        .join('m_agents as a', 'fc.agent_id', 'a.id')
+        .where('f.path', params.file_path)
+        .where('fc.project_id', projectId)
+        .select('a.name as agent', 'fc.change_type', 'fc.ts')
+        .orderBy('fc.ts', 'desc')
+        .limit(1)
+        .first() as { agent: string; change_type: number; ts: number } | undefined;
 
-    if (!result) {
-      // File never changed
+      if (!result) {
+        // File never changed
+        return {
+          locked: false,
+        };
+      }
+
+      // Check if within lock duration
+      if (result.ts >= lockThreshold) {
+        return {
+          locked: true,
+          last_agent: result.agent,
+          last_change: new Date(result.ts * 1000).toISOString(),
+          change_type: CHANGE_TYPE_TO_STRING[result.change_type as 1 | 2 | 3],
+        };
+      }
+
+      // Not locked (too old)
       return {
         locked: false,
-      };
-    }
-
-    // Check if within lock duration
-    if (result.ts >= lockThreshold) {
-      return {
-        locked: true,
         last_agent: result.agent,
         last_change: new Date(result.ts * 1000).toISOString(),
         change_type: CHANGE_TYPE_TO_STRING[result.change_type as 1 | 2 | 3],
       };
-    }
-
-    // Not locked (too old)
-    return {
-      locked: false,
-      last_agent: result.agent,
-      last_change: new Date(result.ts * 1000).toISOString(),
-      change_type: CHANGE_TYPE_TO_STRING[result.change_type as 1 | 2 | 3],
-    };
-
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to check file lock: ${message}`);

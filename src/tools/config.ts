@@ -9,6 +9,7 @@ import { DatabaseAdapter } from '../adapters/index.js';
 import { getAdapter } from '../database.js';
 import { getProjectContext } from '../utils/project-context.js';
 import { validateActionParams } from '../utils/parameter-validator.js';
+import connectionManager from '../utils/connection-manager.js';
 
 /**
  * Get configuration value with per-project inheritance
@@ -32,42 +33,44 @@ export async function getConfig(
     // Validate parameters
     validateActionParams('config', 'get', params);
 
-    const projectId = getProjectContext().getProjectId();
-    const configKey = params.key;
+    return await connectionManager.executeWithRetry(async () => {
+      const projectId = getProjectContext().getProjectId();
+      const configKey = params.key;
 
-    // Try project-specific config first
-    let config = await knex('m_config')
-      .where({ key: configKey, project_id: projectId })
-      .first<{ key: string; value: string }>();
+      // Try project-specific config first
+      let config = await knex('m_config')
+        .where({ key: configKey, project_id: projectId })
+        .first<{ key: string; value: string }>();
 
-    if (config) {
+      if (config) {
+        return {
+          key: config.key,
+          value: config.value,
+          scope: 'project'
+        };
+      }
+
+      // Fallback to global config (project_id = NULL)
+      config = await knex('m_config')
+        .where({ key: configKey })
+        .whereNull('project_id')
+        .first<{ key: string; value: string }>();
+
+      if (config) {
+        return {
+          key: config.key,
+          value: config.value,
+          scope: 'global'
+        };
+      }
+
+      // Not found
       return {
-        key: config.key,
-        value: config.value,
-        scope: 'project'
+        key: configKey,
+        value: null,
+        scope: 'not_found'
       };
-    }
-
-    // Fallback to global config (project_id = NULL)
-    config = await knex('m_config')
-      .where({ key: configKey })
-      .whereNull('project_id')
-      .first<{ key: string; value: string }>();
-
-    if (config) {
-      return {
-        key: config.key,
-        value: config.value,
-        scope: 'global'
-      };
-    }
-
-    // Not found
-    return {
-      key: configKey,
-      value: null,
-      scope: 'not_found'
-    };
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to get config: ${message}`);
@@ -96,29 +99,31 @@ export async function updateConfig(
     // Validate parameters
     validateActionParams('config', 'update', params);
 
-    const configKey = params.key;
-    const configValue = params.value;
-    const scope = params.scope || 'project'; // Default to project-specific
+    return await connectionManager.executeWithRetry(async () => {
+      const configKey = params.key;
+      const configValue = params.value;
+      const scope = params.scope || 'project'; // Default to project-specific
 
-    // Determine project_id based on scope
-    const projectId = scope === 'global' ? null : getProjectContext().getProjectId();
+      // Determine project_id based on scope
+      const projectId = scope === 'global' ? null : getProjectContext().getProjectId();
 
-    // Use Knex insert with onConflict for upsert (works across SQLite, MySQL, PostgreSQL)
-    await knex('m_config')
-      .insert({
+      // Use Knex insert with onConflict for upsert (works across SQLite, MySQL, PostgreSQL)
+      await knex('m_config')
+        .insert({
+          key: configKey,
+          project_id: projectId,
+          value: configValue
+        })
+        .onConflict(['key', 'project_id'])
+        .merge({ value: configValue });
+
+      return {
+        success: true,
         key: configKey,
-        project_id: projectId,
-        value: configValue
-      })
-      .onConflict(['key', 'project_id'])
-      .merge({ value: configValue });
-
-    return {
-      success: true,
-      key: configKey,
-      value: configValue,
-      scope: scope
-    };
+        value: configValue,
+        scope: scope
+      };
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to update config: ${message}`);

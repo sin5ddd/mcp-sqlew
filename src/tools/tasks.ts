@@ -30,6 +30,7 @@ import {
 import { parseStringArray } from '../utils/param-parser.js';
 import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
 import { debugLog } from '../utils/debug-logger.js';
+import connectionManager from '../utils/connection-manager.js';
 
 /**
  * Task status enum (matches m_task_statuses)
@@ -336,8 +337,10 @@ export async function createTask(params: {
   validateLength(params.title, 'Parameter "title"', 200);
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      return await createTaskInternal(params, actualAdapter, trx);
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        return await createTaskInternal(params, actualAdapter, trx);
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -372,195 +375,197 @@ export async function updateTask(params: {
   const projectId = getProjectContext().getProjectId();
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      const knex = actualAdapter.getKnex();
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        const knex = actualAdapter.getKnex();
 
-      // Check if task exists with project_id isolation
-      const taskExists = await trx('t_tasks')
-        .where({ id: params.task_id, project_id: projectId })
-        .first();
-      if (!taskExists) {
-        throw new Error(`Task with id ${params.task_id} not found`);
-      }
-
-      // Build update data dynamically
-      const updateData: any = {};
-
-      if (params.title !== undefined) {
-        if (params.title.trim() === '') {
-          throw new Error('Parameter "title" cannot be empty');
-        }
-        validateLength(params.title, 'Parameter "title"', 200);
-        updateData.title = params.title;
-      }
-
-      if (params.priority !== undefined) {
-        validatePriorityRange(params.priority);
-        updateData.priority = params.priority;
-      }
-
-      if (params.assigned_agent !== undefined) {
-        const agentId = await getOrCreateAgent(actualAdapter, params.assigned_agent, trx);
-        updateData.assigned_agent_id = agentId;
-      }
-
-      if (params.layer !== undefined) {
-        const layerId = await getLayerId(actualAdapter, params.layer, trx);
-        if (layerId === null) {
-          throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
-        }
-        updateData.layer_id = layerId;
-      }
-
-      // Update t_tasks if any updates (with project_id isolation)
-      if (Object.keys(updateData).length > 0) {
-        await trx('t_tasks')
+        // Check if task exists with project_id isolation
+        const taskExists = await trx('t_tasks')
           .where({ id: params.task_id, project_id: projectId })
-          .update(updateData);
+          .first();
+        if (!taskExists) {
+          throw new Error(`Task with id ${params.task_id} not found`);
+        }
 
-        // TODO: Add activity logging for updates if needed
-      }
+        // Build update data dynamically
+        const updateData: any = {};
 
-      // Update t_task_details if any detail fields provided
-      if (params.description !== undefined || params.acceptance_criteria !== undefined || params.notes !== undefined) {
-        // Process acceptance_criteria (can be string or array)
-        let acceptanceCriteriaString: string | null | undefined = undefined;
-        let acceptanceCriteriaJson: string | null | undefined = undefined;
+        if (params.title !== undefined) {
+          if (params.title.trim() === '') {
+            throw new Error('Parameter "title" cannot be empty');
+          }
+          validateLength(params.title, 'Parameter "title"', 200);
+          updateData.title = params.title;
+        }
 
-        if (params.acceptance_criteria !== undefined) {
-          if (Array.isArray(params.acceptance_criteria)) {
-            // Array format - store as JSON in acceptance_criteria_json
-            acceptanceCriteriaJson = JSON.stringify(params.acceptance_criteria);
-            // Also create human-readable summary in acceptance_criteria
-            acceptanceCriteriaString = params.acceptance_criteria
-              .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
-              .join('\n');
-          } else if (typeof params.acceptance_criteria === 'string') {
-            // Try to parse as JSON first
-            try {
-              const parsed = JSON.parse(params.acceptance_criteria);
-              if (Array.isArray(parsed)) {
-                // It's a JSON array string - store in JSON field
-                acceptanceCriteriaJson = params.acceptance_criteria;
-                // Also create human-readable summary
-                acceptanceCriteriaString = parsed
-                  .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
-                  .join('\n');
-              } else {
-                // Valid JSON but not an array - store as plain text
+        if (params.priority !== undefined) {
+          validatePriorityRange(params.priority);
+          updateData.priority = params.priority;
+        }
+
+        if (params.assigned_agent !== undefined) {
+          const agentId = await getOrCreateAgent(actualAdapter, params.assigned_agent, trx);
+          updateData.assigned_agent_id = agentId;
+        }
+
+        if (params.layer !== undefined) {
+          const layerId = await getLayerId(actualAdapter, params.layer, trx);
+          if (layerId === null) {
+            throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
+          }
+          updateData.layer_id = layerId;
+        }
+
+        // Update t_tasks if any updates (with project_id isolation)
+        if (Object.keys(updateData).length > 0) {
+          await trx('t_tasks')
+            .where({ id: params.task_id, project_id: projectId })
+            .update(updateData);
+
+          // TODO: Add activity logging for updates if needed
+        }
+
+        // Update t_task_details if any detail fields provided
+        if (params.description !== undefined || params.acceptance_criteria !== undefined || params.notes !== undefined) {
+          // Process acceptance_criteria (can be string or array)
+          let acceptanceCriteriaString: string | null | undefined = undefined;
+          let acceptanceCriteriaJson: string | null | undefined = undefined;
+
+          if (params.acceptance_criteria !== undefined) {
+            if (Array.isArray(params.acceptance_criteria)) {
+              // Array format - store as JSON in acceptance_criteria_json
+              acceptanceCriteriaJson = JSON.stringify(params.acceptance_criteria);
+              // Also create human-readable summary in acceptance_criteria
+              acceptanceCriteriaString = params.acceptance_criteria
+                .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
+                .join('\n');
+            } else if (typeof params.acceptance_criteria === 'string') {
+              // Try to parse as JSON first
+              try {
+                const parsed = JSON.parse(params.acceptance_criteria);
+                if (Array.isArray(parsed)) {
+                  // It's a JSON array string - store in JSON field
+                  acceptanceCriteriaJson = params.acceptance_criteria;
+                  // Also create human-readable summary
+                  acceptanceCriteriaString = parsed
+                    .map((check: any, i: number) => `${i + 1}. ${check.type}: ${check.command || check.file || check.pattern || ''}`)
+                    .join('\n');
+                } else {
+                  // Valid JSON but not an array - store as plain text
+                  acceptanceCriteriaString = params.acceptance_criteria || null;
+                  acceptanceCriteriaJson = null;
+                }
+              } catch {
+                // Not valid JSON - store as plain text
                 acceptanceCriteriaString = params.acceptance_criteria || null;
                 acceptanceCriteriaJson = null;
               }
-            } catch {
-              // Not valid JSON - store as plain text
-              acceptanceCriteriaString = params.acceptance_criteria || null;
-              acceptanceCriteriaJson = null;
             }
           }
-        }
 
-        // Check if details exist (with project_id isolation)
-        const detailsExist = await trx('t_task_details')
-          .where({ task_id: params.task_id, project_id: projectId })
-          .first();
-
-        const detailsUpdate: any = {};
-        if (params.description !== undefined) {
-          detailsUpdate.description = params.description || null;
-        }
-        if (acceptanceCriteriaString !== undefined) {
-          detailsUpdate.acceptance_criteria = acceptanceCriteriaString;
-        }
-        if (acceptanceCriteriaJson !== undefined) {
-          detailsUpdate.acceptance_criteria_json = acceptanceCriteriaJson;
-        }
-        if (params.notes !== undefined) {
-          detailsUpdate.notes = params.notes || null;
-        }
-
-        if (detailsExist && Object.keys(detailsUpdate).length > 0) {
-          // Update existing details (with project_id isolation)
-          await trx('t_task_details')
+          // Check if details exist (with project_id isolation)
+          const detailsExist = await trx('t_task_details')
             .where({ task_id: params.task_id, project_id: projectId })
-            .update(detailsUpdate);
-        } else if (!detailsExist) {
-          // Insert new details
-          await trx('t_task_details').insert({
-            project_id: projectId,
-            task_id: params.task_id,
-            description: params.description || null,
-            acceptance_criteria: acceptanceCriteriaString !== undefined ? acceptanceCriteriaString : null,
-            acceptance_criteria_json: acceptanceCriteriaJson !== undefined ? acceptanceCriteriaJson : null,
-            notes: params.notes || null
-          });
-        }
-      }
+            .first();
 
-      // Handle watch_files if provided (v3.4.1)
-      if (params.watch_files && params.watch_files.length > 0) {
-        // Parse watch_files - handle MCP SDK converting JSON string to char array
-        let watchFilesParsed: string[];
-
-        if (typeof params.watch_files === 'string') {
-          // String - try to parse as JSON
-          try {
-            watchFilesParsed = JSON.parse(params.watch_files);
-          } catch {
-            // If not valid JSON, treat as single file path
-            watchFilesParsed = [params.watch_files];
+          const detailsUpdate: any = {};
+          if (params.description !== undefined) {
+            detailsUpdate.description = params.description || null;
           }
-        } else if (Array.isArray(params.watch_files)) {
-          // Check if it's an array of single characters (MCP SDK bug)
-          if (params.watch_files.every((item: any) => typeof item === 'string' && item.length === 1)) {
-            // Join characters back into string and parse JSON
-            const jsonString = params.watch_files.join('');
+          if (acceptanceCriteriaString !== undefined) {
+            detailsUpdate.acceptance_criteria = acceptanceCriteriaString;
+          }
+          if (acceptanceCriteriaJson !== undefined) {
+            detailsUpdate.acceptance_criteria_json = acceptanceCriteriaJson;
+          }
+          if (params.notes !== undefined) {
+            detailsUpdate.notes = params.notes || null;
+          }
+
+          if (detailsExist && Object.keys(detailsUpdate).length > 0) {
+            // Update existing details (with project_id isolation)
+            await trx('t_task_details')
+              .where({ task_id: params.task_id, project_id: projectId })
+              .update(detailsUpdate);
+          } else if (!detailsExist) {
+            // Insert new details
+            await trx('t_task_details').insert({
+              project_id: projectId,
+              task_id: params.task_id,
+              description: params.description || null,
+              acceptance_criteria: acceptanceCriteriaString !== undefined ? acceptanceCriteriaString : null,
+              acceptance_criteria_json: acceptanceCriteriaJson !== undefined ? acceptanceCriteriaJson : null,
+              notes: params.notes || null
+            });
+          }
+        }
+
+        // Handle watch_files if provided (v3.4.1)
+        if (params.watch_files && params.watch_files.length > 0) {
+          // Parse watch_files - handle MCP SDK converting JSON string to char array
+          let watchFilesParsed: string[];
+
+          if (typeof params.watch_files === 'string') {
+            // String - try to parse as JSON
             try {
-              watchFilesParsed = JSON.parse(jsonString);
+              watchFilesParsed = JSON.parse(params.watch_files);
             } catch {
-              throw new Error(`Invalid watch_files format: ${jsonString}`);
+              // If not valid JSON, treat as single file path
+              watchFilesParsed = [params.watch_files];
+            }
+          } else if (Array.isArray(params.watch_files)) {
+            // Check if it's an array of single characters (MCP SDK bug)
+            if (params.watch_files.every((item: any) => typeof item === 'string' && item.length === 1)) {
+              // Join characters back into string and parse JSON
+              const jsonString = params.watch_files.join('');
+              try {
+                watchFilesParsed = JSON.parse(jsonString);
+              } catch {
+                throw new Error(`Invalid watch_files format: ${jsonString}`);
+              }
+            } else {
+              // Normal array of file paths
+              watchFilesParsed = params.watch_files;
             }
           } else {
-            // Normal array of file paths
-            watchFilesParsed = params.watch_files;
+            throw new Error('Parameter "watch_files" must be a string or array');
           }
-        } else {
-          throw new Error('Parameter "watch_files" must be a string or array');
-        }
 
-        for (const filePath of watchFilesParsed) {
-          const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
-          await trx('t_task_file_links').insert({
-            project_id: projectId,
-            task_id: params.task_id,
-            file_id: fileId
-          }).onConflict(['project_id', 'task_id', 'file_id']).ignore();
-        }
+          for (const filePath of watchFilesParsed) {
+            const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+            await trx('t_task_file_links').insert({
+              project_id: projectId,
+              task_id: params.task_id,
+              file_id: fileId
+            }).onConflict(['project_id', 'task_id', 'file_id']).ignore();
+          }
 
-        // Register files with watcher for auto-tracking
-        try {
-          const taskData = await trx('t_tasks as t')
-            .join('m_task_statuses as s', 't.status_id', 's.id')
-            .where({ 't.id': params.task_id, 't.project_id': projectId })
-            .select('t.title', 's.name as status')
-            .first() as { title: string; status: string } | undefined;
+          // Register files with watcher for auto-tracking
+          try {
+            const taskData = await trx('t_tasks as t')
+              .join('m_task_statuses as s', 't.status_id', 's.id')
+              .where({ 't.id': params.task_id, 't.project_id': projectId })
+              .select('t.title', 's.name as status')
+              .first() as { title: string; status: string } | undefined;
 
-          if (taskData) {
-            const watcher = FileWatcher.getInstance();
-            for (const filePath of watchFilesParsed) {
-              watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+            if (taskData) {
+              const watcher = FileWatcher.getInstance();
+              for (const filePath of watchFilesParsed) {
+                watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+              }
             }
+          } catch (error) {
+            // Watcher may not be initialized yet, ignore
+            debugLog('WARN', 'Could not register files with watcher', { error });
           }
-        } catch (error) {
-          // Watcher may not be initialized yet, ignore
-          debugLog('WARN', 'Could not register files with watcher', { error });
         }
-      }
 
-      return {
-        success: true,
-        task_id: params.task_id,
-        message: `Task ${params.task_id} updated successfully`
-      };
+        return {
+          success: true,
+          task_id: params.task_id,
+          message: `Task ${params.task_id} updated successfully`
+        };
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -882,75 +887,77 @@ export async function moveTask(params: {
     await detectAndTransitionStaleTasks(actualAdapter);
     await autoArchiveOldDoneTasks(actualAdapter);
 
-    return await actualAdapter.transaction(async (trx) => {
-      // Get current status
-      const taskRow = await trx('t_tasks')
-        .where({ id: params.task_id })
-        .select('status_id')
-        .first() as { status_id: number } | undefined;
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Get current status
+        const taskRow = await trx('t_tasks')
+          .where({ id: params.task_id })
+          .select('status_id')
+          .first() as { status_id: number } | undefined;
 
-      if (!taskRow) {
-        throw new Error(`Task with id ${params.task_id} not found`);
-      }
-
-      const currentStatusId = taskRow.status_id;
-      const newStatusId = STATUS_TO_ID[params.new_status];
-
-      if (!newStatusId) {
-        throw new Error(`Invalid new_status: ${params.new_status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
-      }
-
-      // Check if transition is valid
-      const validNextStatuses = VALID_TRANSITIONS[currentStatusId] || [];
-      if (!validNextStatuses.includes(newStatusId)) {
-        throw new Error(
-          `Invalid transition from ${ID_TO_STATUS[currentStatusId]} to ${params.new_status}. ` +
-          `Valid transitions: ${validNextStatuses.map(id => ID_TO_STATUS[id]).join(', ')}`
-        );
-      }
-
-      // Update status
-      const updateData: any = {
-        status_id: newStatusId
-      };
-
-      // Set completed_ts when moving to done
-      if (newStatusId === TASK_STATUS.DONE) {
-        updateData.completed_ts = Math.floor(Date.now() / 1000);
-      }
-
-      await trx('t_tasks')
-        .where({ id: params.task_id })
-        .update(updateData);
-
-      // Activity logging (replaces trigger)
-      // Note: Using system agent (id=1) for status changes
-      // In a real implementation, you'd pass the actual agent_id who made the change
-      const systemAgentId = 1;
-      await logTaskStatusChange(trx, {
-        task_id: params.task_id,
-        old_status: currentStatusId,
-        new_status: newStatusId,
-        agent_id: systemAgentId
-      });
-
-      // Update watcher if moving to done or archived (stop watching)
-      if (params.new_status === 'done' || params.new_status === 'archived') {
-        try {
-          const watcher = FileWatcher.getInstance();
-          watcher.unregisterTask(params.task_id);
-        } catch (error) {
-          // Watcher may not be initialized, ignore
+        if (!taskRow) {
+          throw new Error(`Task with id ${params.task_id} not found`);
         }
-      }
 
-      return {
-        success: true,
-        task_id: params.task_id,
-        old_status: ID_TO_STATUS[currentStatusId],
-        new_status: params.new_status,
-        message: `Task ${params.task_id} moved from ${ID_TO_STATUS[currentStatusId]} to ${params.new_status}`
-      };
+        const currentStatusId = taskRow.status_id;
+        const newStatusId = STATUS_TO_ID[params.new_status];
+
+        if (!newStatusId) {
+          throw new Error(`Invalid new_status: ${params.new_status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
+        }
+
+        // Check if transition is valid
+        const validNextStatuses = VALID_TRANSITIONS[currentStatusId] || [];
+        if (!validNextStatuses.includes(newStatusId)) {
+          throw new Error(
+            `Invalid transition from ${ID_TO_STATUS[currentStatusId]} to ${params.new_status}. ` +
+            `Valid transitions: ${validNextStatuses.map(id => ID_TO_STATUS[id]).join(', ')}`
+          );
+        }
+
+        // Update status
+        const updateData: any = {
+          status_id: newStatusId
+        };
+
+        // Set completed_ts when moving to done
+        if (newStatusId === TASK_STATUS.DONE) {
+          updateData.completed_ts = Math.floor(Date.now() / 1000);
+        }
+
+        await trx('t_tasks')
+          .where({ id: params.task_id })
+          .update(updateData);
+
+        // Activity logging (replaces trigger)
+        // Note: Using system agent (id=1) for status changes
+        // In a real implementation, you'd pass the actual agent_id who made the change
+        const systemAgentId = 1;
+        await logTaskStatusChange(trx, {
+          task_id: params.task_id,
+          old_status: currentStatusId,
+          new_status: newStatusId,
+          agent_id: systemAgentId
+        });
+
+        // Update watcher if moving to done or archived (stop watching)
+        if (params.new_status === 'done' || params.new_status === 'archived') {
+          try {
+            const watcher = FileWatcher.getInstance();
+            watcher.unregisterTask(params.task_id);
+          } catch (error) {
+            // Watcher may not be initialized, ignore
+          }
+        }
+
+        return {
+          success: true,
+          task_id: params.task_id,
+          old_status: ID_TO_STATUS[currentStatusId],
+          new_status: params.new_status,
+          message: `Task ${params.task_id} moved from ${ID_TO_STATUS[currentStatusId]} to ${params.new_status}`
+        };
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -985,96 +992,98 @@ export async function linkTask(params: {
   }
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Check if task exists
-      const taskExists = await trx('t_tasks').where({ id: params.task_id }).first();
-      if (!taskExists) {
-        throw new Error(`Task with id ${params.task_id} not found`);
-      }
-
-      if (params.link_type === 'decision') {
-        const decisionKey = String(params.target_id);
-        const keyId = await getOrCreateContextKey(actualAdapter, decisionKey, trx);
-        const linkRelation = params.link_relation || 'implements';
-
-        await trx('t_task_decision_links').insert({
-          task_id: params.task_id,
-          decision_key_id: keyId,
-          link_type: linkRelation
-        }).onConflict(['task_id', 'decision_key_id']).merge();
-
-        return {
-          success: true,
-          task_id: params.task_id,
-          linked_to: 'decision',
-          target: decisionKey,
-          relation: linkRelation,
-          message: `Task ${params.task_id} linked to decision "${decisionKey}"`
-        };
-
-      } else if (params.link_type === 'constraint') {
-        const constraintId = Number(params.target_id);
-
-        // Check if constraint exists
-        const constraintExists = await trx('t_constraints').where({ id: constraintId }).first();
-        if (!constraintExists) {
-          throw new Error(`Constraint with id ${constraintId} not found`);
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Check if task exists
+        const taskExists = await trx('t_tasks').where({ id: params.task_id }).first();
+        if (!taskExists) {
+          throw new Error(`Task with id ${params.task_id} not found`);
         }
 
-        await trx('t_task_constraint_links').insert({
-          task_id: params.task_id,
-          constraint_id: constraintId
-        }).onConflict(['task_id', 'constraint_id']).ignore();
+        if (params.link_type === 'decision') {
+          const decisionKey = String(params.target_id);
+          const keyId = await getOrCreateContextKey(actualAdapter, decisionKey, trx);
+          const linkRelation = params.link_relation || 'implements';
 
-        return {
-          success: true,
-          task_id: params.task_id,
-          linked_to: 'constraint',
-          target: constraintId,
-          message: `Task ${params.task_id} linked to constraint ${constraintId}`
-        };
+          await trx('t_task_decision_links').insert({
+            task_id: params.task_id,
+            decision_key_id: keyId,
+            link_type: linkRelation
+          }).onConflict(['task_id', 'decision_key_id']).merge();
 
-      } else if (params.link_type === 'file') {
-        // Deprecation warning (v3.4.1)
-        debugLog('WARN', `DEPRECATION: task.link(link_type="file") is deprecated as of v3.4.1. Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead. Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
+          return {
+            success: true,
+            task_id: params.task_id,
+            linked_to: 'decision',
+            target: decisionKey,
+            relation: linkRelation,
+            message: `Task ${params.task_id} linked to decision "${decisionKey}"`
+          };
 
-        const filePath = String(params.target_id);
-        const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+        } else if (params.link_type === 'constraint') {
+          const constraintId = Number(params.target_id);
 
-        await trx('t_task_file_links').insert({
-          task_id: params.task_id,
-          file_id: fileId
-        }).onConflict(['task_id', 'file_id']).ignore();
-
-        // Register file with watcher for auto-tracking
-        try {
-          const taskData = await trx('t_tasks as t')
-            .join('m_task_statuses as s', 't.status_id', 's.id')
-            .where('t.id', params.task_id)
-            .select('t.title', 's.name as status')
-            .first() as { title: string; status: string } | undefined;
-
-          if (taskData) {
-            const watcher = FileWatcher.getInstance();
-            watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+          // Check if constraint exists
+          const constraintExists = await trx('t_constraints').where({ id: constraintId }).first();
+          if (!constraintExists) {
+            throw new Error(`Constraint with id ${constraintId} not found`);
           }
-        } catch (error) {
-          // Watcher may not be initialized yet, ignore
-          debugLog('WARN', 'Could not register file with watcher', { error });
+
+          await trx('t_task_constraint_links').insert({
+            task_id: params.task_id,
+            constraint_id: constraintId
+          }).onConflict(['task_id', 'constraint_id']).ignore();
+
+          return {
+            success: true,
+            task_id: params.task_id,
+            linked_to: 'constraint',
+            target: constraintId,
+            message: `Task ${params.task_id} linked to constraint ${constraintId}`
+          };
+
+        } else if (params.link_type === 'file') {
+          // Deprecation warning (v3.4.1)
+          debugLog('WARN', `DEPRECATION: task.link(link_type="file") is deprecated as of v3.4.1. Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead. Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
+
+          const filePath = String(params.target_id);
+          const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+
+          await trx('t_task_file_links').insert({
+            task_id: params.task_id,
+            file_id: fileId
+          }).onConflict(['task_id', 'file_id']).ignore();
+
+          // Register file with watcher for auto-tracking
+          try {
+            const taskData = await trx('t_tasks as t')
+              .join('m_task_statuses as s', 't.status_id', 's.id')
+              .where('t.id', params.task_id)
+              .select('t.title', 's.name as status')
+              .first() as { title: string; status: string } | undefined;
+
+            if (taskData) {
+              const watcher = FileWatcher.getInstance();
+              watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+            }
+          } catch (error) {
+            // Watcher may not be initialized yet, ignore
+            debugLog('WARN', 'Could not register file with watcher', { error });
+          }
+
+          return {
+            success: true,
+            task_id: params.task_id,
+            linked_to: 'file',
+            target: filePath,
+            deprecation_warning: 'task.link(link_type="file") is deprecated. Use task.create/update(watch_files) or watch_files action instead.',
+            message: `Task ${params.task_id} linked to file "${filePath}" (DEPRECATED API - use watch_files instead)`
+          };
+
+        } else {
+          throw new Error(`Invalid link_type: ${params.link_type}. Must be one of: decision, constraint, file`);
         }
-
-        return {
-          success: true,
-          task_id: params.task_id,
-          linked_to: 'file',
-          target: filePath,
-          deprecation_warning: 'task.link(link_type="file") is deprecated. Use task.create/update(watch_files) or watch_files action instead.',
-          message: `Task ${params.task_id} linked to file "${filePath}" (DEPRECATED API - use watch_files instead)`
-        };
-
-      } else {
-        throw new Error(`Invalid link_type: ${params.link_type}. Must be one of: decision, constraint, file`);
-      }
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1096,49 +1105,51 @@ export async function archiveTask(params: { task_id: number }, adapter?: Databas
   }
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Check if task is in 'done' status
-      const taskRow = await trx('t_tasks')
-        .where({ id: params.task_id })
-        .select('status_id')
-        .first() as { status_id: number } | undefined;
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Check if task is in 'done' status
+        const taskRow = await trx('t_tasks')
+          .where({ id: params.task_id })
+          .select('status_id')
+          .first() as { status_id: number } | undefined;
 
-      if (!taskRow) {
-        throw new Error(`Task with id ${params.task_id} not found`);
-      }
+        if (!taskRow) {
+          throw new Error(`Task with id ${params.task_id} not found`);
+        }
 
-      if (taskRow.status_id !== TASK_STATUS.DONE) {
-        throw new Error(`Task ${params.task_id} must be in 'done' status to archive (current: ${ID_TO_STATUS[taskRow.status_id]})`);
-      }
+        if (taskRow.status_id !== TASK_STATUS.DONE) {
+          throw new Error(`Task ${params.task_id} must be in 'done' status to archive (current: ${ID_TO_STATUS[taskRow.status_id]})`);
+        }
 
-      // Update to archived
-      await trx('t_tasks')
-        .where({ id: params.task_id })
-        .update({ status_id: TASK_STATUS.ARCHIVED });
+        // Update to archived
+        await trx('t_tasks')
+          .where({ id: params.task_id })
+          .update({ status_id: TASK_STATUS.ARCHIVED });
 
-      // Activity logging
-      // Note: Using system agent (id=1) for status changes
-      const systemAgentId = 1;
-      await logTaskStatusChange(trx, {
-        task_id: params.task_id,
-        old_status: TASK_STATUS.DONE,
-        new_status: TASK_STATUS.ARCHIVED,
-        agent_id: systemAgentId
+        // Activity logging
+        // Note: Using system agent (id=1) for status changes
+        const systemAgentId = 1;
+        await logTaskStatusChange(trx, {
+          task_id: params.task_id,
+          old_status: TASK_STATUS.DONE,
+          new_status: TASK_STATUS.ARCHIVED,
+          agent_id: systemAgentId
+        });
+
+        // Unregister from file watcher (archived tasks don't need tracking)
+        try {
+          const watcher = FileWatcher.getInstance();
+          watcher.unregisterTask(params.task_id);
+        } catch (error) {
+          // Watcher may not be initialized, ignore
+        }
+
+        return {
+          success: true,
+          task_id: params.task_id,
+          message: `Task ${params.task_id} archived successfully`
+        };
       });
-
-      // Unregister from file watcher (archived tasks don't need tracking)
-      try {
-        const watcher = FileWatcher.getInstance();
-        watcher.unregisterTask(params.task_id);
-      } catch (error) {
-        // Watcher may not be initialized, ignore
-      }
-
-      return {
-        success: true,
-        task_id: params.task_id,
-        message: `Task ${params.task_id} archived successfully`
-      };
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1167,108 +1178,110 @@ export async function addDependency(params: {
   }
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Validation 1: No self-dependencies
-      if (params.blocker_task_id === params.blocked_task_id) {
-        throw new Error('Self-dependency not allowed');
-      }
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Validation 1: No self-dependencies
+        if (params.blocker_task_id === params.blocked_task_id) {
+          throw new Error('Self-dependency not allowed');
+        }
 
-      // Validation 2: Both tasks must exist and check if archived
-      const blockerTask = await trx('t_tasks')
-        .where({ id: params.blocker_task_id })
-        .select('id', 'status_id')
-        .first() as { id: number; status_id: number } | undefined;
+        // Validation 2: Both tasks must exist and check if archived
+        const blockerTask = await trx('t_tasks')
+          .where({ id: params.blocker_task_id })
+          .select('id', 'status_id')
+          .first() as { id: number; status_id: number } | undefined;
 
-      const blockedTask = await trx('t_tasks')
-        .where({ id: params.blocked_task_id })
-        .select('id', 'status_id')
-        .first() as { id: number; status_id: number } | undefined;
+        const blockedTask = await trx('t_tasks')
+          .where({ id: params.blocked_task_id })
+          .select('id', 'status_id')
+          .first() as { id: number; status_id: number } | undefined;
 
-      if (!blockerTask) {
-        throw new Error(`Blocker task #${params.blocker_task_id} not found`);
-      }
+        if (!blockerTask) {
+          throw new Error(`Blocker task #${params.blocker_task_id} not found`);
+        }
 
-      if (!blockedTask) {
-        throw new Error(`Blocked task #${params.blocked_task_id} not found`);
-      }
+        if (!blockedTask) {
+          throw new Error(`Blocked task #${params.blocked_task_id} not found`);
+        }
 
-      // Validation 3: Neither task is archived
-      if (blockerTask.status_id === TASK_STATUS.ARCHIVED) {
-        throw new Error(`Cannot add dependency: Task #${params.blocker_task_id} is archived`);
-      }
+        // Validation 3: Neither task is archived
+        if (blockerTask.status_id === TASK_STATUS.ARCHIVED) {
+          throw new Error(`Cannot add dependency: Task #${params.blocker_task_id} is archived`);
+        }
 
-      if (blockedTask.status_id === TASK_STATUS.ARCHIVED) {
-        throw new Error(`Cannot add dependency: Task #${params.blocked_task_id} is archived`);
-      }
+        if (blockedTask.status_id === TASK_STATUS.ARCHIVED) {
+          throw new Error(`Cannot add dependency: Task #${params.blocked_task_id} is archived`);
+        }
 
-      // Validation 4: No direct circular (reverse relationship)
-      const reverseExists = await trx('t_task_dependencies')
-        .where({
-          blocker_task_id: params.blocked_task_id,
-          blocked_task_id: params.blocker_task_id
-        })
-        .first();
+        // Validation 4: No direct circular (reverse relationship)
+        const reverseExists = await trx('t_task_dependencies')
+          .where({
+            blocker_task_id: params.blocked_task_id,
+            blocked_task_id: params.blocker_task_id
+          })
+          .first();
 
-      if (reverseExists) {
-        throw new Error(`Circular dependency detected: Task #${params.blocked_task_id} already blocks Task #${params.blocker_task_id}`);
-      }
+        if (reverseExists) {
+          throw new Error(`Circular dependency detected: Task #${params.blocked_task_id} already blocks Task #${params.blocker_task_id}`);
+        }
 
-      // Validation 5: No transitive circular (check if adding this would create a cycle)
-      const cycleCheck = await trx.raw(`
-        WITH RECURSIVE dependency_chain AS (
-          -- Start from the task that would be blocked
-          SELECT blocked_task_id as task_id, 1 as depth
-          FROM t_task_dependencies
-          WHERE blocker_task_id = ?
-
-          UNION ALL
-
-          -- Follow the chain of dependencies
-          SELECT d.blocked_task_id, dc.depth + 1
-          FROM t_task_dependencies d
-          JOIN dependency_chain dc ON d.blocker_task_id = dc.task_id
-          WHERE dc.depth < 100
-        )
-        SELECT task_id FROM dependency_chain WHERE task_id = ?
-      `, [params.blocked_task_id, params.blocker_task_id])
-        .then((result: any) => result[0] as { task_id: number } | undefined);
-
-      if (cycleCheck) {
-        // Build cycle path for error message
-        const cyclePathResult = await trx.raw(`
+        // Validation 5: No transitive circular (check if adding this would create a cycle)
+        const cycleCheck = await trx.raw(`
           WITH RECURSIVE dependency_chain AS (
-            SELECT blocked_task_id as task_id, 1 as depth,
-                   CAST(blocked_task_id AS TEXT) as path
+            -- Start from the task that would be blocked
+            SELECT blocked_task_id as task_id, 1 as depth
             FROM t_task_dependencies
             WHERE blocker_task_id = ?
 
             UNION ALL
 
-            SELECT d.blocked_task_id, dc.depth + 1,
-                   dc.path || ' → ' || d.blocked_task_id
+            -- Follow the chain of dependencies
+            SELECT d.blocked_task_id, dc.depth + 1
             FROM t_task_dependencies d
             JOIN dependency_chain dc ON d.blocker_task_id = dc.task_id
             WHERE dc.depth < 100
           )
-          SELECT path FROM dependency_chain WHERE task_id = ? ORDER BY depth DESC LIMIT 1
+          SELECT task_id FROM dependency_chain WHERE task_id = ?
         `, [params.blocked_task_id, params.blocker_task_id])
-          .then((result: any) => result[0] as { path: string } | undefined);
+          .then((result: any) => result[0] as { task_id: number } | undefined);
 
-        const cyclePath = cyclePathResult?.path || `#${params.blocked_task_id} → ... → #${params.blocker_task_id}`;
-        throw new Error(`Circular dependency detected: Task #${params.blocker_task_id} → #${cyclePath} → #${params.blocker_task_id}`);
-      }
+        if (cycleCheck) {
+          // Build cycle path for error message
+          const cyclePathResult = await trx.raw(`
+            WITH RECURSIVE dependency_chain AS (
+              SELECT blocked_task_id as task_id, 1 as depth,
+                     CAST(blocked_task_id AS TEXT) as path
+              FROM t_task_dependencies
+              WHERE blocker_task_id = ?
 
-      // All validations passed - insert dependency
-      await trx('t_task_dependencies').insert({
-        blocker_task_id: params.blocker_task_id,
-        blocked_task_id: params.blocked_task_id,
-        created_ts: Math.floor(Date.now() / 1000)
+              UNION ALL
+
+              SELECT d.blocked_task_id, dc.depth + 1,
+                     dc.path || ' → ' || d.blocked_task_id
+              FROM t_task_dependencies d
+              JOIN dependency_chain dc ON d.blocker_task_id = dc.task_id
+              WHERE dc.depth < 100
+            )
+            SELECT path FROM dependency_chain WHERE task_id = ? ORDER BY depth DESC LIMIT 1
+          `, [params.blocked_task_id, params.blocker_task_id])
+            .then((result: any) => result[0] as { path: string } | undefined);
+
+          const cyclePath = cyclePathResult?.path || `#${params.blocked_task_id} → ... → #${params.blocker_task_id}`;
+          throw new Error(`Circular dependency detected: Task #${params.blocker_task_id} → #${cyclePath} → #${params.blocker_task_id}`);
+        }
+
+        // All validations passed - insert dependency
+        await trx('t_task_dependencies').insert({
+          blocker_task_id: params.blocker_task_id,
+          blocked_task_id: params.blocked_task_id,
+          created_ts: Math.floor(Date.now() / 1000)
+        });
+
+        return {
+          success: true,
+          message: `Dependency added: Task #${params.blocker_task_id} blocks Task #${params.blocked_task_id}`
+        };
       });
-
-      return {
-        success: true,
-        message: `Dependency added: Task #${params.blocker_task_id} blocks Task #${params.blocked_task_id}`
-      };
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1392,25 +1405,27 @@ export async function batchCreateTasks(params: {
   try {
     if (atomic) {
       // Atomic mode: All or nothing
-      const results = await actualAdapter.transaction(async (trx) => {
-        const processedResults = [];
+      const results = await connectionManager.executeWithRetry(async () => {
+        return await actualAdapter.transaction(async (trx) => {
+          const processedResults = [];
 
-        for (const task of params.tasks) {
-          try {
-            const result = await createTaskInternal(task, actualAdapter, trx);
-            processedResults.push({
-              title: task.title,
-              task_id: result.task_id,
-              success: true,
-              error: undefined
-            });
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            throw new Error(`Batch failed at task "${task.title}": ${errorMessage}`);
+          for (const task of params.tasks) {
+            try {
+              const result = await createTaskInternal(task, actualAdapter, trx);
+              processedResults.push({
+                title: task.title,
+                task_id: result.task_id,
+                success: true,
+                error: undefined
+              });
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              throw new Error(`Batch failed at task "${task.title}": ${errorMessage}`);
+            }
           }
-        }
 
-        return processedResults;
+          return processedResults;
+        });
       });
 
       return {
@@ -1427,8 +1442,10 @@ export async function batchCreateTasks(params: {
 
       for (const task of params.tasks) {
         try {
-          const result = await actualAdapter.transaction(async (trx) => {
-            return await createTaskInternal(task, actualAdapter, trx);
+          const result = await connectionManager.executeWithRetry(async () => {
+            return await actualAdapter.transaction(async (trx) => {
+              return await createTaskInternal(task, actualAdapter, trx);
+            });
           });
 
           results.push({
@@ -1487,108 +1504,110 @@ export async function watchFiles(params: {
   }
 
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Check if task exists (project-scoped)
-      const taskData = await trx('t_tasks as t')
-        .join('m_task_statuses as s', 't.status_id', 's.id')
-        .where({ 't.id': params.task_id, 't.project_id': projectId })
-        .select('t.id', 't.title', 's.name as status')
-        .first() as { id: number; title: string; status: string } | undefined;
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Check if task exists (project-scoped)
+        const taskData = await trx('t_tasks as t')
+          .join('m_task_statuses as s', 't.status_id', 's.id')
+          .where({ 't.id': params.task_id, 't.project_id': projectId })
+          .select('t.id', 't.title', 's.name as status')
+          .first() as { id: number; title: string; status: string } | undefined;
 
-      if (!taskData) {
-        throw new Error(`Task with id ${params.task_id} not found`);
-      }
-
-      if (params.action === 'watch') {
-        if (!params.file_paths || params.file_paths.length === 0) {
-          throw new Error('Parameter "file_paths" is required for watch action');
+        if (!taskData) {
+          throw new Error(`Task with id ${params.task_id} not found`);
         }
 
-        const addedFiles: string[] = [];
-        for (const filePath of params.file_paths) {
-          const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
-
-          // Check if already exists
-          const existing = await trx('t_task_file_links')
-            .where({ task_id: params.task_id, file_id: fileId })
-            .first();
-
-          if (!existing) {
-            await trx('t_task_file_links').insert({
-              task_id: params.task_id,
-              file_id: fileId
-            });
-            addedFiles.push(filePath);
+        if (params.action === 'watch') {
+          if (!params.file_paths || params.file_paths.length === 0) {
+            throw new Error('Parameter "file_paths" is required for watch action');
           }
-        }
 
-        // Register files with watcher
-        try {
-          const watcher = FileWatcher.getInstance();
-          for (const filePath of addedFiles) {
-            watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+          const addedFiles: string[] = [];
+          for (const filePath of params.file_paths) {
+            const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+
+            // Check if already exists
+            const existing = await trx('t_task_file_links')
+              .where({ task_id: params.task_id, file_id: fileId })
+              .first();
+
+            if (!existing) {
+              await trx('t_task_file_links').insert({
+                task_id: params.task_id,
+                file_id: fileId
+              });
+              addedFiles.push(filePath);
+            }
           }
-        } catch (error) {
-          // Watcher may not be initialized yet, ignore
-          debugLog('WARN', 'Could not register files with watcher', { error });
-        }
 
-        return {
-          success: true,
-          task_id: params.task_id,
-          action: 'watch',
-          files_added: addedFiles.length,
-          files: addedFiles,
-          message: `Watching ${addedFiles.length} file(s) for task ${params.task_id}`
-        };
-
-      } else if (params.action === 'unwatch') {
-        if (!params.file_paths || params.file_paths.length === 0) {
-          throw new Error('Parameter "file_paths" is required for unwatch action');
-        }
-
-        const removedFiles: string[] = [];
-        for (const filePath of params.file_paths) {
-          const deleted = await trx('t_task_file_links')
-            .where('task_id', params.task_id)
-            .whereIn('file_id', function() {
-              this.select('id').from('m_files').where({ path: filePath });
-            })
-            .delete();
-
-          if (deleted > 0) {
-            removedFiles.push(filePath);
+          // Register files with watcher
+          try {
+            const watcher = FileWatcher.getInstance();
+            for (const filePath of addedFiles) {
+              watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+            }
+          } catch (error) {
+            // Watcher may not be initialized yet, ignore
+            debugLog('WARN', 'Could not register files with watcher', { error });
           }
+
+          return {
+            success: true,
+            task_id: params.task_id,
+            action: 'watch',
+            files_added: addedFiles.length,
+            files: addedFiles,
+            message: `Watching ${addedFiles.length} file(s) for task ${params.task_id}`
+          };
+
+        } else if (params.action === 'unwatch') {
+          if (!params.file_paths || params.file_paths.length === 0) {
+            throw new Error('Parameter "file_paths" is required for unwatch action');
+          }
+
+          const removedFiles: string[] = [];
+          for (const filePath of params.file_paths) {
+            const deleted = await trx('t_task_file_links')
+              .where('task_id', params.task_id)
+              .whereIn('file_id', function() {
+                this.select('id').from('m_files').where({ path: filePath });
+              })
+              .delete();
+
+            if (deleted > 0) {
+              removedFiles.push(filePath);
+            }
+          }
+
+          return {
+            success: true,
+            task_id: params.task_id,
+            action: 'unwatch',
+            files_removed: removedFiles.length,
+            files: removedFiles,
+            message: `Stopped watching ${removedFiles.length} file(s) for task ${params.task_id}`
+          };
+
+        } else if (params.action === 'list') {
+          const files = await trx('t_task_file_links as tfl')
+            .join('m_files as f', 'tfl.file_id', 'f.id')
+            .where('tfl.task_id', params.task_id)
+            .select('f.path')
+            .then(rows => rows.map((row: any) => row.path));
+
+          return {
+            success: true,
+            task_id: params.task_id,
+            action: 'list',
+            files_count: files.length,
+            files: files,
+            message: `Task ${params.task_id} is watching ${files.length} file(s)`
+          };
+
+        } else {
+          throw new Error(`Invalid action: ${params.action}. Must be one of: watch, unwatch, list`);
         }
-
-        return {
-          success: true,
-          task_id: params.task_id,
-          action: 'unwatch',
-          files_removed: removedFiles.length,
-          files: removedFiles,
-          message: `Stopped watching ${removedFiles.length} file(s) for task ${params.task_id}`
-        };
-
-      } else if (params.action === 'list') {
-        const files = await trx('t_task_file_links as tfl')
-          .join('m_files as f', 'tfl.file_id', 'f.id')
-          .where('tfl.task_id', params.task_id)
-          .select('f.path')
-          .then(rows => rows.map((row: any) => row.path));
-
-        return {
-          success: true,
-          task_id: params.task_id,
-          action: 'list',
-          files_count: files.length,
-          files: files,
-          message: `Task ${params.task_id} is watching ${files.length} file(s)`
-        };
-
-      } else {
-        throw new Error(`Invalid action: ${params.action}. Must be one of: watch, unwatch, list`);
-      }
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
