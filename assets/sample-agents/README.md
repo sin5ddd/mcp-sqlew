@@ -14,6 +14,8 @@ This directory contains specialized agent files for efficient multi-agent coordi
 - `sqlew-researcher.md` - Query decisions, analyze patterns, investigate context (14KB tokens)
 - `sqlew-architect.md` - Document decisions, enforce constraints, maintain standards (20KB tokens)
 
+**v3.7.0 Update**: Templates now emphasize **error-prevention** (reduces tool call errors from 60% to <10%) through discovery-first workflow. Existing users: see upgrade instructions in [docs/SPECIALIZED_AGENTS.md](../../docs/SPECIALIZED_AGENTS.md#upgrading-to-error-prevention-templates-v370).
+
 ## Quick Install
 
 Configure which agents to install in `.sqlew/config.toml`:
