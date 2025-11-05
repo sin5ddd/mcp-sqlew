@@ -76,16 +76,17 @@ export function handleToolError(
 }
 
 /**
- * Handle initialization errors
- * Logs the error and returns formatted error message
+ * Handle initialization errors (system-critical)
+ * Logs the error at FATAL level and returns formatted error message
  */
 export function handleInitializationError(error: any): string {
   const { message, stack, errorType } = formatErrorDetails(error);
 
+  // Use FATAL level for system-critical initialization errors
   debugLogError('INITIALIZATION_ERROR', error, {
     errorType: errorType,
     stack: stack
-  });
+  }, 'FATAL');
 
   safeConsoleError('\n❌ INITIALIZATION ERROR:');
   safeConsoleError(`   Message: ${message}`);
@@ -105,7 +106,7 @@ export function handleInitializationError(error: any): string {
 export function setupGlobalErrorHandlers(
   onCleanup?: () => void
 ): void {
-  // Handle uncaught exceptions
+  // Handle uncaught exceptions (system-critical)
   process.on('uncaughtException', (error: Error) => {
     const { message, stack, errorType } = formatErrorDetails(error);
 
@@ -114,15 +115,16 @@ export function setupGlobalErrorHandlers(
     safeConsoleError(`   Stack trace:`);
     safeConsoleError(stack?.split('\n').map(line => `     ${line}`).join('\n'));
 
+    // Use FATAL level for uncaught exceptions
     debugLogError('UNCAUGHT_EXCEPTION', error, {
       errorType: errorType,
       stack: stack
-    });
+    }, 'FATAL');
 
     safeConsoleError('   ⚠️  Server continuing despite error\n');
   });
 
-  // Handle unhandled promise rejections
+  // Handle unhandled promise rejections (system-critical)
   process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
     const { message, stack, errorType } = formatErrorDetails(reason);
 
@@ -133,11 +135,12 @@ export function setupGlobalErrorHandlers(
       safeConsoleError(stack.split('\n').map(line => `     ${line}`).join('\n'));
     }
 
+    // Use FATAL level for unhandled promise rejections
     debugLogError('UNHANDLED_REJECTION', reason, {
       errorType: errorType,
       stack: stack,
       promise: String(promise)
-    });
+    }, 'FATAL');
 
     safeConsoleError('   ⚠️  Server continuing despite error\n');
   });

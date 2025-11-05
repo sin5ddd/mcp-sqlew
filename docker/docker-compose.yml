@@ -1,0 +1,102 @@
+version: "3.8"
+
+services:
+    mysql:
+        image: mysql:8.0
+        container_name: mcp-sqlew-mysql-test
+        environment:
+            MYSQL_ROOT_PASSWORD: rootpass
+            MYSQL_DATABASE: mcp_test
+            MYSQL_USER: mcp_user
+            MYSQL_PASSWORD: mcp_pass
+            TZ: UTC
+        ports:
+            - "3307:3306"
+        volumes:
+            - ./data/mysql:/var/lib/mysql
+        command: >
+            --character-set-server=utf8mb4
+            --collation-server=utf8mb4_unicode_ci
+            --default-time-zone='+00:00'
+            --sql-mode=TRADITIONAL
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "mysqladmin",
+                    "ping",
+                    "-h",
+                    "localhost",
+                    "-u",
+                    "root",
+                    "-prootpass",
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 30s
+
+    # MariaDB 10.5 for compatibility testing
+    mariadb:
+        image: mariadb:10.5
+        container_name: mcp-sqlew-mariadb-test
+        environment:
+            MYSQL_ROOT_PASSWORD: rootpass
+            MYSQL_DATABASE: mcp_test
+            MYSQL_USER: mcp_user
+            MYSQL_PASSWORD: mcp_pass
+            TZ: UTC
+        ports:
+            - "3308:3306"
+        volumes:
+            - ./data/mariadb:/var/lib/mysql
+        command: >
+            --character-set-server=utf8mb4
+            --collation-server=utf8mb4_unicode_ci
+            --default-time-zone='+00:00'
+            --sql-mode=TRADITIONAL
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "mysqladmin",
+                    "ping",
+                    "-h",
+                    "localhost",
+                    "-u",
+                    "root",
+                    "-prootpass",
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 30s
+
+    # PostgreSQL for future testing
+    postgres:
+        image: postgres:16-alpine
+        container_name: mcp-sqlew-postgres-test
+        environment:
+            POSTGRES_DB: mcp_test
+            POSTGRES_USER: mcp_user
+            POSTGRES_PASSWORD: mcp_pass
+            POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+            TZ: UTC
+            PGTZ: UTC
+            PGDATA: /var/lib/postgresql/data/pgdata
+        ports:
+            - "5432:5432"
+        volumes:
+            - ./data/postgres:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U mcp_user -d mcp_test"]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
+networks:
+    default:
+        driver: bridge
+        enable_ipv6: false
+        driver_opts:
+            com.docker.network.enable_ipv6: "false"

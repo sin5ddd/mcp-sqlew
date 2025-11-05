@@ -18,7 +18,17 @@ let testDb: DatabaseAdapter;
  * Create an in-memory test database
  */
 async function createTestDatabase(): Promise<DatabaseAdapter> {
-  const adapter = new SQLiteAdapter();
+  const adapter = new SQLiteAdapter({
+    type: 'sqlite',
+    connection: {
+      host: '',
+      port: 0,
+      database: ':memory:',
+    },
+    auth: {
+      type: 'direct',
+    },
+  });
   await adapter.connect({
     client: 'better-sqlite3',
     connection: { filename: ':memory:' },

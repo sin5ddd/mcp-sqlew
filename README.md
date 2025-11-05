@@ -40,8 +40,9 @@ Traditional code analysis like git tells you **WHAT** is done, sqlew adds **WHY*
 **60-75% token reduction** in multi-session projects through structured data storage and selective querying.
 
 ### 🎯 Key Features
-- **5 Specialized Tools**: decisions, tasks, files, constraints, stats (config tool removed)
-- **Parameter Validation**: Typo detection, required/optional markers, helpful error messages
+- **5 Specialized Tools**: decisions, tasks, files, constraints, stats
+- **Runtime Reconnection**: Automatic database connection recovery with exponential backoff
+- **Parameter Validation**: Typo detection, required/optional markers, 70-85% more concise error messages
 - **Metadata-Driven**: Tag, layer, scope, and version everything
 - **Decision Context**: Document WHY with rationale, alternatives, and trade-offs
 - **Task Dependencies**: Blocking relationships with circular detection
@@ -218,6 +219,7 @@ All tools support:
 ### For Developers
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
+- [Database Migration](docs/DATABASE_MIGRATION.md) - SQLite → MySQL/PostgreSQL migration
 - [Building from Source](docs/ARCHITECTURE.md#development) - Setup instructions
 - [Migration Guides](docs/MIGRATION_v2.md) - Version upgrade guides
 
@@ -243,7 +245,7 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.6.6**
+Current version: **3.7.0**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License

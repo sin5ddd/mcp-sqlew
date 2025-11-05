@@ -29,7 +29,25 @@ export async function initializeDatabase(
   }
 
   const dbType = config?.databaseType || 'sqlite';
-  const adapter = createDatabaseAdapter(dbType);
+
+  // Build DatabaseConfig for adapter
+  // For MySQL/PostgreSQL, use provided connection config with auth
+  // For SQLite, use traditional file path
+  const databaseConfig = config?.connection
+    ? ({
+        type: (dbType === 'postgresql' ? 'postgres' : dbType) as 'sqlite' | 'mysql' | 'postgres',
+        connection: config.connection,
+        auth: config.connection.user
+          ? {
+              type: 'direct' as const,
+              user: config.connection.user,
+              password: config.connection.password,
+            }
+          : undefined,
+      } as const)
+    : undefined;
+
+  const adapter = createDatabaseAdapter(dbType, databaseConfig as any);
 
   // Determine if running from compiled code (dist/) or source (src/)
   const isCompiledCode = import.meta.url.includes('/dist/');
@@ -41,11 +59,31 @@ export async function initializeDatabase(
     ? { ...baseConfig, connection: config.connection }
     : baseConfig;
 
+  // Note: adapter.connect() uses this.config internally (set in constructor)
+  // The knexConnConfig here is primarily for TypeScript and backward compatibility
   await adapter.connect(knexConnConfig);
 
   // Run migrations if needed
   const knex = adapter.getKnex();
-  await knex.migrate.latest();
+
+  // Extract migrations config from baseConfig and pass to migrate()
+  const migrationsConfig = baseConfig.migrations || {};
+
+  try {
+    await knex.migrate.latest(migrationsConfig);
+  } catch (migrationError: any) {
+    // Log migration error to debug log (if initialized) and stderr
+    const errorMessage = `Migration failed: ${migrationError.message || String(migrationError)}`;
+    debugLog('ERROR', errorMessage, {
+      error: migrationError,
+      stack: migrationError.stack
+    });
+
+    // Re-throw with more context
+    const enhancedError = new Error(errorMessage);
+    enhancedError.cause = migrationError;
+    throw enhancedError;
+  }
 
   debugLog('INFO', `Database initialized with Knex adapter (${environment})`);
 
@@ -292,15 +330,42 @@ export async function getCategoryId(
 // ============================================================================
 
 /**
- * Get configuration value from m_config table
+ * Get configuration value from m_config table with per-project inheritance
+ *
+ * Lookup priority:
+ * 1. Project-specific config (project_id = provided projectId)
+ * 2. Global config (project_id = NULL)
+ *
+ * @param adapter - Database adapter
+ * @param key - Config key
+ * @param projectId - Optional project ID (if not provided, only checks global config)
+ * @returns Config value or null if not found
  */
 export async function getConfigValue(
   adapter: DatabaseAdapter,
-  key: string
+  key: string,
+  projectId?: number | null
 ): Promise<string | null> {
   const knex = adapter.getKnex();
-  const result = await knex('m_config').where({ key }).first('value');
-  return result ? result.value : null;
+
+  // If projectId provided, try project-specific config first
+  if (projectId !== undefined && projectId !== null) {
+    const projectConfig = await knex('m_config')
+      .where({ key, project_id: projectId })
+      .first<{ value: string }>();
+
+    if (projectConfig) {
+      return projectConfig.value;
+    }
+  }
+
+  // Fallback to global config (project_id = NULL)
+  const globalConfig = await knex('m_config')
+    .where({ key })
+    .whereNull('project_id')
+    .first<{ value: string }>();
+
+  return globalConfig ? globalConfig.value : null;
 }
 
 /**

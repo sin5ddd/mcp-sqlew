@@ -1,12 +1,20 @@
 // src/adapters/sqlite-adapter.ts
 import knexLib from 'knex';
 import type { Knex } from 'knex';
-import type { DatabaseAdapter } from './types.js';
+import { BaseAdapter } from './base-adapter.js';
+import type { DatabaseConfig } from '../config/types.js';
 
 const { knex } = knexLib;
 
-export class SQLiteAdapter implements DatabaseAdapter {
-  private knexInstance: Knex | null = null;
+/**
+ * SQLite adapter implementation with BaseAdapter integration.
+ *
+ * SQLite is a file-based database that doesn't require authentication,
+ * so this adapter overrides the connect() method to bypass the auth flow.
+ *
+ * @extends BaseAdapter
+ */
+export class SQLiteAdapter extends BaseAdapter {
   private rawConnection: any = null;
 
   // Feature detection
@@ -18,42 +26,77 @@ export class SQLiteAdapter implements DatabaseAdapter {
   readonly supportsSavepoints = true;
   readonly databaseName = 'sqlite' as const;
 
-  // Connection Management
-  async connect(config: Knex.Config): Promise<Knex> {
-    const fullConfig: Knex.Config = {
+  /**
+   * Creates a new SQLite adapter instance.
+   *
+   * @param config - Database configuration (auth is ignored for SQLite)
+   */
+  constructor(config: DatabaseConfig) {
+    super(config);
+  }
+
+  /**
+   * Returns the Knex dialect for SQLite.
+   */
+  getDialect(): string {
+    return 'better-sqlite3';
+  }
+
+  /**
+   * Initializes SQLite-specific settings (PRAGMA configuration).
+   */
+  async initialize(): Promise<void> {
+    const knex = this.getKnex();
+
+    // Configure SQLite pragmas for optimal performance and safety
+    await knex.raw('PRAGMA journal_mode = WAL');
+    await knex.raw('PRAGMA foreign_keys = ON');
+    await knex.raw('PRAGMA synchronous = NORMAL');
+    await knex.raw('PRAGMA busy_timeout = 5000');
+  }
+
+  /**
+   * Establishes SQLite connection (overrides BaseAdapter to bypass auth).
+   *
+   * SQLite doesn't require authentication, so we create the Knex instance
+   * directly without going through the authentication provider flow.
+   */
+  async connect(config?: Knex.Config): Promise<Knex> {
+    // Return existing connection if already established
+    if (this.knexInstance) {
+      return this.knexInstance;
+    }
+
+    // Build configuration
+    const connectionConfig = config || {
       client: 'better-sqlite3',
-      connection: config.connection,
+      connection: {
+        filename: this.config.connection!.database,
+      },
       useNullAsDefault: true,
-      ...config,
     };
 
-    this.knexInstance = knex(fullConfig);
+    // Create Knex instance
+    this.knexInstance = knex(connectionConfig);
 
     // Get and store the raw better-sqlite3 connection
     this.rawConnection = await (this.knexInstance.client as any).acquireRawConnection();
 
-    // Configure SQLite pragmas
-    await this.knexInstance.raw('PRAGMA journal_mode = WAL');
-    await this.knexInstance.raw('PRAGMA foreign_keys = ON');
-    await this.knexInstance.raw('PRAGMA synchronous = NORMAL');
-    await this.knexInstance.raw('PRAGMA busy_timeout = 5000');
+    // Initialize SQLite settings
+    await this.initialize();
 
     return this.knexInstance;
   }
 
+  /**
+   * Closes SQLite connection.
+   */
   async disconnect(): Promise<void> {
     if (this.knexInstance) {
       await this.knexInstance.destroy();
       this.knexInstance = null;
       this.rawConnection = null;
     }
-  }
-
-  getKnex(): Knex {
-    if (!this.knexInstance) {
-      throw new Error('Database not connected. Call connect() first.');
-    }
-    return this.knexInstance;
   }
 
   /**

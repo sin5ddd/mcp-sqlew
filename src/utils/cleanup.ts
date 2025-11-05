@@ -3,11 +3,13 @@
  * Replaces the automatic triggers with weekend-aware logic
  *
  * CONVERTED: Using Knex.js with DatabaseAdapter (async/await)
+ * MULTI-PROJECT: All cleanup operations scoped by project_id (Constraint #40)
  */
 
 import { DatabaseAdapter } from '../adapters/index.js';
 import { Knex } from 'knex';
 import { calculateMessageCutoff, calculateFileChangeCutoff, releaseInactiveAgents } from './retention.js';
+import { getProjectContext } from './project-context.js';
 
 /**
  * Perform automatic cleanup of old data
@@ -60,6 +62,7 @@ export async function cleanupMessages(
 
 /**
  * Delete old file changes before the cutoff timestamp
+ * PROJECT-SCOPED: Only deletes file changes for current project (Constraint #40)
  *
  * @param adapter - Database adapter instance
  * @param cutoffTimestamp - Unix timestamp (seconds) for cutoff
@@ -72,12 +75,18 @@ export async function cleanupFileChanges(
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
-  return await knex('t_file_changes').where('ts', '<', cutoffTimestamp).delete();
+  const projectId = getProjectContext().getProjectId();
+
+  return await knex('t_file_changes')
+    .where('project_id', projectId)
+    .where('ts', '<', cutoffTimestamp)
+    .delete();
 }
 
 /**
  * Delete old activity logs before the cutoff timestamp
  * Activity logs use the same retention as messages (constraint #4)
+ * PROJECT-SCOPED: Only deletes activity logs for current project (Constraint #40)
  *
  * @param adapter - Database adapter instance
  * @param cutoffTimestamp - Unix timestamp (seconds) for cutoff
@@ -90,7 +99,12 @@ export async function cleanupActivityLogs(
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
-  return await knex('t_activity_log').where('ts', '<', cutoffTimestamp).delete();
+  const projectId = getProjectContext().getProjectId();
+
+  return await knex('t_activity_log')
+    .where('project_id', projectId)
+    .where('ts', '<', cutoffTimestamp)
+    .delete();
 }
 
 /**
