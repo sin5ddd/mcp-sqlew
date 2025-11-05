@@ -556,6 +556,8 @@ setupGlobalErrorHandlers(() => {
 
 // Start server with stdio transport
 async function main() {
+  let debugLoggerInitialized = false;
+
   try {
     // 0. Determine project root and load config (BEFORE logger init)
     // This must happen first to get debug log path from config
@@ -583,6 +585,7 @@ async function main() {
     const debugLogPath = parsedArgs.debugLogPath || process.env.SQLEW_DEBUG || fileConfig.debug?.log_path;
     const debugLogLevel = fileConfig.debug?.log_level || 'info';
     initDebugLogger(debugLogPath, debugLogLevel);
+    debugLoggerInitialized = true;
 
     debugLog('INFO', 'Project root determined', { finalProjectRoot });
     debugLog('INFO', 'Config loaded', { dbPath });
@@ -724,7 +727,15 @@ async function main() {
       safeConsoleError('  (Auto task tracking will be disabled)');
     }
   } catch (error) {
-    // Use centralized initialization error handler
+    // If debug logger not initialized, write to stderr as fallback
+    if (!debugLoggerInitialized) {
+      console.error('\n❌ EARLY INITIALIZATION ERROR (before debug logger):', error);
+      if (error instanceof Error && error.stack) {
+        console.error('Stack:', error.stack);
+      }
+    }
+
+    // Use centralized initialization error handler (writes to log file)
     handleInitializationError(error);
 
     closeDatabase();
@@ -734,7 +745,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  // Use centralized initialization error handler
+  // Use centralized initialization error handler (writes to log file)
   safeConsoleError('\n❌ FATAL ERROR:');
   handleInitializationError(error);
 

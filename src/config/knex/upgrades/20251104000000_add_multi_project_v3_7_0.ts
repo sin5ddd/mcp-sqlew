@@ -251,9 +251,9 @@ export async function up(knex: Knex): Promise<void> {
         table.increments('id').primary();
         table.integer('decision_key_id').unsigned().notNullable();
         table.text('rationale');
-        table.text('alternatives'); // JSON array
+        table.text('alternatives_considered'); // JSON array (was 'alternatives' - fixed for compatibility)
         table.text('tradeoffs'); // JSON object
-        table.integer('decided_by_agent_id').unsigned();
+        table.integer('agent_id').unsigned();
         table.integer('decision_date').notNullable().defaultTo(knex.raw('(unixepoch())'));
         table.integer('related_task_id').unsigned();
         table.integer('related_constraint_id').unsigned();
@@ -262,7 +262,7 @@ export async function up(knex: Knex): Promise<void> {
 
         // Foreign keys
         table.foreign('decision_key_id').references('m_context_keys.id');
-        table.foreign('decided_by_agent_id').references('m_agents.id');
+        table.foreign('agent_id').references('m_agents.id');
         table.foreign('related_task_id').references('t_tasks.id').onDelete('SET NULL');
         table.foreign('related_constraint_id').references('t_constraints.id').onDelete('SET NULL');
         table.foreign('project_id').references('m_projects.id').onDelete('CASCADE');
@@ -384,26 +384,28 @@ export async function up(knex: Knex): Promise<void> {
 
   console.log('🔄 Recreating views with multi-project support...');
 
-  // v_tagged_decisions
+  // v_tagged_decisions - Must match bootstrap schema (20251025070349_create_views.ts)
   await knex.raw(`
     CREATE VIEW v_tagged_decisions AS
     SELECT
         k.key,
         d.value,
+        d.version,
+        CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' ELSE 'draft' END as status,
         d.project_id,
         l.name as layer,
+        (SELECT GROUP_CONCAT(t2.name, ',') FROM t_decision_tags dt2
+         JOIN m_tags t2 ON dt2.tag_id = t2.id
+         WHERE dt2.decision_key_id = d.key_id AND dt2.project_id = d.project_id) as tags,
+        (SELECT GROUP_CONCAT(s2.name, ',') FROM t_decision_scopes ds2
+         JOIN m_scopes s2 ON ds2.scope_id = s2.id
+         WHERE ds2.decision_key_id = d.key_id AND ds2.project_id = d.project_id) as scopes,
         a.name as decided_by,
-        datetime(d.ts, 'unixepoch') as updated,
-        GROUP_CONCAT(t.tag, ', ') as tags
+        datetime(d.ts, 'unixepoch') as updated
     FROM t_decisions d
     JOIN m_context_keys k ON d.key_id = k.id
     LEFT JOIN m_layers l ON d.layer_id = l.id
     LEFT JOIN m_agents a ON d.agent_id = a.id
-    LEFT JOIN t_decision_tags dt ON d.key_id = dt.key_id AND d.project_id = dt.project_id
-    LEFT JOIN m_tags t ON dt.tag_id = t.id
-    WHERE d.status = 1
-    GROUP BY d.key_id, d.project_id, k.key, d.value, l.name, a.name, d.ts
-    ORDER BY d.ts DESC
   `);
 
   // v_active_context
@@ -424,16 +426,22 @@ export async function up(knex: Knex): Promise<void> {
     ORDER BY d.ts DESC
   `);
 
-  // v_layer_summary
+  // v_layer_summary - Must match bootstrap schema (correct column names)
   await knex.raw(`
     CREATE VIEW v_layer_summary AS
-    SELECT l.name as layer,
-           COUNT(*) as decision_count
-    FROM t_decisions d
-    JOIN m_layers l ON d.layer_id = l.id
-    WHERE d.status = 1
-    GROUP BY l.id, l.name
-    ORDER BY decision_count DESC
+    SELECT
+        l.name as layer,
+        l.id as layer_id,
+        (SELECT COUNT(DISTINCT d2.key_id) FROM t_decisions d2
+         WHERE d2.layer_id = l.id AND d2.status = 1 AND d2.project_id = d.project_id) as decisions_count,
+        (SELECT COUNT(DISTINCT fc2.id) FROM t_file_changes fc2
+         WHERE fc2.layer_id = l.id AND fc2.ts > (strftime('%s','now') - 3600) AND fc2.project_id = d.project_id) as file_changes_count,
+        (SELECT COUNT(DISTINCT c2.id) FROM t_constraints c2
+         WHERE c2.layer_id = l.id AND c2.active = 1 AND c2.project_id = d.project_id) as constraints_count,
+        d.project_id
+    FROM m_layers l
+    CROSS JOIN (SELECT DISTINCT project_id FROM t_decisions) d
+    GROUP BY l.id, l.name, d.project_id
   `);
 
   // v_recent_file_changes
@@ -469,21 +477,28 @@ export async function up(knex: Knex): Promise<void> {
     ORDER BY c.priority DESC, c.ts DESC
   `);
 
-  // v_task_board
+  // v_task_board - Must match bootstrap schema (include all columns)
   await knex.raw(`
     CREATE VIEW v_task_board AS
-    SELECT t.id,
-           t.title,
-           t.project_id,
-           ts.name as status,
-           t.priority,
-           a.name as assigned_to,
-           datetime(t.created_ts, 'unixepoch') as created,
-           datetime(t.updated_ts, 'unixepoch') as updated
+    SELECT
+        t.id,
+        t.title,
+        t.project_id,
+        s.name as status,
+        t.priority,
+        a.name as assigned_to,
+        l.name as layer,
+        t.created_ts,
+        t.updated_ts,
+        t.completed_ts,
+        (SELECT GROUP_CONCAT(tg2.name, ', ')
+         FROM t_task_tags tt2
+         JOIN m_tags tg2 ON tt2.tag_id = tg2.id
+         WHERE tt2.task_id = t.id AND tt2.project_id = t.project_id) as tags
     FROM t_tasks t
-    JOIN m_task_statuses ts ON t.status_id = ts.id
+    LEFT JOIN m_task_statuses s ON t.status_id = s.id
     LEFT JOIN m_agents a ON t.assigned_agent_id = a.id
-    ORDER BY t.priority DESC, t.created_ts DESC
+    LEFT JOIN m_layers l ON t.layer_id = l.id
   `);
 
   console.log('✓ Recreated all 6 views with project_id support');
@@ -642,12 +657,12 @@ export async function down(knex: Knex): Promise<void> {
         l.name as layer,
         a.name as decided_by,
         datetime(d.ts, 'unixepoch') as updated,
-        GROUP_CONCAT(t.tag, ', ') as tags
+        GROUP_CONCAT(t.name, ', ') as tags
     FROM t_decisions d
     JOIN m_context_keys k ON d.key_id = k.id
     LEFT JOIN m_layers l ON d.layer_id = l.id
     LEFT JOIN m_agents a ON d.agent_id = a.id
-    LEFT JOIN t_decision_tags dt ON d.key_id = dt.key_id
+    LEFT JOIN t_decision_tags dt ON d.key_id = dt.decision_key_id
     LEFT JOIN m_tags t ON dt.tag_id = t.id
     WHERE d.status = 1
     GROUP BY d.key_id

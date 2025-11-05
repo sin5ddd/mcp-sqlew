@@ -33,8 +33,8 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run unit tests (CI - no Docker)
-        run: npm run test:ci
+      - name: Run comprehensive feature tests (all tools)
+        run: npm run test:all-features
         env:
           CI: true
 
@@ -47,7 +47,7 @@ jobs:
           retention-days: 7
 
   migration-tests:
-    name: Migration Tests (SQLite only)
+    name: Migration Tests (v3.1+ backward compatibility)
     runs-on: ubuntu-latest
     needs: build-and-test
 
@@ -69,7 +69,7 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run migration tests (SQLite only - no Docker)
+      - name: Run historical migration tests (v3.1.2, v3.2.5, v3.5.3, v3.6.0 → current)
         run: npm run test:migrations:ci
         env:
           CI: true
@@ -84,7 +84,7 @@ jobs:
           retention-days: 30
 
   migration-safety-tests:
-    name: Migration Safety Tests (Upgrade Paths & Idempotency)
+    name: Migration Safety Tests (v3.5→v3.6→v3.7 upgrade paths & idempotency)
     runs-on: ubuntu-latest
     needs: build-and-test
 
@@ -106,13 +106,8 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run migration upgrade path tests (v3.5→v3.6→v3.7)
-        run: npm run test:migration-upgrade-paths
-        env:
-          CI: true
-
-      - name: Run migration idempotency tests (run twice scenarios)
-        run: npm run test:migration-idempotency
+      - name: Run comprehensive migration safety tests
+        run: npm run test:migrations
         env:
           CI: true
 

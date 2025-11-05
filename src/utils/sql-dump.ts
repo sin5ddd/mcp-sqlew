@@ -2,20 +2,259 @@
 
 import type { Knex } from 'knex';
 import knex from 'knex';
+import { SchemaInspector } from 'knex-schema-inspector';
+import type { Column } from 'knex-schema-inspector/dist/types/column.js';
+import type { ForeignKey } from 'knex-schema-inspector/dist/types/foreign-key.js';
 import {
   convertIdentifierQuotes,
-  convertAutoIncrement,
   convertTimestampFunctions,
-  convertBooleanDefaults,
-  convertDataTypes,
-  removeCheckConstraints,
-  removeSqliteDefaultFunctions,
   type DatabaseFormat,
 } from './sql-dump-converters.js';
 import { debugLog } from './debug-logger.js';
 
 export type { DatabaseFormat };
 export type ConflictMode = 'error' | 'ignore' | 'replace';
+
+/**
+ * Convert data type from source format to target format using metadata
+ */
+function convertDataType(columnType: string, targetFormat: DatabaseFormat, maxLength?: number | null): string {
+  const upperType = columnType.toUpperCase();
+
+  if (targetFormat === 'mysql') {
+    // MySQL-specific conversions
+    if (upperType.includes('SERIAL') || upperType.includes('BIGSERIAL')) {
+      return 'BIGINT AUTO_INCREMENT';
+    }
+    if (upperType.includes('TEXT')) {
+      return 'TEXT';
+    }
+    if (upperType.includes('VARCHAR')) {
+      // Use maxLength from metadata
+      const length = maxLength && maxLength <= 191 ? maxLength : 191;
+      return `VARCHAR(${length})`;
+    }
+    if (upperType.includes('TIMESTAMP') || upperType.includes('TIMESTAMPTZ')) {
+      return 'DATETIME';
+    }
+    if (upperType.includes('BOOLEAN') || upperType === 'BOOL') {
+      return 'TINYINT(1)';
+    }
+    if (upperType === 'INTEGER' || upperType === 'INT') {
+      return 'INT';
+    }
+    if (upperType.includes('BIGINT')) {
+      return 'BIGINT';
+    }
+  } else if (targetFormat === 'postgresql') {
+    // PostgreSQL-specific conversions
+    if (upperType.includes('AUTOINCREMENT') || upperType.includes('AUTO_INCREMENT')) {
+      return 'SERIAL';
+    }
+    if (upperType.includes('DATETIME')) {
+      return 'TIMESTAMP';
+    }
+    if (upperType.includes('TINYINT') || upperType === 'BIT') {
+      return 'BOOLEAN';
+    }
+    if (upperType.includes('TEXT')) {
+      return 'TEXT';
+    }
+    if (upperType.includes('VARCHAR')) {
+      const length = maxLength || 255;
+      return `VARCHAR(${length})`;
+    }
+  } else if (targetFormat === 'sqlite') {
+    // SQLite-specific conversions
+    if (upperType.includes('SERIAL') || upperType.includes('AUTO_INCREMENT') || upperType.includes('AUTOINCREMENT')) {
+      return 'INTEGER';
+    }
+    if (upperType.includes('VARCHAR') || upperType.includes('TEXT')) {
+      return 'TEXT';
+    }
+    if (upperType.includes('TINYINT') || upperType.includes('BOOLEAN')) {
+      return 'INTEGER';
+    }
+    if (upperType.includes('DATETIME') || upperType.includes('TIMESTAMP')) {
+      return 'INTEGER'; // SQLite stores as Unix timestamp
+    }
+  }
+
+  // Default: return as-is
+  return columnType;
+}
+
+/**
+ * Convert default value from SQLite functions to target format
+ * Handles: unixepoch() → UNIX_TIMESTAMP() / EXTRACT(epoch FROM NOW())
+ *         strftime() → DATE_FORMAT() / TO_CHAR()
+ */
+function convertDefaultValue(defaultValue: string | null, targetFormat: DatabaseFormat): string | null {
+  if (!defaultValue) {
+    return null;
+  }
+
+  const lower = defaultValue.toLowerCase().trim();
+
+  // SQLite unixepoch() conversions
+  if (lower.includes('unixepoch()') || lower === 'unixepoch()') {
+    if (targetFormat === 'mysql') {
+      return 'UNIX_TIMESTAMP()';
+    } else if (targetFormat === 'postgresql') {
+      return 'EXTRACT(epoch FROM NOW())::INTEGER';
+    }
+    return null; // Remove for SQLite
+  }
+
+  // SQLite strftime('%s', 'now') - Unix timestamp (INTEGER)
+  // Must check BEFORE generic strftime to handle this specific case
+  if (lower.includes("strftime('%s'") || lower.includes('strftime("%s"')) {
+    if (targetFormat === 'mysql') {
+      return 'UNIX_TIMESTAMP()';
+    } else if (targetFormat === 'postgresql') {
+      return 'EXTRACT(epoch FROM NOW())::INTEGER';
+    }
+    return null;
+  }
+
+  // SQLite strftime conversions (datetime formats)
+  if (lower.includes('strftime')) {
+    if (targetFormat === 'mysql') {
+      // strftime('%Y-%m-%d %H:%M:%S', 'now') → NOW()
+      return 'NOW()';
+    } else if (targetFormat === 'postgresql') {
+      return 'NOW()';
+    }
+    return null;
+  }
+
+  // Remove parentheses for simple values
+  let cleanValue = defaultValue;
+  if (lower.startsWith('(') && lower.endsWith(')')) {
+    cleanValue = defaultValue.substring(1, defaultValue.length - 1);
+  }
+
+  // For numeric defaults, normalize floating point values
+  // Remove trailing .0 (e.g., 1.0 → 1) to avoid type mismatches
+  const trimmed = cleanValue.trim();
+  if (/^\d+\.0+$/.test(trimmed)) {
+    return trimmed.replace(/\.0+$/, '');
+  }
+
+  // Quote string literals if not already quoted and not a number
+  if (!/^['"]/.test(trimmed) && !/^-?\d+(\.\d+)?$/.test(trimmed) && !/^(true|false|null|current_timestamp|now\(\)|unix_timestamp\(\))$/i.test(trimmed)) {
+    return `'${trimmed}'`;
+  }
+
+  return trimmed;
+}
+
+/**
+ * Quote identifier (table or column name) for target database
+ */
+export function quoteIdentifier(name: string, format: DatabaseFormat): string {
+  switch (format) {
+    case 'mysql':
+      return `\`${name}\``;
+    case 'postgresql':
+    case 'sqlite':
+      return `"${name}"`;
+    default:
+      return `"${name}"`;
+  }
+}
+
+/**
+ * Build column definition from Column metadata
+ */
+function buildColumnDefinition(col: Column, targetFormat: DatabaseFormat): string {
+  const quotedName = quoteIdentifier(col.name, targetFormat);
+  let dataType = convertDataType(col.data_type, targetFormat, col.max_length);
+
+  // MySQL: TEXT columns cannot be used in UNIQUE/PRIMARY KEY constraints without prefix length
+  // Convert TEXT to VARCHAR(191) for utf8mb4 compatibility (768 bytes ÷ 4 bytes/char = 191)
+  if (targetFormat === 'mysql' && dataType.toUpperCase() === 'TEXT') {
+    if (col.is_unique || col.is_primary_key || col.foreign_key_table || (col as any).in_composite_unique) {
+      dataType = 'VARCHAR(191)';
+    }
+  }
+
+  let def = `${quotedName} ${dataType}`;
+
+  // Handle NOT NULL constraint
+  if (col.is_nullable === false) {
+    def += ' NOT NULL';
+  }
+
+  // Handle DEFAULT value
+  if (col.default_value !== null && col.default_value !== undefined) {
+    let convertedDefault = convertDefaultValue(String(col.default_value), targetFormat);
+    if (convertedDefault !== null && convertedDefault !== '') {
+      // MySQL restrictions for DEFAULT values
+      const isTextColumn = dataType.toUpperCase().includes('TEXT') || dataType.toUpperCase().includes('BLOB');
+      const isFunctionCall = convertedDefault.includes('(') && convertedDefault.includes(')');
+      const isIntegerColumn = dataType.toUpperCase().includes('INT');
+      const isBooleanColumn = dataType.toUpperCase().includes('BOOLEAN');
+
+      // PostgreSQL: Convert integer defaults to boolean for BOOLEAN columns
+      if (targetFormat === 'postgresql' && isBooleanColumn && /^[01]$/.test(convertedDefault)) {
+        convertedDefault = convertedDefault === '1' ? 'TRUE' : 'FALSE';
+      }
+
+      if (targetFormat === 'mysql') {
+        // MySQL doesn't allow DEFAULT on TEXT/BLOB columns
+        if (isTextColumn) {
+          // Skip DEFAULT - application must handle at runtime
+        }
+        // MySQL DOES support certain function calls as DEFAULT for INTEGER columns
+        // (e.g., UNIX_TIMESTAMP(), CURRENT_TIMESTAMP)
+        // Only skip if conversion returned null (meaning function not supported)
+        else {
+          def += ` DEFAULT ${convertedDefault}`;
+        }
+      } else {
+        def += ` DEFAULT ${convertedDefault}`;
+      }
+    }
+  }
+
+  // Handle AUTO_INCREMENT for MySQL
+  if (targetFormat === 'mysql' && col.is_generated && col.generation_expression === null) {
+    if (!def.includes('AUTO_INCREMENT')) {
+      def += ' AUTO_INCREMENT';
+    }
+  }
+
+  // Handle UNIQUE constraint (skip if already PRIMARY KEY)
+  if (col.is_unique && !col.is_primary_key) {
+    def += ' UNIQUE';
+  }
+
+  return def;
+}
+
+/**
+ * Build FOREIGN KEY definition from ForeignKey metadata
+ */
+function buildForeignKeyDefinition(fk: ForeignKey, targetFormat: DatabaseFormat): string {
+  const quotedColumn = quoteIdentifier(fk.column, targetFormat);
+  const quotedForeignTable = quoteIdentifier(fk.foreign_key_table, targetFormat);
+  const quotedForeignColumn = quoteIdentifier(fk.foreign_key_column, targetFormat);
+
+  let fkDef = `FOREIGN KEY (${quotedColumn}) REFERENCES ${quotedForeignTable}(${quotedForeignColumn})`;
+
+  // Add ON DELETE clause
+  if (fk.on_delete && fk.on_delete !== 'NO ACTION') {
+    fkDef += ` ON DELETE ${fk.on_delete}`;
+  }
+
+  // Add ON UPDATE clause
+  if (fk.on_update && fk.on_update !== 'NO ACTION') {
+    fkDef += ` ON UPDATE ${fk.on_update}`;
+  }
+
+  return fkDef;
+}
 
 /**
  * Enforce NOT NULL constraints on PRIMARY KEY columns
@@ -105,260 +344,127 @@ export async function getPrimaryKeyColumns(knex: Knex, table: string): Promise<s
 }
 
 /**
- * Get CREATE TABLE statement for a table
+ * Get CREATE TABLE statement for a table using knex-schema-inspector
+ * Replaces regex-based SQL conversion with metadata-driven approach
  */
 export async function getCreateTableStatement(knex: Knex, table: string, targetFormat: DatabaseFormat): Promise<string> {
   const client = knex.client.config.client;
 
-  if (client === 'better-sqlite3' || client === 'sqlite3') {
-    // SQLite: Get from sqlite_master
-    const result = await knex.raw(`
-      SELECT sql FROM sqlite_master
-      WHERE type='table' AND name=?
-    `, [table]);
+  // Initialize schema inspector (database-agnostic)
+  const inspector = SchemaInspector(knex);
 
-    if (result.length === 0 || !result[0].sql) {
-      throw new Error(`Table ${table} not found`);
-    }
+  // Get column metadata
+  const columns: Column[] = await inspector.columnInfo(table);
 
-    let createSql = result[0].sql;
-
-    // Convert SQLite syntax to target format if needed
-    if (targetFormat === 'mysql') {
-      // Convert to MySQL syntax using shared converters
-      createSql = convertIdentifierQuotes(createSql, 'mysql');
-      createSql = convertAutoIncrement(createSql, 'sqlite', 'mysql');
-      createSql = convertDataTypes(createSql, 'mysql');
-      createSql = removeCheckConstraints(createSql);
-      createSql = removeSqliteDefaultFunctions(createSql);
-
-      // Get PRIMARY KEY columns and ensure they have NOT NULL constraints
-      const pkColumns = await getPrimaryKeyColumns(knex, table);
-      if (pkColumns.length > 0) {
-        createSql = enforceNotNullOnPrimaryKey(createSql, pkColumns);
-      }
-
-      // Handle PRIMARY KEY constraints with long VARCHAR columns
-      // MySQL has a 768 byte limit for InnoDB PRIMARY KEYs (with utf8mb4, that's ~191 chars)
-      const pkMatch = createSql.match(/primary key\s*\(([^)]+)\)/i);
-      if (pkMatch) {
-        const pkColumns = pkMatch[1];
-        const columnInfo = await knex(table).columnInfo();
-
-        // Process each column in the primary key
-        const processedPkCols = pkColumns.split(',').map((col: string) => {
-          const colName = col.trim().replace(/[`"]/g, '');
-          const info = columnInfo[colName];
-
-          if (info && (info as any).type) {
-            const type = (info as any).type.toLowerCase();
-            if (type.includes('varchar') || type.includes('text')) {
-              const maxLength = (info as any).maxLength;
-              if (maxLength && parseInt(maxLength) > 191) {
-                return `\`${colName}\`(191)`;
-              } else if (type.includes('text')) {
-                return `\`${colName}\`(191)`;
-              }
-            }
-          }
-          return `\`${colName}\``;
-        }).join(', ');
-
-        // Replace the primary key definition
-        createSql = createSql.replace(/primary key\s*\([^)]+\)/i, `primary key (${processedPkCols})`);
-      }
-
-      // Note: knex_migrations.migration_time stays as datetime for MySQL
-      // (Knex expects datetime format for compatibility with its migration system)
-    } else if (targetFormat === 'postgresql') {
-      // Convert to PostgreSQL syntax using shared converters
-      createSql = convertIdentifierQuotes(createSql, 'postgresql');
-      createSql = convertAutoIncrement(createSql, 'sqlite', 'postgresql');
-      createSql = convertDataTypes(createSql, 'postgresql');
-      createSql = convertBooleanDefaults(createSql, 'postgresql');
-      createSql = removeSqliteDefaultFunctions(createSql);
-
-      // Get PRIMARY KEY columns and ensure they have NOT NULL constraints
-      const pkColumns = await getPrimaryKeyColumns(knex, table);
-      if (pkColumns.length > 0) {
-        createSql = enforceNotNullOnPrimaryKey(createSql, pkColumns);
-      }
-    }
-
-    return createSql + ';';
-
-  } else if (client === 'mysql' || client === 'mysql2') {
-    // MySQL: Use SHOW CREATE TABLE
-    const result = await knex.raw(`SHOW CREATE TABLE ??`, [table]);
-    let createSql = result[0][0]['Create Table'];
-
-    if (targetFormat === 'sqlite') {
-      // Convert to SQLite syntax using shared converters
-      createSql = convertAutoIncrement(createSql, 'mysql', 'sqlite');
-      createSql = createSql.replace(/ENGINE=\w+/gi, '');
-      createSql = createSql.replace(/DEFAULT CHARSET=\w+/gi, '');
-      return createSql + ';';
-    } else if (targetFormat === 'postgresql') {
-      // Convert to PostgreSQL syntax using shared converters
-      createSql = convertIdentifierQuotes(createSql, 'postgresql');
-      createSql = convertAutoIncrement(createSql, 'mysql', 'postgresql');
-      createSql = createSql.replace(/ENGINE=\w+/gi, '');
-      return createSql + ';';
-    } else if (targetFormat === 'mysql') {
-      // MySQL → MySQL: Apply prefix length to TEXT/long VARCHAR in PRIMARY KEY
-      const pkMatch = createSql.match(/primary key\s*\(([^)]+)\)/i);
-      if (pkMatch) {
-        const pkColumns = pkMatch[1];
-        const columnInfo = await knex(table).columnInfo();
-
-        const processedPkCols = pkColumns.split(',').map((col: string) => {
-          const colName = col.trim().replace(/[`"]/g, '');
-          const info = columnInfo[colName];
-
-          if (info && (info as any).type) {
-            const type = (info as any).type.toLowerCase();
-            if (type.includes('varchar') || type.includes('text')) {
-              const maxLength = (info as any).maxLength;
-              if (maxLength && parseInt(maxLength) > 191) {
-                return `\`${colName}\`(191)`;
-              } else if (type.includes('text')) {
-                return `\`${colName}\`(191)`;
-              }
-            }
-          }
-          return `\`${colName}\``;
-        }).join(', ');
-
-        createSql = createSql.replace(/primary key\s*\([^)]+\)/i, `PRIMARY KEY (${processedPkCols})`);
-      }
-    }
-
-    return createSql + ';';
-
-  } else if (client === 'pg') {
-    // PostgreSQL: Reconstruct from information_schema + pg_catalog
-    // Complete implementation with constraints and indexes
-    const columns = await knex.raw(`
-      SELECT
-        column_name,
-        data_type,
-        character_maximum_length,
-        is_nullable,
-        column_default
-      FROM information_schema.columns
-      WHERE table_name = ?
-      ORDER BY ordinal_position
-    `, [table]);
-
-    const columnDefs = columns.rows.map((col: any) => {
-      let def = `"${col.column_name}" ${col.data_type.toUpperCase()}`;
-      if (col.character_maximum_length) {
-        def += `(${col.character_maximum_length})`;
-      }
-      if (col.is_nullable === 'NO') {
-        def += ' NOT NULL';
-      }
-      if (col.column_default) {
-        // Handle nextval sequences (SERIAL columns)
-        if (col.column_default.includes('nextval')) {
-          // Skip - SERIAL/IDENTITY already handled in data_type
-        } else {
-          def += ` DEFAULT ${col.column_default}`;
-        }
-      }
-      return def;
-    });
-
-    // Get PRIMARY KEY constraint
-    const pkResult = await knex.raw(`
-      SELECT a.attname AS column_name
-      FROM pg_index i
-      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-      WHERE i.indrelid = ?::regclass AND i.indisprimary
-      ORDER BY a.attnum
-    `, [table]);
-
-    if (pkResult.rows.length > 0) {
-      const pkColumns = pkResult.rows.map((r: any) => `"${r.column_name}"`).join(', ');
-      columnDefs.push(`PRIMARY KEY (${pkColumns})`);
-    }
-
-    // Get FOREIGN KEY constraints
-    const fkResult = await knex.raw(`
-      SELECT
-        tc.constraint_name,
-        kcu.column_name,
-        ccu.table_name AS foreign_table_name,
-        ccu.column_name AS foreign_column_name,
-        rc.update_rule,
-        rc.delete_rule
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage AS ccu
-        ON ccu.constraint_name = tc.constraint_name
-        AND ccu.table_schema = tc.table_schema
-      JOIN information_schema.referential_constraints AS rc
-        ON rc.constraint_name = tc.constraint_name
-        AND rc.constraint_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_name = ?
-      ORDER BY tc.constraint_name
-    `, [table]);
-
-    for (const fk of fkResult.rows) {
-      let fkDef = `FOREIGN KEY ("${fk.column_name}") REFERENCES "${fk.foreign_table_name}"("${fk.foreign_column_name}")`;
-      if (fk.update_rule && fk.update_rule !== 'NO ACTION') {
-        fkDef += ` ON UPDATE ${fk.update_rule}`;
-      }
-      if (fk.delete_rule && fk.delete_rule !== 'NO ACTION') {
-        fkDef += ` ON DELETE ${fk.delete_rule}`;
-      }
-      columnDefs.push(fkDef);
-    }
-
-    // Get UNIQUE constraints (excluding PRIMARY KEY)
-    const uniqueResult = await knex.raw(`
-      SELECT
-        tc.constraint_name,
-        STRING_AGG(kcu.column_name, ',' ORDER BY kcu.ordinal_position) AS column_names
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      WHERE tc.constraint_type = 'UNIQUE'
-        AND tc.table_name = ?
-      GROUP BY tc.constraint_name
-      ORDER BY tc.constraint_name
-    `, [table]);
-
-    for (const unique of uniqueResult.rows) {
-      const uniqueColumns = unique.column_names.split(',').map((col: string) => `"${col.trim()}"`).join(', ');
-      columnDefs.push(`UNIQUE (${uniqueColumns})`);
-    }
-
-    let createSql = `CREATE TABLE "${table}" (\n  ${columnDefs.join(',\n  ')}\n)`;
-
-    // Apply cross-database conversions using shared converters
-    if (targetFormat === 'mysql') {
-      createSql = convertIdentifierQuotes(createSql, 'mysql');
-      createSql = convertAutoIncrement(createSql, 'postgresql', 'mysql');
-      createSql = convertDataTypes(createSql, 'mysql');
-      createSql = convertTimestampFunctions(createSql, 'mysql');
-      return createSql + ';';
-    } else if (targetFormat === 'sqlite') {
-      createSql = convertIdentifierQuotes(createSql, 'sqlite');
-      createSql = convertAutoIncrement(createSql, 'postgresql', 'sqlite');
-      createSql = convertDataTypes(createSql, 'sqlite');
-      createSql = convertTimestampFunctions(createSql, 'sqlite');
-      return createSql + ';';
-    }
-
-    return createSql + ';';
+  if (columns.length === 0) {
+    throw new Error(`Table ${table} not found or has no columns`);
   }
 
-  throw new Error(`Unsupported database client: ${client}`);
+  // Fix: knex-schema-inspector doesn't detect composite PRIMARY KEYs and UNIQUE constraints from SQLite properly
+  // Manually detect them using PRAGMA index_list
+  const compositeUniqueConstraints: string[][] = []; // Track composite UNIQUE constraints
+  let compositePrimaryKey: string[] | null = null; // Track composite PRIMARY KEY
+
+  if (client === 'better-sqlite3' || client === 'sqlite3') {
+    const indexResult = await knex.raw(`PRAGMA index_list(${table})`);
+
+    // Knex raw() returns an array directly for SQLite
+    const indexes = Array.isArray(indexResult) ? indexResult : [];
+
+    for (const index of indexes) {
+      // Check for PRIMARY KEY index
+      if (index.origin === 'pk' && index.unique === 1) {
+        const indexInfoResult = await knex.raw(`PRAGMA index_info(${index.name})`);
+        const indexInfo = Array.isArray(indexInfoResult) ? indexInfoResult : [];
+        const columnNames = indexInfo.map((idxCol: any) => idxCol.name);
+
+        if (columnNames.length > 1) {
+          // Composite PRIMARY KEY detected
+          compositePrimaryKey = columnNames;
+          debugLog('DEBUG', `Found composite PRIMARY KEY on ${table}(${columnNames.join(', ')}) from ${index.name}`);
+        }
+      }
+      // Check if this is a UNIQUE index (skip PRIMARY KEY indexes)
+      else if (index.unique === 1 && index.origin !== 'pk') {
+        // Get columns in this index
+        const indexInfoResult = await knex.raw(`PRAGMA index_info(${index.name})`);
+        const indexInfo = Array.isArray(indexInfoResult) ? indexInfoResult : [];
+
+        const columnNames = indexInfo.map((idxCol: any) => idxCol.name);
+
+        if (columnNames.length === 1) {
+          // Single-column UNIQUE - mark column as unique
+          const col = columns.find(c => c.name === columnNames[0]);
+          if (col && !col.is_primary_key) {
+            col.is_unique = true;
+            debugLog('DEBUG', `Marked ${table}.${col.name} as UNIQUE (single-column from ${index.name})`);
+          }
+        } else if (columnNames.length > 1) {
+          // Composite UNIQUE - add to table-level constraints
+          compositeUniqueConstraints.push(columnNames);
+          debugLog('DEBUG', `Found composite UNIQUE on ${table}(${columnNames.join(', ')}) from ${index.name}`);
+
+          // For MySQL: Convert TEXT to VARCHAR(191) for columns in composite UNIQUE
+          if (targetFormat === 'mysql') {
+            for (const colName of columnNames) {
+              const col = columns.find(c => c.name === colName);
+              if (col && !col.is_primary_key) {
+                // Mark as part of composite unique (will be converted to VARCHAR later)
+                (col as any).in_composite_unique = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Build column definitions using buildColumnDefinition()
+  const columnDefs: string[] = columns.map(col => buildColumnDefinition(col, targetFormat));
+
+  // Add PRIMARY KEY constraint (with MySQL prefix length handling)
+  // Use composite PRIMARY KEY if detected, otherwise fall back to column metadata
+  const pkColumns = compositePrimaryKey || columns.filter(col => col.is_primary_key).map(col => col.name);
+  if (pkColumns.length > 0) {
+    // For MySQL: Apply (191) prefix to TEXT/long VARCHAR columns
+    if (targetFormat === 'mysql') {
+      const processedPkCols = pkColumns.map((colName) => {
+        const col = columns.find(c => c.name === colName);
+        if (col && (col.data_type.toUpperCase() === 'TEXT' ||
+            (col.data_type.toUpperCase().includes('VARCHAR') && col.max_length && col.max_length > 191))) {
+          return `${quoteIdentifier(colName, targetFormat)}(191)`;
+        }
+        return quoteIdentifier(colName, targetFormat);
+      }).join(', ');
+      columnDefs.push(`PRIMARY KEY (${processedPkCols})`);
+    } else {
+      const quotedPkColumns = pkColumns.map(col => quoteIdentifier(col, targetFormat));
+      columnDefs.push(`PRIMARY KEY (${quotedPkColumns.join(', ')})`);
+    }
+  }
+
+  // Add FOREIGN KEY constraints using buildForeignKeyDefinition()
+  const foreignKeys: ForeignKey[] = await inspector.foreignKeys(table);
+  for (const fk of foreignKeys) {
+    columnDefs.push(buildForeignKeyDefinition(fk, targetFormat));
+  }
+
+  // Add composite UNIQUE constraints (from SQLite multi-column UNIQUE indexes)
+  for (const uniqueCols of compositeUniqueConstraints) {
+    const quotedCols = uniqueCols.map(col => quoteIdentifier(col, targetFormat)).join(', ');
+    columnDefs.push(`UNIQUE (${quotedCols})`);
+  }
+
+  // Build CREATE TABLE statement with IF NOT EXISTS for idempotency
+  const quotedTable = quoteIdentifier(table, targetFormat);
+  const createSql = `CREATE TABLE IF NOT EXISTS ${quotedTable} (\n  ${columnDefs.join(',\n  ')}\n)`;
+
+  // Add database-specific table options
+  if (targetFormat === 'mysql') {
+    return createSql + ' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;';
+  }
+
+  return createSql + ';';
 }
 
 /**
@@ -749,21 +855,6 @@ export async function getCreateViewStatement(knex: Knex, viewName: string, targe
   }
 
   throw new Error(`Unsupported database client: ${client}`);
-}
-
-/**
- * Quote identifier (table or column name) for the target database
- */
-export function quoteIdentifier(name: string, format: DatabaseFormat): string {
-  switch (format) {
-    case 'mysql':
-      return `\`${name}\``;
-    case 'postgresql':
-    case 'sqlite':
-      return `"${name}"`;
-    default:
-      return `"${name}"`;
-  }
 }
 
 /**
@@ -1371,23 +1462,15 @@ export async function getTableDependencies(knex: Knex, tables: string[]): Promis
   for (const table of tables) {
     try {
       if (client === 'better-sqlite3' || client === 'sqlite3') {
-        // SQLite: Parse foreign keys from CREATE TABLE statement
-        const result = await knex.raw(`
-          SELECT sql FROM sqlite_master
-          WHERE type='table' AND name=?
-        `, [table]);
+        // SQLite: Use PRAGMA foreign_key_list() for reliable FK detection
+        // This catches both inline REFERENCES and explicit FOREIGN KEY syntax
+        const result = await knex.raw(`PRAGMA foreign_key_list(${table})`);
+        const fkList = Array.isArray(result) ? result : [];
 
-        if (result.length > 0 && result[0].sql) {
-          const sql = result[0].sql;
-          // Match FOREIGN KEY (...) REFERENCES table_name
-          // SQLite uses backticks, double quotes, or no quotes for identifiers
-          const fkRegex = /FOREIGN\s+KEY\s*\([^)]+\)\s*REFERENCES\s+[`"]?(\w+)[`"]?/gi;
-          let match;
-          while ((match = fkRegex.exec(sql)) !== null) {
-            const referencedTable = match[1];
-            if (tables.includes(referencedTable) && referencedTable !== table) {
-              dependencies.get(table)!.push(referencedTable);
-            }
+        for (const fk of fkList) {
+          const referencedTable = fk.table;
+          if (tables.includes(referencedTable) && referencedTable !== table) {
+            dependencies.get(table)!.push(referencedTable);
           }
         }
       } else if (client === 'mysql' || client === 'mysql2') {

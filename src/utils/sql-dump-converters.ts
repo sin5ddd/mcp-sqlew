@@ -128,6 +128,8 @@ export function convertTimestampFunctions(sql: string, targetFormat: DatabaseFor
     // SQLite → MySQL timestamp functions
     sql = sql.replace(/unixepoch\(\)/g, 'UNIX_TIMESTAMP()');
     sql = sql.replace(/datetime\(([^,)]+),\s*'unixepoch'\)/g, 'FROM_UNIXTIME($1)');
+    // strftime('%s', 'now') → UNIX_TIMESTAMP()
+    sql = sql.replace(/strftime\s*\(\s*['"]%s['"]\s*,\s*['"]now['"]\s*\)/gi, 'UNIX_TIMESTAMP()');
     return sql;
   } else if (targetFormat === 'postgresql') {
     // SQLite/MySQL → PostgreSQL timestamp functions
@@ -135,6 +137,8 @@ export function convertTimestampFunctions(sql: string, targetFormat: DatabaseFor
     sql = sql.replace(/datetime\(([^,)]+),\s*'unixepoch'\)/g, 'to_timestamp($1)');
     sql = sql.replace(/UNIX_TIMESTAMP\(\)/g, 'extract(epoch from now())::integer');
     sql = sql.replace(/FROM_UNIXTIME\(([^)]+)\)/g, 'to_timestamp($1)');
+    // strftime('%s', 'now') → extract(epoch from now())::integer
+    sql = sql.replace(/strftime\s*\(\s*['"]%s['"]\s*,\s*['"]now['"]\s*\)/gi, 'extract(epoch from now())::integer');
     return sql;
   } else if (targetFormat === 'sqlite') {
     // MySQL/PostgreSQL → SQLite timestamp functions
@@ -186,10 +190,17 @@ export function convertBooleanDefaults(sql: string, targetFormat: DatabaseFormat
  * Convert data type keywords between databases
  *
  * Type conversions:
- * - SQLite TEXT → MySQL VARCHAR(255) (when used with DEFAULT)
+ * - SQLite TEXT → MySQL VARCHAR(255) (when used with DEFAULT or NOT NULL)
  * - SQLite TEXT PRIMARY KEY → MySQL VARCHAR(191) PRIMARY KEY (MariaDB 10.5 compatibility)
+ * - SQLite TEXT UNIQUE → MySQL VARCHAR(191) UNIQUE (indexes require VARCHAR)
+ * - SQLite TEXT NOT NULL → MySQL VARCHAR(255) NOT NULL (for FK columns)
  * - SQLite datetime → PostgreSQL TIMESTAMP
  * - MySQL TEXT → VARCHAR for compatibility
+ *
+ * MySQL/MariaDB limitations:
+ * - TEXT columns cannot be used in PRIMARY KEY, UNIQUE, or indexes without prefix length
+ * - TEXT columns cannot have DEFAULT values
+ * - VARCHAR(191) is safe max for utf8mb4 with InnoDB index prefix limit (768 bytes ÷ 4 bytes/char)
  *
  * @param sql - SQL statement
  * @param targetFormat - Target database format
@@ -206,6 +217,16 @@ export function convertBooleanDefaults(sql: string, targetFormat: DatabaseFormat
  * // Returns: "tool_name VARCHAR(191) PRIMARY KEY"
  *
  * @example
+ * // SQLite → MySQL (TEXT UNIQUE not allowed in MySQL)
+ * convertDataTypes("category_name TEXT UNIQUE NOT NULL", 'mysql')
+ * // Returns: "category_name VARCHAR(191) UNIQUE NOT NULL"
+ *
+ * @example
+ * // SQLite → MySQL (TEXT NOT NULL for FK columns)
+ * convertDataTypes("tool_name TEXT NOT NULL", 'mysql')
+ * // Returns: "tool_name VARCHAR(255) NOT NULL"
+ *
+ * @example
  * // SQLite → PostgreSQL
  * convertDataTypes("created_at datetime", 'postgresql')
  * // Returns: "created_at TIMESTAMP"
@@ -217,10 +238,20 @@ export function convertDataTypes(sql: string, targetFormat: DatabaseFormat): str
     // 191 is the safe max for utf8mb4 with InnoDB index prefix limit (767 bytes / 4 bytes per char)
     sql = sql.replace(/\bTEXT(\s+PRIMARY\s+KEY)/gi, 'VARCHAR(191)$1');
 
+    // MySQL doesn't allow TEXT columns in UNIQUE constraints
+    // Convert TEXT UNIQUE to VARCHAR(191) UNIQUE
+    sql = sql.replace(/\bTEXT(\s+UNIQUE)/gi, 'VARCHAR(191)$1');
+
+    // MySQL doesn't allow TEXT columns in indexes (including FOREIGN KEY references)
+    // Convert TEXT NOT NULL (commonly used in FK columns) to VARCHAR(255) NOT NULL
+    // This must come BEFORE the default pattern to avoid conflicts
+    sql = sql.replace(/\bTEXT(\s+NOT\s+NULL)(?!\s+default)/gi, 'VARCHAR(255)$1');
+
     // MySQL doesn't allow DEFAULT values on TEXT columns
     // Convert TEXT with defaults to VARCHAR(255)
     // Pattern: TEXT followed by optional NOT NULL, then default
     sql = sql.replace(/\bTEXT(\s+(?:NOT\s+NULL\s+)?default\s+[^,\)]+)/gi, 'VARCHAR(255)$1');
+
     return sql;
   } else if (targetFormat === 'postgresql') {
     // Convert datetime → TIMESTAMP

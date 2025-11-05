@@ -31,11 +31,14 @@ export interface DbConfig {
   containerName?: string;
 }
 
-// Migration directories
+// Migration directories - resolve based on whether we're in dist/ or src/
+// When running tests, we're in dist/tests/utils/, so ../../config/knex/ is wrong
+// We need to go to the project root first
+const projectRoot = join(__dirname, '../../../'); // dist/tests/utils/ -> project root
 const migrationDirs = [
-  join(__dirname, '../../config/knex/bootstrap'),
-  join(__dirname, '../../config/knex/upgrades'),
-  join(__dirname, '../../config/knex/enhancements'),
+  join(projectRoot, 'dist/config/knex/bootstrap'),
+  join(projectRoot, 'dist/config/knex/upgrades'),
+  join(projectRoot, 'dist/config/knex/enhancements'),
 ];
 
 /**
