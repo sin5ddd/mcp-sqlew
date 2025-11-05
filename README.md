@@ -10,25 +10,39 @@
 
 **sqlew** is a Model Context Protocol (MCP) server that gives AI agents organizational memory across sessions.
 
-**The Problem:** Without sqlew, every Claude session starts with zero context. You must re-explain decisions, agents can reintroduce bugs, and there's no way to track WHY decisions were made.
+### The Problem
+Without sqlew, every Claude session starts with zero context. You must re-explain decisions, agents can reintroduce bugs, and there's no way to track WHY decisions were made.
 
-**The Solution:** sqlew lets agents remember decisions, query past context, prevent regressions with constraints, and coordinate via messaging and tasks.
+It has been possible to keep records using Markdown files. However, large-scale projects or long-term maintenance records tend to generate massive amounts of documentation. This has become a problem, as it causes context rot in AI systems, leading to declining performance.
 
-**Example:** Session 1 records "API v1 deprecated". Session 2 (days later) queries and automatically uses v2.
+### The Solution
+sqlew builds efficient external memory for AI by using relational databases.
+- Records the reasoning behind decisions
+- Enables querying past context
+- Prevents anti-patterns through constraints
+- Eliminates duplicate work via task management
+
+**Example:**
+- Session 1 records "API v1 deprecated".
+- Session 2 (days later) queries and automatically uses v2.
+
+> *This software does not send any data to external networks. We NEVER collect any data or usage statistics. Please use it with complete security.*
 
 ## Why Use sqlew?
 
 ### 🧠 Organizational Memory
-Traditional code tells you **WHAT** and **HOW**. sqlew adds **WHY**:
+Traditional code analysis like git tells you **WHAT** is done, sqlew adds **WHY** and **HOW** on it:
 - **Decisions** → WHY it was changed
-- **Constraints** → WHY it must work this way
+- **Constraints** → HOW should it be written
+- **Tasks** → WHAT needs to be done
 
 ### ⚡ Token Efficiency
 **60-75% token reduction** in multi-session projects through structured data storage and selective querying.
 
 ### 🎯 Key Features
-- **5 Specialized Tools**: decisions, tasks, files, constraints, stats (config tool removed in dev)
-- **Parameter Validation**: Typo detection, required/optional markers, helpful error messages (NEW in dev)
+- **5 Specialized Tools**: decisions, tasks, files, constraints, stats
+- **Runtime Reconnection**: Automatic database connection recovery with exponential backoff
+- **Parameter Validation**: Typo detection, required/optional markers, 70-85% more concise error messages
 - **Metadata-Driven**: Tag, layer, scope, and version everything
 - **Decision Context**: Document WHY with rationale, alternatives, and trade-offs
 - **Task Dependencies**: Blocking relationships with circular detection
@@ -41,7 +55,7 @@ Traditional code tells you **WHAT** and **HOW**. sqlew adds **WHY**:
 See [docs/TASK_OVERVIEW.md](docs/TASK_OVERVIEW.md) and [docs/DECISION_CONTEXT.md](docs/DECISION_CONTEXT.md) for details.
 
 ### 🔖Kanban-style AI Scrum
-![kanban-style task management](assets/kanban-style.png)
+![kanban-style task management](assets/kanban-visualizer.png)
 
 ## Installation
 
@@ -51,21 +65,7 @@ See [docs/TASK_OVERVIEW.md](docs/TASK_OVERVIEW.md) and [docs/DECISION_CONTEXT.md
 
 ### Quick Install
 
-**Recommended (npx):**
-```bash
-npx sqlew
-```
-
-**Or install per project:**
-```bash
-npm install sqlew
-```
-
-**Note**: Global install (`npm install -g`) is **not recommended** because sqlew requires an independent database per project. Each project should maintain its own context database in `.sqlew/sqlew.db`.
-
-### Add to Claude Desktop
-
-Edit `claude_desktop_config.json`:
+on `.mcp.json` in your project's root, add these lines:
 
 ```json
 {
@@ -77,8 +77,13 @@ Edit `claude_desktop_config.json`:
   }
 }
 ```
+**Recommend to restart claude after initialize**
 
-Restart Claude Desktop. Done!
+The first time, sqlew install custom agents and initialize database. Custom agents are not loaded in this time. Please exit claude once, and restart claude again.
+
+It's Ready!
+
+**⚠️Note**: Global install (`npm install -g`) is **not recommended** because sqlew requires an independent settings per project. Each project should maintain its own context database in `.sqlew/sqlew.db`.
 
 **Custom database path:** Add path as argument: `"args": ["sqlew", "/path/to/db.db"]`
 **Default location:** `.sqlew/sqlew.db`
@@ -91,7 +96,7 @@ Restart Claude Desktop. Done!
 
 ### Optional Config File
 
-Create `.sqlew/config.toml` for persistent settings:
+On first run, `.sqlew/config.toml` will be created for persistent settings:
 
 ```toml
 [database]
@@ -102,25 +107,31 @@ ignore_weekend = true
 message_hours = 48
 ```
 
-**Priority:** CLI args > config.toml > database defaults
+Also `.sqlew/config.example.toml` is created for reference.
+
+**Settings Priority:** CLI args > config.toml > database defaults
 
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all options and validation rules.
 
 ## Quick Start
 
+install it, launch claude, exit claude and launch Claude again.
+
 ### Basic Usage
 
-All tools require an `action` parameter. Example:
+You'll never need to call it manually, I recommend to call this tool via prompt.
 
-```javascript
-// Store a decision
-{action: "set", key: "auth_method", value: "JWT", layer: "business", tags: ["security"]}
-
-// Query later
-{action: "get", key: "auth_method"}
+```
+read sqlew usecases, and plan implementation of feature X using sqlew.
 ```
 
-For detailed examples, see [docs/TOOL_REFERENCE.md](docs/TOOL_REFERENCE.md).
+or invoke Specialized Agent
+
+```
+plan implementation of feature X with @agent-scrum-master.
+```
+
+Specialized Agents use sqlew more efficiently.
 
 ## Specialized Agents
 
@@ -132,7 +143,7 @@ sqlew provides three specialized agents for efficient multi-agent coordination i
 | **Researcher** | Query decisions, analyze patterns, investigate context | 14KB/conversation | Understanding past decisions, onboarding new members, sprint retrospectives |
 | **Architect** | Document decisions, enforce constraints, maintain standards | 20KB/conversation | Making architectural choices, establishing rules, validating compliance |
 
-### Installation
+### Detailed Installation
 
 **By default, all three specialized agents are automatically installed** to your project's `.claude/agents/` directory on first run.
 
@@ -160,22 +171,25 @@ Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
 
 | Tool | Purpose | Example Use |
 |------|---------|------------|
-| **decision** | Record choices | "We chose PostgreSQL" |
+| **decision** | Record choices and reasons | "We chose PostgreSQL" |
+| **constraint** | Define rules | "DO NOT use raw SQL, use ORM" |
 | **task** | Track work | "Implement feature X" |
 | **file** | Track changes | "Modified auth.ts" |
-| **constraint** | Define rules | "API must be <100ms" |
 | **stats** | Database metrics | Get layer summary |
-| **config** | Retention settings | Auto-cleanup config |
+
+
+## Documentation
 
 Each tool supports `action: "help"` for full documentation and `action: "example"` for comprehensive usage examples.
 
-## Documentation
+And `action: "use_case"` shows how to use the tool in a real-world scenario.
 
 ### On-Demand Documentation
 
 All tools support:
 - `action: "help"` - Parameter reference and descriptions
 - `action: "example"` - Usage scenarios and examples
+- `action: "use_case"` - Real-world usage examples
 
 ### For AI Agents
 
@@ -205,6 +219,7 @@ All tools support:
 ### For Developers
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
+- [Database Migration](docs/DATABASE_MIGRATION.md) - SQLite → MySQL/PostgreSQL migration
 - [Building from Source](docs/ARCHITECTURE.md#development) - Setup instructions
 - [Migration Guides](docs/MIGRATION_v2.md) - Version upgrade guides
 
@@ -230,7 +245,7 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.6.6**
+Current version: **3.7.0**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License

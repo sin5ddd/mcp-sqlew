@@ -9,6 +9,7 @@ import { getContext, searchAdvanced } from './tools/context.js';
 import { getMessages } from './tools/messaging.js';
 import { getFileChanges } from './tools/files.js';
 import { getActivityLog } from './tools/utils.js';
+import { dbDumpCommand } from './cli/db-dump.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
@@ -130,18 +131,22 @@ function formatTable(data: any[], headers: string[]): void {
  */
 function showHelp(): void {
   console.log(`
-sqlew CLI - Query tool for mcp-sqlew v2.1.1
+sqlew CLI - Query and database migration tool for mcp-sqlew
 
 USAGE:
-  sqlew query <subcommand> [options]
+  sqlew <command> [subcommand] [options]
 
-SUBCOMMANDS:
+COMMANDS:
+  query      Query context data (decisions, messages, files, activity)
+  db:dump    Generate SQL dump for database migration
+
+QUERY SUBCOMMANDS:
   decisions  Query decisions with filtering
   messages   Query agent messages
   files      Query file changes
   activity   Query activity log
 
-OPTIONS:
+QUERY OPTIONS:
   --layer <layer>          Filter by layer (presentation, business, data, infrastructure, cross-cutting)
   --tags <tags>            Filter by tags (comma-separated)
   --since <time>           Time filter (e.g., "5m", "1h", "2d", or ISO timestamp)
@@ -161,14 +166,14 @@ EXAMPLES:
   # Query unread high-priority messages
   sqlew query messages --unread --priority=high --output=json
 
-  # Query recent file changes in last hour
-  sqlew query files --since=1h --output=table
+  # Generate MySQL dump for database migration
+  sqlew db:dump --format=mysql --output=dump-mysql.sql
 
-  # Query recent activity from all agents
-  sqlew query activity --since=5m --agent=* --output=json
+  # Generate PostgreSQL dump
+  sqlew db:dump --format=postgresql --output=dump-pg.sql
 
-  # Query activity with specific actions
-  sqlew query activity --actions=decision_set,message_send --limit=20
+For more information on db:dump, run:
+  sqlew db:dump --help
 `);
 }
 
@@ -333,6 +338,12 @@ async function queryActivity(args: CLIArgs): Promise<void> {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
+  // Special handling for db:dump command (passes through --help to subcommand)
+  if (args.command === 'db:dump') {
+    await dbDumpCommand(process.argv.slice(3));
+    return;
+  }
+
   // Show help if requested or no command
   if (args.help || !args.command) {
     showHelp();
@@ -340,13 +351,13 @@ async function main(): Promise<void> {
   }
 
   try {
-    // Initialize database
-    const dbPath = args['db-path'];
-    const config = dbPath ? { configPath: dbPath } : undefined;
-    await initializeDatabase(config);
-
     // Route to appropriate command
     if (args.command === 'query') {
+      // Initialize database for query commands
+      const dbPath = args['db-path'];
+      const config = dbPath ? { configPath: dbPath } : undefined;
+      await initializeDatabase(config);
+
       switch (args.subcommand) {
         case 'decisions':
           await queryDecisions(args);

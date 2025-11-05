@@ -24,6 +24,8 @@ import { validateCategory, validatePriority } from '../utils/validators.js';
 import { validateActionParams } from '../utils/parameter-validator.js';
 import { logConstraintAdd } from '../utils/activity-logging.js';
 import { parseStringArray } from '../utils/param-parser.js';
+import { getProjectContext } from '../utils/project-context.js';
+import connectionManager from '../utils/connection-manager.js';
 import { Knex } from 'knex';
 import type {
   AddConstraintParams,
@@ -55,84 +57,90 @@ export async function addConstraint(
   const actualAdapter = adapter ?? getAdapter();
 
   try {
-    // Validate parameters
-    validateActionParams('constraint', 'add', params);
+    return await connectionManager.executeWithRetry(async () => {
+      // Fail-fast project_id validation (Constraint #29)
+      const projectId = getProjectContext().getProjectId();
 
-    // Validate category
-    validateCategory(params.category);
+      // Validate parameters
+      validateActionParams('constraint', 'add', params);
 
-    // Validate priority if provided
-    const priorityStr = params.priority || 'medium';
-    validatePriority(priorityStr);
-    const priority = STRING_TO_PRIORITY[priorityStr] || DEFAULT_PRIORITY;
+      // Validate category
+      validateCategory(params.category);
 
-    // Validate and get layer ID if provided
-    let layerId: number | null = null;
-    if (params.layer) {
-      const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
-      if (!validLayers.includes(params.layer)) {
-        throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
-      }
-      layerId = await getLayerId(actualAdapter, params.layer);
-      if (!layerId) {
-        throw new Error(`Layer not found: ${params.layer}`);
-      }
-    }
+      // Validate priority if provided
+      const priorityStr = params.priority || 'medium';
+      validatePriority(priorityStr);
+      const priority = STRING_TO_PRIORITY[priorityStr] || DEFAULT_PRIORITY;
 
-    // Use transaction for multi-table insert
-    const result = await actualAdapter.transaction(async (trx) => {
-      // Get or create category
-      const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
-
-      // Get or create created_by agent (default to generic pool)
-      const createdBy = params.created_by || '';
-      const agentId = await getOrCreateAgent(actualAdapter, createdBy, trx);
-
-      // Calculate timestamp
-      const ts = Math.floor(Date.now() / 1000);
-
-      // Insert constraint
-      const [constraintId] = await trx('t_constraints').insert({
-        category_id: categoryId,
-        layer_id: layerId,
-        constraint_text: params.constraint_text,
-        priority: priority,
-        active: SQLITE_TRUE,
-        agent_id: agentId,
-        ts: ts
-      });
-
-      // Insert m_tags if provided
-      if (params.tags && params.tags.length > 0) {
-        // Parse tags (handles both arrays and JSON strings from MCP)
-        const tags = parseStringArray(params.tags);
-        for (const tagName of tags) {
-          const tagId = await getOrCreateTag(actualAdapter, tagName, trx);
-          await trx('t_constraint_tags').insert({
-            constraint_id: Number(constraintId),
-            tag_id: tagId
-          });
+      // Validate and get layer ID if provided
+      let layerId: number | null = null;
+      if (params.layer) {
+        const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
+        if (!validLayers.includes(params.layer)) {
+          throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
+        }
+        layerId = await getLayerId(actualAdapter, params.layer);
+        if (!layerId) {
+          throw new Error(`Layer not found: ${params.layer}`);
         }
       }
 
-      // Activity logging (replaces trigger)
-      await logConstraintAdd(trx, {
-        constraint_id: Number(constraintId),
-        category: params.category,
-        constraint_text: params.constraint_text,
-        priority: priorityStr,
-        layer: params.layer || null,
-        created_by: createdBy,
-        agent_id: agentId
+      // Use transaction for multi-table insert
+      const result = await actualAdapter.transaction(async (trx) => {
+        // Get or create category
+        const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
+
+        // Get or create created_by agent (default to generic pool)
+        const createdBy = params.created_by || '';
+        const agentId = await getOrCreateAgent(actualAdapter, createdBy, trx);
+
+        // Calculate timestamp
+        const ts = Math.floor(Date.now() / 1000);
+
+        // Insert constraint with project_id
+        const [constraintId] = await trx('t_constraints').insert({
+          category_id: categoryId,
+          layer_id: layerId,
+          constraint_text: params.constraint_text,
+          priority: priority,
+          active: SQLITE_TRUE,
+          agent_id: agentId,
+          ts: ts,
+          project_id: projectId
+        });
+
+        // Insert m_tags if provided
+        if (params.tags && params.tags.length > 0) {
+          // Parse tags (handles both arrays and JSON strings from MCP)
+          const tags = parseStringArray(params.tags);
+          for (const tagName of tags) {
+            const tagId = await getOrCreateTag(actualAdapter, tagName, trx);
+            await trx('t_constraint_tags').insert({
+              constraint_id: Number(constraintId),
+              tag_id: tagId
+            });
+          }
+        }
+
+        // Activity logging (replaces trigger)
+        await logConstraintAdd(trx, {
+          constraint_id: Number(constraintId),
+          category: params.category,
+          constraint_text: params.constraint_text,
+          priority: priorityStr,
+          layer: params.layer || null,
+          created_by: createdBy,
+          agent_id: agentId
+        });
+
+        return { constraintId: Number(constraintId) };
       });
 
-      return { constraintId: Number(constraintId) };
+      return {
+        success: true,
+        constraint_id: result.constraintId,
+      };
     });
-
-    return {
-      success: true,
-      constraint_id: result.constraintId,
-    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to add constraint: ${message}`);
@@ -155,57 +163,63 @@ export async function getConstraints(
   const knex = actualAdapter.getKnex();
 
   try {
-    // Validate parameters
-    validateActionParams('constraint', 'get', params);
+    return await connectionManager.executeWithRetry(async () => {
+      // Fail-fast project_id validation (Constraint #29)
+      const projectId = getProjectContext().getProjectId();
 
-    // Build query using v_tagged_constraints view (already filters active=1)
-    let query = knex('v_tagged_constraints');
+      // Validate parameters
+      validateActionParams('constraint', 'get', params);
 
-    // Filter by category
-    if (params.category) {
-      validateCategory(params.category);
-      query = query.where('category', params.category);
-    }
+      // Build query using v_tagged_constraints view (already filters active=1)
+      let query = knex('v_tagged_constraints')
+        .where('project_id', projectId);
 
-    // Filter by layer
-    if (params.layer) {
-      query = query.where('layer', params.layer);
-    }
+      // Filter by category
+      if (params.category) {
+        validateCategory(params.category);
+        query = query.where('category', params.category);
+      }
 
-    // Filter by priority
-    if (params.priority) {
-      query = query.where('priority', params.priority);
-    }
+      // Filter by layer
+      if (params.layer) {
+        query = query.where('layer', params.layer);
+      }
 
-    // Filter by m_tags (OR logic - match ANY tag)
-    if (params.tags && params.tags.length > 0) {
-      // Parse tags (handles both arrays and JSON strings from MCP)
-      const tags = parseStringArray(params.tags);
-      query = query.where((builder) => {
-        for (const tag of tags) {
-          builder.orWhere('tags', 'like', `%${tag}%`);
-        }
-      });
-    }
+      // Filter by priority
+      if (params.priority) {
+        query = query.where('priority', params.priority);
+      }
 
-    // Note: v_tagged_constraints view already orders by priority DESC, category, ts DESC
-    // Add limit if provided
-    const limit = params.limit || 50;
-    query = query.limit(limit);
+      // Filter by m_tags (OR logic - match ANY tag)
+      if (params.tags && params.tags.length > 0) {
+        // Parse tags (handles both arrays and JSON strings from MCP)
+        const tags = parseStringArray(params.tags);
+        query = query.where((builder) => {
+          for (const tag of tags) {
+            builder.orWhere('tags', 'like', `%${tag}%`);
+          }
+        });
+      }
 
-    // Execute query
-    const rows = await query.select('*') as TaggedConstraint[];
+      // Note: v_tagged_constraints view already orders by priority DESC, category, ts DESC
+      // Add limit if provided
+      const limit = params.limit || 50;
+      query = query.limit(limit);
 
-    // Parse m_tags from comma-separated to array for consistency
-    const constraints = rows.map(row => ({
-      ...row,
-      tags: row.tags ? row.tags.split(',') : null,
-    })) as any[];
+      // Execute query
+      const rows = await query.select('*') as TaggedConstraint[];
 
-    return {
-      constraints,
-      count: constraints.length,
-    };
+      // Parse m_tags from comma-separated to array for consistency
+      const constraints = rows.map(row => ({
+        ...row,
+        tags: row.tags ? row.tags.split(',') : null,
+      })) as any[];
+
+      return {
+        constraints,
+        count: constraints.length,
+      };
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to get constraints: ${message}`);
@@ -228,27 +242,32 @@ export async function deactivateConstraint(
   const knex = actualAdapter.getKnex();
 
   try {
-    // Validate parameters
-    validateActionParams('constraint', 'deactivate', params);
+    return await connectionManager.executeWithRetry(async () => {
+      // Fail-fast project_id validation (Constraint #29)
+      const projectId = getProjectContext().getProjectId();
 
-    // Check if constraint exists
-    const constraint = await knex('t_constraints')
-      .where({ id: params.constraint_id })
-      .select('id', 'active')
-      .first() as { id: number; active: number } | undefined;
+      // Validate parameters
+      validateActionParams('constraint', 'deactivate', params);
 
-    if (!constraint) {
-      throw new Error(`Constraint not found: ${params.constraint_id}`);
-    }
+      // Check if constraint exists in current project
+      const constraint = await knex('t_constraints')
+        .where({ id: params.constraint_id, project_id: projectId })
+        .select('id', 'active')
+        .first() as { id: number; active: number } | undefined;
 
-    // Update constraint to inactive (idempotent)
-    await knex('t_constraints')
-      .where({ id: params.constraint_id })
-      .update({ active: SQLITE_FALSE });
+      if (!constraint) {
+        throw new Error(`Constraint not found: ${params.constraint_id}`);
+      }
 
-    return {
-      success: true,
-    };
+      // Update constraint to inactive (idempotent) with project_id filter
+      await knex('t_constraints')
+        .where({ id: params.constraint_id, project_id: projectId })
+        .update({ active: SQLITE_FALSE });
+
+      return {
+        success: true,
+      };
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to deactivate constraint: ${message}`);

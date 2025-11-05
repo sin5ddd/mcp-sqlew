@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS t_constraints (
     constraint_text TEXT NOT NULL,
     priority INTEGER DEFAULT 2,  -- 1=low, 2=medium, 3=high, 4=critical
     active INTEGER DEFAULT 1,
-    created_by INTEGER REFERENCES m_agents(id),
+    agent_id INTEGER REFERENCES m_agents(id),
     ts INTEGER DEFAULT (unixepoch())
 );
 
@@ -377,7 +377,7 @@ SELECT
 FROM t_constraints c
 JOIN m_constraint_categories cc ON c.category_id = cc.id
 LEFT JOIN m_layers l ON c.layer_id = l.id
-LEFT JOIN m_agents a ON c.created_by = a.id
+LEFT JOIN m_agents a ON c.agent_id = a.id
 WHERE c.active = 1
 ORDER BY c.priority DESC, cc.name, c.ts DESC;
 

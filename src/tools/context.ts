@@ -17,6 +17,7 @@ import {
   getDecisionWithContext as dbGetDecisionWithContext,
   listDecisionContexts as dbListDecisionContexts
 } from '../database.js';
+import { getProjectContext } from '../utils/project-context.js';
 import { STRING_TO_STATUS, STATUS_TO_STRING, DEFAULT_VERSION, DEFAULT_STATUS } from '../constants.js';
 import { processBatch } from '../utils/batch.js';
 import { validateRequired, validateStatus, validateLayer } from '../utils/validators.js';
@@ -25,7 +26,9 @@ import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../uti
 import { parseStringArray } from '../utils/param-parser.js';
 import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
 import { Knex } from 'knex';
+import connectionManager from '../utils/connection-manager.js';
 import {
+  debugLog,
   debugLogFunctionEntry,
   debugLogFunctionExit,
   debugLogTransaction,
@@ -84,6 +87,9 @@ async function setDecisionInternal(
 ): Promise<SetDecisionResponse> {
   const knex = trx || adapter.getKnex();
 
+  // Validate project context (Constraint #29 - fail-fast before mutations)
+  const projectId = getProjectContext().getProjectId();
+
   // Validate required parameters
   const trimmedKey = validateRequired(params.key, 'key');
 
@@ -127,13 +133,14 @@ async function setDecisionInternal(
 
   // Check if decision already exists for activity logging
   const existingDecision = await knex(isNumeric ? 't_decisions_numeric' : 't_decisions')
-    .where({ key_id: keyId })
+    .where({ key_id: keyId, project_id: projectId })
     .first();
 
   // Insert or update decision based on value type
   const tableName = isNumeric ? 't_decisions_numeric' : 't_decisions';
   const decisionData = {
     key_id: keyId,
+    project_id: projectId,
     value: isNumeric ? value : String(value),
     agent_id: agentId,
     layer_id: layerId,
@@ -143,7 +150,7 @@ async function setDecisionInternal(
   };
 
   // Use transaction-aware upsert instead of adapter.upsert to avoid connection pool timeout
-  const conflictColumns = ['key_id'];
+  const conflictColumns = ['key_id', 'project_id'];
   const updateColumns = Object.keys(decisionData).filter(
     key => !conflictColumns.includes(key)
   );
@@ -194,13 +201,19 @@ async function setDecisionInternal(
     // Parse tags (handles both arrays and JSON strings from MCP)
     const tags = parseStringArray(params.tags);
 
-    // Clear existing tags
-    await knex('t_decision_tags').where({ decision_key_id: keyId }).delete();
+    // Clear existing tags for this project
+    await knex('t_decision_tags')
+      .where({ decision_key_id: keyId, project_id: projectId })
+      .delete();
 
     // Insert new tags
     for (const tagName of tags) {
       const tagId = await getOrCreateTag(adapter, tagName, trx);
-      await knex('t_decision_tags').insert({ decision_key_id: keyId, tag_id: tagId });
+      await knex('t_decision_tags').insert({
+        decision_key_id: keyId,
+        tag_id: tagId,
+        project_id: projectId
+      });
     }
   }
 
@@ -209,13 +222,19 @@ async function setDecisionInternal(
     // Parse scopes (handles both arrays and JSON strings from MCP)
     const scopes = parseStringArray(params.scopes);
 
-    // Clear existing scopes
-    await knex('t_decision_scopes').where({ decision_key_id: keyId }).delete();
+    // Clear existing scopes for this project
+    await knex('t_decision_scopes')
+      .where({ decision_key_id: keyId, project_id: projectId })
+      .delete();
 
     // Insert new scopes
     for (const scopeName of scopes) {
       const scopeId = await getOrCreateScope(adapter, scopeName, trx);
-      await knex('t_decision_scopes').insert({ decision_key_id: keyId, scope_id: scopeId });
+      await knex('t_decision_scopes').insert({
+        decision_key_id: keyId,
+        scope_id: scopeId,
+        project_id: projectId
+      });
     }
   }
 
@@ -255,12 +274,14 @@ export async function setDecision(
   try {
     debugLogTransaction('START', 'setDecision');
 
-    // Use transaction for atomicity
-    const result = await actualAdapter.transaction(async (trx) => {
-      debugLogTransaction('COMMIT', 'setDecision-transaction-begin');
-      const internalResult = await setDecisionInternal(params, actualAdapter, trx);
-      debugLogTransaction('COMMIT', 'setDecision-transaction-end');
-      return internalResult;
+    // Use transaction for atomicity with connection retry
+    const result = await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        debugLogTransaction('COMMIT', 'setDecision-transaction-begin');
+        const internalResult = await setDecisionInternal(params, actualAdapter, trx);
+        debugLogTransaction('COMMIT', 'setDecision-transaction-end');
+        return internalResult;
+      });
     });
 
     debugLogFunctionExit('setDecision', true, result);
@@ -300,9 +321,34 @@ export async function getContext(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Determine which project to query (current or referenced)
+  let projectId: number;
+
+  if (params._reference_project) {
+    // Cross-project query: look up the referenced project
+    const refProject = await knex('m_projects')
+      .where({ name: params._reference_project })
+      .first<{ id: number; name: string }>();
+
+    if (!refProject) {
+      throw new Error(`Referenced project "${params._reference_project}" not found`);
+    }
+
+    projectId = refProject.id;
+    debugLog('INFO', 'Cross-project query', {
+      currentProject: getProjectContext().getProjectName(),
+      referencedProject: params._reference_project,
+      projectId
+    });
+  } else {
+    // Normal query: use current project
+    projectId = getProjectContext().getProjectId();
+  }
+
   try {
     // Build query dynamically based on filters
-    let query = knex('v_tagged_decisions');
+    // NOTE: v_tagged_decisions view will be updated to include project_id filtering
+    let query = knex('v_tagged_decisions').where('project_id', projectId);
 
     // Filter by status
     if (params.status) {
@@ -381,6 +427,9 @@ export async function getDecision(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context
+  const projectId = getProjectContext().getProjectId();
+
   // Validate parameter
   if (!params.key || params.key.trim() === '') {
     throw new Error('Parameter "key" is required and cannot be empty');
@@ -389,6 +438,7 @@ export async function getDecision(
   try {
     // If include_context is true, use the context-aware function
     if (params.include_context) {
+      // TODO: Update dbGetDecisionWithContext to accept projectId parameter
       const result = await dbGetDecisionWithContext(actualAdapter, params.key);
 
       if (!result) {
@@ -421,7 +471,7 @@ export async function getDecision(
 
     // Standard query without context (backward compatible)
     const row = await knex('v_tagged_decisions')
-      .where({ key: params.key })
+      .where({ key: params.key, project_id: projectId })
       .first() as TaggedDecision | undefined;
 
     if (!row) {
@@ -462,6 +512,9 @@ export async function searchByTags(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context
+  const projectId = getProjectContext().getProjectId();
+
   // Validate required parameters
   if (!params.tags || params.tags.length === 0) {
     throw new Error('Parameter "tags" is required and must contain at least one tag');
@@ -472,7 +525,7 @@ export async function searchByTags(
     const tags = parseStringArray(params.tags);
 
     const matchMode = params.match_mode || 'OR';
-    let query = knex('v_tagged_decisions');
+    let query = knex('v_tagged_decisions').where('project_id', projectId);
 
     // Apply tag filtering based on match mode
     if (matchMode === 'AND') {
@@ -547,6 +600,9 @@ export async function getVersions(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context
+  const projectId = getProjectContext().getProjectId();
+
   // Validate required parameter
   if (!params.key || params.key.trim() === '') {
     throw new Error('Parameter "key" is required and cannot be empty');
@@ -572,7 +628,7 @@ export async function getVersions(
     // Query t_decision_history with agent join
     const rows = await knex('t_decision_history as dh')
       .leftJoin('m_agents as a', 'dh.agent_id', 'a.id')
-      .where('dh.key_id', keyId)
+      .where({ 'dh.key_id': keyId, 'dh.project_id': projectId })
       .select(
         'dh.version',
         'dh.value',
@@ -627,6 +683,30 @@ export async function searchByLayer(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Determine which project to query (current or referenced)
+  let projectId: number;
+
+  if (params._reference_project) {
+    // Cross-project query: look up the referenced project
+    const refProject = await knex('m_projects')
+      .where({ name: params._reference_project })
+      .first<{ id: number; name: string }>();
+
+    if (!refProject) {
+      throw new Error(`Referenced project "${params._reference_project}" not found`);
+    }
+
+    projectId = refProject.id;
+    debugLog('INFO', 'Cross-project searchByLayer', {
+      currentProject: getProjectContext().getProjectName(),
+      referencedProject: params._reference_project,
+      projectId
+    });
+  } else {
+    // Normal query: use current project
+    projectId = getProjectContext().getProjectId();
+  }
+
   // Validate required parameter
   if (!params.layer || params.layer.trim() === '') {
     throw new Error('Parameter "layer" is required and cannot be empty');
@@ -653,7 +733,7 @@ export async function searchByLayer(
     if (includeTagsValue) {
       // Use v_tagged_decisions view for full metadata
       rows = await knex('v_tagged_decisions')
-        .where({ layer: params.layer, status: statusValue })
+        .where({ layer: params.layer, status: statusValue, project_id: projectId })
         .orderBy('updated', 'desc')
         .select('*') as TaggedDecision[];
     } else {
@@ -666,6 +746,7 @@ export async function searchByLayer(
         .leftJoin('m_agents as a', 'd.agent_id', 'a.id')
         .where('l.name', params.layer)
         .where('d.status', statusInt)
+        .where('d.project_id', projectId)
         .select(
           'ck.key',
           'd.value',
@@ -684,6 +765,7 @@ export async function searchByLayer(
         .leftJoin('m_agents as a', 'dn.agent_id', 'a.id')
         .where('l.name', params.layer)
         .where('dn.status', statusInt)
+        .where('dn.project_id', projectId)
         .select(
           'ck.key',
           knex.raw('CAST(dn.value AS TEXT) as value'),
@@ -864,6 +946,9 @@ export async function searchAdvanced(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context
+  const projectId = getProjectContext().getProjectId();
+
   try {
     // Parse relative time to Unix timestamp
     const parseRelativeTime = (relativeTime: string): number | null => {
@@ -890,7 +975,7 @@ export async function searchAdvanced(
     };
 
     // Build base query using v_tagged_decisions view
-    let query = knex('v_tagged_decisions');
+    let query = knex('v_tagged_decisions').where('project_id', projectId);
 
     // Filter by layers (OR relationship)
     if (params.layers && params.layers.length > 0) {
@@ -1072,8 +1157,9 @@ export async function setDecisionBatch(
   try {
     if (atomic) {
       // Atomic mode: All or nothing
-      const results = await actualAdapter.transaction(async (trx) => {
-        const processedResults = [];
+      const results = await connectionManager.executeWithRetry(async () => {
+        return await actualAdapter.transaction(async (trx) => {
+          const processedResults = [];
 
         for (const decision of params.decisions) {
           try {
@@ -1091,7 +1177,8 @@ export async function setDecisionBatch(
           }
         }
 
-        return processedResults;
+          return processedResults;
+        });
       });
 
       return {
@@ -1108,8 +1195,10 @@ export async function setDecisionBatch(
 
       for (const decision of params.decisions) {
         try {
-          const result = await actualAdapter.transaction(async (trx) => {
-            return await setDecisionInternal(decision, actualAdapter, trx);
+          const result = await connectionManager.executeWithRetry(async () => {
+            return await actualAdapter.transaction(async (trx) => {
+              return await setDecisionInternal(decision, actualAdapter, trx);
+            });
           });
 
           results.push({
@@ -1165,6 +1254,9 @@ export async function hasUpdates(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context
+  const projectId = getProjectContext().getProjectId();
+
   try {
     // Parse ISO timestamp to Unix epoch
     const sinceDate = new Date(params.since_timestamp);
@@ -1175,11 +1267,13 @@ export async function hasUpdates(
 
     // Count decisions updated since timestamp (both string and numeric tables)
     const decisionCount1 = await knex('t_decisions')
+      .where({ project_id: projectId })
       .where('ts', '>', sinceTs)
       .count('* as count')
       .first() as { count: number };
 
     const decisionCount2 = await knex('t_decisions_numeric')
+      .where({ project_id: projectId })
       .where('ts', '>', sinceTs)
       .count('* as count')
       .first() as { count: number };
@@ -1206,8 +1300,9 @@ export async function hasUpdates(
       messagesCount = messageResult?.count || 0;
     }
 
-    // Count file changes since timestamp
+    // Count file changes since timestamp (project-scoped)
     const fileResult = await knex('t_file_changes')
+      .where({ project_id: projectId })
       .where('ts', '>', sinceTs)
       .count('* as count')
       .first() as { count: number };
@@ -1249,10 +1344,13 @@ export async function setFromTemplate(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context
+  const projectId = getProjectContext().getProjectId();
+
   try {
-    // Get template
+    // Get template (templates are project-scoped)
     const templateRow = await knex('t_decision_templates')
-      .where({ name: params.template })
+      .where({ name: params.template, project_id: projectId })
       .first() as {
         id: number;
         name: string;
@@ -1349,10 +1447,14 @@ export async function createTemplate(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context (Constraint #29 - fail-fast before mutations)
+  const projectId = getProjectContext().getProjectId();
+
   try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Validate layer if provided in defaults
-      if (params.defaults.layer) {
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Validate layer if provided in defaults
+        if (params.defaults.layer) {
         const layerId = await getLayerId(actualAdapter, params.defaults.layer, trx);
         if (layerId === null) {
           throw new Error(`Invalid layer in defaults: ${params.defaults.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
@@ -1377,17 +1479,19 @@ export async function createTemplate(
       // Insert template
       const [id] = await trx('t_decision_templates').insert({
         name: params.name,
+        project_id: projectId,
         defaults: defaultsJson,
         required_fields: requiredFieldsJson,
         created_by: createdById
       });
 
-      return {
-        success: true,
-        template_id: id,
-        template_name: params.name,
-        message: `Template "${params.name}" created successfully`
-      };
+        return {
+          success: true,
+          template_id: id,
+          template_name: params.name,
+          message: `Template "${params.name}" created successfully`
+        };
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1413,9 +1517,13 @@ export async function listTemplates(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Validate project context
+  const projectId = getProjectContext().getProjectId();
+
   try {
     const rows = await knex('t_decision_templates as t')
       .leftJoin('m_agents as a', 't.created_by', 'a.id')
+      .where('t.project_id', projectId)
       .select(
         't.id',
         't.name',
@@ -1479,38 +1587,53 @@ export async function hardDeleteDecision(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
-  try {
-    return await actualAdapter.transaction(async (trx) => {
-      // Get key_id
-      const keyResult = await trx('m_context_keys')
-        .where({ key: params.key })
-        .first('id') as { id: number } | undefined;
+  // Validate project context (fail-fast)
+  const projectId = getProjectContext().getProjectId();
 
-      if (!keyResult) {
-        // Key doesn't exist - still return success (idempotent)
-        return {
-          success: true,
-          key: params.key,
-          message: `Decision "${params.key}" not found (already deleted or never existed)`
-        };
-      }
+  try {
+    return await connectionManager.executeWithRetry(async () => {
+      return await actualAdapter.transaction(async (trx) => {
+        // Get key_id
+        const keyResult = await trx('m_context_keys')
+          .where({ key: params.key })
+          .first('id') as { id: number } | undefined;
+
+        if (!keyResult) {
+          // Key doesn't exist - still return success (idempotent)
+          return {
+            success: true,
+            key: params.key,
+            message: `Decision "${params.key}" not found (already deleted or never existed)`
+          };
+        }
 
       const keyId = keyResult.id;
 
-      // Delete from t_decisions (if exists)
-      const deletedString = await trx('t_decisions').where({ key_id: keyId }).delete();
+      // SECURITY: All deletes MUST filter by project_id to prevent cross-project deletion
+      // Delete from t_decisions (if exists in this project)
+      const deletedString = await trx('t_decisions')
+        .where({ key_id: keyId, project_id: projectId })
+        .delete();
 
-      // Delete from t_decisions_numeric (if exists)
-      const deletedNumeric = await trx('t_decisions_numeric').where({ key_id: keyId }).delete();
+      // Delete from t_decisions_numeric (if exists in this project)
+      const deletedNumeric = await trx('t_decisions_numeric')
+        .where({ key_id: keyId, project_id: projectId })
+        .delete();
 
-      // Delete from t_decision_history (CASCADE should handle this, but explicit for clarity)
-      const deletedHistory = await trx('t_decision_history').where({ key_id: keyId }).delete();
+      // Delete from t_decision_history (for this project only)
+      const deletedHistory = await trx('t_decision_history')
+        .where({ key_id: keyId, project_id: projectId })
+        .delete();
 
-      // Delete from t_decision_tags (CASCADE should handle this)
-      const deletedTags = await trx('t_decision_tags').where({ decision_key_id: keyId }).delete();
+      // Delete from t_decision_tags (for this project only)
+      const deletedTags = await trx('t_decision_tags')
+        .where({ decision_key_id: keyId, project_id: projectId })
+        .delete();
 
-      // Delete from t_decision_scopes (CASCADE should handle this)
-      const deletedScopes = await trx('t_decision_scopes').where({ decision_key_id: keyId }).delete();
+      // Delete from t_decision_scopes (for this project only)
+      const deletedScopes = await trx('t_decision_scopes')
+        .where({ decision_key_id: keyId, project_id: projectId })
+        .delete();
 
       // Calculate total deleted records
       const totalDeleted = deletedString + deletedNumeric + deletedHistory + deletedTags + deletedScopes;
@@ -1523,11 +1646,12 @@ export async function hardDeleteDecision(
         };
       }
 
-      return {
-        success: true,
-        key: params.key,
-        message: `Decision "${params.key}" permanently deleted (${totalDeleted} record${totalDeleted === 1 ? '' : 's'})`
-      };
+        return {
+          success: true,
+          key: params.key,
+          message: `Decision "${params.key}" permanently deleted (${totalDeleted} record${totalDeleted === 1 ? '' : 's'})`
+        };
+      });
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

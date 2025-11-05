@@ -1,9 +1,15 @@
 #!/usr/bin/env sh
 echo "🔍 Running pre-push checks..."
 
-echo "🗄️  Running comprehensive migration tests..."
-npm run test:migrations:all || {
+echo "🗄️  Running migration safety tests (v3.5→v3.6→v3.7)..."
+npm run test:migrations || {
   echo "❌ Migration tests failed\! Please fix migration issues before pushing."
+  exit 1
+}
+
+echo "🧪 Running comprehensive feature tests..."
+npm run test:all-features || {
+  echo "❌ Feature tests failed\! Please fix failing tests before committing."
   exit 1
 }
 

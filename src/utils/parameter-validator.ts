@@ -205,7 +205,12 @@ export function validateActionParams(
   // Get action specification
   const spec = getActionSpec(tool, action);
   if (!spec) {
-    throw new Error(`Unknown action "${action}" for tool "${tool}". Use action: "help" to see available actions, or action: "use_case" for comprehensive scenarios.`);
+    // Suggest similar actions if available
+    const suggestions = suggestSimilarActions(tool, action);
+    const suggestionMsg = suggestions.length > 0
+      ? ` Did you mean: ${suggestions.join(', ')}?`
+      : '';
+    throw new Error(`Unknown action "${action}".${suggestionMsg} See: ${tool}.help`);
   }
 
   // Check for missing required parameters
@@ -225,24 +230,32 @@ export function validateActionParams(
   // Find typo suggestions
   const typoSuggestions = findTypoSuggestions(providedParams, allValidParams);
 
-  // If validation fails, throw structured error
+  // If validation fails, throw concise structured error
   if (missingParams.length > 0 || Object.keys(typoSuggestions).length > 0) {
+    // Build concise error message
+    let errorMsg = '';
+    if (missingParams.length > 0) {
+      errorMsg = `Missing: ${missingParams.join(', ')}`;
+    }
+    if (Object.keys(typoSuggestions).length > 0) {
+      const typoMsg = Object.entries(typoSuggestions)
+        .map(([wrong, correct]) => `${wrong} → ${correct}`)
+        .join(', ');
+      errorMsg = errorMsg
+        ? `${errorMsg}. Invalid params: ${typoMsg}`
+        : `Invalid params: ${typoMsg}`;
+    }
+
     const error: ValidationError = {
-      error: missingParams.length > 0
-        ? `Missing required parameter${missingParams.length > 1 ? 's' : ''} for action '${action}': ${missingParams.join(', ')}`
-        : `Invalid parameter name${Object.keys(typoSuggestions).length > 1 ? 's' : ''} detected`,
+      error: errorMsg,
       action: action,
-      missing_params: missingParams.length > 0 ? missingParams : undefined,
-      required_params: spec.required,
-      optional_params: spec.optional,
-      you_provided: providedParams,
-      did_you_mean: Object.keys(typoSuggestions).length > 0 ? typoSuggestions : undefined,
-      example: spec.example,
-      hint: spec.hint,
-      need_help: `For comprehensive scenarios and examples, try: ${tool}({ action: "use_case" })`
+      reference: `${tool}.${action}`,  // e.g., "decision.set"
+      missing: missingParams.length > 0 ? missingParams : undefined,
+      typos: Object.keys(typoSuggestions).length > 0 ? typoSuggestions : undefined,
+      hint: spec.hint
     };
 
-    // Throw error with JSON-formatted details for easy parsing by AI agents
+    // Throw concise JSON error (significantly reduced token usage)
     throw new Error(JSON.stringify(error, null, 2));
   }
 }
@@ -267,7 +280,20 @@ export function validateBatchParams(
 ): void {
   // Check if batch parameter exists and is an array
   if (!items || !Array.isArray(items)) {
-    throw new Error(`Parameter "${batchParamName}" is required and must be an array`);
+    // Detect if a JSON string was passed instead of a parsed object
+    const itemsAsAny = items as any;
+    if (typeof itemsAsAny === 'string' && (itemsAsAny.trim().startsWith('[') || itemsAsAny.trim().startsWith('{'))) {
+      throw new Error(
+        `Parameter "${batchParamName}" received as JSON string instead of parsed array. ` +
+        `MCP tools require pre-parsed JSON objects, not stringified JSON. ` +
+        `The parameter must be a JavaScript array/object, not a string. ` +
+        `Received type: ${typeof itemsAsAny}`
+      );
+    }
+    throw new Error(
+      `Parameter "${batchParamName}" is required and must be an array. ` +
+      `Received type: ${typeof itemsAsAny}`
+    );
   }
 
   // Check array is not empty

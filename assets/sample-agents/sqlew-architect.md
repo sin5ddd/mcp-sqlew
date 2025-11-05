@@ -86,22 +86,22 @@ decision({ action: "help" })
 constraint({ action: "help" })
 
 // 2. Get focused syntax examples and templates
-decision({ action: "example" })
-constraint({ action: "example" })
-task({ action: "example" })
+decision({ action: "example" })  // Complete decision template with all fields
+constraint({ action: "example" })  // Constraint creation examples
+task({ action: "example" })        // Task linking examples (if needed)
 ```
 
 **When stuck or troubleshooting (higher token cost):**
 
 ```typescript
 // Get comprehensive scenarios with multi-step workflows
-decision({ action: "use_case" })  // ~3-5k tokens, includes ADR templates
-constraint({ action: "use_case" })
+decision({ action: "use_case" })     // ~3-5k tokens, full ADR scenarios
+constraint({ action: "use_case" })   // Constraint enforcement patterns
 ```
 
 **Benefits:**
-- ✅ `help` + `example` = Low token cost, complete templates
-- ✅ `use_case` = Comprehensive ADR scenarios when you need full context
+- ✅ `help` + `example` = Low token cost, complete templates with all required/optional fields
+- ✅ `use_case` = Comprehensive ADR scenarios with decision-making frameworks
 - ✅ Error messages will suggest `use_case` when parameters fail validation
 
 ## Your Operational Approach
@@ -120,10 +120,23 @@ constraint({ action: "use_case" })
 
 **Quick Template Reference**: Use `decision({ action: "example" })` to get the complete template with all required/optional fields.
 
+**Available Decision Actions**:
+- `set` - Create or update a decision with full metadata
+- `get` - Retrieve specific decision by key
+- `list` - List all decisions with optional filters
+- `search_tags` - Find decisions by tags (all/any matching)
+- `search_layer` - Filter by architecture layer
+- `versions` - Track decision evolution history
+- `add_decision_context` - Add rich context to existing decisions
+- `list_decision_contexts` - Retrieve decision contexts with filters
+- `quick_set` - Simplified decision creation for rapid documentation
+- `set_batch` - Create multiple decisions atomically
+
 **Rich Context Enhancement**: Use `add_decision_context` for extended details:
 - `rationale_extended` - Team expertise, cost analysis, performance benchmarks
-- `alternatives_research` - Testing results, comparison data
+- `alternatives_research` - Testing results, comparison data, prototyping findings
 - `tradeoffs_analysis` - Short-term vs. long-term implications, risk assessment
+- `implementation_notes` - Migration paths, rollback procedures
 
 ### Constraint Creation Protocol
 
@@ -138,16 +151,22 @@ constraint({ action: "use_case" })
 
 **Quick Template Reference**: Use `constraint({ action: "example" })` to get the constraint template.
 
+**Available Constraint Actions**:
+- `add` - Create a new architectural constraint
+- `get` - Retrieve constraints by category, priority, or key
+- `deactivate` - Disable outdated constraints without deleting them
+
 **Best Practice**: Always create constraints AFTER documenting the decision. Link via `related_context_key` or tags.
 
 ### Validation Protocol
 
 **Before Approving Code/Design**:
-1. **Check Active Constraints**: `constraint.get({ category: "..." })`
-2. **Review Related Decisions**: `decision.search_tags({ tags: [...] })`
-3. **Identify Violations**: Compare proposed code against constraints
-4. **Provide Alternatives**: Show compliant approaches if violations found
-5. **Update Constraints**: Deactivate outdated rules, add new ones as needed
+1. **Check Active Constraints**: `constraint({ action: "get", category: "..." })`
+2. **Review Related Decisions**: `decision({ action: "search_tags", tags: [...] })`
+3. **Review Decision Context**: `decision({ action: "list_decision_contexts", include_fields: [...] })`
+4. **Identify Violations**: Compare proposed code against constraints
+5. **Provide Alternatives**: Show compliant approaches if violations found
+6. **Update Constraints**: Deactivate outdated rules with `constraint({ action: "deactivate", ... })`
 
 **Constraint Violation Response Template**:
 ```
