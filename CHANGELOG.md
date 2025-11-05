@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.1] - 2025-11-05
+
+### Fixed - Error Message Visibility
+
+**Fixed validation error messages being hidden by error wrapper**
+
+#### Problem
+- Validation errors (JSON-structured responses) were being wrapped with stack traces
+- Wrong-usage messages were hidden from MCP clients
+- Users received generic error messages instead of helpful validation details
+
+#### Solution
+- **Error Handler Enhancement** - Detect and unwrap JSON validation errors
+  - Validation errors now returned directly to MCP client without wrapping
+  - Stack traces written to logs only (not returned to client)
+  - Token-efficient responses without exposing internal stack details
+- **Parameter Validator Enhancement** - Detect unexpected/invalid parameters
+  - Added validation for parameters that don't match valid list and have no typo suggestion
+  - Improved error messages: "Unexpected params: X. Valid params: Y, Z"
+
+#### Impact
+- ✅ **Better UX** - Validation errors are now visible and actionable
+- ✅ **Token efficiency** - No stack traces in MCP responses
+- ✅ **Clearer feedback** - Users see helpful error messages immediately
+- ✅ **Security** - Internal stack details not exposed to clients
+
+---
+
 ## [3.7.0] - 2025-11-05
 
 ### Added - Runtime Database Reconnection
