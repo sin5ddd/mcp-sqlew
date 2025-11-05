@@ -126,6 +126,11 @@ export function convertAutoIncrement(
 export function convertTimestampFunctions(sql: string, targetFormat: DatabaseFormat): string {
   if (targetFormat === 'mysql') {
     // SQLite → MySQL timestamp functions
+    // Special handling for DEFAULT clauses - need CAST wrapper for type safety
+    sql = sql.replace(/DEFAULT\s*\(\s*unixepoch\(\)\s*\)/gi, 'DEFAULT (CAST(UNIX_TIMESTAMP() AS SIGNED))');
+    sql = sql.replace(/DEFAULT\s*\(\s*strftime\s*\(\s*['"]%s['"]\s*,\s*['"]now['"]\s*\)\s*\)/gi, 'DEFAULT (CAST(UNIX_TIMESTAMP() AS SIGNED))');
+
+    // Regular conversions (non-DEFAULT contexts)
     sql = sql.replace(/unixepoch\(\)/g, 'UNIX_TIMESTAMP()');
     sql = sql.replace(/datetime\(([^,)]+),\s*'unixepoch'\)/g, 'FROM_UNIXTIME($1)');
     // strftime('%s', 'now') → UNIX_TIMESTAMP()

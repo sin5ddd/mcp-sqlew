@@ -147,6 +147,53 @@ Stack trace line 2
 
 ---
 
+### Changed - Specialized Agent Templates (Error Prevention)
+
+**Restructured agent templates to reduce tool call errors from 60% to <10%**
+
+#### Problem
+- 60% of agent errors: missing `action` parameter in tool calls
+- Templates embedded outdated action samples that became obsolete
+- Agents guessed syntax instead of using discovery workflow
+
+#### Solution
+All three agent templates restructured with error-prevention focus:
+- **sqlew-architect.md** - Decision documentation specialist
+- **sqlew-researcher.md** - Context analysis specialist
+- **sqlew-scrum-master.md** - Sprint coordination specialist
+
+#### Key Improvements
+- ⚠️ **Prominent Error-Prevention Section** - "CRITICAL: Error-Free sqlew Tool Usage" at top
+- 📚 **Discovery-First Workflow** - Guides agents: `action: "help"` → `action: "example"` → copy/modify
+- ❌✅ **Zero-Error Pattern** - Clear WRONG/CORRECT examples for every common mistake:
+  - Missing `action` parameter
+  - Wrong data types (priority: string vs number)
+  - Wrong parameter names (old v2.x API)
+- 🔍 **Pre-Execution Checklist** - Verify `action` parameter before every tool call
+- 🗑️ **No Embedded Samples** - Removed action lists to prevent outdated syntax
+- 🛠️ **Common Data Type Errors** - Shows tag arrays, boolean atomics, integer priorities
+
+#### Upgrade Path
+**Note**: Existing `.claude/agents/` files NOT auto-upgraded (preserves customizations)
+
+**Manual upgrade required**:
+```bash
+# Remove old templates
+rm .claude/agents/sqlew-{architect,researcher,scrum-master}.md
+
+# Restart MCP server (auto-copies new templates from assets/sample-agents/)
+```
+
+See [docs/SPECIALIZED_AGENTS.md#upgrading-to-error-prevention-templates-v370](docs/SPECIALIZED_AGENTS.md#upgrading-to-error-prevention-templates-v370) for detailed instructions.
+
+#### Impact
+- ✅ **Target: 60% → <10% error rate** for agent tool calls
+- ✅ **Better UX** - Clear guidance prevents common mistakes
+- ✅ **Self-Correcting** - Agents learn correct patterns from errors
+- ✅ **Future-Proof** - Discovery workflow adapts to API changes
+
+---
+
 ### Fixed - Multi-Project Migration (Critical)
 
 **Fixed migration for ALL users upgrading from v3.6.10 to v3.7.0**

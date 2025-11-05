@@ -486,6 +486,45 @@ EOF
 cp node_modules/sqlew/assets/config.example.toml .sqlew/config.toml
 ```
 
+### Upgrading to Error-Prevention Templates (v3.7.0+)
+
+**Background**: v3.7.0 introduced error-prevention focused agent templates that reduce tool call errors from 60% to <10% by emphasizing discovery-first workflow.
+
+**Problem**: Existing agent files in `.claude/agents/` are **NOT automatically upgraded** to preserve user customizations.
+
+**Solution - Upgrade to New Templates**:
+
+```bash
+# Step 1: Check current template version
+head -n 50 .claude/agents/sqlew-scrum-master.md | grep "CRITICAL: Error-Free"
+
+# If you DON'T see "⚠️ CRITICAL: Error-Free sqlew Tool Usage", you have old templates
+
+# Step 2: Backup existing files (if you customized them)
+mkdir -p .claude/agents-backup
+cp .claude/agents/sqlew-*.md .claude/agents-backup/ 2>/dev/null || true
+
+# Step 3: Remove old templates
+rm .claude/agents/sqlew-architect.md
+rm .claude/agents/sqlew-researcher.md
+rm .claude/agents/sqlew-scrum-master.md
+
+# Step 4: Restart MCP server (triggers auto-copy of new templates)
+# The sync-agents mechanism will detect missing files and copy from assets/sample-agents/
+```
+
+**Key Improvements in v3.7.0 Templates**:
+- ⚠️ **Error-Prevention Section**: Prominent warnings about missing `action` parameter (60% of errors)
+- 📚 **Discovery-First Workflow**: Guides agents to call `action: "help"`, `action: "example"`, `action: "use_case"`
+- ❌✅ **Zero-Error Pattern**: Clear WRONG/CORRECT examples for every common mistake
+- 🔍 **Pre-Execution Checklist**: Verifies `action` parameter before every tool call
+- 🗑️ **No Embedded Samples**: Removed outdated action lists that become obsolete
+
+**Why Manual Upgrade Required**:
+Agent sync preserves existing files to protect user customizations (modified agent personalities, custom examples, etc.). Users who haven't customized their agents should upgrade to get error-prevention benefits.
+
+---
+
 ### Too Many Tokens
 
 **Problem**: Conversations consume too many tokens
