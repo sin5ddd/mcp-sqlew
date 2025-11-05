@@ -593,19 +593,44 @@ async function main() {
     // 2. Initialize database (SILENT - no stderr writes yet)
     // Note: .sqlew directory already created above with correct project root
     // Build config from fileConfig (which includes database type and auth for multi-RDBMS)
-    const config = fileConfig.database?.type && fileConfig.database.type !== 'sqlite'
-      ? {
-          databaseType: fileConfig.database.type as 'mysql' | 'postgresql',
-          connection: {
-            ...fileConfig.database.connection,
-            user: fileConfig.database.auth?.user,
-            password: fileConfig.database.auth?.password,
-          },
-        }
-      : dbPath
+    const isExplicitRDBMS = fileConfig.database?.type === 'mysql'
+                         || fileConfig.database?.type === 'postgres';
+
+    if (isExplicitRDBMS) {
+      // User explicitly configured MySQL/PostgreSQL
+      // Note: Config uses 'postgres' but initializeDatabase expects 'postgresql'
+      const dbType = fileConfig.database!.type === 'postgres' ? 'postgresql' : fileConfig.database!.type;
+      const config = {
+        databaseType: dbType as 'mysql' | 'postgresql',
+        connection: {
+          ...fileConfig.database!.connection,
+          user: fileConfig.database!.auth?.user,
+          password: fileConfig.database!.auth?.password,
+        },
+      };
+
+      try {
+        db = await initializeDatabase(config);
+
+        // Test connection immediately - fail fast if connection is bad
+        await db.getKnex().raw('SELECT 1');
+        debugLog('INFO', `Successfully connected to ${config.databaseType}`);
+      } catch (error: any) {
+        // Connection failed - EXIT WITHOUT SQLITE FALLBACK
+        const errorMsg = `❌ Failed to connect to ${config.databaseType}: ${error.message}`;
+        debugLog('ERROR', errorMsg, { error, stack: error.stack });
+        console.error(errorMsg);
+        console.error('Please check your .sqlew/config.toml database configuration and try again.');
+        console.error('Connection details: host=' + config.connection.host + ', database=' + config.connection.database);
+        process.exit(1);
+      }
+    } else {
+      // SQLite (default or explicit) - backwards compatible behavior
+      const config = dbPath
         ? { connection: { filename: dbPath } }
         : undefined;
-    db = await initializeDatabase(config);
+      db = await initializeDatabase(config);
+    }
 
     // 3. Apply CLI config overrides (SILENT)
     if (parsedArgs.autodeleteIgnoreWeekend !== undefined) {
