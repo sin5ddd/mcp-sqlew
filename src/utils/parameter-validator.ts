@@ -230,8 +230,16 @@ export function validateActionParams(
   // Find typo suggestions
   const typoSuggestions = findTypoSuggestions(providedParams, allValidParams);
 
+  // Check for unexpected/invalid parameters (not in valid list and no typo suggestion)
+  const unexpectedParams: string[] = [];
+  for (const provided of providedParams) {
+    if (!allValidParams.includes(provided) && !typoSuggestions[provided]) {
+      unexpectedParams.push(provided);
+    }
+  }
+
   // If validation fails, throw concise structured error
-  if (missingParams.length > 0 || Object.keys(typoSuggestions).length > 0) {
+  if (missingParams.length > 0 || Object.keys(typoSuggestions).length > 0 || unexpectedParams.length > 0) {
     // Build concise error message
     let errorMsg = '';
     if (missingParams.length > 0) {
@@ -244,6 +252,12 @@ export function validateActionParams(
       errorMsg = errorMsg
         ? `${errorMsg}. Invalid params: ${typoMsg}`
         : `Invalid params: ${typoMsg}`;
+    }
+    if (unexpectedParams.length > 0) {
+      const unexpectedMsg = `Unexpected params: ${unexpectedParams.join(', ')}. Valid params: ${allValidParams.join(', ')}`;
+      errorMsg = errorMsg
+        ? `${errorMsg}. ${unexpectedMsg}`
+        : unexpectedMsg;
     }
 
     const error: ValidationError = {
