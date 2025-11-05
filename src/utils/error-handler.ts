@@ -42,13 +42,16 @@ function formatErrorDetails(error: any): {
 /**
  * Handle tool execution errors
  * Logs the error with context and returns formatted error response
+ *
+ * IMPORTANT: Stack traces are ONLY written to logs, never returned to MCP client
+ * This keeps responses token-efficient and prevents exposing internal details
  */
 export function handleToolError(
   toolName: string,
   action: string,
   error: any,
   params?: any
-): { message: string; stack?: string } {
+): { message: string } {
   const { message, stack, errorType } = formatErrorDetails(error);
 
   // Enhanced debug logging with full error details
@@ -72,7 +75,8 @@ export function handleToolError(
   }
   safeConsoleError('');
 
-  return { message, stack };
+  // Only return message, stack goes to logs only
+  return { message };
 }
 
 /**

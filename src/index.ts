@@ -543,12 +543,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   } catch (error) {
-    // Use centralized error handler
-    const { message, stack } = handleToolError(name, action, error, params);
-    debugLogToolResponse(name, action, false, undefined, { message, stack });
+    // Use centralized error handler (stack goes to logs only, not returned to client)
+    const { message } = handleToolError(name, action, error, params);
+    debugLogToolResponse(name, action, false, undefined, { message });
 
     return {
-      content: [{ type: 'text', text: JSON.stringify({ error: message, stack: stack }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ error: message }, null, 2) }],
       isError: true,
     };
   }
