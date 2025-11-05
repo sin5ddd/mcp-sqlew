@@ -99,7 +99,9 @@ function convertDefaultValue(defaultValue: string | null, targetFormat: Database
   // SQLite unixepoch() conversions
   if (lower.includes('unixepoch()') || lower === 'unixepoch()') {
     if (targetFormat === 'mysql') {
-      return 'UNIX_TIMESTAMP()';
+      // MySQL 8.0+: Use CAST to explicitly convert UNIX_TIMESTAMP() to SIGNED INTEGER
+      // Wrapped in parentheses for expression syntax
+      return '(CAST(UNIX_TIMESTAMP() AS SIGNED))';
     } else if (targetFormat === 'postgresql') {
       return 'EXTRACT(epoch FROM NOW())::INTEGER';
     }
@@ -110,9 +112,25 @@ function convertDefaultValue(defaultValue: string | null, targetFormat: Database
   // Must check BEFORE generic strftime to handle this specific case
   if (lower.includes("strftime('%s'") || lower.includes('strftime("%s"')) {
     if (targetFormat === 'mysql') {
-      return 'UNIX_TIMESTAMP()';
+      // MySQL 8.0+: Use CAST to explicitly convert UNIX_TIMESTAMP() to SIGNED INTEGER
+      // Wrapped in parentheses for expression syntax
+      return '(CAST(UNIX_TIMESTAMP() AS SIGNED))';
     } else if (targetFormat === 'postgresql') {
       return 'EXTRACT(epoch FROM NOW())::INTEGER';
+    }
+    return null;
+  }
+
+  // MySQL UNIX_TIMESTAMP() - already MySQL syntax, needs CAST wrapping
+  // Match both "unix_timestamp()" and "UNIX_TIMESTAMP()" case-insensitively
+  if (lower.includes('unix_timestamp')) {
+    if (targetFormat === 'mysql') {
+      // MySQL 8.0+: Wrap UNIX_TIMESTAMP() with CAST for type safety
+      return '(CAST(UNIX_TIMESTAMP() AS SIGNED))';
+    } else if (targetFormat === 'postgresql') {
+      return 'EXTRACT(epoch FROM NOW())::INTEGER';
+    } else if (targetFormat === 'sqlite') {
+      return 'unixepoch()';
     }
     return null;
   }
@@ -1017,6 +1035,29 @@ export function convertValueWithType(
       }
       return `'${isoString}'`;
     } else if (typeof value === 'string') {
+      // Detect ISO 8601 format (e.g., '2025-11-05T00:07:53.343Z')
+      // ISO 8601 pattern: YYYY-MM-DDTHH:MM:SS.sssZ or with timezone offset
+      const iso8601Pattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:\d{2})?$/;
+
+      if (iso8601Pattern.test(value)) {
+        // Parse ISO 8601 string and convert to database-compatible format
+        const date = new Date(value);
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        const hours = String(date.getUTCHours()).padStart(2, '0');
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+        const isoString = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+
+        if (targetFormat === 'postgresql') {
+          return `'${isoString}'::timestamp`;
+        } else if (targetFormat === 'mysql') {
+          return `'${isoString}'`;
+        }
+        return `'${isoString}'`;
+      }
+
       // Already formatted string - ensure proper escaping
       const escaped = value.replace(/'/g, "''");
       if (targetFormat === 'postgresql') {

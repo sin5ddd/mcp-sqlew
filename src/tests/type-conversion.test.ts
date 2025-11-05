@@ -129,6 +129,67 @@ describe('Type-Aware Value Conversion', () => {
       assert.strictEqual(result.length, 1);
       assert.ok(result[0].includes('2024-01-15'), 'Should format as ISO date');
     });
+
+    it('should convert ISO 8601 format strings to MySQL DATETIME format', () => {
+      const rows = [
+        { id: 1, migration_time: '2025-11-05T00:07:53.343Z' }
+      ];
+
+      const columnInfo = new Map([
+        ['id', { type: 'integer' }],
+        ['migration_time', { type: 'datetime' }]
+      ]);
+
+      const result = generateBulkInsert('knex_migrations', rows, 'mysql', {
+        columnInfo
+      });
+
+      assert.strictEqual(result.length, 1);
+      assert.ok(result[0].includes('2025-11-05 00:07:53'), 'Should convert ISO 8601 to MySQL DATETIME');
+      assert.ok(!result[0].includes('T'), 'Should not contain T separator');
+      assert.ok(!result[0].includes('Z'), 'Should not contain Z timezone indicator');
+    });
+
+    it('should handle ISO 8601 format with timezone offset for MySQL', () => {
+      const rows = [
+        { id: 1, created_at: '2024-06-15T14:30:00+09:00' }
+      ];
+
+      const columnInfo = new Map([
+        ['id', { type: 'integer' }],
+        ['created_at', { type: 'timestamp' }]
+      ]);
+
+      const result = generateBulkInsert('test_table', rows, 'mysql', {
+        columnInfo
+      });
+
+      assert.strictEqual(result.length, 1);
+      // Should convert to UTC: 14:30:00+09:00 -> 05:30:00 UTC
+      assert.ok(result[0].includes('2024-06-15'), 'Should preserve date part');
+      assert.ok(!result[0].includes('T'), 'Should not contain T separator');
+    });
+
+    it('should convert ISO 8601 format strings to PostgreSQL timestamp', () => {
+      const rows = [
+        { id: 1, created_at: '2025-11-05T00:07:53.343Z' }
+      ];
+
+      const columnInfo = new Map([
+        ['id', { type: 'integer' }],
+        ['created_at', { type: 'timestamp' }]
+      ]);
+
+      const result = generateBulkInsert('test_table', rows, 'postgresql', {
+        columnInfo
+      });
+
+      assert.strictEqual(result.length, 1);
+      assert.ok(result[0].includes('2025-11-05 00:07:53'), 'Should convert to standard format');
+      assert.ok(result[0].includes('::timestamp'), 'Should include PostgreSQL cast');
+      assert.ok(!result[0].includes('T'), 'Should not contain T separator');
+      assert.ok(!result[0].includes('Z'), 'Should not contain Z timezone indicator');
+    });
   });
 
   describe('Binary Conversion', () => {

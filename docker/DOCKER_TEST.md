@@ -1,26 +1,12 @@
 # Docker Testing Guide
 
-Quick guide for testing MySQL, MariaDB, and PostgreSQL adapters with Docker.
+Quick guide for testing MySQL and PostgreSQL adapters with Docker.
 
 ## Prerequisites
 
 - Docker and Docker Compose installed
 - Node.js 18+ installed
 - Project built (`npm run build`)
-
-## Important: Database Pre-Creation
-
-**IMPORTANT**: In production environments, database users typically do NOT have `CREATE DATABASE` privilege. The mcp-sqlew server expects databases to already exist before connection.
-
-**For Docker testing:**
-- Databases are automatically created via `MYSQL_DATABASE` environment variable in docker-compose.yml
-- This simulates a production scenario where the database already exists
-- The server connects to pre-existing databases and creates only tables/indexes
-
-**For production:**
-- Database must be manually created beforehand by a DBA or privileged user
-- Application user only needs: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `INDEX`, `DROP`, `REFERENCES`
-- Application user does NOT need: `CREATE DATABASE`
 
 ## MySQL Testing
 
@@ -48,33 +34,29 @@ docker exec -it mcp-sqlew-mysql-test mysql -u mcp_user -pmcp_pass mcp_test
 
 ### 3. Run MCP Server with MySQL
 
-**Option A: Using environment variable**
+Set config path and run:
 ```bash
-export SQLEW_CONFIG=.sqlew/config.mysql-test.toml
+export MCP_SQLEW_CONFIG_PATH=.sqlew/config.mysql-test.toml
 node dist/index.js
 ```
 
-**Option B: Using CLI flag**
+Or with MCP Inspector:
 ```bash
-node dist/index.js --config=.sqlew/config.mysql-test.toml
-```
-
-**With MCP Inspector:**
-```bash
-# Environment variable
-export SQLEW_CONFIG=.sqlew/config.mysql-test.toml
+export MCP_SQLEW_CONFIG_PATH=.sqlew/config.mysql-test.toml
 npx @modelcontextprotocol/inspector node dist/index.js
-
-# Or CLI flag
-npx @modelcontextprotocol/inspector node dist/index.js --config=.sqlew/config.mysql-test.toml
 ```
 
-### 4. Test MCP Tools
+### 4. Test with CLI
 
-Use MCP Inspector to test tools:
-- Call `decision.set` to create a decision
-- Call `task.create` to create tasks
-- Call `stats.db_stats` to verify database operations
+```bash
+# Set config and test tools
+export MCP_SQLEW_CONFIG_PATH=.sqlew/config.mysql-test.toml
+
+# Run server and use MCP Inspector to:
+# - Call decision.set to create a decision
+# - Call task.create to create tasks
+# - Call stats.db_stats to verify database operations
+```
 
 ### 5. Verify MySQL Data
 
@@ -107,32 +89,6 @@ docker-compose stop mysql
 docker-compose down -v
 ```
 
-## MariaDB 10.5 Testing
-
-### 1. Start MariaDB Container
-
-```bash
-docker-compose up -d mariadb
-```
-
-Wait for health check:
-```bash
-docker-compose ps mariadb
-```
-
-### 2. Run MCP Server with MariaDB
-
-```bash
-node dist/index.js --config=.sqlew/config.mariadb-test.toml
-```
-
-### 3. Verify MariaDB Data
-
-```bash
-# Connect to MariaDB
-docker exec mcp-sqlew-mariadb-test mysql -u mcp_user -pmcp_pass mcp_test -e "SHOW TABLES;"
-```
-
 ## PostgreSQL Testing (Future)
 
 ```bash
@@ -142,17 +98,9 @@ docker-compose up -d postgres
 
 ## Test Credentials
 
-**MySQL 8.0:**
+**MySQL:**
 - Host: localhost
 - Port: 3306
-- Database: mcp_test
-- User: mcp_user
-- Password: mcp_pass
-- Root password: rootpass
-
-**MariaDB 10.5:**
-- Host: localhost
-- Port: 3307
 - Database: mcp_test
 - User: mcp_user
 - Password: mcp_pass

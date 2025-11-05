@@ -344,6 +344,12 @@ export async function createTask(params: {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
+    // Preserve validation errors (they already contain helpful information)
+    if (message.startsWith('{') && message.includes('"error"')) {
+      throw error;
+    }
+
     throw new Error(`Failed to create task: ${message}`);
   }
 }
@@ -569,6 +575,12 @@ export async function updateTask(params: {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
+    // Preserve validation errors (they already contain helpful information)
+    if (message.startsWith('{') && message.includes('"error"')) {
+      throw error;  // Re-throw validation error as-is
+    }
+
     throw new Error(`Failed to update task: ${message}`);
   }
 }
@@ -961,6 +973,12 @@ export async function moveTask(params: {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
+    // Preserve validation errors (they already contain helpful information)
+    if (message.startsWith('{') && message.includes('"error"')) {
+      throw error;
+    }
+
     throw new Error(`Failed to move task: ${message}`);
   }
 }

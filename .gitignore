@@ -56,5 +56,5 @@ PHASE*.md
 # Allow test database directories created by tests
 .sqlew-test/
 
-# Docker data directories (keep docker-compose.yml and docs)
-docker/data/
+docker/data/*/
+.tmp-test-*
