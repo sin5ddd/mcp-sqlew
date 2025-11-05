@@ -531,11 +531,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   } catch (error) {
     // Use centralized error handler (stack goes to logs only, not returned to client)
-    const { message } = handleToolError(name, action, error, params);
-    debugLogToolResponse(name, action, false, undefined, { message });
+    const errorResult = handleToolError(name, action, error, params);
+
+    // Check if this is a structured validation error or a simple message
+    const errorResponse = errorResult.message !== undefined
+      ? { error: errorResult.message }  // Regular error: wrap message
+      : errorResult;  // Validation error: use structured object as-is
+
+    debugLogToolResponse(name, action, false, undefined, errorResponse);
 
     return {
-      content: [{ type: 'text', text: JSON.stringify({ error: message }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(errorResponse, null, 2) }],
       isError: true,
     };
   }

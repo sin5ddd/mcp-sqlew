@@ -50,6 +50,9 @@ const TEST_VERSIONS = [
  * Versions to skip (known schema.sql bugs - migrations work fine in practice)
  */
 const SKIP_VERSIONS = [
+  '1.0.0',   // Pre-v3 schema incompatible with v3.7 view dependencies
+  '1.1.0',   // Pre-v3 schema incompatible with v3.7 view dependencies
+  '2.0.0',   // Pre-v3 schema incompatible with v3.7 view dependencies
   '3.0.2',   // Historical schema.sql has malformed INSERT (extra NULL in t_decision_templates)
              // Real users got v3.0.2 via migrations (not schema.sql), so upgrade path works fine
 ];

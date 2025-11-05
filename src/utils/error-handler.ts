@@ -51,7 +51,7 @@ export function handleToolError(
   action: string,
   error: any,
   params?: any
-): { message: string } {
+): { message: string } | any {
   const { message, stack, errorType } = formatErrorDetails(error);
 
   // Enhanced debug logging with full error details
@@ -63,7 +63,26 @@ export function handleToolError(
     stack: stack
   });
 
-  // Log to stderr for immediate visibility (pipe-safe)
+  // Check if this is a validation error (JSON structure with error details)
+  if (message.startsWith('{') && message.includes('"error"')) {
+    try {
+      const parsed = JSON.parse(message);
+      // Return parsed validation error object directly (no wrapping)
+      // Log simplified version to console
+      safeConsoleError(`\n❌ VALIDATION ERROR in ${toolName}.${action}:`);
+      safeConsoleError(`   ${parsed.error}`);
+      if (parsed.hint) {
+        safeConsoleError(`   Hint: ${parsed.hint}`);
+      }
+      safeConsoleError('');
+
+      return parsed;  // Return structured validation error
+    } catch (e) {
+      // If JSON parsing fails, fall through to regular error handling
+    }
+  }
+
+  // Regular errors: Log to stderr for immediate visibility (pipe-safe)
   safeConsoleError(`\n❌ ERROR in ${toolName}.${action}:`);
   safeConsoleError(`   Message: ${message}`);
   if (stack) {
