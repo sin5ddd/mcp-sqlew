@@ -6,7 +6,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { parse as parseTOML } from 'smol-toml';
-import type { SqlewConfig, FlatConfig } from './types.js';
+import type { SqlewConfig, FlatConfig, DatabaseConfig } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 
 /**
@@ -37,12 +37,18 @@ export function loadConfigFile(projectRoot: string = process.cwd(), configPath?:
     const content = readFileSync(absolutePath, 'utf-8');
     const parsed = parseTOML(content) as SqlewConfig;
 
-    // Merge with defaults (file config takes priority)
-    const merged: SqlewConfig = {
-      database: {
+    // Normalize database config with defaults
+    let databaseConfig = DEFAULT_CONFIG.database;
+    if (parsed.database) {
+      databaseConfig = normalizeDatabaseConfig({
         ...DEFAULT_CONFIG.database,
         ...parsed.database,
-      },
+      });
+    }
+
+    // Merge with defaults (file config takes priority)
+    const merged: SqlewConfig = {
+      database: databaseConfig,
       autodelete: {
         ...DEFAULT_CONFIG.autodelete,
         ...parsed.autodelete,
@@ -60,6 +66,15 @@ export function loadConfigFile(projectRoot: string = process.cwd(), configPath?:
         ...parsed.agents,
       },
     };
+
+    // Validate the merged configuration
+    const validation = validateConfig(merged);
+    if (!validation.valid) {
+      console.error(`⚠️  Configuration validation failed: ${finalPath}`);
+      validation.errors.forEach(err => console.error(`   - ${err}`));
+      console.error(`   Using default configuration`);
+      return DEFAULT_CONFIG;
+    }
 
     return merged;
   } catch (error) {
@@ -127,6 +142,145 @@ export function loadAndFlattenConfig(projectRoot: string = process.cwd(), config
 }
 
 /**
+ * Validate database configuration
+ * Ensures database type, connection, and auth settings are correct
+ *
+ * @param config - Database configuration to validate
+ * @returns Validation result with errors if any
+ */
+export function validateDatabaseConfig(
+  config: DatabaseConfig
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  // If path is specified (SQLite), no further validation needed
+  if (config.path) {
+    return { valid: true, errors: [] };
+  }
+
+  // If no type specified and no path, use defaults
+  if (!config.type) {
+    return { valid: true, errors: [] };
+  }
+
+  // Validate database type
+  const validTypes = ['sqlite', 'postgres', 'mysql'];
+  if (!validTypes.includes(config.type)) {
+    errors.push(`database.type must be one of: ${validTypes.join(', ')}`);
+    return { valid: false, errors };
+  }
+
+  // SQLite doesn't need connection or auth
+  if (config.type === 'sqlite') {
+    return { valid: true, errors: [] };
+  }
+
+  // PostgreSQL and MySQL require connection and auth
+  if (!config.connection) {
+    errors.push(`database.connection is required for ${config.type}`);
+  } else {
+    // Validate connection fields
+    if (!config.connection.host) {
+      errors.push('database.connection.host is required');
+    }
+    if (!config.connection.port) {
+      errors.push('database.connection.port is required');
+    } else {
+      const port = config.connection.port;
+      if (port < 1 || port > 65535) {
+        errors.push('database.connection.port must be between 1 and 65535');
+      }
+    }
+    if (!config.connection.database) {
+      errors.push('database.connection.database is required');
+    }
+  }
+
+  if (!config.auth) {
+    errors.push(`database.auth is required for ${config.type}`);
+  } else {
+    // Validate auth type (SSH removed - users must set up tunnels manually)
+    const validAuthTypes = ['direct', 'aws-iam', 'gcp-iam'];
+    if (!validAuthTypes.includes(config.auth.type)) {
+      errors.push(`database.auth.type must be one of: ${validAuthTypes.join(', ')}`);
+    }
+
+    // Validate auth fields based on type
+    if (config.auth.type === 'direct') {
+      if (!config.auth.user) {
+        errors.push('database.auth.user is required for direct authentication');
+      }
+      if (!config.auth.password) {
+        errors.push('database.auth.password is required for direct authentication');
+      }
+    } else if (config.auth.type === 'aws-iam' || config.auth.type === 'gcp-iam') {
+      errors.push(`${config.auth.type} authentication is not yet implemented`);
+    }
+
+    // Validate SSL configuration if present
+    if (config.auth.ssl) {
+      if (config.auth.ssl.rejectUnauthorized !== undefined) {
+        if (typeof config.auth.ssl.rejectUnauthorized !== 'boolean') {
+          errors.push('database.auth.ssl.rejectUnauthorized must be a boolean');
+        }
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Normalize and apply defaults to database configuration
+ *
+ * @param config - Partial database configuration
+ * @returns Complete database configuration with defaults
+ */
+export function normalizeDatabaseConfig(config: DatabaseConfig): DatabaseConfig {
+  // If path is specified, it's SQLite
+  if (config.path) {
+    return { path: config.path };
+  }
+
+  // If no type, use SQLite default
+  if (!config.type) {
+    return {};
+  }
+
+  // SQLite doesn't need connection or auth
+  if (config.type === 'sqlite') {
+    return { type: 'sqlite', path: config.path };
+  }
+
+  // Apply defaults to connection
+  const connection = config.connection ? { ...config.connection } : undefined;
+
+  // Apply defaults to auth
+  let auth = config.auth ? { ...config.auth } : undefined;
+  if (auth) {
+    // Apply SSL defaults
+    if (auth.ssl) {
+      auth = {
+        ...auth,
+        ssl: {
+          rejectUnauthorized: true,
+          ...auth.ssl,
+        },
+      };
+    }
+  }
+
+  return {
+    type: config.type,
+    connection,
+    auth,
+  };
+}
+
+/**
  * Validate configuration values
  * Ensures all values are within acceptable ranges
  *
@@ -135,6 +289,14 @@ export function loadAndFlattenConfig(projectRoot: string = process.cwd(), config
  */
 export function validateConfig(config: SqlewConfig): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
+
+  // Validate database configuration
+  if (config.database) {
+    const dbValidation = validateDatabaseConfig(config.database);
+    if (!dbValidation.valid) {
+      errors.push(...dbValidation.errors);
+    }
+  }
 
   // Validate autodelete settings
   if (config.autodelete) {

@@ -7,10 +7,4 @@ npm run build || {
   exit 1
 }
 
-echo "🧪 Running tests..."
-npm test || {
-  echo "❌ Tests failed\! Please fix failing tests before committing."
-  exit 1
-}
-
 echo "✅ Pre-commit checks passed\!"

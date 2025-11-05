@@ -32,6 +32,24 @@ export interface VCSAdapter {
    * Get the VCS type name (for logging)
    */
   getVCSType(): string;
+
+  /**
+   * Get repository root path
+   * @returns Absolute path to repository root, or null if not a repository
+   */
+  getRepositoryRoot(): Promise<string | null>;
+
+  /**
+   * Get remote repository URL (if available)
+   * @returns Remote URL or null if no remote configured
+   */
+  getRemoteUrl(): Promise<string | null>;
+
+  /**
+   * Extract project name from remote URL or repository
+   * @returns Project name derived from VCS metadata, or null if unable to detect
+   */
+  extractProjectName(): Promise<string | null>;
 }
 
 /**
@@ -85,6 +103,85 @@ export class GitAdapter implements VCSAdapter {
 
   getVCSType(): string {
     return 'Git';
+  }
+
+  /**
+   * Get repository root path using safe git command
+   * Satisfies Constraint #36: Use safe git commands (git rev-parse --show-toplevel)
+   */
+  async getRepositoryRoot(): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync('git rev-parse --show-toplevel', {
+        cwd: this.projectRoot,
+      });
+      return stdout.trim();
+    } catch {
+      // Git command failed gracefully (Constraint #36)
+      return null;
+    }
+  }
+
+  /**
+   * Get remote repository URL using safe git command
+   * Satisfies Constraint #36: Use safe git commands (git config --get remote.origin.url)
+   */
+  async getRemoteUrl(): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync('git config --get remote.origin.url', {
+        cwd: this.projectRoot,
+      });
+      return stdout.trim();
+    } catch {
+      // No remote configured or git command failed gracefully (Constraint #36)
+      return null;
+    }
+  }
+
+  /**
+   * Extract project name from remote URL or repository path
+   * Satisfies Constraint #36: Graceful fallback to directory name
+   *
+   * Parsing logic:
+   * - Git remote URLs (SSH): git@github.com:user/repo.git → repo
+   * - Git remote URLs (HTTPS): https://github.com/user/repo.git → repo
+   * - Git remote URLs (HTTPS): https://github.com/user/repo → repo
+   * - Fallback: Use repository root directory name
+   */
+  async extractProjectName(): Promise<string | null> {
+    try {
+      // Try remote URL first
+      const remoteUrl = await this.getRemoteUrl();
+      if (remoteUrl) {
+        // Remove .git suffix if present
+        const urlWithoutGit = remoteUrl.replace(/\.git$/, '');
+
+        // Extract last path segment (project name)
+        // Handles both SSH (git@github.com:user/repo) and HTTPS (https://github.com/user/repo)
+        const segments = urlWithoutGit.split(/[/:]/);
+        const projectName = segments[segments.length - 1];
+
+        if (projectName && projectName.length > 0) {
+          return projectName;
+        }
+      }
+
+      // Fallback to repository root directory name (Constraint #36)
+      const repoRoot = await this.getRepositoryRoot();
+      if (repoRoot) {
+        const pathSegments = repoRoot.split('/').filter(s => s.length > 0);
+        const dirName = pathSegments[pathSegments.length - 1];
+        if (dirName && dirName.length > 0) {
+          return dirName;
+        }
+      }
+
+      // Final fallback: use current project root directory name
+      const currentDirSegments = this.projectRoot.split('/').filter(s => s.length > 0);
+      return currentDirSegments[currentDirSegments.length - 1] || null;
+    } catch {
+      // Graceful error handling (Constraint #36)
+      return null;
+    }
   }
 }
 
@@ -151,6 +248,46 @@ export class SVNAdapter implements VCSAdapter {
   getVCSType(): string {
     return 'SVN';
   }
+
+  async getRepositoryRoot(): Promise<string | null> {
+    // SVN doesn't have a single command for repository root
+    // Return project root as approximation
+    return this.projectRoot;
+  }
+
+  async getRemoteUrl(): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync('svn info --show-item url', {
+        cwd: this.projectRoot,
+      });
+      return stdout.trim();
+    } catch {
+      return null;
+    }
+  }
+
+  async extractProjectName(): Promise<string | null> {
+    // Extract from SVN URL or directory name
+    try {
+      const url = await this.getRemoteUrl();
+      if (url) {
+        const segments = url.split('/').filter(s => s.length > 0);
+        // Try to find trunk/branches/tags and use parent directory
+        const trunkIndex = segments.indexOf('trunk');
+        if (trunkIndex > 0) {
+          return segments[trunkIndex - 1];
+        }
+        // Otherwise use last segment
+        return segments[segments.length - 1] || null;
+      }
+
+      // Fallback to directory name
+      const pathSegments = this.projectRoot.split('/').filter(s => s.length > 0);
+      return pathSegments[pathSegments.length - 1] || null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 /**
@@ -215,6 +352,49 @@ export class MercurialAdapter implements VCSAdapter {
 
   getVCSType(): string {
     return 'Mercurial';
+  }
+
+  async getRepositoryRoot(): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync('hg root', { cwd: this.projectRoot });
+      return stdout.trim();
+    } catch {
+      return null;
+    }
+  }
+
+  async getRemoteUrl(): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync('hg paths default', {
+        cwd: this.projectRoot,
+      });
+      return stdout.trim();
+    } catch {
+      return null;
+    }
+  }
+
+  async extractProjectName(): Promise<string | null> {
+    // Extract from Mercurial remote URL or directory name
+    try {
+      const url = await this.getRemoteUrl();
+      if (url) {
+        const urlWithoutScheme = url.replace(/^https?:\/\//, '');
+        const segments = urlWithoutScheme.split('/').filter(s => s.length > 0);
+        return segments[segments.length - 1] || null;
+      }
+
+      // Fallback to repository root directory name
+      const repoRoot = await this.getRepositoryRoot();
+      if (repoRoot) {
+        const pathSegments = repoRoot.split('/').filter(s => s.length > 0);
+        return pathSegments[pathSegments.length - 1] || null;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
   }
 }
 

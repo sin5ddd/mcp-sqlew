@@ -16,10 +16,16 @@ import * as path from 'path';
 let debugEnabled = false;
 let debugStream: fs.WriteStream | null = null;
 let currentLogPath: string | null = null;
-let currentLogLevel: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' = 'INFO';
+let currentLogLevel: 'FATAL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' = 'INFO';
 
 // Log level hierarchy (higher number = more verbose)
+// FATAL: System-critical errors (crashes, initialization failures)
+// ERROR: Application errors (user errors, validation failures)
+// WARN: Warnings (deprecated features, non-critical issues)
+// INFO: Informational messages (startup, configuration)
+// DEBUG: Detailed debugging information
 const LOG_LEVELS = {
+  'FATAL': 0,
   'ERROR': 1,
   'WARN': 2,
   'INFO': 3,
@@ -51,7 +57,7 @@ export function initDebugLogger(debugLogPath?: string, logLevel?: string): void 
 
   // Set log level (case-insensitive, default to INFO)
   if (logLevel) {
-    const upperLevel = logLevel.toUpperCase() as 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+    const upperLevel = logLevel.toUpperCase() as 'FATAL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
     if (LOG_LEVELS[upperLevel]) {
       currentLogLevel = upperLevel;
     }
@@ -89,12 +95,21 @@ export function initDebugLogger(debugLogPath?: string, logLevel?: string): void 
 }
 
 /**
- * Write debug log entry
- * @param level - Log level (INFO, WARN, ERROR, DEBUG)
+ * Sanitize string to remove newlines for single-line log format
+ * @param str - String to sanitize
+ * @returns String with newlines replaced by spaces
+ */
+function sanitizeForSingleLine(str: string): string {
+  return str.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Write debug log entry (always single-line format)
+ * @param level - Log level (FATAL, ERROR, WARN, INFO, DEBUG)
  * @param message - Log message
  * @param data - Optional data to log
  */
-export function debugLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, data?: any): void {
+export function debugLog(level: 'FATAL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG', message: string, data?: any): void {
   if (!debugEnabled || !debugStream) {
     return;
   }
@@ -105,13 +120,15 @@ export function debugLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: st
   }
 
   const timestamp = new Date().toISOString();
-  let logEntry = `[${timestamp}] [${level}] ${message}`;
+  // Sanitize message to ensure single-line format
+  const sanitizedMessage = sanitizeForSingleLine(message);
+  let logEntry = `[${timestamp}] [${level}] ${sanitizedMessage}`;
 
   try {
     if (data !== undefined) {
       const dataStr = typeof data === 'string'
-        ? data
-        : JSON.stringify(data);
+        ? sanitizeForSingleLine(data)
+        : sanitizeForSingleLine(JSON.stringify(data));
       logEntry += ` | Data: ${dataStr}`;
     }
 
@@ -141,12 +158,16 @@ export function debugLogToolResponse(toolName: string, action: string, success: 
 
 /**
  * Log error with stack trace
+ * @param context - Error context/description
+ * @param error - Error object or message
+ * @param additionalContext - Additional context data
+ * @param level - Log level (FATAL for system-critical, ERROR for application errors)
  */
-export function debugLogError(context: string, error: any, additionalContext?: any): void {
+export function debugLogError(context: string, error: any, additionalContext?: any, level: 'FATAL' | 'ERROR' = 'ERROR'): void {
   const errorMessage = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error ? error.stack : undefined;
 
-  debugLog('ERROR', `${context}: ${errorMessage}`, {
+  debugLog(level, `${context}: ${errorMessage}`, {
     stack,
     ...additionalContext
   });
