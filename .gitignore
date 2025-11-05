@@ -57,3 +57,4 @@ PHASE*.md
 .sqlew-test/
 
 docker/data/*/
+.tmp-test-*
