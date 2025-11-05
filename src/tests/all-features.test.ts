@@ -4,7 +4,8 @@
  * Tests all tools and actions to detect crashes with proper TypeScript types
  */
 
-import { initializeDatabase, closeDatabase } from '../database.js';
+import { initializeDatabase, closeDatabase, getAdapter } from '../database.js';
+import { ProjectContext } from '../utils/project-context.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -378,10 +379,13 @@ async function testTaskTool() {
     recordResult('task', 'remove_dependency', 'CRASH', error instanceof Error ? error.message : String(error));
   }
 
-  // Test archive action
+  // Test archive action (must move to 'done' first)
   try {
     const start = Date.now();
     if (taskId1) {
+      // First move task to 'done' status (required before archiving)
+      await moveTask({ task_id: taskId1, new_status: 'done' });
+      // Now archive it
       await archiveTask({ task_id: taskId1 });
       recordResult('task', 'archive', 'PASS', undefined, Date.now() - start);
     } else {
@@ -409,7 +413,16 @@ async function runAllTests() {
   // Initialize test database
   try {
     await initializeDatabase({ databaseType: 'sqlite', connection: { filename: TEST_DB_PATH } });
-    log('✅ Database initialized successfully\n');
+    log('✅ Database initialized successfully');
+
+    // Initialize ProjectContext (required after v3.7.0 multi-project migration)
+    const adapter = getAdapter();
+    const knex = adapter.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-project', 'config', {
+      projectRootPath: process.cwd(),
+    });
+    log('✅ ProjectContext initialized\n');
   } catch (error) {
     log(`❌ Failed to initialize database: ${error}`);
     process.exit(1);

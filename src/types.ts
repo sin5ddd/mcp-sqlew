@@ -56,21 +56,18 @@ export enum ChangeType {
 // ============================================================================
 
 /**
- * Structured validation error response for MCP tool parameter validation
- * Used by parameter-validator.ts to provide detailed error information
- * with examples, typo suggestions, and required/optional parameter lists
+ * Concise validation error for MCP tool parameter validation
+ * Designed for token efficiency - references examples via ID instead of embedding full objects
+ *
+ * Example output: "Missing: key, value. See: decision.set"
  */
 export interface ValidationError {
-  error: string;
-  action: string;
-  missing_params?: string[];
-  required_params: string[];
-  optional_params: string[];
-  you_provided: string[];
-  did_you_mean?: Record<string, string>;
-  example: any;
-  hint?: string;
-  need_help?: string;  // Guidance to use action: "use_case" for comprehensive scenarios
+  error: string;                   // Concise error message (e.g., "Missing: key, value")
+  action: string;                  // Action name (e.g., "set")
+  reference: string;               // Reference ID for full docs (e.g., "decision.set")
+  missing?: string[];              // Missing required params (only if present)
+  typos?: Record<string, string>;  // Typo suggestions: provided → correct (only if detected)
+  hint?: string;                   // Short actionable hint from spec
 }
 
 // ============================================================================
@@ -301,6 +298,7 @@ export interface GetContextParams {
   status?: 'active' | 'deprecated' | 'draft';
   scope?: string;
   tag_match?: 'AND' | 'OR';
+  _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
 export interface GetDecisionParams {
@@ -326,6 +324,7 @@ export interface SearchByLayerParams {
   layer: string;
   status?: 'active' | 'deprecated' | 'draft';
   include_tags?: boolean;
+  _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
 export interface SearchAdvancedParams {
@@ -808,22 +807,7 @@ export interface ListTemplatesResponse {
 // Parameter Validation Error Types (MCP Tool Usability Enhancement)
 // ============================================================================
 
-/**
- * Structured validation error for MCP tool parameter validation
- * Used by all tools to provide consistent, helpful error messages
- */
-export interface ValidationError {
-  error: string;
-  action: string;
-  missing_params?: string[];
-  required_params: string[];
-  optional_params: string[];
-  you_provided: string[];
-  did_you_mean?: Record<string, string>;  // Typo suggestions (Levenshtein ≤2)
-  example: any;
-  hint?: string;
-  need_help?: string;  // Guidance to use action: "use_case" for comprehensive scenarios
-}
+// Note: ValidationError interface is defined at the top of this file (lines 58-71)
 
 /**
  * Batch validation error for batch operations
