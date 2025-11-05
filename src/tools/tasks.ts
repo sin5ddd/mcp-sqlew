@@ -1857,6 +1857,7 @@ export function taskHelp(): any {
         limits: {
           max_items: 50
         },
+        note: '⚠️  IMPORTANT: The "tasks" parameter must be a JavaScript array, not a JSON string. MCP tools require pre-parsed objects.',
         example: {
           action: 'batch_create',
           tasks: [

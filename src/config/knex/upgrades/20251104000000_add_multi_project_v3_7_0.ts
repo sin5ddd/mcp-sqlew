@@ -15,10 +15,33 @@
  * 5. Adding indexes for multi-project queries
  * 6. Recreating all views with project_id support
  *
+ * Migration Steps:
+ * - STEP 1: Create m_projects table
+ * - STEP 2: Drop all views and triggers before modifications
+ * - STEP 3: Add project_id via ALTER TABLE (10 tables)
+ * - STEP 4: Fix PRIMARY KEY constraints (composite keys)
+ *   - STEP 4a-4b: Recreate t_decisions tables with composite PRIMARY KEY
+ *   - STEP 4.5: Recreate t_task_tags with composite PRIMARY KEY
+ *   - STEP 4.6: Recreate t_task_dependencies with composite PRIMARY KEY
+ *   - STEP 4.7: Recreate t_task_details with project_id (ALTER TABLE fails due to FK constraints)
+ *   - STEP 4.8: Recreate t_task_file_links with project_id (ALTER TABLE fails due to FK constraints)
+ *   - STEP 4.9: Recreate t_task_decision_links with project_id (ALTER TABLE fails due to FK constraints)
+ * - STEP 5: Recreate m_config table
+ * - STEP 6: Create composite indexes
+ * - STEP 7: Recreate all views with project_id support
+ * - STEP 8: Re-enable foreign key constraints
+ *
+ * SQLite Limitation Note:
+ * ALTER TABLE cannot modify tables with complex FOREIGN KEY constraints (ON DELETE CASCADE).
+ * Tables requiring recreation: t_task_details, t_task_tags, t_task_file_links,
+ * t_task_decision_links, t_task_dependencies.
+ *
  * Satisfies Constraints:
  * - #22 (CRITICAL): All transaction tables have project_id
  * - #23 (CRITICAL): m_projects table with name/detection_source
  * - #39 (HIGH): Composite indexes with project_id first
+ * - #41 (HIGH): t_task_tags composite PRIMARY KEY
+ * - #42 (HIGH): t_task_dependencies composite PRIMARY KEY
  */
 
 import type { Knex } from 'knex';
@@ -126,6 +149,7 @@ export async function up(knex: Knex): Promise<void> {
 
   // Transaction tables that need project_id
   // Note: t_decision_context is handled separately in Step 4 (after PRIMARY KEY fix)
+  // Note: t_task_details, t_task_tags, t_task_dependencies are recreated in Steps 4.5-4.7 (need table recreation for constraints)
   const transactionTables = [
     't_decision_history',
     't_decision_tags',
@@ -133,11 +157,11 @@ export async function up(knex: Knex): Promise<void> {
     't_file_changes',
     't_constraints',
     't_tasks',
-    't_task_details',
-    't_task_tags',
+    // 't_task_details', // Handled in STEP 4.7 (needs table recreation)
+    // 't_task_tags', // Handled in STEP 4.5 (composite PRIMARY KEY)
     't_task_file_links',
     't_task_decision_links',
-    't_task_dependencies',
+    // 't_task_dependencies', // Handled in STEP 4.6 (composite PRIMARY KEY)
     't_activity_log', // Required for stats.clear to filter by project_id
   ];
 
@@ -379,6 +403,172 @@ export async function up(knex: Knex): Promise<void> {
     console.log(`✓ Recreated t_task_dependencies with composite PRIMARY KEY (${taskDepsData.length} rows)`);
   } else {
     console.log('✓ t_task_dependencies PRIMARY KEY already correct, skipping');
+  }
+
+  // ============================================================================
+  // STEP 4.7: Fix t_task_details - Add project_id with table recreation
+  // ============================================================================
+
+  // t_task_details needs project_id but ALTER TABLE may fail due to foreign key constraints
+  // Recreate table to ensure proper schema
+  const taskDetailsHasProjectId = await knex.schema.hasColumn('t_task_details', 'project_id');
+
+  if (!taskDetailsHasProjectId) {
+    console.log('🔄 Adding project_id to t_task_details (table recreation)...');
+
+    // Backup existing data
+    const taskDetailsData = await knex('t_task_details').select('*');
+
+    // Get project_id mapping from t_tasks
+    const tasksWithProjects = await knex('t_tasks')
+      .select('id', 'project_id')
+      .whereIn('id', taskDetailsData.map((row: any) => row.task_id));
+
+    const projectMap = new Map(tasksWithProjects.map((t: any) => [t.id, t.project_id]));
+
+    // Drop and recreate table with project_id
+    await knex.schema.dropTableIfExists('t_task_details');
+    await knex.schema.createTable('t_task_details', (table) => {
+      table.integer('task_id').primary();
+      table.integer('project_id').unsigned().notNullable().defaultTo(defaultProjectId);
+      table.text('description');
+      table.text('acceptance_criteria');
+      table.text('notes');
+      table.text('acceptance_criteria_json');
+
+      // Foreign keys
+      table.foreign('task_id').references('id').inTable('t_tasks').onDelete('CASCADE');
+      table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
+
+      // Index for project-scoped queries
+      table.index(['project_id', 'task_id'], 'idx_task_details_project');
+    });
+
+    // Restore data with project_id from parent tasks
+    if (taskDetailsData.length > 0) {
+      await knex('t_task_details').insert(
+        taskDetailsData.map((row: any) => ({
+          ...row,
+          project_id: projectMap.get(row.task_id) || defaultProjectId,
+        }))
+      );
+    }
+
+    console.log(`✓ Recreated t_task_details with project_id (${taskDetailsData.length} rows)`);
+  } else {
+    console.log('✓ t_task_details already has project_id, skipping');
+  }
+
+  // ============================================================================
+  // STEP 4.8: Fix t_task_file_links - Add project_id with table recreation
+  // ============================================================================
+
+  // t_task_file_links needs project_id but ALTER TABLE may fail due to foreign key constraints
+  // Recreate table to ensure proper schema
+  const taskFileLinksHasProjectId = await knex.schema.hasColumn('t_task_file_links', 'project_id');
+
+  if (!taskFileLinksHasProjectId) {
+    console.log('🔄 Adding project_id to t_task_file_links (table recreation)...');
+
+    // Backup existing data
+    const taskFileLinksData = await knex('t_task_file_links').select('*');
+
+    // Get project_id mapping from t_tasks
+    const tasksWithProjects2 = await knex('t_tasks')
+      .select('id', 'project_id')
+      .whereIn('id', taskFileLinksData.map((row: any) => row.task_id));
+
+    const projectMap2 = new Map(tasksWithProjects2.map((t: any) => [t.id, t.project_id]));
+
+    // Drop and recreate table with project_id
+    await knex.schema.dropTableIfExists('t_task_file_links');
+    await knex.schema.createTable('t_task_file_links', (table) => {
+      table.increments('id').primary();
+      table.integer('task_id').unsigned().notNullable();
+      table.integer('file_id').unsigned().notNullable();
+      table.integer('project_id').unsigned().notNullable().defaultTo(defaultProjectId);
+      table.integer('linked_ts').notNullable();
+
+      // Foreign keys
+      table.foreign('task_id').references('id').inTable('t_tasks').onDelete('CASCADE');
+      table.foreign('file_id').references('id').inTable('m_files');
+      table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
+
+      // Indexes
+      table.index('task_id', 'idx_task_file_links_task');
+      table.index(['project_id', 'task_id'], 'idx_task_file_links_project');
+    });
+
+    // Restore data with project_id from parent tasks
+    if (taskFileLinksData.length > 0) {
+      await knex('t_task_file_links').insert(
+        taskFileLinksData.map((row: any) => ({
+          ...row,
+          project_id: projectMap2.get(row.task_id) || defaultProjectId,
+        }))
+      );
+    }
+
+    console.log(`✓ Recreated t_task_file_links with project_id (${taskFileLinksData.length} rows)`);
+  } else {
+    console.log('✓ t_task_file_links already has project_id, skipping');
+  }
+
+  // ============================================================================
+  // STEP 4.9: Fix t_task_decision_links - Add project_id with table recreation
+  // ============================================================================
+
+  // t_task_decision_links needs project_id but ALTER TABLE may fail due to foreign key constraints
+  // Recreate table to ensure proper schema
+  const taskDecisionLinksHasProjectId = await knex.schema.hasColumn('t_task_decision_links', 'project_id');
+
+  if (!taskDecisionLinksHasProjectId) {
+    console.log('🔄 Adding project_id to t_task_decision_links (table recreation)...');
+
+    // Backup existing data
+    const taskDecisionLinksData = await knex('t_task_decision_links').select('*');
+
+    // Get project_id mapping from t_tasks
+    const tasksWithProjects3 = await knex('t_tasks')
+      .select('id', 'project_id')
+      .whereIn('id', taskDecisionLinksData.map((row: any) => row.task_id));
+
+    const projectMap3 = new Map(tasksWithProjects3.map((t: any) => [t.id, t.project_id]));
+
+    // Drop and recreate table with project_id
+    await knex.schema.dropTableIfExists('t_task_decision_links');
+    await knex.schema.createTable('t_task_decision_links', (table) => {
+      table.increments('id').primary();
+      table.integer('task_id').unsigned().notNullable();
+      table.integer('decision_key_id').unsigned().notNullable();
+      table.integer('project_id').unsigned().notNullable().defaultTo(defaultProjectId);
+      table.text('link_type').defaultTo('implements');
+      table.integer('linked_ts').notNullable();
+
+      // Foreign keys
+      table.foreign('task_id').references('id').inTable('t_tasks').onDelete('CASCADE');
+      table.foreign('decision_key_id').references('id').inTable('m_context_keys');
+      table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
+
+      // Indexes
+      table.index('task_id', 'idx_task_decision_links_task');
+      table.index('decision_key_id', 'idx_task_decision_links_decision');
+      table.index(['project_id', 'task_id'], 'idx_task_decision_links_project');
+    });
+
+    // Restore data with project_id from parent tasks
+    if (taskDecisionLinksData.length > 0) {
+      await knex('t_task_decision_links').insert(
+        taskDecisionLinksData.map((row: any) => ({
+          ...row,
+          project_id: projectMap3.get(row.task_id) || defaultProjectId,
+        }))
+      );
+    }
+
+    console.log(`✓ Recreated t_task_decision_links with project_id (${taskDecisionLinksData.length} rows)`);
+  } else {
+    console.log('✓ t_task_decision_links already has project_id, skipping');
   }
 
   // ============================================================================

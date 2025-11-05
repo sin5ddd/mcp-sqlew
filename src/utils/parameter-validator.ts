@@ -280,7 +280,20 @@ export function validateBatchParams(
 ): void {
   // Check if batch parameter exists and is an array
   if (!items || !Array.isArray(items)) {
-    throw new Error(`Parameter "${batchParamName}" is required and must be an array`);
+    // Detect if a JSON string was passed instead of a parsed object
+    const itemsAsAny = items as any;
+    if (typeof itemsAsAny === 'string' && (itemsAsAny.trim().startsWith('[') || itemsAsAny.trim().startsWith('{'))) {
+      throw new Error(
+        `Parameter "${batchParamName}" received as JSON string instead of parsed array. ` +
+        `MCP tools require pre-parsed JSON objects, not stringified JSON. ` +
+        `The parameter must be a JavaScript array/object, not a string. ` +
+        `Received type: ${typeof itemsAsAny}`
+      );
+    }
+    throw new Error(
+      `Parameter "${batchParamName}" is required and must be an array. ` +
+      `Received type: ${typeof itemsAsAny}`
+    );
   }
 
   // Check array is not empty
