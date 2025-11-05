@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.2] - 2025-11-05
+
+### Changed - Enhanced Sub-Agent Templates
+
+**Improved specialized agent templates for more efficient sqlew usage**
+
+#### Sub-Agent Template Updates
+- **sqlew-scrum-master.md** - Enhanced multi-agent coordination and task management workflows
+- **sqlew-researcher.md** - Improved decision querying and context analysis patterns
+- **sqlew-architect.md** - Enhanced decision documentation and constraint enforcement workflows
+
+#### New Documentation
+- **docs/SPECIALIZED_AGENTS.md** - Comprehensive guide for specialized agents
+  - Installation and configuration instructions
+  - Usage examples for each agent
+  - Token optimization guidelines
+  - Agent comparison and capability matrix
+  - Integration patterns
+  - Troubleshooting guide
+
+#### SQL Dump Enhancements
+- Added type conversion testing (`src/tests/type-conversion.test.ts`)
+- Enhanced SQL dump converters for better type handling
+- Improved SQL dump utilities with expanded functionality
+
+### Fixed - Git LFS PNG Display Issue
+
+**Removed Git LFS tracking for PNG files to fix GitHub display**
+
+#### Problem
+- PNG files were tracked with Git LFS, causing display issues on GitHub
+- Users without Git LFS saw ASCII pointers instead of images
+- README images were not rendering properly
+
+#### Solution
+- Removed `*.png filter=lfs diff=lfs merge=lfs -text` from .gitattributes
+- Restored actual PNG binary files from pre-LFS commits
+- All PNG images now display correctly on GitHub without requiring Git LFS
+
+#### Impact
+- ✅ **Better agent templates** - More efficient sqlew usage patterns
+- ✅ **Comprehensive documentation** - Clear installation and usage guides
+- ✅ **Improved type handling** - Better SQL dump type conversion
+- ✅ **Fixed GitHub display** - PNG images now render properly without Git LFS
+- ✅ **Token efficient** - Optimized agent workflows reduce unnecessary tool calls
+
+---
+
 ## [3.7.1] - 2025-11-05
 
 ### Fixed - Error Message Visibility
