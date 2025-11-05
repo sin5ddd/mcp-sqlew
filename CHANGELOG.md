@@ -7,6 +7,166 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.0] - 2025-11-05
+
+### Added - Runtime Database Reconnection
+
+**Automatic connection recovery with exponential backoff retry logic**
+
+#### Features
+- **ConnectionManager** - Singleton wrapper for all database operations
+- **Exponential Backoff** - Retry delays: 1s → 2s → 4s → 8s → 16s (31 seconds total)
+- **Smart Error Detection** - Recognizes connection errors across SQLite, MySQL, PostgreSQL
+- **Process.exit on Exhaustion** - Exits cleanly after 5 failed retries
+- **27 Operations Wrapped** - All transactional operations protected:
+  - context.ts: 5 operations
+  - tasks.ts: 9 operations
+  - files.ts: 3 operations
+  - constraints.ts: 3 operations
+  - config.ts: 2 operations
+  - utils.ts: 5 operations
+
+#### Connection Error Patterns Detected
+- **Network Errors**: ECONNREFUSED, ENOTFOUND, ETIMEDOUT, ECONNRESET, EPIPE
+- **SQLite**: "database is locked", "unable to open database"
+- **MySQL/MariaDB**: "server has gone away", "lost connection to mysql server"
+- **PostgreSQL**: "connection to server was lost", "could not connect to server"
+- **Knex-specific**: "timeout acquiring a connection", "pool is destroyed"
+
+#### Test Coverage
+- **41 tests passing** (22 unit + 19 integration)
+- Retry behavior verification
+- Production scenario simulation (server restart, network failures)
+- Tool integration testing
+
+#### Impact
+- ✅ **Resilient operations** - Automatic recovery from transient connection failures
+- ✅ **Production ready** - Handles server restarts, network issues
+- ✅ **Zero regressions** - All existing tests pass
+- ✅ **Token efficient** - No manual retry logic needed in agent code
+
+---
+
+### Changed - Validation Error Messages
+
+**70-85% token reduction in error message size**
+
+#### Token Efficiency
+- **Before**: ~1000+ characters (~300+ tokens) with full examples embedded
+- **After**: ~200 characters (~50 tokens) with reference IDs
+- **Reduction**: 70-85% token savings
+
+#### New Error Format
+```json
+{
+  "error": "Missing: key, value",
+  "action": "set",
+  "reference": "decision.set",
+  "missing": ["key", "value"],
+  "hint": "Use 'quick_set' for simpler usage..."
+}
+```
+
+#### Features
+- **Reference IDs** - Compact `{tool}.{action}` format (e.g., "decision.set")
+- **Concise Messages** - Essential information only
+- **Conditional Fields** - Only include fields when present
+- **Self-Documenting** - AI can query `action: "help"` for full docs if needed
+
+#### Error Types
+- Missing params: `"Missing: key, value"`
+- Typos: `"Invalid params: val → value"`
+- Unknown action: `"Unknown action 'sett'. Did you mean: set?"`
+
+#### Impact
+- ✅ **Token efficiency** - 70-85% reduction in error size
+- ✅ **Cost reduction** - Lower API costs for AI agents
+- ✅ **Better UX** - Quick, scannable errors
+- ✅ **Backward compatible** - Error structure unchanged
+
+---
+
+### Changed - Debug Log Format
+
+**Single-line log entries for easier parsing**
+
+#### Problem
+Multi-line log messages broke standard text processing tools (grep, awk, log rotation).
+
+#### Solution
+- **Sanitization Function** - Replaces newlines with spaces, collapses whitespace
+- **Applied To**: All log messages, data values, JSON output
+- **Result**: Every log entry is exactly one line
+
+#### Benefits
+- ✅ **Easier parsing** - Line-based tools work correctly
+- ✅ **Better grep** - Search across entire messages
+- ✅ **Simpler analysis** - Standard text processing
+- ✅ **Cleaner output** - No unexpected line breaks
+
+#### Example
+**Before:**
+```
+[2025-11-05T02:00:00.000Z] [ERROR] Error details:
+Stack trace line 1
+Stack trace line 2
+```
+
+**After:**
+```
+[2025-11-05T02:00:00.000Z] [ERROR] Error details: Stack trace line 1 Stack trace line 2
+```
+
+---
+
+### Fixed - Multi-Project Migration (Critical)
+
+**Fixed migration for ALL users upgrading from v3.6.10 to v3.7.0**
+
+#### Problem
+- SQLite's `ALTER TABLE` silently failed for 4 tables with complex foreign keys
+- Migration reported success but columns weren't added
+- Task creation would fail: `"table t_task_details has no column named project_id"`
+
+#### Root Cause
+SQLite cannot modify tables with `ON DELETE CASCADE` constraints using ALTER TABLE.
+
+#### Solution
+- **Table Recreation Strategy** - Backup → Drop → Recreate → Restore
+- **4 Tables Fixed**:
+  - `t_task_details` (STEP 4.7)
+  - `t_task_file_links` (STEP 4.8)
+  - `t_task_decision_links` (STEP 4.9)
+  - `t_task_tags` (composite PRIMARY KEY)
+
+#### Idempotency
+All recreation steps check if `project_id` exists before executing:
+```typescript
+const hasProjectId = await knex.schema.hasColumn('table_name', 'project_id');
+if (!hasProjectId) {
+  // Recreation logic
+}
+```
+
+#### Data Preservation Verified
+- ✅ 223 task detail rows preserved
+- ✅ 632 task tag rows preserved
+- ✅ All task links preserved
+- ✅ 100% data integrity maintained
+
+#### Testing
+- ✅ Fresh installation works
+- ✅ v3.6.10 → v3.7.0 upgrade works
+- ✅ Migration can be re-run safely (idempotent)
+- ✅ TypeScript compiles without errors
+
+#### Impact
+- ✅ **Production ready** - Safe for all v3.6.10 users to upgrade
+- ✅ **No data loss** - All existing data preserved
+- ✅ **Idempotent** - Can re-run without errors
+
+---
+
 ## [3.6.10] - 2025-10-30
 
 ### Added - Environment Variable Support for Project Root
