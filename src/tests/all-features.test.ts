@@ -379,10 +379,13 @@ async function testTaskTool() {
     recordResult('task', 'remove_dependency', 'CRASH', error instanceof Error ? error.message : String(error));
   }
 
-  // Test archive action
+  // Test archive action (must move to 'done' first)
   try {
     const start = Date.now();
     if (taskId1) {
+      // First move task to 'done' status (required before archiving)
+      await moveTask({ task_id: taskId1, new_status: 'done' });
+      // Now archive it
       await archiveTask({ task_id: taskId1 });
       recordResult('task', 'archive', 'PASS', undefined, Date.now() - start);
     } else {

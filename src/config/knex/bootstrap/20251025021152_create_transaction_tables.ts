@@ -256,12 +256,12 @@ export async function up(knex: Knex): Promise<void> {
   // Task Dependencies (v3.2.0) - with CASCADE delete
   if (!(await knex.schema.hasTable('t_task_dependencies'))) {
     await knex.schema.createTable('t_task_dependencies', (table) => {
-      table.integer('task_id').unsigned();
-      table.integer('depends_on_task_id').unsigned();
+      table.integer('blocker_task_id').unsigned();
+      table.integer('blocked_task_id').unsigned();
       table.integer('created_ts').notNullable();
-      table.primary(['task_id', 'depends_on_task_id']);
-      table.foreign('task_id').references('t_tasks.id').onDelete('CASCADE');
-      table.foreign('depends_on_task_id').references('t_tasks.id').onDelete('CASCADE');
+      table.primary(['blocker_task_id', 'blocked_task_id']);
+      table.foreign('blocker_task_id').references('t_tasks.id').onDelete('CASCADE');
+      table.foreign('blocked_task_id').references('t_tasks.id').onDelete('CASCADE');
     });
   }
 

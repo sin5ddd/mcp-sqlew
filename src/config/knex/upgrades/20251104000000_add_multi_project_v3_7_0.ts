@@ -138,6 +138,7 @@ export async function up(knex: Knex): Promise<void> {
     't_task_file_links',
     't_task_decision_links',
     't_task_dependencies',
+    't_activity_log', // Required for stats.clear to filter by project_id
   ];
 
   for (const tableName of transactionTables) {
@@ -285,6 +286,99 @@ export async function up(knex: Knex): Promise<void> {
     }
   } else {
     console.log('✓ PRIMARY KEY constraints already fixed, skipping');
+  }
+
+  // ============================================================================
+  // STEP 4.5: Fix t_task_tags PRIMARY KEY (Constraint #41)
+  // ============================================================================
+
+  // t_task_tags needs composite PRIMARY KEY (project_id, task_id, tag_id)
+  // to support ON CONFLICT clause for multi-project tag insertion
+
+  const taskTagsHasCorrectPK = await knex.raw(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='t_task_tags'`
+  ).then((result: any) => {
+    const createSql = result[0]?.sql || '';
+    return createSql.includes('PRIMARY KEY (project_id, task_id, tag_id)') ||
+           createSql.includes('PRIMARY KEY(project_id, task_id, tag_id)');
+  });
+
+  if (!taskTagsHasCorrectPK) {
+    console.log('🔄 Fixing t_task_tags PRIMARY KEY to include project_id...');
+
+    // Backup existing data
+    const taskTagsData = await knex('t_task_tags').select('*');
+
+    // Drop and recreate table with correct PRIMARY KEY
+    await knex.schema.dropTableIfExists('t_task_tags');
+    await knex.schema.createTable('t_task_tags', (table) => {
+      table.integer('project_id').unsigned().notNullable().defaultTo(defaultProjectId);
+      table.integer('task_id').unsigned().notNullable();
+      table.integer('tag_id').unsigned().notNullable();
+
+      // Composite PRIMARY KEY with project_id first
+      table.primary(['project_id', 'task_id', 'tag_id']);
+
+      // Foreign keys
+      table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
+      table.foreign('task_id').references('id').inTable('t_tasks').onDelete('CASCADE');
+      table.foreign('tag_id').references('id').inTable('m_tags');
+    });
+
+    // Restore data with project_id
+    if (taskTagsData.length > 0) {
+      await knex('t_task_tags').insert(
+        taskTagsData.map((row: any) => ({
+          ...row,
+          project_id: row.project_id || defaultProjectId,
+        }))
+      );
+    }
+
+    console.log(`✓ Recreated t_task_tags with composite PRIMARY KEY (${taskTagsData.length} rows)`);
+  } else {
+    console.log('✓ t_task_tags PRIMARY KEY already correct, skipping');
+  }
+
+  // STEP 4.6: Fix t_task_dependencies PRIMARY KEY (Constraint #42)
+  // PRIMARY KEY must be (project_id, blocker_task_id, blocked_task_id) for multi-project support
+  const taskDepsHasCorrectPK = await knex.raw(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='t_task_dependencies'`
+  ).then((result: any) => {
+    const createSql = result[0]?.sql || '';
+    return createSql.includes('PRIMARY KEY (project_id, blocker_task_id, blocked_task_id)') ||
+           createSql.includes('PRIMARY KEY(project_id, blocker_task_id, blocked_task_id)');
+  });
+
+  if (!taskDepsHasCorrectPK) {
+    console.log('🔄 Fixing t_task_dependencies PRIMARY KEY to include project_id...');
+    const taskDepsData = await knex('t_task_dependencies').select('*');
+
+    await knex.schema.dropTableIfExists('t_task_dependencies');
+    await knex.schema.createTable('t_task_dependencies', (table) => {
+      table.integer('project_id').unsigned().notNullable().defaultTo(defaultProjectId);
+      table.integer('blocker_task_id').unsigned().notNullable();
+      table.integer('blocked_task_id').unsigned().notNullable();
+      table.integer('created_ts').notNullable();
+      table.primary(['project_id', 'blocker_task_id', 'blocked_task_id']);
+      table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
+      table.foreign('blocker_task_id').references('id').inTable('t_tasks').onDelete('CASCADE');
+      table.foreign('blocked_task_id').references('id').inTable('t_tasks').onDelete('CASCADE');
+      table.index('blocked_task_id', 'idx_task_deps_blocked');
+    });
+
+    if (taskDepsData.length > 0) {
+      await knex('t_task_dependencies').insert(
+        taskDepsData.map((row: any) => ({
+          ...row,
+          project_id: row.project_id || defaultProjectId,
+        }))
+      );
+    }
+
+    console.log(`✓ Recreated t_task_dependencies with composite PRIMARY KEY (${taskDepsData.length} rows)`);
+  } else {
+    console.log('✓ t_task_dependencies PRIMARY KEY already correct, skipping');
   }
 
   // ============================================================================

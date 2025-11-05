@@ -95,7 +95,16 @@ export function initDebugLogger(debugLogPath?: string, logLevel?: string): void 
 }
 
 /**
- * Write debug log entry
+ * Sanitize string to remove newlines for single-line log format
+ * @param str - String to sanitize
+ * @returns String with newlines replaced by spaces
+ */
+function sanitizeForSingleLine(str: string): string {
+  return str.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Write debug log entry (always single-line format)
  * @param level - Log level (FATAL, ERROR, WARN, INFO, DEBUG)
  * @param message - Log message
  * @param data - Optional data to log
@@ -111,13 +120,15 @@ export function debugLog(level: 'FATAL' | 'ERROR' | 'WARN' | 'INFO' | 'DEBUG', m
   }
 
   const timestamp = new Date().toISOString();
-  let logEntry = `[${timestamp}] [${level}] ${message}`;
+  // Sanitize message to ensure single-line format
+  const sanitizedMessage = sanitizeForSingleLine(message);
+  let logEntry = `[${timestamp}] [${level}] ${sanitizedMessage}`;
 
   try {
     if (data !== undefined) {
       const dataStr = typeof data === 'string'
-        ? data
-        : JSON.stringify(data);
+        ? sanitizeForSingleLine(data)
+        : sanitizeForSingleLine(JSON.stringify(data));
       logEntry += ` | Data: ${dataStr}`;
     }
 

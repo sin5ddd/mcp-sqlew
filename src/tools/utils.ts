@@ -86,6 +86,12 @@ export async function clearOldData(
     // Get current project ID (Constraint #40 - respect project boundaries)
     const projectId = getProjectContext().getProjectId();
 
+    // Calculate cutoff threshold BEFORE starting transaction to avoid connection pool deadlock
+    // (calculateFileChangeCutoff queries m_config table, which would try to acquire a second connection)
+    const fileChangesThreshold = params?.file_changes_older_than_days === undefined
+      ? await calculateFileChangeCutoff(actualAdapter)
+      : null;
+
     return await actualAdapter.transaction(async (trx) => {
       let messagesDeleted = 0;
       let fileChangesDeleted = 0;
@@ -104,18 +110,18 @@ export async function clearOldData(
         activityLogsDeleted = result.activityLogsDeleted;
       } else {
         // No parameters: use config-based weekend-aware retention
-        const fileChangesThreshold = await calculateFileChangeCutoff(actualAdapter);
+        // (threshold already calculated above, before transaction started)
 
         // Delete file changes (project-scoped)
         fileChangesDeleted = await trx('t_file_changes')
           .where('project_id', projectId)
-          .where('ts', '<', fileChangesThreshold)
+          .where('ts', '<', fileChangesThreshold!)
           .delete();
 
         // Delete activity logs (uses same threshold as file changes, project-scoped)
         activityLogsDeleted = await trx('t_activity_log')
           .where('project_id', projectId)
-          .where('ts', '<', fileChangesThreshold)
+          .where('ts', '<', fileChangesThreshold!)
           .delete();
       }
 
