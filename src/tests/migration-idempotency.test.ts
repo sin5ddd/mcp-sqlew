@@ -2,6 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import knex, { Knex } from 'knex';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import fs from 'fs/promises';
 
 /**
@@ -89,7 +90,7 @@ describe('Migration Idempotency Tests', () => {
         `${migrationName}.js`
       );
 
-      const migration = await import(migrationPath);
+      const migration = await import(pathToFileURL(migrationPath).href);
       await migration.up(db);
       console.log(`      ✓ Applied ${migrationName} (1st run)`);
     }
@@ -105,7 +106,7 @@ describe('Migration Idempotency Tests', () => {
 
       // Clear require cache to force re-import
       const cacheBuster = `?t=${Date.now()}`;
-      const migration = await import(migrationPath + cacheBuster);
+      const migration = await import(pathToFileURL(migrationPath).href + cacheBuster);
 
       // Should not throw errors
       await migration.up(db);
@@ -159,7 +160,7 @@ describe('Migration Idempotency Tests', () => {
         `${migrationName}.js`
       );
 
-      const migration = await import(migrationPath);
+      const migration = await import(pathToFileURL(migrationPath).href);
       await migration.up(db);
       console.log(`      ✓ Applied ${migrationName} (1st run)`);
     }
@@ -175,7 +176,7 @@ describe('Migration Idempotency Tests', () => {
 
       // Clear require cache
       const cacheBuster = `?t=${Date.now()}`;
-      const migration = await import(migrationPath + cacheBuster);
+      const migration = await import(pathToFileURL(migrationPath).href + cacheBuster);
 
       // Should not throw errors (this is where user's errors occurred)
       await migration.up(db);
@@ -217,7 +218,7 @@ describe('Migration Idempotency Tests', () => {
         `${migrationName}.js`
       );
 
-      const migration = await import(migrationPath);
+      const migration = await import(pathToFileURL(migrationPath).href);
       await migration.up(db);
       console.log(`      ✓ Applied ${migrationName} (1st run)`);
     }
@@ -233,7 +234,7 @@ describe('Migration Idempotency Tests', () => {
 
       // Clear require cache
       const cacheBuster = `?t=${Date.now()}`;
-      const migration = await import(migrationPath + cacheBuster);
+      const migration = await import(pathToFileURL(migrationPath).href + cacheBuster);
 
       // Should not throw errors
       await migration.up(db);
@@ -326,7 +327,7 @@ describe('Migration Idempotency Tests', () => {
       );
 
       const cacheBuster = `?t=${Date.now()}`;
-      const migration = await import(migrationPath + cacheBuster);
+      const migration = await import(pathToFileURL(migrationPath).href + cacheBuster);
 
       // Should not throw errors - idempotency checks should skip existing objects
       await migration.up(db);
@@ -386,7 +387,7 @@ describe('Migration Idempotency Tests', () => {
       );
 
       const cacheBuster = `?t=${Date.now()}`;
-      const migration = await import(migrationPath + cacheBuster);
+      const migration = await import(pathToFileURL(migrationPath).href + cacheBuster);
       await migration.up(db);
     }
 
@@ -422,7 +423,7 @@ describe('Migration Idempotency Tests', () => {
         `${name}.js`
       );
 
-      const migration = await import(migrationPath);
+      const migration = await import(pathToFileURL(migrationPath).href);
 
       // Run down() first time
       await migration.down(db);
@@ -430,7 +431,7 @@ describe('Migration Idempotency Tests', () => {
 
       // Run down() second time - should skip existing objects
       const cacheBuster = `?t=${Date.now()}`;
-      const migration2 = await import(migrationPath + cacheBuster);
+      const migration2 = await import(pathToFileURL(migrationPath).href + cacheBuster);
       await migration2.down(db);
       console.log(`      ✓ Re-ran rollback ${name} (2nd run - idempotent)`);
 

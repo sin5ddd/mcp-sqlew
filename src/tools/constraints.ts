@@ -114,7 +114,7 @@ export async function addConstraint(
           // Parse tags (handles both arrays and JSON strings from MCP)
           const tags = parseStringArray(params.tags);
           for (const tagName of tags) {
-            const tagId = await getOrCreateTag(actualAdapter, tagName, trx);
+            const tagId = await getOrCreateTag(actualAdapter, projectId, tagName, trx);  // v3.7.3: pass projectId
             await trx('t_constraint_tags').insert({
               constraint_id: Number(constraintId),
               tag_id: tagId

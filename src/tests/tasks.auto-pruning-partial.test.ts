@@ -345,7 +345,7 @@ async function addWatchedFiles(
   for (const filePath of filePaths) {
     // Extract just the filename (last segment) for relative paths
     const fileName = path.basename(filePath);
-    const fileId = await getOrCreateFile(db, fileName);
+    const fileId = await getOrCreateFile(db, 1, fileName);
 
     await knex('t_task_file_links')
       .insert({

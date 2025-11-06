@@ -97,7 +97,7 @@ async function watchFilesAction(db: DatabaseAdapter, params: {
 
     const addedFiles: string[] = [];
     for (const filePath of params.file_paths) {
-      const fileId = await getOrCreateFile(db, filePath);
+      const fileId = await getOrCreateFile(db, 1, filePath);
 
       // Try to insert, check if row was actually inserted
       const rowsBefore = await knex('t_task_file_links')

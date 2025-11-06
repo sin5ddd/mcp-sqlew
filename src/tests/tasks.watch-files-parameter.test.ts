@@ -74,7 +74,7 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   const watchedFiles: string[] = [];
   if (params.watch_files && params.watch_files.length > 0) {
     for (const filePath of params.watch_files) {
-      const fileId = await getOrCreateFile(adapter, filePath);
+      const fileId = await getOrCreateFile(adapter, 1, filePath);
       await knex('t_task_file_links').insert({
         task_id: taskId,
         file_id: fileId
@@ -108,7 +108,7 @@ async function updateTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   const watchedFiles: string[] = [];
   if (params.watch_files && params.watch_files.length > 0) {
     for (const filePath of params.watch_files) {
-      const fileId = await getOrCreateFile(adapter, filePath);
+      const fileId = await getOrCreateFile(adapter, 1, filePath);
       await knex('t_task_file_links').insert({
         task_id: params.task_id,
         file_id: fileId
