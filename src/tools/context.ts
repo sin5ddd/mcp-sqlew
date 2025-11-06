@@ -208,7 +208,7 @@ async function setDecisionInternal(
 
     // Insert new tags
     for (const tagName of tags) {
-      const tagId = await getOrCreateTag(adapter, tagName, trx);
+      const tagId = await getOrCreateTag(adapter, projectId, tagName, trx);  // v3.7.3: pass projectId
       await knex('t_decision_tags').insert({
         decision_key_id: keyId,
         tag_id: tagId,
@@ -229,7 +229,7 @@ async function setDecisionInternal(
 
     // Insert new scopes
     for (const scopeName of scopes) {
-      const scopeId = await getOrCreateScope(adapter, scopeName, trx);
+      const scopeId = await getOrCreateScope(adapter, projectId, scopeName, trx);  // v3.7.3: pass projectId
       await knex('t_decision_scopes').insert({
         decision_key_id: keyId,
         scope_id: scopeId,

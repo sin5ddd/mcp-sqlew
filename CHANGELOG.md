@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.3] - 2025-11-06
+
+### Fixed - Master Tables Namespace Collision Bug
+
+**Critical bug fix for incomplete multi-project support in v3.7.0-v3.7.2**
+
+#### Problem
+- Master tables (m_files, m_tags, m_scopes) lacked `project_id` columns in v3.7.0-v3.7.2
+- This caused **namespace collisions** where identical file paths/tag names/scope names from different projects would conflict
+- Example: "src/index.ts" from ProjectA would collide with ProjectB's "src/index.ts"
+- Users upgrading from v3.6.x would have fake project name "default-project" instead of detected real name
+
+#### Solution
+- **20251106000000_fix_master_tables_project_id_v3_7_3.ts** - Comprehensive migration that:
+  1. **Data Consolidation** - Detects v3.7.0-v3.7.2 upgrade scenario and consolidates project #2 data into project #1
+  2. **Project Rename** - Renames fake "default-project" to real detected name (from config.toml/git remote/directory)
+  3. **Schema Fix** - Adds `project_id` column to m_files, m_tags, m_scopes with composite UNIQUE constraints
+  4. **Data Migration** - Maps all existing master table data to default project (ID 1)
+  5. **Orphan Cleanup** - Filters out 95 orphaned foreign key references (deleted tasks/tags)
+  6. **View Restoration** - Temporarily drops and restores 4 views during migration
+  7. **Table Restoration** - Backs up and restores 6 referencing tables with updated foreign keys
+
+#### Migration Details
+- **Idempotent** - Can run multiple times safely (checks for existing columns)
+- **Version-Aware** - Only consolidates data for v3.7.0-v3.7.2 databases (detects fake project names)
+- **Batch Inserts** - Uses 10-row batches to avoid SQLite UNION ALL limits
+- **FK Filtering** - Validates foreign key references before restoration to prevent constraint errors
+- **SQLite-Optimized** - Handles better-sqlite3 FK constraint behavior during table drops
+
+#### Technical Changes
+- **m_files**: Added `project_id` column, changed UNIQUE constraint from `(path)` to `(project_id, path)`
+- **m_tags**: Added `project_id` column, changed UNIQUE constraint from `(name)` to `(project_id, name)`
+- **m_scopes**: Added `project_id` column, changed UNIQUE constraint from `(name)` to `(project_id, name)`
+- **Referencing Tables**: Updated t_file_changes, t_task_file_links, t_decision_tags, t_task_tags, t_constraint_tags, t_decision_scopes
+- **Views**: Restored v_layer_summary, v_task_board, v_tagged_decisions, v_tagged_constraints
+
+#### Impact
+- ✅ **Fixed namespace collisions** - Files/tags/scopes from different projects can now have identical names
+- ✅ **Data integrity** - All existing data preserved and mapped correctly
+- ✅ **Project consolidation** - v3.7.0-v3.7.2 users get clean migration path
+- ✅ **Real project names** - No more fake "default-project" names
+- ✅ **Orphan cleanup** - Removed invalid foreign key references automatically
+- ✅ **Full idempotency** - Migration can be safely re-run if interrupted
+
+#### Testing
+- ✅ Tested on actual v3.7.2 production database (mcp-sqlew project)
+- ✅ Successfully consolidated 77 decisions, 191 tasks, 61 file changes
+- ✅ Filtered 95 orphaned task-tag references
+- ✅ All views and referencing tables restored correctly
+- ✅ Final database state validated with composite UNIQUE constraints working
+
+---
+
 ## [3.7.2] - 2025-11-05
 
 ### Changed - Enhanced Sub-Agent Templates

@@ -74,8 +74,8 @@ async function recordFileChangeInternal(
     }
   }
 
-  // Auto-register file and agent
-  const fileId = await getOrCreateFile(adapter, params.file_path, trx);
+  // Auto-register file and agent (v3.7.3: pass projectId)
+  const fileId = await getOrCreateFile(adapter, projectId, params.file_path, trx);
   const agentId = await getOrCreateAgent(adapter, params.agent_name, trx);
 
   // Current timestamp
