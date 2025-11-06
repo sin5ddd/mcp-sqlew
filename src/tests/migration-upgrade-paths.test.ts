@@ -2,6 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import knex, { Knex } from 'knex';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import fs from 'fs/promises';
 
 /**
@@ -101,7 +102,7 @@ describe('Migration Upgrade Path Tests', () => {
       // Check if file exists in enhancements folder
       try {
         await fs.access(migrationPath);
-        const migration = await import(migrationPath);
+        const migration = await import(pathToFileURL(migrationPath).href);
         await migration.up(db);
         console.log(`      ✓ Applied ${migrationName}`);
       } catch (error: any) {
@@ -114,7 +115,7 @@ describe('Migration Upgrade Path Tests', () => {
         );
         try {
           await fs.access(bootstrapPath);
-          const migration = await import(bootstrapPath);
+          const migration = await import(pathToFileURL(bootstrapPath).href);
           await migration.up(db);
           console.log(`      ✓ Applied ${migrationName}`);
         } catch (bootstrapError: any) {
@@ -169,7 +170,7 @@ describe('Migration Upgrade Path Tests', () => {
         `${migrationName}.js`
       );
 
-      const migration = await import(migrationPath);
+      const migration = await import(pathToFileURL(migrationPath).href);
       await migration.up(db);
       console.log(`      ✓ Applied ${migrationName}`);
     }
@@ -214,7 +215,7 @@ describe('Migration Upgrade Path Tests', () => {
         `${migrationName}.js`
       );
 
-      const migration = await import(migrationPath);
+      const migration = await import(pathToFileURL(migrationPath).href);
       await migration.up(db);
       console.log(`      ✓ Applied ${migrationName}`);
     }
@@ -262,7 +263,7 @@ describe('Migration Upgrade Path Tests', () => {
 
       // Re-import to get fresh module (clear cache)
       const cacheBuster = `?t=${Date.now()}`;
-      const migration = await import(migrationPath + cacheBuster);
+      const migration = await import(pathToFileURL(migrationPath).href + cacheBuster);
       await migration.up(db);
       console.log(`      ✓ Re-ran ${migrationName} (should skip existing objects)`);
     }

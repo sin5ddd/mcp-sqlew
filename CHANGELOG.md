@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.3] - 2025-11-06
+
+### Fixed - Master Tables Namespace Collision Bug
+
+**Critical bug fix for incomplete multi-project support in v3.7.0-v3.7.2**
+
+#### Problem
+- Master tables (m_files, m_tags, m_scopes) lacked `project_id` columns in v3.7.0-v3.7.2
+- This caused **namespace collisions** where identical file paths/tag names/scope names from different projects would conflict
+- Example: "src/index.ts" from ProjectA would collide with ProjectB's "src/index.ts"
+- Users upgrading from v3.6.x would have fake project name "default-project" instead of detected real name
+
+#### Solution
+- **20251106000000_fix_master_tables_project_id_v3_7_3.ts** - Comprehensive migration that:
+  1. **Data Consolidation** - Detects v3.7.0-v3.7.2 upgrade scenario and consolidates project #2 data into project #1
+  2. **Project Rename** - Renames fake "default-project" to real detected name (from config.toml/git remote/directory)
+  3. **Schema Fix** - Adds `project_id` column to m_files, m_tags, m_scopes with composite UNIQUE constraints
+  4. **Data Migration** - Maps all existing master table data to default project (ID 1)
+  5. **Orphan Cleanup** - Filters out 95 orphaned foreign key references (deleted tasks/tags)
+  6. **View Restoration** - Temporarily drops and restores 4 views during migration
+  7. **Table Restoration** - Backs up and restores 6 referencing tables with updated foreign keys
+
+#### Migration Details
+- **Idempotent** - Can run multiple times safely (checks for existing columns)
+- **Version-Aware** - Only consolidates data for v3.7.0-v3.7.2 databases (detects fake project names)
+- **Batch Inserts** - Uses 10-row batches to avoid SQLite UNION ALL limits
+- **FK Filtering** - Validates foreign key references before restoration to prevent constraint errors
+- **SQLite-Optimized** - Handles better-sqlite3 FK constraint behavior during table drops
+
+#### Technical Changes
+- **m_files**: Added `project_id` column, changed UNIQUE constraint from `(path)` to `(project_id, path)`
+- **m_tags**: Added `project_id` column, changed UNIQUE constraint from `(name)` to `(project_id, name)`
+- **m_scopes**: Added `project_id` column, changed UNIQUE constraint from `(name)` to `(project_id, name)`
+- **Referencing Tables**: Updated t_file_changes, t_task_file_links, t_decision_tags, t_task_tags, t_constraint_tags, t_decision_scopes
+- **Views**: Restored v_layer_summary, v_task_board, v_tagged_decisions, v_tagged_constraints
+
+#### Impact
+- ✅ **Fixed namespace collisions** - Files/tags/scopes from different projects can now have identical names
+- ✅ **Data integrity** - All existing data preserved and mapped correctly
+- ✅ **Project consolidation** - v3.7.0-v3.7.2 users get clean migration path
+- ✅ **Real project names** - No more fake "default-project" names
+- ✅ **Orphan cleanup** - Removed invalid foreign key references automatically
+- ✅ **Full idempotency** - Migration can be safely re-run if interrupted
+
+#### Testing
+- ✅ Tested on actual v3.7.2 production database (mcp-sqlew project)
+- ✅ Successfully consolidated 77 decisions, 191 tasks, 61 file changes
+- ✅ Filtered 95 orphaned task-tag references
+- ✅ All views and referencing tables restored correctly
+- ✅ Final database state validated with composite UNIQUE constraints working
+
+---
+
 ## [3.7.2] - 2025-11-05
 
 ### Changed - Enhanced Sub-Agent Templates
@@ -291,6 +344,85 @@ if (!hasProjectId) {
 ---
 
 ## [3.6.10] - 2025-10-30
+
+### Added - Environment Variable Support for Project Root
+
+**New `SQLEW_PROJECT_ROOT` environment variable for project-relative databases**
+
+#### Problem
+- Junie AI and other MCP clients require absolute paths in configuration
+- Users had to hardcode project-specific paths in MCP server config
+- No easy way to use project-relative database paths
+
+#### Solution
+- Added `SQLEW_PROJECT_ROOT` environment variable support (inspired by serena-mcp pattern)
+- MCP clients can now pass project directory via environment variable
+- Database automatically created at `$SQLEW_PROJECT_ROOT/.sqlew/sqlew.db`
+
+#### Priority Order
+1. `SQLEW_PROJECT_ROOT` environment variable (NEW - highest priority)
+2. `--db-path` CLI argument (absolute path)
+3. `--config-path` CLI argument (absolute path)
+4. `database.path` in config file (absolute path)
+5. `process.cwd()` fallback
+
+#### Junie AI Configuration Example
+```json
+{
+  "mcpServers": {
+    "sqlew": {
+      "command": "npx",
+      "args": ["sqlew"],
+      "env": {
+        "SQLEW_PROJECT_ROOT": "{projectDir}"
+      }
+    }
+  }
+}
+```
+
+**Note:** Junie AI uses `{projectDir}` variable which expands to the current project's absolute path. This ensures each project gets its own isolated database without hardcoded paths. Other MCP clients may use different variable names like `${workspaceFolder}` (VS Code/Cline) - check your client's documentation.
+
+#### Impact
+- ✅ **Project-relative databases** without hardcoded absolute paths
+- ✅ **Cleaner MCP configuration** (no per-project path updates needed)
+- ✅ **Compatible with Junie AI, Claude Desktop, and other MCP clients**
+- ✅ **No breaking changes** (environment variable is optional)
+
+---
+
+### Fixed - MCP Protocol Compliance (EPIPE Fix)
+
+**Eliminated console output for strict JSON-RPC protocol compliance**
+
+#### Problem
+- EPIPE (broken pipe) errors when running with Junie AI on Windows
+- Console output to stdout/stderr violated MCP JSON-RPC protocol requirements
+- Strict MCP clients (like Junie AI) expect pure JSON-RPC on stdio streams
+
+#### Changes
+- **Redirected all diagnostic output to debug log file** - stdout/stderr reserved exclusively for JSON-RPC
+- Modified `safeConsoleError()` to write to debug log instead of stderr
+- Replaced 50+ console.log/console.error calls across codebase:
+  - `src/database.ts` - Database initialization messages
+  - `src/watcher/file-watcher.ts` - File watcher status and events
+  - `src/watcher/gitignore-parser.ts` - .gitignore loading warnings
+  - `src/tools/tasks.ts` - Task file registration warnings
+  - `src/config/example-generator.ts` - First launch messages
+
+#### Technical Details
+- **MCP Protocol Requirement**: stdin/stdout/stderr must carry only JSON-RPC messages
+- **Debug Logging**: All diagnostic messages now use `debugLog()` with appropriate levels (INFO, WARN, ERROR)
+- **Zero stdout pollution**: Server starts silently, waits for JSON-RPC requests
+- **Tested with Junie AI**: Confirmed no EPIPE errors on Windows
+
+#### Impact
+- ✅ **Works with strict MCP clients** (Junie AI, etc.)
+- ✅ **Maintains full diagnostics** via debug log file
+- ✅ **Pure JSON-RPC protocol** compliance
+- ✅ **No breaking changes** to MCP tool functionality
+
+---
 
 ### Added - Environment Variable Support for Project Root
 

@@ -87,7 +87,7 @@ async function linkTaskFile(db: DatabaseAdapter, params: {
   // console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.`);
 
   const filePath = String(params.target_id);
-  const fileId = await getOrCreateFile(db, filePath);
+  const fileId = await getOrCreateFile(db, 1, filePath);
 
   await knex('t_task_file_links')
     .insert({ task_id: params.task_id, file_id: fileId })
@@ -227,7 +227,7 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     });
 
     // Use new API (simulated by direct DB insert)
-    const fileId = await getOrCreateFile(testDb, 'src/database.ts');
+    const fileId = await getOrCreateFile(testDb, 1, 'src/database.ts');
     const knex = testDb.getKnex();
     await knex('t_task_file_links')
       .insert({ task_id: taskId, file_id: fileId })
@@ -296,7 +296,7 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     });
 
     // New API (simulated)
-    const fileId = await getOrCreateFile(testDb, 'src/index.ts');
+    const fileId = await getOrCreateFile(testDb, 1, 'src/index.ts');
     const knex = testDb.getKnex();
     await knex('t_task_file_links')
       .insert({ task_id: taskId2, file_id: fileId })

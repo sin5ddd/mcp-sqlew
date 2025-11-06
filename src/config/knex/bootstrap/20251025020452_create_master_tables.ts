@@ -23,7 +23,10 @@ export async function up(knex: Knex): Promise<void> {
   if (!(await knex.schema.hasTable('m_files'))) {
     await knex.schema.createTable('m_files', (table) => {
       table.increments('id').primary();
-      table.string('path', pathLength).unique().notNullable();
+      table.integer('project_id').unsigned().notNullable().defaultTo(1);
+      table.string('path', pathLength).notNullable();
+      table.unique(['project_id', 'path']); // Composite UNIQUE for multi-project (v3.7.3)
+      // Foreign key to m_projects will be added after m_projects is created in v3.7.0 migration
     });
   }
 
@@ -55,7 +58,10 @@ export async function up(knex: Knex): Promise<void> {
   if (!(await knex.schema.hasTable('m_tags'))) {
     await knex.schema.createTable('m_tags', (table) => {
       table.increments('id').primary();
-      table.string('name', 100).unique().notNullable();
+      table.integer('project_id').unsigned().notNullable().defaultTo(1);
+      table.string('name', 100).notNullable();
+      table.unique(['project_id', 'name']); // Composite UNIQUE for multi-project (v3.7.3)
+      // Foreign key to m_projects will be added after m_projects is created in v3.7.0 migration
     });
   }
 
@@ -63,7 +69,10 @@ export async function up(knex: Knex): Promise<void> {
   if (!(await knex.schema.hasTable('m_scopes'))) {
     await knex.schema.createTable('m_scopes', (table) => {
       table.increments('id').primary();
-      table.string('name', 200).unique().notNullable();
+      table.integer('project_id').unsigned().notNullable().defaultTo(1);
+      table.string('name', 200).notNullable();
+      table.unique(['project_id', 'name']); // Composite UNIQUE for multi-project (v3.7.3)
+      // Foreign key to m_projects will be added after m_projects is created in v3.7.0 migration
     });
   }
 
