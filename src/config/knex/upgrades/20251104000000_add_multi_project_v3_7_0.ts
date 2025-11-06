@@ -45,6 +45,7 @@
  */
 
 import type { Knex } from 'knex';
+import { detectProjectNameSync } from '../../../utils/project-detector.js';
 
 export async function up(knex: Knex): Promise<void> {
   // Check if migration already completed
@@ -75,6 +76,10 @@ export async function up(knex: Knex): Promise<void> {
 
   let defaultProjectId: number;
 
+  // Detect real project name (v3.7.3 fix)
+  const projectRoot = process.cwd();
+  const detected = detectProjectNameSync(projectRoot);
+
   if (!hasProjectsTable) {
     await knex.schema.createTable('m_projects', (table) => {
       table.increments('id').primary();
@@ -87,24 +92,132 @@ export async function up(knex: Knex): Promise<void> {
       table.text('metadata'); // JSON string for extensibility
     });
 
-    // Insert default project for existing data
+    // Insert project with REAL detected name (v3.7.3 fix)
     const now = Math.floor(Date.now() / 1000);
     await knex('m_projects').insert({
       id: 1,
-      name: 'default-project',
-      display_name: 'Default Project (Migrated)',
-      detection_source: 'directory',
+      name: detected.name,
+      display_name: detected.name,
+      detection_source: detected.source,
       created_ts: now,
       last_active_ts: now,
     });
 
     defaultProjectId = 1;
-    console.log(`✓ Created m_projects table with default project (ID: ${defaultProjectId})`);
+    console.log(`✓ Created m_projects table with project "${detected.name}" (ID: ${defaultProjectId}, source: ${detected.source})`);
   } else {
-    // Use existing first project as default
-    const firstProject = await knex('m_projects').orderBy('id').first<{ id: number }>();
-    defaultProjectId = firstProject?.id || 1;
-    console.log(`✓ Using existing project ID ${defaultProjectId} as default`);
+    // ========================================================================
+    // Data Consolidation Strategy (v3.7.3 fix)
+    // ========================================================================
+    // Goal: Consolidate everything into project ID 1 with correct name
+    //
+    // This ONLY runs if upgrading from v3.7.0-v3.7.2 where:
+    // - Project #1 was created with fake name "default" or "default-project"
+    // - User manually created project #2 with real project name
+    //
+    // For fresh installs, project #1 is created with real name above,
+    // so consolidation is skipped.
+
+    const existingProject1 = await knex('m_projects')
+      .where({ id: 1 })
+      .first<{ id: number; name: string }>();
+
+    const existingProject2 = await knex('m_projects')
+      .where({ id: 2 })
+      .first<{ id: number; name: string }>();
+
+    const FAKE_NAMES = ['default-project', 'default'];
+
+    // Check if this is a v3.7.0-v3.7.2 upgrade scenario
+    // (project #1 has fake name AND project #2 exists)
+    const isV370UpgradeScenario = existingProject1 &&
+                                   existingProject2 &&
+                                   FAKE_NAMES.includes(existingProject1.name);
+
+    // Perform consolidation ONLY for v3.7.0-v3.7.2 upgrades
+    if (isV370UpgradeScenario) {
+      console.log(`🔄 Detected v3.7.0-v3.7.2 upgrade scenario - consolidating projects...`);
+      console.log(`   Project #1: "${existingProject1.name}" (fake name, empty)`);
+      console.log(`   Project #2: "${existingProject2.name}" (real project, has data)`);
+      console.log(`🔄 Consolidating project #2 into project #1...`);
+
+      // STEP 1: Temporarily rename project #2 to avoid conflict
+      const tempName = `temp-${existingProject2.name}-${Date.now()}`;
+      await knex('m_projects')
+        .where({ id: 2 })
+        .update({ name: tempName });
+      console.log(`  ✓ Temporarily renamed project #2 to "${tempName}"`);
+
+      // STEP 2: Rename project #1 to real detected name
+      await knex('m_projects')
+        .where({ id: 1 })
+        .update({
+          name: detected.name,
+          display_name: detected.name,
+          detection_source: detected.source,
+          last_active_ts: Math.floor(Date.now() / 1000)
+        });
+      console.log(`  ✓ Renamed project #1 from "${existingProject1.name}" to "${detected.name}"`);
+
+      // STEP 3: Migrate ALL data from project_id=2 → 1
+      const tablesToUpdate = [
+        't_decisions',
+        't_decisions_numeric',
+        't_decision_history',
+        't_decision_tags',
+        't_decision_scopes',
+        't_file_changes',
+        't_constraints',
+        't_tasks',
+        't_task_tags',
+        't_task_dependencies',
+        't_task_details',
+        't_task_file_links',
+        't_task_decision_links',
+        't_activity_log',
+        't_decision_context'
+      ];
+
+      for (const tableName of tablesToUpdate) {
+        const hasTable = await knex.schema.hasTable(tableName);
+        if (hasTable) {
+          const hasProjectId = await knex.schema.hasColumn(tableName, 'project_id');
+          if (hasProjectId) {
+            const count = await knex(tableName)
+              .where({ project_id: 2 })
+              .update({ project_id: 1 });
+            if (count > 0) {
+              console.log(`  ✓ Migrated ${count} rows in ${tableName} (project_id: 2→1)`);
+            }
+          }
+        }
+      }
+
+      // STEP 4: Delete project #2
+      await knex('m_projects').where({ id: 2 }).delete();
+      console.log(`  ✓ Deleted project #2 (data consolidated into project #1)`);
+      console.log(`✅ Consolidation complete - all data now in project #1 "${detected.name}"`);
+
+    } else if (existingProject1 && FAKE_NAMES.includes(existingProject1.name)) {
+      // No project #2, just rename project #1
+      console.log(`🔄 Renaming project #1 from "${existingProject1.name}" to "${detected.name}"`);
+      await knex('m_projects')
+        .where({ id: 1 })
+        .update({
+          name: detected.name,
+          display_name: detected.name,
+          detection_source: detected.source,
+          last_active_ts: Math.floor(Date.now() / 1000)
+        });
+      console.log(`✓ Project #1 renamed to "${detected.name}" (source: ${detected.source})`);
+
+    } else if (existingProject1) {
+      // User already has real name, don't change it
+      console.log(`✓ Using existing project "${existingProject1.name}" (ID: 1)`);
+    }
+
+    // Always use project ID 1 after consolidation
+    defaultProjectId = 1;
   }
 
   // ============================================================================

@@ -220,17 +220,24 @@ export async function getOrCreateContextKey(
  */
 export async function getOrCreateFile(
   adapter: DatabaseAdapter,
+  projectId: number,
   path: string,
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
-  await knex('m_files').insert({ path }).onConflict('path').ignore();
+  // Insert with composite key (project_id, path)
+  await knex('m_files')
+    .insert({ project_id: projectId, path })
+    .onConflict(['project_id', 'path'])  // Composite conflict resolution (v3.7.3)
+    .ignore();
 
-  const result = await knex('m_files').where({ path }).first('id');
+  const result = await knex('m_files')
+    .where({ project_id: projectId, path })  // Filter by both columns (v3.7.3)
+    .first('id');
 
   if (!result) {
-    throw new Error(`Failed to get or create file: ${path}`);
+    throw new Error(`Failed to get or create file: ${path} (project: ${projectId})`);
   }
 
   return result.id;
@@ -241,17 +248,24 @@ export async function getOrCreateFile(
  */
 export async function getOrCreateTag(
   adapter: DatabaseAdapter,
+  projectId: number,
   name: string,
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
-  await knex('m_tags').insert({ name }).onConflict('name').ignore();
+  // Insert with composite key (project_id, name)
+  await knex('m_tags')
+    .insert({ project_id: projectId, name })
+    .onConflict(['project_id', 'name'])  // Composite conflict resolution (v3.7.3)
+    .ignore();
 
-  const result = await knex('m_tags').where({ name }).first('id');
+  const result = await knex('m_tags')
+    .where({ project_id: projectId, name })  // Filter by both columns (v3.7.3)
+    .first('id');
 
   if (!result) {
-    throw new Error(`Failed to get or create tag: ${name}`);
+    throw new Error(`Failed to get or create tag: ${name} (project: ${projectId})`);
   }
 
   return result.id;
@@ -262,17 +276,24 @@ export async function getOrCreateTag(
  */
 export async function getOrCreateScope(
   adapter: DatabaseAdapter,
+  projectId: number,
   name: string,
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
-  await knex('m_scopes').insert({ name }).onConflict('name').ignore();
+  // Insert with composite key (project_id, name)
+  await knex('m_scopes')
+    .insert({ project_id: projectId, name })
+    .onConflict(['project_id', 'name'])  // Composite conflict resolution (v3.7.3)
+    .ignore();
 
-  const result = await knex('m_scopes').where({ name }).first('id');
+  const result = await knex('m_scopes')
+    .where({ project_id: projectId, name })  // Filter by both columns (v3.7.3)
+    .first('id');
 
   if (!result) {
-    throw new Error(`Failed to get or create scope: ${name}`);
+    throw new Error(`Failed to get or create scope: ${name} (project: ${projectId})`);
   }
 
   return result.id;

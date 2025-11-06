@@ -229,7 +229,7 @@ async function createTaskInternal(params: {
     }
 
     for (const tagName of tagsParsed) {
-      const tagId = await getOrCreateTag(adapter, tagName, trx);
+      const tagId = await getOrCreateTag(adapter, projectId, tagName, trx);  // v3.7.3: pass projectId
       await knex('t_task_tags').insert({
         project_id: projectId,
         task_id: Number(taskId),
@@ -280,7 +280,7 @@ async function createTaskInternal(params: {
     }
 
     for (const filePath of watchFilesParsed) {
-      const fileId = await getOrCreateFile(adapter, filePath, trx);
+      const fileId = await getOrCreateFile(adapter, projectId, filePath, trx);  // v3.7.3: pass projectId
       await knex('t_task_file_links').insert({
         project_id: projectId,
         task_id: Number(taskId),
@@ -538,7 +538,7 @@ export async function updateTask(params: {
           }
 
           for (const filePath of watchFilesParsed) {
-            const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+            const fileId = await getOrCreateFile(actualAdapter, projectId, filePath, trx);  // v3.7.3: pass projectId
             await trx('t_task_file_links').insert({
               project_id: projectId,
               task_id: params.task_id,
@@ -997,6 +997,9 @@ export async function linkTask(params: {
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Get project context (v3.7.3)
+  const projectId = getProjectContext().getProjectId();
+
   if (!params.task_id) {
     throw new Error('Parameter "task_id" is required');
   }
@@ -1065,7 +1068,7 @@ export async function linkTask(params: {
           debugLog('WARN', `DEPRECATION: task.link(link_type="file") is deprecated as of v3.4.1. Use task.create(watch_files=[...]) or task.update(watch_files=[...]) instead. Or use the new watch_files action: { action: "watch_files", task_id: ${params.task_id}, file_paths: ["..."] }`);
 
           const filePath = String(params.target_id);
-          const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+          const fileId = await getOrCreateFile(actualAdapter, projectId, filePath, trx);  // v3.7.3: pass projectId
 
           await trx('t_task_file_links').insert({
             task_id: params.task_id,
@@ -1542,7 +1545,7 @@ export async function watchFiles(params: {
 
           const addedFiles: string[] = [];
           for (const filePath of params.file_paths) {
-            const fileId = await getOrCreateFile(actualAdapter, filePath, trx);
+            const fileId = await getOrCreateFile(actualAdapter, projectId, filePath, trx);  // v3.7.3: pass projectId
 
             // Check if already exists
             const existing = await trx('t_task_file_links')
