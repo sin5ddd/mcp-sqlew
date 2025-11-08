@@ -1111,6 +1111,7 @@ export async function down(knex: Knex): Promise<void> {
     CREATE VIEW v_tagged_constraints AS
     SELECT c.id,
            c.constraint_text,
+           c.project_id,
            cat.name as category,
            c.priority,
            a.name as author,

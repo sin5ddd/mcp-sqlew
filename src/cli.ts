@@ -5,10 +5,10 @@
  */
 
 import { initializeDatabase } from './database.js';
-import { getContext, searchAdvanced } from './tools/context.js';
+import { getContext, searchAdvanced } from './tools/context/index.js';
 import { getMessages } from './tools/messaging.js';
-import { getFileChanges } from './tools/files.js';
-import { getActivityLog } from './tools/utils.js';
+import { getFileChanges } from './tools/files/index.js';
+import { getActivityLog } from './tools/stats/index.js';
 import { dbDumpCommand } from './cli/db-dump.js';
 import { dbExportCommand } from './cli/db-export.js';
 import { dbImportCommand } from './cli/db-import.js';

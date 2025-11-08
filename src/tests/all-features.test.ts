@@ -10,10 +10,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Import all tool functions
-import { setDecision, getDecision, searchByTags, getVersions, searchByLayer, addDecisionContextAction, listDecisionContextsAction } from '../tools/context.js';
-import { recordFileChange, getFileChanges, checkFileLock } from '../tools/files.js';
-import { addConstraint, getConstraints, deactivateConstraint } from '../tools/constraints.js';
-import { getLayerSummary, clearOldData, getStats } from '../tools/utils.js';
+import { setDecision, getDecision, searchByTags, getVersions, searchByLayer, addDecisionContextAction, listDecisionContextsAction } from '../tools/context/index.js';
+import { recordFileChange, getFileChanges, checkFileLock } from '../tools/files/index.js';
+import { addConstraint, getConstraints, deactivateConstraint } from '../tools/constraints/index.js';
+import { getLayerSummary, clearOldData, getStats } from '../tools/stats/index.js';
 import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies } from '../tools/tasks.js';
 
 const TEST_DB_PATH = '.sqlew/tmp/test-all-features.db';
