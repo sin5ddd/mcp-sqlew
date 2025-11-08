@@ -27,6 +27,7 @@
         "dev": "tsc --watch",
         "clean": "rm -rf dist",
         "rebuild": "npm run clean && npm run build",
+        "test": "npm run test:all-features",
         "test:all-features": "npm run build && node dist/tests/all-features.test.js",
         "test:docker": "npm run build && node --test dist/tests/multi-project-migration.test.js dist/tests/sql-dump-fk-constraints.test.js",
         "test:cross-db": "npm run build && node --test dist/tests/sql-dump-cross-database.test.js",

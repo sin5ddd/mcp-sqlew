@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { initializeDatabase } from '../database.js';
 import type { DatabaseAdapter } from '../adapters/types.js';
 import { getOrCreateAgent } from '../database.js';
-import { setDecision } from '../tools/context.js';
+import { setDecision } from '../tools/context/index.js';
 import { getPrunedFiles, linkPrunedFile } from '../tools/tasks.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

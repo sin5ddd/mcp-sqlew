@@ -1,0 +1,132 @@
+/**
+ * Add a constraint with priority, layer, and tags
+ * Auto-registers category and agent if they don't exist
+ */
+
+import { DatabaseAdapter } from '../../../adapters/index.js';
+import {
+  getAdapter,
+  getOrCreateAgent,
+  getLayerId,
+  getOrCreateTag,
+  getOrCreateCategoryId
+} from '../../../database.js';
+import {
+  STRING_TO_PRIORITY,
+  DEFAULT_PRIORITY,
+  SQLITE_TRUE
+} from '../../../constants.js';
+import { validateCategory, validatePriority } from '../../../utils/validators.js';
+import { validateActionParams } from '../../../utils/parameter-validator.js';
+import { logConstraintAdd } from '../../../utils/activity-logging.js';
+import { parseStringArray } from '../../../utils/param-parser.js';
+import { getProjectContext } from '../../../utils/project-context.js';
+import connectionManager from '../../../utils/connection-manager.js';
+import type {
+  AddConstraintParams,
+  AddConstraintResponse
+} from '../types.js';
+
+/**
+ * Add a constraint with priority, layer, and tags
+ *
+ * @param params - Constraint parameters
+ * @param adapter - Optional database adapter (for testing)
+ * @returns Constraint ID and timestamp
+ */
+export async function addConstraint(
+  params: AddConstraintParams,
+  adapter?: DatabaseAdapter
+): Promise<AddConstraintResponse> {
+  const actualAdapter = adapter ?? getAdapter();
+
+  try {
+    return await connectionManager.executeWithRetry(async () => {
+      // Fail-fast project_id validation (Constraint #29)
+      const projectId = getProjectContext().getProjectId();
+
+      // Validate parameters
+      validateActionParams('constraint', 'add', params);
+
+      // Validate category
+      validateCategory(params.category);
+
+      // Validate priority if provided
+      const priorityStr = params.priority || 'medium';
+      validatePriority(priorityStr);
+      const priority = STRING_TO_PRIORITY[priorityStr] || DEFAULT_PRIORITY;
+
+      // Validate and get layer ID if provided
+      let layerId: number | null = null;
+      if (params.layer) {
+        const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
+        if (!validLayers.includes(params.layer)) {
+          throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
+        }
+        layerId = await getLayerId(actualAdapter, params.layer);
+        if (!layerId) {
+          throw new Error(`Layer not found: ${params.layer}`);
+        }
+      }
+
+      // Use transaction for multi-table insert
+      const result = await actualAdapter.transaction(async (trx) => {
+        // Get or create category
+        const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
+
+        // Get or create created_by agent (default to generic pool)
+        const createdBy = params.created_by || '';
+        const agentId = await getOrCreateAgent(actualAdapter, createdBy, trx);
+
+        // Calculate timestamp
+        const ts = Math.floor(Date.now() / 1000);
+
+        // Insert constraint with project_id
+        const [constraintId] = await trx('t_constraints').insert({
+          category_id: categoryId,
+          layer_id: layerId,
+          constraint_text: params.constraint_text,
+          priority: priority,
+          active: SQLITE_TRUE,
+          agent_id: agentId,
+          ts: ts,
+          project_id: projectId
+        });
+
+        // Insert m_tags if provided
+        if (params.tags && params.tags.length > 0) {
+          // Parse tags (handles both arrays and JSON strings from MCP)
+          const tags = parseStringArray(params.tags);
+          for (const tagName of tags) {
+            const tagId = await getOrCreateTag(actualAdapter, projectId, tagName, trx);  // v3.7.3: pass projectId
+            await trx('t_constraint_tags').insert({
+              constraint_id: Number(constraintId),
+              tag_id: tagId
+            });
+          }
+        }
+
+        // Activity logging (replaces trigger)
+        await logConstraintAdd(trx, {
+          constraint_id: Number(constraintId),
+          category: params.category,
+          constraint_text: params.constraint_text,
+          priority: priorityStr,
+          layer: params.layer || null,
+          created_by: createdBy,
+          agent_id: agentId
+        });
+
+        return { constraintId: Number(constraintId) };
+      });
+
+      return {
+        success: true,
+        constraint_id: result.constraintId,
+      };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to add constraint: ${message}`);
+  }
+}
