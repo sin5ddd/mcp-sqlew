@@ -99,6 +99,7 @@ interface HelpNextActionsResult {
   next_actions: HelpNextAction[];
 }
 
+// todo RAW SQL must be avoided
 /**
  * Query single action with parameters and examples
  * Target: ~50-100 tokens (vs ~2,000 legacy)
