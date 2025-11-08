@@ -10,6 +10,8 @@ import { getMessages } from './tools/messaging.js';
 import { getFileChanges } from './tools/files.js';
 import { getActivityLog } from './tools/utils.js';
 import { dbDumpCommand } from './cli/db-dump.js';
+import { dbExportCommand } from './cli/db-export.js';
+import { dbImportCommand } from './cli/db-import.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
@@ -138,7 +140,9 @@ USAGE:
 
 COMMANDS:
   query      Query context data (decisions, messages, files, activity)
-  db:dump    Generate SQL dump for database migration
+  db:dump    Generate SQL dump for database migration (schema + data)
+  db:export  Export project data to JSON format (data-only, for append-import)
+  db:import  Import project data from JSON export (append to existing database)
 
 QUERY SUBCOMMANDS:
   decisions  Query decisions with filtering
@@ -172,8 +176,16 @@ EXAMPLES:
   # Generate PostgreSQL dump
   sqlew db:dump --format=postgresql --output=dump-pg.sql
 
-For more information on db:dump, run:
+  # Export project data to JSON (for merging data across databases)
+  sqlew db:export --project=visualizer --output=data.json
+
+  # Import project data from JSON export
+  sqlew db:import --source=data.json --project-name=visualizer-v2
+
+For more information on commands, run:
   sqlew db:dump --help
+  sqlew db:export --help
+  sqlew db:import --help
 `);
 }
 
@@ -341,6 +353,18 @@ async function main(): Promise<void> {
   // Special handling for db:dump command (passes through --help to subcommand)
   if (args.command === 'db:dump') {
     await dbDumpCommand(process.argv.slice(3));
+    return;
+  }
+
+  // Special handling for db:export command (passes through --help to subcommand)
+  if (args.command === 'db:export') {
+    await dbExportCommand(process.argv.slice(3));
+    return;
+  }
+
+  // Special handling for db:import command (passes through --help to subcommand)
+  if (args.command === 'db:import') {
+    await dbImportCommand(process.argv.slice(3));
     return;
   }
 

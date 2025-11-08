@@ -45,7 +45,8 @@
         "migrate:status": "npm run knex migrate:status",
         "seed:make": "npm run knex seed:make",
         "seed:run": "npm run knex seed:run",
-        "db:dump": "node dist/cli.js db:dump"
+        "db:dump": "node dist/cli.js db:dump",
+        "db:export": "node dist/cli.js db:export"
     },
     "engines": {
         "node": ">=18.0.0"
