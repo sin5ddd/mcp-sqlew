@@ -7,6 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.7.4] - 2025-11-08
+
+### Added - Complete JSON Import/Export System
+
+**Full-featured data migration system with smart ID remapping and dependency resolution**
+
+#### New Features
+
+- **db:import CLI Command** - Import project data from JSON exports with automatic ID remapping
+  - Smart conflict detection (skip-if-exists, project-name override)
+  - Dry-run mode for validation before import
+  - Comprehensive error messages with validation details
+- **Topological Sort Algorithm** - Resolves task dependencies during import
+  - Circular dependency detection prevents import of invalid dependency graphs
+  - BFS-based topological sorting ensures dependencies imported before dependents
+  - Preserves all task relationships and blocking constraints
+- **Smart ID Remapping** - Handles complex foreign key relationships
+  - Master table merge logic (reuse existing entries by name/path)
+  - Transaction table ID translation with bidirectional mapping
+  - Junction table relationship preservation
+  - Automatic orphan cleanup for invalid references
+
+#### Import System Architecture
+
+- **4 Core Modules**:
+  1. `import.ts` - Main orchestrator with transaction management
+  2. `master-tables.ts` - Master table merge logic (m_files, m_tags, m_scopes, etc.)
+  3. `topological-sort.ts` - Dependency graph analysis and sorting
+  4. `db-import.ts` - CLI command with argument parsing and validation
+
+#### Data Migration Strategy
+
+- **ID Remapping**: All imported data gets fresh auto-incremented IDs (no ID preservation)
+- **Master Table Deduplication**: Reuse existing entries for agents, tags, scopes, files by name/path
+- **Transaction Atomicity**: All-or-nothing semantics (full rollback on any error)
+- **Project Isolation**: Each import creates independent project with no cross-contamination
+
+#### CLI Examples
+
+```bash
+# Import project from JSON export
+npx sqlew db:import --source=project-backup.json
+
+# Import with custom project name
+npx sqlew db:import --source=data.json --project-name=my-project
+
+# Dry-run validation (no actual import)
+npx sqlew db:import --source=data.json --dry-run
+
+# Export project for migration
+npx sqlew db:export --project=visualizer --output=visualizer-data.json
+```
+
+#### Technical Details
+
+- **Batch Inserts** - 10-row batches to avoid SQLite UNION ALL limits
+- **Foreign Key Validation** - Validates all foreign key references before insertion
+- **View Handling** - Temporarily drops/restores views during schema changes
+- **Idempotent Operations** - Safe to retry on failure
+- **Error Recovery** - Detailed error messages with validation guidance
+
+#### Use Cases
+
+- **Multi-Project Single Database** - Consolidate multiple projects when database creation permissions are limited
+- **Project Sharing** - Share context with team members or between machines
+- **Cross-Database Migration** - Move projects between different databases (different machine, SQLite → MySQL, etc.)
+
+**Note**: Import uses `--skip-if-exists=true` by default. This is NOT a backup/restore solution for the same database.
+Use database-level backups (SQLite file copy, MySQL dump) for backup/restore scenarios.
+
+#### Impact
+
+- ✅ **Complete migration solution** - Export from one database, import to another
+- ✅ **Multi-project support** - Merge multiple project exports into single database
+- ✅ **Permission-friendly** - Works for users who can't create multiple databases
+- ✅ **Data integrity** - Zero data loss, all relationships preserved
+- ✅ **Production ready** - Comprehensive error handling and validation
+- ✅ **Cross-database compatible** - JSON format works across SQLite, MySQL, PostgreSQL
+
+---
+
+### Fixed - Multi-Project Migration (HOTFIX)
+
+**Critical fix for v3.7.0-v3.7.2 migration in multi-project scenarios**
+
+#### Problem
+
+- Users upgrading from v3.6.10 to v3.7.0+ could end up with duplicate projects
+- Migration 20251104000000 created project #1 with fake name "default-project"
+- Users creating second project manually resulted in namespace conflicts
+
+#### Solution
+
+- Enhanced migration idempotency checks
+- Improved project consolidation logic
+- Better handling of existing project scenarios
+
+#### Impact
+
+- ✅ **Safe multi-project migration** - No duplicate projects created
+- ✅ **Backward compatible** - Works for both fresh installs and upgrades
+- ✅ **Data preservation** - All existing data maintained correctly
+
+---
+
 ## [3.7.3] - 2025-11-06
 
 ### Fixed - Master Tables Namespace Collision Bug

@@ -585,8 +585,6 @@ Manage file watches dynamically:
 }
 ```
 
-**See Also:** [MIGRATION_v3.3.md](./MIGRATION_v3.3.md) for complete migration guide.
-
 ---
 
 ## Decision Context System (v3.2.2)

@@ -5,11 +5,11 @@
  * from git history. This ensures backward compatibility for all users.
  */
 
-import Database, { Database as DatabaseType } from 'better-sqlite3';
-import { execSync } from 'child_process';
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { initializeDatabase } from '../../database.js';
+import Database from 'better-sqlite3';
+import {execSync} from 'child_process';
+import {existsSync, mkdirSync, writeFileSync} from 'fs';
+import {join} from 'path';
+import {initializeDatabase} from '../../database.js';
 
 // Colors for console output
 const GREEN = '\x1b[32m';
@@ -53,11 +53,12 @@ const SKIP_VERSIONS = [
   '1.0.0',   // Pre-v3 schema incompatible with v3.7 view dependencies
   '1.1.0',   // Pre-v3 schema incompatible with v3.7 view dependencies
   '2.0.0',   // Pre-v3 schema incompatible with v3.7 view dependencies
+	'2.1.4',   // Pre-v3 schema incompatible with v3.7 view dependencies
   '3.0.2',   // Historical schema.sql has malformed INSERT (extra NULL in t_decision_templates)
              // Real users got v3.0.2 via migrations (not schema.sql), so upgrade path works fine
 ];
 
-const CURRENT_VERSION = '3.6.2';
+const CURRENT_VERSION = '3.7.4';
 
 /**
  * Extract schema SQL from a git tag

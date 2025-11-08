@@ -219,7 +219,7 @@ All tools support:
 ### For Developers
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
-- [Database Migration](docs/DATABASE_MIGRATION.md) - SQLite → MySQL/PostgreSQL migration
+- [CLI Mode Overview](docs/cli/README.md) - Database migration, export/import commands
 - [Building from Source](docs/ARCHITECTURE.md#development) - Setup instructions
 - [Migration Guides](docs/MIGRATION_v2.md) - Version upgrade guides
 
@@ -245,7 +245,7 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.7.0**
+Current version: **3.7.4**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License

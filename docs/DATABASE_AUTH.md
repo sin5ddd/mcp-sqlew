@@ -440,6 +440,5 @@ Planned authentication methods:
 ## Related Documentation
 
 - [Configuration Guide](./CONFIGURATION.md)
-- [Database Setup](./DATABASE_SETUP.md)
-- [Architecture Overview](../ARCHITECTURE.md)
+- [Architecture Overview](./ARCHITECTURE.md)
 - [Type Definitions](../src/config/types.ts)
