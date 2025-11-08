@@ -837,4 +837,3 @@ task action=create
 - [WORKFLOWS.md](./WORKFLOWS.md) - Multi-agent coordination patterns
 - [BEST_PRACTICES.md](./BEST_PRACTICES.md) - Common errors and solutions
 - [TASK_MIGRATION.md](./TASK_MIGRATION.md) - Migrate from decision-based tracking
-- [MIGRATION_v3.3.md](./MIGRATION_v3.3.md) - Migration guide from v3.2.x to v3.4.1
