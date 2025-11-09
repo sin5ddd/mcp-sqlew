@@ -94,10 +94,21 @@ It's Ready!
 
 ## Configuration
 
+### Database Support
+
+sqlew supports multiple database backends for different deployment scenarios:
+
+| Database | Use Case | Status |
+|----------|----------|--------|
+| **SQLite** | Development, small projects | ✅ Default |
+| **MySQL 8.0 / MariaDB 10+** | Production, shared environments | ✅ Supported |
+| **PostgreSQL 12+** | Production, enterprise | ✅ v3.8.0+ |
+
 ### Optional Config File
 
 On first run, `.sqlew/config.toml` will be created for persistent settings:
 
+**SQLite (Default):**
 ```toml
 [database]
 path = ".sqlew/custom.db"
@@ -105,6 +116,38 @@ path = ".sqlew/custom.db"
 [autodelete]
 ignore_weekend = true
 message_hours = 48
+```
+
+**PostgreSQL:**
+```toml
+[database]
+type = "postgres"
+
+[database.connection]
+host = "localhost"
+port = 5432
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "secret"
+```
+
+**MySQL/MariaDB:**
+```toml
+[database]
+type = "mysql"
+
+[database.connection]
+host = "localhost"
+port = 3306
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "secret"
 ```
 
 Also `.sqlew/config.example.toml` is created for reference.
