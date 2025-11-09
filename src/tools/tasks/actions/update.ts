@@ -59,13 +59,17 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
           const layerId = await getLayerId(actualAdapter, params.layer, trx);
           if (layerId === null) {
             throw new Error(
-              `Invalid layer: '${params.layer}'. Must be one of 9 layers:\n` +
+              `Invalid layer: '${params.layer}'. Must be one of 9 layers (v3.8.0):\n` +
               `\n` +
               `FILE_REQUIRED (6): presentation, business, data, infrastructure, cross-cutting, documentation\n` +
-              `  → Requires file_actions parameter (or [] for non-file tasks)\n` +
+              `  → Must provide file_actions parameter (or [] for non-file tasks)\n` +
+              `  → Documentation IS files (README, CHANGELOG, docs/)\n` +
               `\n` +
               `FILE_OPTIONAL (3): planning, coordination, review\n` +
               `  → file_actions parameter is optional\n` +
+              `  → Planning: research, surveys, investigation\n` +
+              `  → Coordination: multi-agent orchestration\n` +
+              `  → Review: code review, verification\n` +
               `\n` +
               `Example: { layer: 'business', file_actions: [{ action: 'edit', path: 'src/model/user.ts' }] }`
             );

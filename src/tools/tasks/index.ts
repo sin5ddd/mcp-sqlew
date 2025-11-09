@@ -29,6 +29,7 @@ export { watcherStatus } from './watcher/status.js';
 // Export help
 export { taskHelp } from './help/help.js';
 export { taskExample } from './help/example.js';
+export { taskUseCase } from './help/use-case.js';
 
 // Export internal utilities (for testing or advanced usage)
 export * from './internal/validation.js';

@@ -145,13 +145,16 @@ export function validateFileActions(layer: string | undefined, file_actions: Tas
   if (FILE_REQUIRED_LAYERS.includes(layer as any)) {
     if (file_actions === undefined) {
       throw new Error(
-        `file_actions is required for layer '${layer}'.\n` +
+        `file_actions is required for layer '${layer}' (v3.8.0: 9 layers total).\n` +
         `\n` +
         `FILE_REQUIRED layers (6): presentation, business, data, infrastructure, cross-cutting, documentation\n` +
+        `  → Must provide file_actions parameter (or [] for non-file tasks)\n` +
+        `\n` +
         `FILE_OPTIONAL layers (3): planning, coordination, review\n` +
+        `  → file_actions parameter is optional\n` +
         `\n` +
         `Example: file_actions: [{ action: 'edit', path: 'src/model/user.ts' }]\n` +
-        `Use [] for non-file tasks, or switch to a planning layer (planning, coordination, review) if no files are involved.`
+        `Use [] for non-file tasks, or switch to a FILE_OPTIONAL layer if no files are involved.`
       );
     }
   }
@@ -162,13 +165,15 @@ export function validateFileActions(layer: string | undefined, file_actions: Tas
     file_actions.forEach((fa, i) => {
       if (!VALID_ACTIONS.includes(fa.action)) {
         throw new Error(
-          `Invalid action at index ${i}: '${fa.action}'. Must be one of: create, edit, delete\n` +
+          `Invalid action at index ${i}: '${fa.action}'. Must be one of: create, edit, delete (v3.8.0)\n` +
+          `\n` +
           `Example: { action: 'edit', path: 'src/model/user.ts' }`
         );
       }
       if (!fa.path || typeof fa.path !== 'string') {
         throw new Error(
-          `Invalid path at index ${i}: path must be a non-empty string.\n` +
+          `Invalid path at index ${i}: path must be a non-empty string (v3.8.0)\n` +
+          `\n` +
           `Example: { action: 'edit', path: 'src/model/user.ts' }`
         );
       }

@@ -12,7 +12,7 @@
  *   // Throws ValidationError with structured details if validation fails
  */
 
-import { getActionSpec, ACTION_SPECS_BY_TOOL } from './action-specs.js';
+import { getActionSpec, ACTION_SPECS_BY_TOOL } from './action-specs/index.js';
 import type {
   ValidationError,
   DecisionAction,

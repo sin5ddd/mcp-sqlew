@@ -26,7 +26,7 @@ import {
 import {
   createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask,
   batchCreateTasks, addDependency, removeDependency, getDependencies, watchFiles,
-  getPrunedFiles, linkPrunedFile, taskHelp, taskExample, watcherStatus
+  getPrunedFiles, linkPrunedFile, taskHelp, taskExample, taskUseCase, watcherStatus
 } from '../tools/tasks.js';
 import { trackAndReturnHelp } from '../utils/help-tracking.js';
 import {
@@ -306,12 +306,9 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
             result = taskExampleContent;
             break;
           case 'use_case':
-            result = await queryHelpListUseCases(getAdapter(), {
-              category: params.category,
-              complexity: params.complexity,
-              limit: params.limit,
-              offset: params.offset
-            });
+            const taskUseCaseContent = taskUseCase();
+            trackAndReturnHelp('task', 'use_case', JSON.stringify(taskUseCaseContent));
+            result = taskUseCaseContent;
             break;
           default: throw new Error(`Unknown action: ${action}`);
         }

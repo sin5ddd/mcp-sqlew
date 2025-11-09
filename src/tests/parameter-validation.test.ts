@@ -6,7 +6,7 @@
  */
 
 import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
-import { getActionSpec } from '../utils/action-specs.js';
+import { getActionSpec } from '../utils/action-specs/index.js';
 import * as assert from 'assert';
 import { test } from 'node:test';
 
