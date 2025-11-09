@@ -82,7 +82,19 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
             limit: params.limit,
             offset: params.offset
           }); break;
-          case 'set_batch': result = await setDecisionBatch({ decisions: params.decisions, atomic: params.atomic }); break;
+          case 'set_batch': {
+            // MCP client serializes arrays as JSON strings - parse if needed
+            let decisions = params.decisions;
+            if (typeof decisions === 'string') {
+              try {
+                decisions = JSON.parse(decisions);
+              } catch (error) {
+                throw new Error(`Invalid JSON in "decisions" parameter: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+            result = await setDecisionBatch({ decisions, atomic: params.atomic });
+            break;
+          }
           case 'has_updates': result = await hasUpdates({ agent_name: params.agent_name, since_timestamp: params.since_timestamp }); break;
           case 'set_from_template': result = await setFromTemplate(params); break;
           case 'create_template': result = await createTemplate(params); break;
@@ -119,7 +131,19 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
           case 'record': result = await recordFileChange(params); break;
           case 'get': result = await getFileChanges(params); break;
           case 'check_lock': result = await checkFileLock(params); break;
-          case 'record_batch': result = await recordFileChangeBatch({ file_changes: params.file_changes, atomic: params.atomic }); break;
+          case 'record_batch': {
+            // MCP client serializes arrays as JSON strings - parse if needed
+            let file_changes = params.file_changes;
+            if (typeof file_changes === 'string') {
+              try {
+                file_changes = JSON.parse(file_changes);
+              } catch (error) {
+                throw new Error(`Invalid JSON in "file_changes" parameter: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+            result = await recordFileChangeBatch({ file_changes, atomic: params.atomic });
+            break;
+          }
           case 'sqlite_flush': result = await sqliteFlush(); break;
           case 'help':
             const fileHelpContent = fileHelp();
@@ -183,7 +207,19 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
           case 'move': result = await moveTask(params); break;
           case 'link': result = await linkTask(params); break;
           case 'archive': result = await archiveTask(params); break;
-          case 'create_batch': result = await batchCreateTasks({ tasks: params.tasks, atomic: params.atomic }); break;
+          case 'create_batch': {
+            // MCP client serializes arrays as JSON strings - parse if needed
+            let tasks = params.tasks;
+            if (typeof tasks === 'string') {
+              try {
+                tasks = JSON.parse(tasks);
+              } catch (error) {
+                throw new Error(`Invalid JSON in "tasks" parameter: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+            result = await batchCreateTasks({ tasks, atomic: params.atomic });
+            break;
+          }
           case 'add_dependency': result = await addDependency(params); break;
           case 'remove_dependency': result = await removeDependency(params); break;
           case 'get_dependencies': result = await getDependencies(params); break;

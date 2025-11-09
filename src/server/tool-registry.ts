@@ -24,6 +24,7 @@ export function getToolRegistry(): Tool[] {
           }
         },
         required: ['action'],
+        additionalProperties: true,  // Allow action-specific parameters (key, value, tags, etc.)
       },
     },
     {
@@ -39,6 +40,7 @@ export function getToolRegistry(): Tool[] {
           }
         },
         required: ['action'],
+        additionalProperties: true,  // Allow action-specific parameters (file_path, layer, etc.)
       },
     },
     {
@@ -54,6 +56,7 @@ export function getToolRegistry(): Tool[] {
           }
         },
         required: ['action'],
+        additionalProperties: true,  // Allow action-specific parameters (constraint_text, priority, etc.)
       },
     },
     {
