@@ -94,11 +94,11 @@ export const TASK_ACTION_SPECS: Record<string, ActionSpec> = {
     hint: "Task must be in 'done' status before archiving"
   },
 
-  batch_create: {
+  create_batch: {
     required: ['tasks'],
     optional: ['atomic'],
     example: {
-      action: 'batch_create',
+      action: 'create_batch',
       tasks: [
         { title: 'Design API', priority: 3 },
         { title: 'Implement API', priority: 3 },

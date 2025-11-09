@@ -351,7 +351,7 @@ This is the most common confusion. Here's the distinction:
 | **move** | action, task_id, new_status | - |
 | **link** | action, task_id, link_type, target_id | link_relation |
 | **archive** | action, task_id | - |
-| **batch_create** | action, tasks | atomic |
+| **create_batch** | action, tasks | atomic |
 
 ---
 
@@ -714,7 +714,7 @@ This section demonstrates comprehensive multi-agent workflows using multiple too
 
 // 3. Create tasks for each sub-agent
 {
-  action: "batch_create",
+  action: "create_batch",
   atomic: false,
   tasks: [
     {

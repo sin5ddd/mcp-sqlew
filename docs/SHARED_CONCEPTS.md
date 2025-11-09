@@ -150,7 +150,7 @@ Determines batch operation failure handling:
 - `decision`: `set_batch`
 - `message`: `send_batch`
 - `file`: `record_batch`
-- `task`: `batch_create`
+- `task`: `create_batch`
 
 ---
 
@@ -180,7 +180,7 @@ Determines batch operation failure handling:
 - **constraint**: add, get, deactivate, help
 - **stats**: layer_summary, db_stats, clear, help
 - **config**: get, update, help
-- **task**: create, update, get, list, move, link, archive, batch_create, help
+- **task**: create, update, get, list, move, link, archive, create_batch, help
 
 ---
 

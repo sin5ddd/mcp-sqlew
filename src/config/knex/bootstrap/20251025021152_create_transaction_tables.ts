@@ -242,19 +242,14 @@ export async function up(knex: Knex): Promise<void> {
     });
   }
 
-  // Task-File Links (v3.7.0+ with project_id and linked_ts)
+  // Task-File Links
   if (!(await knex.schema.hasTable('t_task_file_links'))) {
     await knex.schema.createTable('t_task_file_links', (table) => {
-      table.increments('id').primary();
-      table.integer('task_id').unsigned().notNullable();
-      table.foreign('task_id').references('t_tasks.id').onDelete('CASCADE');
-      table.integer('file_id').unsigned().notNullable();
+      table.integer('task_id').unsigned();
+      table.foreign('task_id').references('t_tasks.id');
+      table.integer('file_id').unsigned();
       table.foreign('file_id').references('m_files.id');
-      table.integer('project_id').unsigned().notNullable().defaultTo(1);
-      table.foreign('project_id').references('m_projects.id').onDelete('CASCADE');
-      table.integer('linked_ts').notNullable();
-      table.index('task_id', 'idx_task_file_links_task');
-      table.index(['project_id', 'task_id'], 'idx_task_file_links_project');
+      table.primary(['task_id', 'file_id']);
     });
   }
 

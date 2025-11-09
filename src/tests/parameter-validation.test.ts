@@ -290,13 +290,6 @@ const validParameterTests: ValidationTest[] = [
       layer: 'business'
     },
     shouldFail: false
-  },
-  {
-    name: 'stats.layer_summary - valid (no params required)',
-    tool: 'stats',
-    action: 'layer_summary',
-    params: {},
-    shouldFail: false
   }
 ];
 
@@ -323,13 +316,6 @@ const helpActionTests: ValidationTest[] = [
     name: 'constraint.use_case - should skip validation',
     tool: 'constraint',
     action: 'use_case',
-    params: {},
-    shouldFail: false
-  },
-  {
-    name: 'stats.help_action - should skip validation',
-    tool: 'stats',
-    action: 'help_action',
     params: {},
     shouldFail: false
   }
@@ -511,7 +497,7 @@ test('Action Spec Registry', async (t) => {
   });
 
   await t.test('All tools have action specs', () => {
-    const tools = ['decision', 'task', 'file', 'constraint', 'stats'];
+    const tools = ['decision', 'task', 'file', 'constraint'];
     for (const tool of tools) {
       // Test at least one action per tool
       const spec = getActionSpec(tool, tool === 'decision' ? 'set' :

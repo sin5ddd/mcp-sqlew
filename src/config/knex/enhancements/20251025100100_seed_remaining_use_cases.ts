@@ -45,17 +45,17 @@ export async function up(knex: Knex): Promise<void> {
       category_id: categoryMap.task_management,
       title: 'Batch create multiple related tasks',
       complexity: 'intermediate',
-      description: 'Use batch_create to create multiple related tasks in a single operation with consistent metadata.\n\nExpected Outcome: Multiple tasks created atomically with shared tags and layer\n\nCommon Pitfalls: ["Not providing required title for each task","Mixing unrelated tasks in batch","Forgetting to link tasks after batch creation"]\n\nRelated Tools: ["task"]',
+      description: 'Use create_batch to create multiple related tasks in a single operation with consistent metadata.\n\nExpected Outcome: Multiple tasks created atomically with shared tags and layer\n\nCommon Pitfalls: ["Not providing required title for each task","Mixing unrelated tasks in batch","Forgetting to link tasks after batch creation"]\n\nRelated Tools: ["task"]',
       full_example: JSON.stringify({
         steps: [
-          { step: 1, action: 'task', params: { action: 'batch_create', tasks: [
+          { step: 1, action: 'task', params: { action: 'create_batch', tasks: [
             { title: 'Setup CI pipeline', priority: 3, layer: 'infrastructure', tags: ['devops', 'ci'] },
             { title: 'Configure deployment', priority: 3, layer: 'infrastructure', tags: ['devops', 'deployment'] },
             { title: 'Setup monitoring', priority: 2, layer: 'infrastructure', tags: ['devops', 'monitoring'] }
           ] } }
         ]
       }),
-      action_sequence: JSON.stringify(['batch_create'])
+      action_sequence: JSON.stringify(['create_batch'])
     },
     {
       category_id: categoryMap.task_management,
@@ -233,7 +233,7 @@ export async function up(knex: Knex): Promise<void> {
         outcome: 'Complete constraint lifecycle managed. All API endpoints measured, constraint enforced through tasks, validation tasks created, constraint deactivated when new decision supersedes it.',
         audit_trail: 'Full history of constraint enforcement preserved even after deactivation'
       }),
-      action_sequence: JSON.stringify(['constraint.add', 'task.batch_create', 'task.link', 'task.move', 'constraint.get', 'decision.set', 'constraint.deactivate'])
+      action_sequence: JSON.stringify(['constraint.add', 'task.create_batch', 'task.link', 'task.move', 'constraint.get', 'decision.set', 'constraint.deactivate'])
     },
     {
       category_id: categoryMap.cross_tool_workflow,
@@ -248,7 +248,7 @@ export async function up(knex: Knex): Promise<void> {
         outcome: 'Feature complete with: architectural decision documented, 8 tasks created/linked, 15 file changes tracked, 3 constraints enforced, 12 coordination messages sent',
         token_efficiency: 'Complete feature context in ~3k tokens vs ~20k tokens with manual tracking'
       }),
-      action_sequence: JSON.stringify(['decision.set', 'decision.add_decision_context', 'task.batch_create', 'constraint.add', 'task.link', 'message.send', 'file.record', 'task.watch_files', 'task.add_dependency', 'task.move', 'stats.layer_summary'])
+      action_sequence: JSON.stringify(['decision.set', 'decision.add_decision_context', 'task.create_batch', 'constraint.add', 'task.link', 'message.send', 'file.record', 'task.watch_files', 'task.add_dependency', 'task.move', 'stats.layer_summary'])
     },
     {
       category_id: categoryMap.configuration,

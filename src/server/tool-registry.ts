@@ -13,13 +13,7 @@ export function getToolRegistry(): Tool[] {
   return [
     {
       name: 'decision',
-      description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
-
-Context Management - Store decisions with metadata (tags, layers, versions, scopes)
-
-Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.
-Use action: "use_case" for practical scenarios and when-to-use guidance.`,
+      description: 'Context Management - Store decisions with versioning and metadata. Use action: "help" for documentation.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -33,45 +27,15 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
       },
     },
     {
-      name: 'message',
-      description: `⚠️ DEPRECATED (v3.6.6) - This tool is deprecated and will be removed in future versions.
-
-The messaging system was unused and has been removed. The t_agent_messages table no longer exists.
-All actions will return deprecation warnings and are non-operational.
-
-**REQUIRED PARAMETER**: action (must be specified in ALL calls)
-
-Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.
-Use action: "use_case" for practical scenarios and when-to-use guidance.`,
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: {
-            type: 'string',
-            description: 'Action',
-            enum: ['send', 'get', 'mark_read', 'send_batch', 'help', 'example', 'use_case']
-          }
-        },
-        required: ['action'],
-      },
-    },
-    {
       name: 'file',
-      description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
-
-File Change Tracking - Track file changes with layer classification and lock detection
-
-Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.
-Use action: "use_case" for practical scenarios and when-to-use guidance.`,
+      description: 'File Change Tracking - Track file modifications and database operations (SQLite only). Use action: "help" for documentation.',
       inputSchema: {
         type: 'object',
         properties: {
           action: {
             type: 'string',
             description: 'Action',
-            enum: ['record', 'get', 'check_lock', 'record_batch', 'help', 'example', 'use_case']
+            enum: ['record', 'get', 'check_lock', 'record_batch', 'sqlite_flush', 'help', 'example', 'use_case']
           }
         },
         required: ['action'],
@@ -79,13 +43,7 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
     },
     {
       name: 'constraint',
-      description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
-
-Constraint Management - Manage architectural rules and requirements
-
-Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.
-Use action: "use_case" for practical scenarios and when-to-use guidance.`,
+      description: 'Architectural Rules - Define and manage project constraints with priorities. Use action: "help" for documentation.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -99,68 +57,167 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
       },
     },
     {
-      name: 'stats',
-      description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
-
-Statistics & Utilities - View stats, activity logs, manage data cleanup, and WAL checkpoints
-
-Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.
-Use action: "use_case" for practical scenarios and when-to-use guidance.`,
+      name: 'task',
+      description: 'Task Management - Create, track, and manage tasks with kanban workflow, layers, and file tracking. Use action: "help" for documentation.',
       inputSchema: {
         type: 'object',
         properties: {
           action: {
             type: 'string',
             description: 'Action',
-            enum: ['layer_summary', 'db_stats', 'clear', 'activity_log', 'flush', 'help_action', 'help_params', 'help_tool', 'help_use_case', 'help_list_use_cases', 'help_next_actions', 'help', 'example', 'use_case']
+            enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'create_batch', 'add_dependency', 'remove_dependency', 'get_dependencies', 'watch_files', 'watcher', 'help', 'example', 'use_case']
+          }
+        },
+        required: ['action'],
+        additionalProperties: true,  // Allow file_actions and other parameters (v3.8.0)
+      },
+    },
+    {
+      name: 'help',
+      description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Help System - Query action documentation, parameters, and workflow guidance
+
+Actions:
+- query_action: Get action documentation with parameters and examples
+- query_params: Get parameter list only (quick reference)
+- query_tool: Get tool overview and all actions
+- workflow_hints: Get common next actions after current action
+- batch_guide: Get guidance for batch operations
+- error_recovery: Analyze errors and suggest fixes
+
+Use this tool to understand how to use other sqlew tools. Returns only requested information (80-95% token reduction vs legacy help).`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'Help action to perform',
+            enum: ['query_action', 'query_params', 'query_tool', 'workflow_hints', 'batch_guide', 'error_recovery', 'help', 'example']
+          },
+          tool: {
+            type: 'string',
+            description: 'Target tool name (for query_action, query_params, query_tool, workflow_hints)'
+          },
+          target_action: {
+            type: 'string',
+            description: 'Target action name (for query_action, query_params)'
+          },
+          current_action: {
+            type: 'string',
+            description: 'Current action name (for workflow_hints)'
+          },
+          operation: {
+            type: 'string',
+            description: 'Batch operation name in format "tool.action" (for batch_guide)'
+          },
+          error_message: {
+            type: 'string',
+            description: 'Error message to analyze (for error_recovery)'
           }
         },
         required: ['action'],
       },
     },
     {
-      name: 'task',
+      name: 'example',
       description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
 
-Kanban Task Watcher - AI-optimized task management with auto-stale detection
+Example System - Browse and search code examples for sqlew tools
 
-**Layers** (9 available in v3.8.0):
-- FILE_REQUIRED (file_actions required): presentation, business, data, infrastructure, cross-cutting, documentation
-- FILE_OPTIONAL (file_actions optional): planning, coordination, review
+Actions:
+- get: Get examples by tool, action, or topic
+- search: Search examples by keyword
+- list_all: List all available examples with filtering
 
-**file_actions** (optional, v3.8.0): Array of file operations for task tracking
-- Structure: { action: 'create'|'edit'|'delete', path: string }[]
-- Example: [{ action: 'create', path: 'src/auth/login.ts' }, { action: 'edit', path: 'src/api/router.ts' }]
-- Validation: Required for FILE_REQUIRED layers (presentation, business, data, infrastructure, cross-cutting, documentation)
-- Validation: Optional for FILE_OPTIONAL layers (planning, coordination, review)
-- Note: watch_files action still supported for backward compatibility but deprecated
-
-**Layer Descriptions**:
-- presentation: UI components, views, pages (file_actions REQUIRED)
-- business: Core business logic, services (file_actions REQUIRED)
-- data: Database models, repositories (file_actions REQUIRED)
-- infrastructure: Config, deployment, CI/CD (file_actions REQUIRED)
-- cross-cutting: Logging, auth, error handling (file_actions REQUIRED)
-- documentation: README, CHANGELOG, docs/ (file_actions REQUIRED)
-- planning: Research, surveys, investigation (file_actions optional)
-- coordination: Multi-agent orchestration (file_actions optional)
-- review: Code review, verification (file_actions optional)
-
-Use action: "help" for detailed documentation.
-Use action: "example" for comprehensive usage examples.
-Use action: "use_case" for practical scenarios and when-to-use guidance.`,
+Use this tool to find working code snippets. Returns only requested examples (token-efficient).`,
       inputSchema: {
         type: 'object',
         properties: {
           action: {
             type: 'string',
-            description: 'Action',
-            enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'batch_create', 'add_dependency', 'remove_dependency', 'get_dependencies', 'watch_files', 'watcher', 'help', 'example', 'use_case']
+            description: 'Example action to perform',
+            enum: ['get', 'search', 'list_all', 'help', 'example']
+          },
+          tool: {
+            type: 'string',
+            description: 'Filter by tool name (for get, search, list_all)'
+          },
+          action_name: {
+            type: 'string',
+            description: 'Filter by action name (for get, search)'
+          },
+          topic: {
+            type: 'string',
+            description: 'Search by topic in title or explanation (for get)'
+          },
+          keyword: {
+            type: 'string',
+            description: 'Keyword to search (for search)'
+          },
+          complexity: {
+            type: 'string',
+            description: 'Filter by complexity: basic|intermediate|advanced (for search, list_all)'
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum results to return (default: 20, for list_all)'
+          },
+          offset: {
+            type: 'number',
+            description: 'Result offset for pagination (default: 0, for list_all)'
           }
         },
         required: ['action'],
-        additionalProperties: true,  // Allow file_actions and other parameters (v3.8.0)
+      },
+    },
+    {
+      name: 'use_case',
+      description: `**REQUIRED PARAMETER**: action (must be specified in ALL calls)
+
+Use Case Catalog - Browse and search complete workflow scenarios
+
+Actions:
+- get: Get complete use case workflow by ID
+- search: Search use cases by keyword/category
+- list_all: List all use cases with filtering and pagination
+
+Use this tool to learn end-to-end workflows and multi-step operations. Returns workflow steps with executable code examples.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'Use case action to perform',
+            enum: ['get', 'search', 'list_all', 'help', 'example']
+          },
+          use_case_id: {
+            type: 'number',
+            description: 'Use case ID to retrieve (for get)'
+          },
+          keyword: {
+            type: 'string',
+            description: 'Search keyword - searches title and description (for search)'
+          },
+          category: {
+            type: 'string',
+            description: 'Filter by category (optional for search, list_all)'
+          },
+          complexity: {
+            type: 'string',
+            description: 'Filter by complexity level',
+            enum: ['basic', 'intermediate', 'advanced']
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum results to return (default: 20, for list_all)'
+          },
+          offset: {
+            type: 'number',
+            description: 'Result offset for pagination (default: 0, for list_all)'
+          }
+        },
+        required: ['action'],
       },
     },
   ];

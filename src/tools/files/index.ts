@@ -9,6 +9,7 @@ export { recordFileChange } from './actions/record.js';
 export { getFileChanges } from './actions/get.js';
 export { checkFileLock } from './actions/check-lock.js';
 export { recordFileChangeBatch } from './actions/record-batch.js';
+export { sqliteFlush } from './actions/sqlite-flush.js';
 
 // Help exports
 export { fileHelp } from './help/help.js';

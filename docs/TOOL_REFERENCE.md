@@ -334,7 +334,7 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
 | **move** | action, task_id, new_status | - |
 | **link** | action, task_id, link_type, target_id | link_relation (⚠️ link_type="file" deprecated in v3.4.1) |
 | **archive** | action, task_id | - |
-| **batch_create** | action, tasks | atomic |
+| **create_batch** | action, tasks | atomic |
 | **add_dependency** | action, blocker_task_id, blocked_task_id | - |
 | **remove_dependency** | action, blocker_task_id, blocked_task_id | - |
 | **get_dependencies** | action, task_id | include_details |

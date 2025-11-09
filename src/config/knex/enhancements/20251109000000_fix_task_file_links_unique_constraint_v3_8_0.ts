@@ -19,45 +19,75 @@ import type { Knex } from 'knex';
 export async function up(knex: Knex): Promise<void> {
   console.log('🔧 Adding UNIQUE constraint to t_task_file_links...');
 
-  // Check if unique index already exists
-  const indexes = await knex.raw(`
-    SELECT name FROM sqlite_master
-    WHERE type='index'
-    AND tbl_name='t_task_file_links'
-    AND name='idx_task_file_links_unique'
-  `);
-
-  if (indexes.length > 0) {
-    console.log('✓ UNIQUE constraint already exists on t_task_file_links, skipping');
+  // Check if project_id column exists (required for this constraint)
+  const hasProjectId = await knex.schema.hasColumn('t_task_file_links', 'project_id');
+  if (!hasProjectId) {
+    console.log('✓ t_task_file_links.project_id does not exist yet, skipping (will be created later)');
     return;
   }
 
-  // Add UNIQUE constraint via index (SQLite best practice)
-  await knex.raw(`
-    CREATE UNIQUE INDEX idx_task_file_links_unique
-    ON t_task_file_links (project_id, task_id, file_id)
-  `);
+  const client = knex.client.config.client;
+  const isSQLite = client === 'better-sqlite3' || client === 'sqlite3';
+  const isMySQL = client === 'mysql' || client === 'mysql2';
 
-  console.log('✅ Added UNIQUE constraint to t_task_file_links (project_id, task_id, file_id)');
+  // Try to create unique index - if it fails because it exists, that's fine
+  try {
+    if (isSQLite || isMySQL) {
+      // SQLite and MySQL: CREATE UNIQUE INDEX
+      await knex.raw(`
+        CREATE UNIQUE INDEX idx_task_file_links_unique
+        ON t_task_file_links (project_id, task_id, file_id)
+      `);
+    } else {
+      // PostgreSQL: Use Knex schema builder
+      await knex.schema.alterTable('t_task_file_links', (table) => {
+        table.unique(['project_id', 'task_id', 'file_id'], { indexName: 'idx_task_file_links_unique' });
+      });
+    }
+    console.log('✅ Added UNIQUE constraint to t_task_file_links (project_id, task_id, file_id)');
+  } catch (error: any) {
+    // Check if error is due to index already existing
+    if (error.message && (
+      error.message.includes('already exists') ||
+      error.message.includes('Duplicate key name') ||
+      error.message.includes('duplicate key') ||
+      error.message.includes('relation') && error.message.includes('already exists')
+    )) {
+      console.log('✓ UNIQUE constraint already exists on t_task_file_links, skipping');
+    } else {
+      // Re-throw if it's a different error
+      throw error;
+    }
+  }
 }
 
 export async function down(knex: Knex): Promise<void> {
   console.log('🔧 Removing UNIQUE constraint from t_task_file_links...');
 
-  // Check if index exists before dropping
-  const indexes = await knex.raw(`
-    SELECT name FROM sqlite_master
-    WHERE type='index'
-    AND tbl_name='t_task_file_links'
-    AND name='idx_task_file_links_unique'
-  `);
+  const client = knex.client.config.client;
+  const isSQLite = client === 'better-sqlite3' || client === 'sqlite3';
+  const isMySQL = client === 'mysql' || client === 'mysql2';
 
-  if (indexes.length === 0) {
-    console.log('✓ UNIQUE constraint does not exist, nothing to remove');
-    return;
+  try {
+    if (isSQLite) {
+      await knex.raw('DROP INDEX IF EXISTS idx_task_file_links_unique');
+    } else if (isMySQL) {
+      await knex.raw('DROP INDEX idx_task_file_links_unique ON t_task_file_links');
+    } else {
+      // PostgreSQL
+      await knex.schema.alterTable('t_task_file_links', (table) => {
+        table.dropUnique(['project_id', 'task_id', 'file_id'], 'idx_task_file_links_unique');
+      });
+    }
+    console.log('✅ Removed UNIQUE constraint from t_task_file_links');
+  } catch (error: any) {
+    if (error.message && (
+      error.message.includes('does not exist') ||
+      error.message.includes("Can't DROP")
+    )) {
+      console.log('✓ UNIQUE constraint does not exist, nothing to remove');
+    } else {
+      throw error;
+    }
   }
-
-  await knex.raw('DROP INDEX IF EXISTS idx_task_file_links_unique');
-
-  console.log('✅ Removed UNIQUE constraint from t_task_file_links');
 }

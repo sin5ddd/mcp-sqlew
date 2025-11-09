@@ -13,18 +13,14 @@ export { DECISION_ACTION_SPECS } from './decision-specs.js';
 export { TASK_ACTION_SPECS } from './task-specs.js';
 export { FILE_ACTION_SPECS } from './file-specs.js';
 export { CONSTRAINT_ACTION_SPECS } from './constraint-specs.js';
-export { STATS_ACTION_SPECS } from './stats-specs.js';
 export { CONFIG_ACTION_SPECS } from './config-specs.js';
-export { MESSAGE_ACTION_SPECS } from './message-specs.js';
 
 // Re-export master registry and utility functions
 import { DECISION_ACTION_SPECS } from './decision-specs.js';
 import { TASK_ACTION_SPECS } from './task-specs.js';
 import { FILE_ACTION_SPECS } from './file-specs.js';
 import { CONSTRAINT_ACTION_SPECS } from './constraint-specs.js';
-import { STATS_ACTION_SPECS } from './stats-specs.js';
 import { CONFIG_ACTION_SPECS } from './config-specs.js';
-import { MESSAGE_ACTION_SPECS } from './message-specs.js';
 import { ActionSpec } from './types.js';
 
 /**
@@ -35,9 +31,7 @@ export const ACTION_SPECS_BY_TOOL: Record<string, Record<string, ActionSpec>> = 
   task: TASK_ACTION_SPECS,
   file: FILE_ACTION_SPECS,
   constraint: CONSTRAINT_ACTION_SPECS,
-  stats: STATS_ACTION_SPECS,
-  config: CONFIG_ACTION_SPECS,
-  message: MESSAGE_ACTION_SPECS
+  config: CONFIG_ACTION_SPECS
 };
 
 /**

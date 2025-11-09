@@ -69,7 +69,7 @@ Only optimize if you have specific workflow constraints (e.g., solo developer do
 - Tracking sprint progress
 
 **Key Capabilities**:
-- Create tasks with dependencies using `batch_create`
+- Create tasks with dependencies using `create_batch`
 - Assign specialized agents to tasks
 - Monitor progress via `stats.layer_summary`
 - Detect stale tasks and blockers

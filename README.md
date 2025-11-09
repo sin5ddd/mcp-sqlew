@@ -113,6 +113,32 @@ Also `.sqlew/config.example.toml` is created for reference.
 
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all options and validation rules.
 
+### CLI Configuration (Recommended)
+
+Configuration is managed via **`.sqlew/config.toml`** file and **CLI arguments only**. The MCP `config` tool has been removed for simplicity.
+
+**Why CLI-only configuration?**
+- **No drift:** Single source of truth (config file)
+- **Version control:** Commit config to git, share with team
+- **Clear documentation:** Config file documents project requirements
+- **Type safety:** TOML validation catches errors at startup
+
+**Common CLI arguments:**
+```bash
+# Custom database path
+npx sqlew /path/to/database.db
+
+# Auto-deletion settings
+npx sqlew --autodelete-message-hours=48
+npx sqlew --autodelete-file-history-days=30
+npx sqlew --autodelete-ignore-weekend
+
+# Custom config file
+npx sqlew --config-path=.sqlew/custom.toml
+```
+
+For persistent settings, edit `.sqlew/config.toml` instead of using CLI arguments.
+
 ## Quick Start
 
 install it, launch claude, exit claude and launch Claude again.

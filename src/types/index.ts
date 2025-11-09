@@ -35,9 +35,6 @@ export * from './file/responses.js';
 export * from './constraint/params.js';
 export * from './constraint/responses.js';
 
-// Stats types
-export * from './stats/index.js';
-
 // Action types
 export * from './actions.js';
 

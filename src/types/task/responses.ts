@@ -213,7 +213,7 @@ export interface TaskBatchCreateResultItem {
 }
 
 /**
- * Response for task batch_create action
+ * Response for task create_batch action
  */
 export interface TaskBatchCreateResponse {
   success: boolean;

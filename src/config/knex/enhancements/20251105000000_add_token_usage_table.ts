@@ -14,6 +14,16 @@ import type { Knex } from 'knex';
  */
 
 export async function up(knex: Knex): Promise<void> {
+  const client = knex.client.config.client;
+  const isSQLite = client === 'better-sqlite3' || client === 'sqlite3';
+
+  // **BUG FIX v3.7.5**: MySQL/PostgreSQL compatibility issue with DEFAULT UNIX_TIMESTAMP()
+  // MySQL/PostgreSQL handled by 20251109000003_token_usage_cross_db_compat_v3_7_5.ts
+  if (!isSQLite) {
+    console.log(`✓ Non-SQLite database (${client}) detected, skipping (handled by 20251109000003)`);
+    return;
+  }
+
   // Check if table already exists (idempotency)
   const hasTable = await knex.schema.hasTable('t_help_token_usage');
   if (hasTable) {
@@ -22,8 +32,6 @@ export async function up(knex: Knex): Promise<void> {
   }
 
   console.log('Creating t_help_token_usage table...');
-
-  const client = knex.client.config.client;
 
   await knex.schema.createTable('t_help_token_usage', (table) => {
     table.increments('usage_id').primary();

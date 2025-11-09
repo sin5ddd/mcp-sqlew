@@ -114,7 +114,7 @@ export function taskExample(): any {
         examples: [
           {
             scenario: 'Create multiple related tasks',
-            request: '{ action: "batch_create", tasks: [{"title": "Design API", "priority": 3}, {"title": "Implement API", "priority": 3}, {"title": "Write tests", "priority": 2}], atomic: false }',
+            request: '{ action: "create_batch", tasks: [{"title": "Design API", "priority": 3}, {"title": "Implement API", "priority": 3}, {"title": "Write tests", "priority": 2}], atomic: false }',
             explanation: 'Create task breakdown - use atomic:false for best-effort'
           }
         ]

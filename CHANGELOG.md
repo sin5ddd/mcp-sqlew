@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.8.0] - 2025-11-09
+
+### BREAKING CHANGES
+
+**Batch Action Naming Standardization**
+
+`task.batch_create` has been renamed to `task.create_batch` to follow the `<verb>_batch` naming pattern used by other batch actions (`set_batch`, `record_batch`).
+
+**Migration Required:**
+```typescript
+// ❌ Old (v3.7.x and earlier)
+task({ action: "batch_create", tasks: [...] })
+
+// ✅ New (v3.8.0+)
+task({ action: "create_batch", tasks: [...] })
+```
+
+**Rationale:**
+- Achieves 100% consistency across all batch actions
+- Improves alphabetical sorting in IDE auto-completion (create → create_batch)
+- Aligns with industry standard (REST APIs, GraphQL, ORMs use suffix pattern)
+- See docs/ADR-batch-naming-standard.md for full justification
+
+**Impact:**
+- All code using `task.batch_create` must update to `task.create_batch`
+- Simple find-replace migration (estimated 2-5 minutes per integration)
+- No database schema changes required
+
+### Removed
+
+**Config Tool Removed (Phase 6)**
+
+The orphaned config tool has been removed in favor of CLI-only configuration:
+
+- **Deleted**: `src/tools/config.ts` (307 lines)
+- **Removed**: `ConfigAction` type from `src/types.ts` and `src/types/actions.ts`
+- **Removed**: ConfigAction import from `src/utils/parameter-validator.ts`
+- **Updated**: README.md with CLI-only config approach documentation
+- **Updated**: docs/CONFIGURATION.md already documented config tool removal
+
+**Why removed:**
+- Config tool was never registered in `tool-registry.ts` (orphaned code)
+- Messaging system deprecated (primary use case eliminated)
+- File-based configuration (`.sqlew/config.toml`) is clearer and more maintainable
+- Runtime updates were confusing (changes lost on restart unless manually synced to file)
+- Configuration drift between `m_config` table and config file
+
+**Migration Path:**
+- ✅ **Use `.sqlew/config.toml`** for all configuration (persistent, version-controlled)
+- ✅ **Use CLI arguments** for one-time overrides (`--autodelete-message-hours=48`)
+- ✅ **Internal config operations** preserved (`src/database/config/config-ops.ts`)
+- ✅ **m_config table** preserved (used internally by retention logic)
+
+**Impact:**
+- Cleaner codebase with ~300 lines removed
+- No functional impact - tool was never registered
+- Configuration via file and CLI arguments only
+
+**Message Tool Completely Removed**
+
+The deprecated message tool has been completely removed from the codebase:
+
+- **Deleted**: `src/tools/messaging.ts` (599 lines)
+- **Removed**: Message tool entry from `tool-registry.ts`
+- **Removed**: Message tool handler from `tool-handlers.ts`
+- **Removed**: Message imports from `cli.ts`
+- **Updated**: `MessageAction` type changed to `never` (backward compatibility stub)
+- **CLI**: `sqlew query messages` now returns error message
+
+**Migration Path**:
+- No action required - messaging system was already marked deprecated in v3.6.6
+- The `t_agent_messages` table was dropped in v3.6.6
+- All message tool actions returned deprecation warnings since v3.6.6
+
+**Impact**:
+- Cleaner codebase with ~700 lines removed
+- No functional impact - messaging system was unused
+- MessageAction type remains as deprecated stub for backward compatibility
+
+---
+
 ## [3.7.4] - 2025-11-08
 
 ### Added - Complete JSON Import/Export System
@@ -1186,7 +1267,7 @@ This version was replaced by v3.2.4. Use v3.2.4 or later.
 - New triggers: `trg_log_task_create`, `trg_log_task_status_change`, `trg_update_task_timestamp`
 
 #### MCP Actions (task tool)
-- `create`, `update`, `get`, `list`, `move`, `link`, `archive`, `batch_create`
+- `create`, `update`, `get`, `list`, `move`, `link`, `archive`, `create_batch`
 - `watch_files` - Start file watching for auto-transitions
 
 #### Documentation

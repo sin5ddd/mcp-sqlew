@@ -48,6 +48,16 @@ import type { Knex } from 'knex';
 import { detectProjectNameSync } from '../../../utils/project-detector.js';
 
 export async function up(knex: Knex): Promise<void> {
+  // **BUG FIX v3.7.5**: This migration is SQLite-specific
+  // MySQL/PostgreSQL compatibility handled by 20251109000002_multi_project_cross_db_compat_v3_7_5.ts
+  const client = knex.client.config.client;
+  const isSQLite = client === 'sqlite3' || client === 'better-sqlite3';
+
+  if (!isSQLite) {
+    console.log(`✓ Non-SQLite database (${client}) detected, skipping (handled by 20251109000002)`);
+    return;
+  }
+
   // Check if migration already completed
   const hasProjectsTable = await knex.schema.hasTable('m_projects');
   const hasProjectIdInDecisions = await knex.schema.hasColumn('t_decisions', 'project_id');

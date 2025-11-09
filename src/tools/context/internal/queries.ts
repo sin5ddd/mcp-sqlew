@@ -55,7 +55,7 @@ export async function setDecisionInternal(
   // Validate layer if provided
   let layerId: number | null = null;
   if (params.layer) {
-    const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
+    const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting', 'documentation'];
     if (!validLayers.includes(params.layer)) {
       throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
     }

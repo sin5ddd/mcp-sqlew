@@ -15,7 +15,7 @@ export { listTasks } from './actions/list.js';
 export { moveTask } from './actions/move.js';
 export { linkTask } from './actions/link.js';
 export { archiveTask } from './actions/archive.js';
-export { batchCreateTasks } from './actions/batch-create.js';
+export { createTasksBatch as batchCreateTasks } from './actions/create-batch.js';
 export { addDependency } from './actions/add-dependency.js';
 export { removeDependency } from './actions/remove-dependency.js';
 export { getDependencies } from './actions/get-dependencies.js';

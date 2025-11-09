@@ -142,7 +142,7 @@ export function taskHelp(): any {
           task_id: 5
         }
       },
-      batch_create: {
+      create_batch: {
         description: 'Create multiple tasks atomically',
         required_params: ['tasks'],
         optional_params: ['atomic'],
@@ -151,7 +151,7 @@ export function taskHelp(): any {
         },
         note: '⚠️  IMPORTANT: The "tasks" parameter must be a JavaScript array, not a JSON string. MCP tools require pre-parsed objects.',
         example: {
-          action: 'batch_create',
+          action: 'create_batch',
           tasks: [
             { title: 'Task 1', priority: 2 },
             { title: 'Task 2', priority: 3, layer: 'business' }
