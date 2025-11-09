@@ -172,7 +172,9 @@ export const ACTIVE_CONTEXT_WINDOW_SECONDS = ONE_HOUR;
 // ============================================================================
 
 /**
- * Standard architecture layers
+ * Standard architecture layers (expanded in v3.8.0)
+ * - Original 5: presentation, business, data, infrastructure, cross-cutting
+ * - Planning 4: planning, documentation, coordination, review
  */
 export const STANDARD_LAYERS = [
   'presentation',
@@ -180,9 +182,36 @@ export const STANDARD_LAYERS = [
   'data',
   'infrastructure',
   'cross-cutting',
+  'planning',
+  'documentation',
+  'coordination',
+  'review',
 ] as const;
 
 export type StandardLayer = typeof STANDARD_LAYERS[number];
+
+/**
+ * Layers that require file_actions parameter (v3.8.0)
+ * These layers represent code or documentation files that must be tracked
+ */
+export const FILE_REQUIRED_LAYERS = [
+  'presentation',
+  'business',
+  'data',
+  'infrastructure',
+  'cross-cutting',
+  'documentation',  // Documentation IS files (README, CHANGELOG, docs/)
+] as const;
+
+/**
+ * Layers where file_actions is optional (v3.8.0)
+ * These layers represent planning, coordination, and review work
+ */
+export const FILE_OPTIONAL_LAYERS = [
+  'planning',      // Research, surveys, investigation
+  'coordination',  // Multi-agent orchestration
+  'review',        // Code review, verification
+] as const;
 
 // ============================================================================
 // Standard Categories

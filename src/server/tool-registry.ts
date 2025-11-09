@@ -125,6 +125,28 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
 
 Kanban Task Watcher - AI-optimized task management with auto-stale detection
 
+**Layers** (9 available in v3.8.0):
+- FILE_REQUIRED (file_actions required): presentation, business, data, infrastructure, cross-cutting, documentation
+- FILE_OPTIONAL (file_actions optional): planning, coordination, review
+
+**file_actions** (optional, v3.8.0): Array of file operations for task tracking
+- Structure: { action: 'create'|'edit'|'delete', path: string }[]
+- Example: [{ action: 'create', path: 'src/auth/login.ts' }, { action: 'edit', path: 'src/api/router.ts' }]
+- Validation: Required for FILE_REQUIRED layers (presentation, business, data, infrastructure, cross-cutting, documentation)
+- Validation: Optional for FILE_OPTIONAL layers (planning, coordination, review)
+- Note: watch_files action still supported for backward compatibility but deprecated
+
+**Layer Descriptions**:
+- presentation: UI components, views, pages (file_actions REQUIRED)
+- business: Core business logic, services (file_actions REQUIRED)
+- data: Database models, repositories (file_actions REQUIRED)
+- infrastructure: Config, deployment, CI/CD (file_actions REQUIRED)
+- cross-cutting: Logging, auth, error handling (file_actions REQUIRED)
+- documentation: README, CHANGELOG, docs/ (file_actions REQUIRED)
+- planning: Research, surveys, investigation (file_actions optional)
+- coordination: Multi-agent orchestration (file_actions optional)
+- review: Code review, verification (file_actions optional)
+
 Use action: "help" for detailed documentation.
 Use action: "example" for comprehensive usage examples.
 Use action: "use_case" for practical scenarios and when-to-use guidance.`,
@@ -138,6 +160,7 @@ Use action: "use_case" for practical scenarios and when-to-use guidance.`,
           }
         },
         required: ['action'],
+        additionalProperties: true,  // Allow file_actions and other parameters (v3.8.0)
       },
     },
   ];

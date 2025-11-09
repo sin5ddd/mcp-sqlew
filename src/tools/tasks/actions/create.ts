@@ -12,7 +12,7 @@ import { validateActionParams } from '../../../utils/parameter-validator.js';
 import { debugLog } from '../../../utils/debug-logger.js';
 import connectionManager from '../../../utils/connection-manager.js';
 import { TaskCreateParams, STATUS_TO_ID } from '../types.js';
-import { validateTaskCreateParams, parseArrayParam, processAcceptanceCriteria } from '../internal/validation.js';
+import { validateTaskCreateParams, parseArrayParam, processAcceptanceCriteria, validateFileActions, convertWatchFilesToFileActions } from '../internal/validation.js';
 
 /**
  * Internal helper: Create task without wrapping in transaction
@@ -31,6 +31,32 @@ export async function createTaskInternal(
   // Validate parameters
   validateTaskCreateParams(params);
 
+  // Handle backward compatibility: convert watch_files to file_actions (v3.8.0)
+  let file_actions = params.file_actions;
+
+  // Parse file_actions if it's a string (MCP SDK may send JSON as string)
+  if (file_actions && typeof file_actions === 'string') {
+    try {
+      file_actions = JSON.parse(file_actions);
+    } catch (error) {
+      throw new Error('Invalid file_actions format. Expected JSON array of {action, path} objects.');
+    }
+  }
+
+  // Backward compatibility: convert watch_files to file_actions
+  if (!file_actions && params.watch_files) {
+    const watchFilesParsed = parseArrayParam(params.watch_files, 'watch_files');
+    file_actions = convertWatchFilesToFileActions(watchFilesParsed);
+  }
+
+  // Validate file_actions is an array if provided
+  if (file_actions !== undefined && !Array.isArray(file_actions)) {
+    throw new Error('file_actions must be an array of {action, path} objects');
+  }
+
+  // Validate file_actions based on layer (v3.8.0)
+  validateFileActions(params.layer, file_actions);
+
   // Get priority
   const priority = params.priority !== undefined ? params.priority : 2;
 
@@ -46,7 +72,17 @@ export async function createTaskInternal(
   if (params.layer) {
     layerId = await getLayerId(adapter, params.layer, trx);
     if (layerId === null) {
-      throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
+      throw new Error(
+        `Invalid layer: '${params.layer}'. Must be one of 9 layers:\n` +
+        `\n` +
+        `FILE_REQUIRED (6): presentation, business, data, infrastructure, cross-cutting, documentation\n` +
+        `  → Requires file_actions parameter (or [] for non-file tasks)\n` +
+        `\n` +
+        `FILE_OPTIONAL (3): planning, coordination, review\n` +
+        `  → file_actions parameter is optional\n` +
+        `\n` +
+        `Example: { layer: 'business', file_actions: [{ action: 'edit', path: 'src/model/user.ts' }] }`
+      );
     }
   }
 
@@ -111,24 +147,24 @@ export async function createTaskInternal(
     layer_id: layerId || undefined
   });
 
-  // Link files and register with watcher if watch_files provided (v3.4.1)
-  if (params.watch_files && params.watch_files.length > 0) {
-    const watchFilesParsed = parseArrayParam(params.watch_files, 'watch_files');
-
-    for (const filePath of watchFilesParsed) {
-      const fileId = await getOrCreateFile(adapter, projectId, filePath, trx);
+  // Link files and register with watcher if file_actions provided (v3.8.0)
+  // Also supports legacy watch_files via auto-conversion above
+  if (file_actions && file_actions.length > 0) {
+    for (const fileAction of file_actions) {
+      const fileId = await getOrCreateFile(adapter, projectId, fileAction.path, trx);
       await knex('t_task_file_links').insert({
         project_id: projectId,
         task_id: Number(taskId),
-        file_id: fileId
+        file_id: fileId,
+        linked_ts: Math.floor(Date.now() / 1000)
       }).onConflict(['project_id', 'task_id', 'file_id']).ignore();
     }
 
     // Register files with watcher for auto-tracking
     try {
       const watcher = FileWatcher.getInstance();
-      for (const filePath of watchFilesParsed) {
-        watcher.registerFile(filePath, Number(taskId), params.title, status);
+      for (const fileAction of file_actions) {
+        watcher.registerFile(fileAction.path, Number(taskId), params.title, status);
       }
     } catch (error) {
       // Watcher may not be initialized yet, ignore

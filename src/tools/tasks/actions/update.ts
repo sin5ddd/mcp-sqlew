@@ -10,7 +10,7 @@ import { validateActionParams } from '../../../utils/parameter-validator.js';
 import { debugLog } from '../../../utils/debug-logger.js';
 import connectionManager from '../../../utils/connection-manager.js';
 import { TaskUpdateParams } from '../types.js';
-import { validateTaskUpdateParams, parseArrayParam, processAcceptanceCriteria } from '../internal/validation.js';
+import { validateTaskUpdateParams, parseArrayParam, processAcceptanceCriteria, validateFileActions, convertWatchFilesToFileActions } from '../internal/validation.js';
 
 /**
  * Update task metadata
@@ -58,7 +58,17 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
         if (params.layer !== undefined) {
           const layerId = await getLayerId(actualAdapter, params.layer, trx);
           if (layerId === null) {
-            throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
+            throw new Error(
+              `Invalid layer: '${params.layer}'. Must be one of 9 layers:\n` +
+              `\n` +
+              `FILE_REQUIRED (6): presentation, business, data, infrastructure, cross-cutting, documentation\n` +
+              `  → Requires file_actions parameter (or [] for non-file tasks)\n` +
+              `\n` +
+              `FILE_OPTIONAL (3): planning, coordination, review\n` +
+              `  → file_actions parameter is optional\n` +
+              `\n` +
+              `Example: { layer: 'business', file_actions: [{ action: 'edit', path: 'src/model/user.ts' }] }`
+            );
           }
           updateData.layer_id = layerId;
         }
@@ -119,16 +129,44 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
           }
         }
 
-        // Handle watch_files if provided (v3.4.1)
-        if (params.watch_files && params.watch_files.length > 0) {
-          const watchFilesParsed = parseArrayParam(params.watch_files, 'watch_files');
+        // Handle backward compatibility: convert watch_files to file_actions (v3.8.0)
+        let file_actions = params.file_actions;
 
-          for (const filePath of watchFilesParsed) {
-            const fileId = await getOrCreateFile(actualAdapter, projectId, filePath, trx);
+        // Parse file_actions if it's a string (MCP SDK may send JSON as string)
+        if (file_actions && typeof file_actions === 'string') {
+          try {
+            file_actions = JSON.parse(file_actions);
+          } catch (error) {
+            throw new Error('Invalid file_actions format. Expected JSON array of {action, path} objects.');
+          }
+        }
+
+        // Backward compatibility: convert watch_files to file_actions
+        if (!file_actions && params.watch_files) {
+          const watchFilesParsed = parseArrayParam(params.watch_files, 'watch_files');
+          file_actions = convertWatchFilesToFileActions(watchFilesParsed);
+        }
+
+        // Validate file_actions is an array if provided
+        if (file_actions !== undefined && !Array.isArray(file_actions)) {
+          throw new Error('file_actions must be an array of {action, path} objects');
+        }
+
+        // Validate file_actions based on layer if both are provided (v3.8.0)
+        if (params.layer && file_actions) {
+          validateFileActions(params.layer, file_actions);
+        }
+
+        // Handle file_actions if provided (v3.8.0)
+        // Also supports legacy watch_files via auto-conversion above
+        if (file_actions && file_actions.length > 0) {
+          for (const fileAction of file_actions) {
+            const fileId = await getOrCreateFile(actualAdapter, projectId, fileAction.path, trx);
             await trx('t_task_file_links').insert({
               project_id: projectId,
               task_id: params.task_id,
-              file_id: fileId
+              file_id: fileId,
+              linked_ts: Math.floor(Date.now() / 1000)
             }).onConflict(['project_id', 'task_id', 'file_id']).ignore();
           }
 
@@ -142,8 +180,8 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
 
             if (taskData) {
               const watcher = FileWatcher.getInstance();
-              for (const filePath of watchFilesParsed) {
-                watcher.registerFile(filePath, params.task_id, taskData.title, taskData.status);
+              for (const fileAction of file_actions) {
+                watcher.registerFile(fileAction.path, params.task_id, taskData.title, taskData.status);
               }
             }
           } catch (error) {

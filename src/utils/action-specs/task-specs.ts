@@ -10,7 +10,7 @@ import { ActionSpec } from './types.js';
 export const TASK_ACTION_SPECS: Record<string, ActionSpec> = {
   create: {
     required: ['title'],
-    optional: ['description', 'acceptance_criteria', 'notes', 'priority', 'assigned_agent', 'created_by_agent', 'layer', 'tags', 'status', 'watch_files'],
+    optional: ['description', 'acceptance_criteria', 'notes', 'priority', 'assigned_agent', 'created_by_agent', 'layer', 'tags', 'status', 'watch_files', 'file_actions'],
     example: {
       action: 'create',
       title: 'Implement JWT authentication',
@@ -19,22 +19,22 @@ export const TASK_ACTION_SPECS: Record<string, ActionSpec> = {
       assigned_agent: 'backend-agent',
       layer: 'business',
       tags: ['authentication', 'security'],
-      watch_files: ['src/api/auth.ts', 'src/middleware/jwt.ts']
+      file_actions: [{ action: 'create', path: 'src/api/auth.ts' }, { action: 'edit', path: 'src/middleware/jwt.ts' }]
     },
-    hint: "⭐ Use watch_files to automatically link and monitor files. Priority: 1=low, 2=medium, 3=high, 4=critical"
+    hint: "⭐ v3.8.0: Use file_actions for layer-based validation. Priority: 1=low, 2=medium, 3=high, 4=critical. Code layers REQUIRE file_actions."
   },
 
   update: {
     required: ['task_id'],
-    optional: ['title', 'priority', 'assigned_agent', 'layer', 'description', 'acceptance_criteria', 'notes', 'watch_files'],
+    optional: ['title', 'priority', 'assigned_agent', 'layer', 'description', 'acceptance_criteria', 'notes', 'watch_files', 'file_actions'],
     example: {
       action: 'update',
       task_id: 5,
       priority: 4,
       assigned_agent: 'senior-backend-agent',
-      watch_files: ['src/api/users.ts']
+      file_actions: [{ action: 'edit', path: 'src/api/users.ts' }]
     },
-    hint: "Only specified fields will be updated; others remain unchanged"
+    hint: "v3.8.0: file_actions replaces watch_files. Only specified fields will be updated; others remain unchanged"
   },
 
   get: {

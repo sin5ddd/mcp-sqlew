@@ -15,8 +15,15 @@ export function taskHelp(): any {
       create: {
         description: 'Create a new task',
         required_params: ['title'],
-        optional_params: ['description', 'acceptance_criteria', 'notes', 'priority', 'assigned_agent', 'created_by_agent', 'layer', 'tags', 'status', 'watch_files'],
-        watch_files_param: '⭐ NEW in v3.4.1: Pass watch_files array to automatically link and watch files (replaces task.link(file))',
+        optional_params: ['description', 'acceptance_criteria', 'notes', 'priority', 'assigned_agent', 'created_by_agent', 'layer', 'tags', 'status', 'watch_files', 'file_actions'],
+        watch_files_param: '⚠️ DEPRECATED in v3.8.0: Use file_actions instead (auto-converts for backward compatibility)',
+        file_actions_param: '⭐ NEW in v3.8.0: Array of {path, action} objects for layer-based file tracking',
+        file_actions_validation: {
+          required_for_layers: ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting', 'documentation'],
+          optional_for_layers: ['planning', 'coordination', 'review'],
+          valid_actions: ['create', 'modify', 'delete', 'read'],
+          note: 'Code and documentation layers MUST specify file_actions. Planning layers MAY specify file_actions.'
+        },
         example: {
           action: 'create',
           title: 'Implement authentication endpoint',
@@ -25,20 +32,26 @@ export function taskHelp(): any {
           assigned_agent: 'backend-agent',
           layer: 'presentation',
           tags: ['api', 'authentication'],
-          watch_files: ['src/api/auth.ts', 'src/middleware/jwt.ts']
+          file_actions: [
+            { path: 'src/api/auth.ts', action: 'create' },
+            { path: 'src/middleware/jwt.ts', action: 'modify' }
+          ]
         }
       },
       update: {
         description: 'Update task metadata',
         required_params: ['task_id'],
-        optional_params: ['title', 'priority', 'assigned_agent', 'layer', 'description', 'acceptance_criteria', 'notes', 'watch_files'],
-        watch_files_param: '⭐ NEW in v3.4.1: Pass watch_files array to add files to watch list',
+        optional_params: ['title', 'priority', 'assigned_agent', 'layer', 'description', 'acceptance_criteria', 'notes', 'watch_files', 'file_actions'],
+        watch_files_param: '⚠️ DEPRECATED in v3.8.0: Use file_actions instead (auto-converts for backward compatibility)',
+        file_actions_param: '⭐ NEW in v3.8.0: Array of {path, action} objects for layer-based file tracking',
         example: {
           action: 'update',
           task_id: 5,
           priority: 4,
           assigned_agent: 'senior-backend-agent',
-          watch_files: ['src/api/users.ts']
+          file_actions: [
+            { path: 'src/api/users.ts', action: 'modify' }
+          ]
         }
       },
       get: {
@@ -231,6 +244,23 @@ export function taskHelp(): any {
       2: 'medium (default)',
       3: 'high',
       4: 'critical'
+    },
+    layers: {
+      description: 'Architecture layers for task classification (expanded in v3.8.0)',
+      code_layers: {
+        presentation: 'UI/UX, API endpoints, views - REQUIRES file_actions',
+        business: 'Business logic, services, domain models - REQUIRES file_actions',
+        data: 'Database, repositories, data access - REQUIRES file_actions',
+        infrastructure: 'DevOps, config, deployment - REQUIRES file_actions',
+        cross_cutting: 'Logging, security, error handling - REQUIRES file_actions'
+      },
+      planning_layers: {
+        planning: 'Research, surveys, investigation, design decisions - file_actions OPTIONAL',
+        documentation: 'README, CHANGELOG, API docs, user guides - REQUIRES file_actions',
+        coordination: 'Multi-agent orchestration, sprint planning - file_actions OPTIONAL',
+        review: 'Code review, QA verification, testing validation - file_actions OPTIONAL'
+      },
+      note: 'Code and documentation layers enforce file_actions requirement. Planning layers allow tasks without file modifications.'
     },
     auto_file_tracking: {
       description: 'Automatic file watching and acceptance criteria validation - save 300 tokens per file vs manual registration',

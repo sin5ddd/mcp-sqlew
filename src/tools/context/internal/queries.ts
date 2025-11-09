@@ -65,6 +65,16 @@ export async function setDecisionInternal(
     }
   }
 
+  // Scope validation warning (v3.8.0)
+  if (!params.scopes || params.scopes.length === 0) {
+    console.warn(`⚠️  Decision "${params.key}" has no scope specified. Defaulting to GLOBAL scope.`);
+    console.warn(`   💡 Consider using scopes for better organization:`);
+    console.warn(`      - "FEATURE:<name>" for feature-specific decisions`);
+    console.warn(`      - "COMPONENT:<name>" for component-level decisions`);
+    console.warn(`      - "MODULE:<name>" for module-scoped decisions`);
+    console.warn(`      - "GLOBAL" for project-wide decisions (current default)`);
+  }
+
   // Get or create master records
   const agentId = await getOrCreateAgent(adapter, agentName, trx);
   const keyId = await getOrCreateContextKey(adapter, params.key, trx);

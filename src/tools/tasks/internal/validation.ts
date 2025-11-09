@@ -3,7 +3,8 @@
  */
 
 import { validatePriorityRange, validateLength } from '../../../utils/validators.js';
-import { STATUS_TO_ID } from '../types.js';
+import { STATUS_TO_ID, TaskFileAction } from '../types.js';
+import { FILE_REQUIRED_LAYERS, FILE_OPTIONAL_LAYERS } from '../../../constants.js';
 
 /**
  * Validate task creation parameters
@@ -131,4 +132,58 @@ export function processAcceptanceCriteria(acceptanceCriteria: string | any[] | u
   }
 
   return { acceptanceCriteriaString, acceptanceCriteriaJson };
+}
+
+/**
+ * Validate file_actions parameter based on layer (v3.8.0)
+ */
+export function validateFileActions(layer: string | undefined, file_actions: TaskFileAction[] | undefined): void {
+  // Only validate if layer is specified
+  if (!layer) return;
+
+  // Check if layer requires file_actions
+  if (FILE_REQUIRED_LAYERS.includes(layer as any)) {
+    if (file_actions === undefined) {
+      throw new Error(
+        `file_actions is required for layer '${layer}'.\n` +
+        `\n` +
+        `FILE_REQUIRED layers (6): presentation, business, data, infrastructure, cross-cutting, documentation\n` +
+        `FILE_OPTIONAL layers (3): planning, coordination, review\n` +
+        `\n` +
+        `Example: file_actions: [{ action: 'edit', path: 'src/model/user.ts' }]\n` +
+        `Use [] for non-file tasks, or switch to a planning layer (planning, coordination, review) if no files are involved.`
+      );
+    }
+  }
+
+  // Validate structure if provided
+  if (file_actions) {
+    const VALID_ACTIONS = ['create', 'edit', 'delete'];
+    file_actions.forEach((fa, i) => {
+      if (!VALID_ACTIONS.includes(fa.action)) {
+        throw new Error(
+          `Invalid action at index ${i}: '${fa.action}'. Must be one of: create, edit, delete\n` +
+          `Example: { action: 'edit', path: 'src/model/user.ts' }`
+        );
+      }
+      if (!fa.path || typeof fa.path !== 'string') {
+        throw new Error(
+          `Invalid path at index ${i}: path must be a non-empty string.\n` +
+          `Example: { action: 'edit', path: 'src/model/user.ts' }`
+        );
+      }
+    });
+  }
+}
+
+/**
+ * Convert watch_files to file_actions for backward compatibility (v3.8.0)
+ */
+export function convertWatchFilesToFileActions(watch_files: string[] | undefined): TaskFileAction[] | undefined {
+  if (!watch_files || watch_files.length === 0) return undefined;
+
+  return watch_files.map(path => ({
+    action: 'edit' as const,
+    path
+  }));
 }
