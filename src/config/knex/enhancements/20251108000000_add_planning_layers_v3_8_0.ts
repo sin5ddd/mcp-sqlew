@@ -33,12 +33,30 @@ export async function up(knex: Knex): Promise<void> {
   }
 
   // Insert the 4 new layers
-  await knex('m_layers').insert([
-    { name: 'planning' },
-    { name: 'documentation' },
-    { name: 'coordination' },
-    { name: 'review' }
-  ]);
+  // Note: Explicit IDs (6-9) required for PostgreSQL compatibility
+  // PostgreSQL sequences don't auto-increment when explicit IDs are used in bootstrap (IDs 1-5)
+  const client = knex.client.config.client;
+  const isPostgreSQL = client === 'pg' || client === 'postgresql';
+
+  if (isPostgreSQL) {
+    // PostgreSQL: Use explicit IDs and update sequence
+    await knex('m_layers').insert([
+      { id: 6, name: 'planning' },
+      { id: 7, name: 'documentation' },
+      { id: 8, name: 'coordination' },
+      { id: 9, name: 'review' }
+    ]);
+    // Update sequence to 9 so future auto-increment starts at 10
+    await knex.raw("SELECT setval('m_layers_id_seq', 9, true)");
+  } else {
+    // SQLite/MySQL: Let auto-increment handle IDs
+    await knex('m_layers').insert([
+      { name: 'planning' },
+      { name: 'documentation' },
+      { name: 'coordination' },
+      { name: 'review' }
+    ]);
+  }
 
   console.log('✅ Added 4 planning layers: planning, documentation, coordination, review');
 }

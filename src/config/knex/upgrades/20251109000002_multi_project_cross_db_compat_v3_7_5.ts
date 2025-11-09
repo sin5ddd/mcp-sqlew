@@ -317,7 +317,7 @@ export async function up(knex: Knex): Promise<void> {
     FROM t_constraints c
     LEFT JOIN m_constraint_categories cat ON c.category_id = cat.id
     LEFT JOIN m_agents a ON c.agent_id = a.id
-    WHERE c.active = 1
+    WHERE c.active = ${isPostgreSQL2 ? 'TRUE' : '1'}
     ORDER BY c.priority DESC, c.ts DESC
   `);
 
