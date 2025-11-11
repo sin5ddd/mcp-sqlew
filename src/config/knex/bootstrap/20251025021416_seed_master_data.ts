@@ -62,32 +62,67 @@ export async function up(knex: Knex): Promise<void> {
   }
 
   // Seed common tags
-  if (isPostgreSQL) {
-    await knex.raw(`
-      INSERT INTO m_tags (project_id, name) VALUES
-        (1, 'authentication'),
-        (1, 'authorization'),
-        (1, 'validation'),
-        (1, 'error-handling'),
-        (1, 'logging'),
-        (1, 'performance'),
-        (1, 'security'),
-        (1, 'testing')
-      ON CONFLICT (project_id, name) DO NOTHING
-    `);
+  // Check if project_id column exists (added in v3.7.0 multi-project migration)
+  const hasProjectId = await knex.schema.hasColumn('m_tags', 'project_id');
+
+  if (hasProjectId) {
+    // New schema with project_id
+    if (isPostgreSQL) {
+      await knex.raw(`
+        INSERT INTO m_tags (project_id, name) VALUES
+          (1, 'authentication'),
+          (1, 'authorization'),
+          (1, 'validation'),
+          (1, 'error-handling'),
+          (1, 'logging'),
+          (1, 'performance'),
+          (1, 'security'),
+          (1, 'testing')
+        ON CONFLICT (project_id, name) DO NOTHING
+      `);
+    } else {
+      const insertIgnore = isMySQL ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
+      await knex.raw(`
+        ${insertIgnore} INTO m_tags (project_id, name) VALUES
+          (1, 'authentication'),
+          (1, 'authorization'),
+          (1, 'validation'),
+          (1, 'error-handling'),
+          (1, 'logging'),
+          (1, 'performance'),
+          (1, 'security'),
+          (1, 'testing')
+      `);
+    }
   } else {
-    const insertIgnore = isMySQL ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
-    await knex.raw(`
-      ${insertIgnore} INTO m_tags (project_id, name) VALUES
-        (1, 'authentication'),
-        (1, 'authorization'),
-        (1, 'validation'),
-        (1, 'error-handling'),
-        (1, 'logging'),
-        (1, 'performance'),
-        (1, 'security'),
-        (1, 'testing')
-    `);
+    // Old schema without project_id (v3.1-v3.6)
+    if (isPostgreSQL) {
+      await knex.raw(`
+        INSERT INTO m_tags (name) VALUES
+          ('authentication'),
+          ('authorization'),
+          ('validation'),
+          ('error-handling'),
+          ('logging'),
+          ('performance'),
+          ('security'),
+          ('testing')
+        ON CONFLICT (name) DO NOTHING
+      `);
+    } else {
+      const insertIgnore = isMySQL ? 'INSERT IGNORE' : 'INSERT OR IGNORE';
+      await knex.raw(`
+        ${insertIgnore} INTO m_tags (name) VALUES
+          ('authentication'),
+          ('authorization'),
+          ('validation'),
+          ('error-handling'),
+          ('logging'),
+          ('performance'),
+          ('security'),
+          ('testing')
+      `);
+    }
   }
 
   // Seed configuration defaults
