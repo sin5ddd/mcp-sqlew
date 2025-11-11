@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.8.1] - 2025-11-11
+
+### Fixed
+
+**Critical Installation Bug**
+
+- Fixed `npm error Invalid Version:` error when installing sqlew@3.8.0
+- Changed `@modelcontextprotocol/sdk` dependency from `"latest"` to `"^1.21.1"` in package.json
+- The `"latest"` tag is not a valid semver version for published packages and caused npm dependency resolution to fail
+- This is a **hotfix release** that resolves installation issues preventing users from using v3.8.0
+
+**Impact:**
+- All users experiencing `Invalid Version:` errors when running `npx sqlew` can now install successfully
+- No functional changes from v3.8.0 - only dependency version fix
+
+---
+
 ## [3.8.0] - 2025-11-09
 
 ### BREAKING CHANGES
