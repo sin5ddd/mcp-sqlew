@@ -15,8 +15,8 @@ export function taskExample(): any {
         examples: [
           {
             scenario: 'Create a new task',
-            request: '{ action: "create", title: "Implement user authentication", description: "Add JWT-based auth to API", priority: 3, assigned_agent: "backend-agent", layer: "business", tags: ["authentication", "security"] }',
-            explanation: 'Creates task in todo status with high priority'
+            request: '{ action: "create", title: "Implement user authentication", description: "Add JWT-based auth to API", priority: 3, assigned_agent: "backend-agent", layer: "business", tags: ["authentication", "security"], file_actions: [{ path: "src/auth/service.ts", action: "create" }, { path: "src/middleware/auth.ts", action: "modify" }] }',
+            explanation: 'Creates task in todo status with high priority. file_actions REQUIRED for business layer.'
           },
           {
             scenario: 'Get task details',
@@ -114,7 +114,7 @@ export function taskExample(): any {
         examples: [
           {
             scenario: 'Create multiple related tasks',
-            request: '{ action: "batch_create", tasks: [{"title": "Design API", "priority": 3}, {"title": "Implement API", "priority": 3}, {"title": "Write tests", "priority": 2}], atomic: false }',
+            request: '{ action: "create_batch", tasks: [{"title": "Design API", "priority": 3}, {"title": "Implement API", "priority": 3}, {"title": "Write tests", "priority": 2}], atomic: false }',
             explanation: 'Create task breakdown - use atomic:false for best-effort'
           }
         ]
@@ -136,6 +136,16 @@ export function taskExample(): any {
             scenario: 'View infrastructure layer tasks',
             request: '{ action: "list", layer: "infrastructure" }',
             explanation: 'See all DevOps/config related tasks'
+          },
+          {
+            scenario: 'View planning layer tasks (v3.8.0)',
+            request: '{ action: "list", layer: "planning" }',
+            explanation: 'Planning tasks (research, surveys) - file_actions optional'
+          },
+          {
+            scenario: 'View coordination layer tasks (v3.8.0)',
+            request: '{ action: "list", layer: "coordination" }',
+            explanation: 'Multi-agent orchestration tasks - file_actions optional'
           }
         ]
       },
@@ -177,7 +187,9 @@ export function taskExample(): any {
         'Set appropriate priority: 1=low, 2=medium (default), 3=high, 4=critical',
         'Assign to layer where work will be done',
         'Tag comprehensively for easy filtering',
-        'Include acceptance_criteria for complex tasks'
+        'Include acceptance_criteria for complex tasks',
+        '⭐ v3.8.0: Specify file_actions for code/documentation layers (presentation, business, data, infrastructure, cross-cutting, documentation)',
+        '📝 v3.8.0: file_actions optional for planning layers (planning, coordination, review)'
       ],
       status_management: [
         'Move to in_progress when starting work',

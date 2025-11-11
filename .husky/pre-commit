@@ -7,4 +7,22 @@ npm run build || {
   exit 1
 }
 
+# Check if migration files are staged
+STAGED_FILES=$(git diff --cached --name-only)
+if echo "$STAGED_FILES" | grep -q "src/config/knex/"; then
+  echo "🗄️  Migration files detected, running migration safety tests..."
+  npm run test:migrations || {
+    echo "❌ Migration safety tests failed\! Please fix migration issues before committing."
+    exit 1
+  }
+
+  echo "🕰️  Running historical migration tests (v3.1+ backward compatibility)..."
+  npm run test:migrations:ci || {
+    echo "❌ Historical migration tests failed\! Please fix backward compatibility before committing."
+    exit 1
+  }
+else
+  echo "✅ No migration files changed, skipping migration tests"
+fi
+
 echo "✅ Pre-commit checks passed\!"

@@ -22,7 +22,15 @@ import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
   // Drop t_agent_messages table (messaging system not used)
-  await knex.schema.dropTableIfExists('t_agent_messages');
+  // PostgreSQL requires CASCADE when dropping tables with foreign key dependencies
+  const client = knex.client.config.client;
+  const isPostgreSQL = client === 'pg' || client === 'postgresql';
+
+  if (isPostgreSQL) {
+    await knex.raw('DROP TABLE IF EXISTS t_agent_messages CASCADE');
+  } else {
+    await knex.schema.dropTableIfExists('t_agent_messages');
+  }
 
   // Note: in_use and is_reusable columns remain in m_agents table but are ignored by code
   // Dropping these columns would require complex table recreation on SQLite due to FK constraints

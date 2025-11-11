@@ -35,7 +35,7 @@ This document demonstrates real-world scenarios showing how different tools work
 
 // 3. Create tasks for each sub-agent
 {
-  action: "batch_create",
+  action: "create_batch",
   atomic: false,
   tasks: [
     {

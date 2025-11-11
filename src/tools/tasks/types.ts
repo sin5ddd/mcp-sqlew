@@ -48,6 +48,20 @@ export const VALID_TRANSITIONS: Record<number, number[]> = {
 };
 
 /**
+ * File action types for task-file associations (v3.8.0)
+ */
+export type TaskFileActionType = 'create' | 'edit' | 'delete';
+
+/**
+ * Task file action interface (v3.8.0)
+ * Specifies what action will be performed on a file for a task
+ */
+export interface TaskFileAction {
+  action: TaskFileActionType;
+  path: string;  // Relative path from project root
+}
+
+/**
  * Task creation parameters
  */
 export interface TaskCreateParams {
@@ -61,7 +75,8 @@ export interface TaskCreateParams {
   layer?: string;
   tags?: string[];
   status?: string;
-  watch_files?: string[];
+  watch_files?: string[];  // DEPRECATED in v3.8.0, use file_actions
+  file_actions?: TaskFileAction[];  // Array of file actions (v3.8.0) - replaces watch_files
 }
 
 /**
@@ -76,5 +91,6 @@ export interface TaskUpdateParams {
   description?: string;
   acceptance_criteria?: string | any[];
   notes?: string;
-  watch_files?: string[];
+  watch_files?: string[];  // DEPRECATED in v3.8.0, use file_actions
+  file_actions?: TaskFileAction[];  // Array of file actions (v3.8.0) - replaces watch_files
 }

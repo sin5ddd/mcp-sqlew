@@ -12,22 +12,26 @@ import {
   listDecisionContextsAction, decisionHelp, decisionExample
 } from '../tools/context/index.js';
 import {
-  sendMessage, getMessages, markRead, sendMessageBatch, messageHelp, messageExample
-} from '../tools/messaging.js';
-import {
-  recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch, fileHelp, fileExample
+  recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch, sqliteFlush, fileHelp, fileExample
 } from '../tools/files/index.js';
 import {
   addConstraint, getConstraints, deactivateConstraint, constraintHelp, constraintExample
 } from '../tools/constraints/index.js';
 import {
-  getLayerSummary, clearOldData, getStats, getActivityLog, flushWAL, statsHelp, statsExample
-} from '../tools/stats/index.js';
-import {
   createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask,
   batchCreateTasks, addDependency, removeDependency, getDependencies, watchFiles,
-  getPrunedFiles, linkPrunedFile, taskHelp, taskExample, watcherStatus
+  getPrunedFiles, linkPrunedFile, taskHelp, taskExample, taskUseCase, watcherStatus
 } from '../tools/tasks.js';
+import {
+  queryAction, queryParams, queryTool, workflowHints, batchGuide, errorRecovery,
+  helpHelp, helpExample
+} from '../tools/help/index.js';
+import {
+  getUseCase, searchUseCases, listAllUseCases, useCaseHelp, useCaseExample
+} from '../tools/use_case/index.js';
+import {
+  getExample, searchExamples, listAllExamples, exampleHelp, exampleExample
+} from '../tools/example/index.js';
 import { trackAndReturnHelp } from '../utils/help-tracking.js';
 import {
   queryHelpAction, queryHelpParams, queryHelpTool, queryHelpUseCase,
@@ -35,7 +39,7 @@ import {
 } from '../tools/help-queries.js';
 import { debugLogToolCall, debugLogToolResponse } from '../utils/debug-logger.js';
 import { handleToolError } from '../utils/error-handler.js';
-import { DecisionAction, TaskAction, FileAction, ConstraintAction, StatsAction, MessageAction } from '../types.js';
+import { DecisionAction, TaskAction, FileAction, ConstraintAction, ExampleAction } from '../types.js';
 
 /**
  * Handle CallToolRequest - dispatch to appropriate tool action
@@ -78,7 +82,19 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
             limit: params.limit,
             offset: params.offset
           }); break;
-          case 'set_batch': result = await setDecisionBatch({ decisions: params.decisions, atomic: params.atomic }); break;
+          case 'set_batch': {
+            // MCP client serializes arrays as JSON strings - parse if needed
+            let decisions = params.decisions;
+            if (typeof decisions === 'string') {
+              try {
+                decisions = JSON.parse(decisions);
+              } catch (error) {
+                throw new Error(`Invalid JSON in "decisions" parameter: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+            result = await setDecisionBatch({ decisions, atomic: params.atomic });
+            break;
+          }
           case 'has_updates': result = await hasUpdates({ agent_name: params.agent_name, since_timestamp: params.since_timestamp }); break;
           case 'set_from_template': result = await setFromTemplate(params); break;
           case 'create_template': result = await createTemplate(params); break;
@@ -109,43 +125,26 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
         break;
       }
 
-      case 'message': {
-        const action = params.action as MessageAction;
-        switch (action) {
-          case 'send': result = await sendMessage(params); break;
-          case 'get': result = await getMessages(params); break;
-          case 'mark_read': result = await markRead(params); break;
-          case 'send_batch': result = await sendMessageBatch({ messages: params.messages, atomic: params.atomic }); break;
-          case 'help':
-            const msgHelpContent = messageHelp();
-            trackAndReturnHelp('message', 'help', JSON.stringify(msgHelpContent));
-            result = msgHelpContent;
-            break;
-          case 'example':
-            const msgExampleContent = messageExample();
-            trackAndReturnHelp('message', 'example', JSON.stringify(msgExampleContent));
-            result = msgExampleContent;
-            break;
-          case 'use_case':
-            result = await queryHelpListUseCases(getAdapter(), {
-              category: params.category,
-              complexity: params.complexity,
-              limit: params.limit,
-              offset: params.offset
-            });
-            break;
-          default: throw new Error(`Unknown action: ${action}`);
-        }
-        break;
-      }
-
       case 'file': {
         const action = params.action as FileAction;
         switch (action) {
           case 'record': result = await recordFileChange(params); break;
           case 'get': result = await getFileChanges(params); break;
           case 'check_lock': result = await checkFileLock(params); break;
-          case 'record_batch': result = await recordFileChangeBatch({ file_changes: params.file_changes, atomic: params.atomic }); break;
+          case 'record_batch': {
+            // MCP client serializes arrays as JSON strings - parse if needed
+            let file_changes = params.file_changes;
+            if (typeof file_changes === 'string') {
+              try {
+                file_changes = JSON.parse(file_changes);
+              } catch (error) {
+                throw new Error(`Invalid JSON in "file_changes" parameter: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+            result = await recordFileChangeBatch({ file_changes, atomic: params.atomic });
+            break;
+          }
+          case 'sqlite_flush': result = await sqliteFlush(); break;
           case 'help':
             const fileHelpContent = fileHelp();
             trackAndReturnHelp('file', 'help', JSON.stringify(fileHelpContent));
@@ -198,85 +197,6 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
         break;
       }
 
-      case 'stats': {
-        const action = params.action as StatsAction;
-        switch (action) {
-          case 'layer_summary': result = await getLayerSummary(); break;
-          case 'db_stats': result = await getStats(); break;
-          case 'clear': result = await clearOldData(params); break;
-          case 'activity_log': result = await getActivityLog({
-            since: params.since,
-            agent_names: params.agent_names,
-            actions: params.actions,
-            limit: params.limit,
-          }); break;
-          case 'flush': result = await flushWAL(); break;
-          case 'help_action':
-            if (!params.target_tool || !params.target_action) {
-              result = { error: 'Parameters "target_tool" and "target_action" are required' };
-            } else {
-              result = await queryHelpAction(getAdapter(), params.target_tool, params.target_action);
-            }
-            break;
-          case 'help_params':
-            if (!params.target_tool || !params.target_action) {
-              result = { error: 'Parameters "target_tool" and "target_action" are required' };
-            } else {
-              result = await queryHelpParams(getAdapter(), params.target_tool, params.target_action);
-            }
-            break;
-          case 'help_tool':
-            if (!params.tool) {
-              result = { error: 'Parameter "tool" is required' };
-            } else {
-              result = await queryHelpTool(getAdapter(), params.tool);
-            }
-            break;
-          case 'help_use_case':
-            if (!params.use_case_id) {
-              result = { error: 'Parameter "use_case_id" is required' };
-            } else {
-              result = await queryHelpUseCase(getAdapter(), params.use_case_id);
-            }
-            break;
-          case 'help_list_use_cases':
-            result = await queryHelpListUseCases(getAdapter(), {
-              category: params.category,
-              complexity: params.complexity,
-              limit: params.limit,
-              offset: params.offset
-            });
-            break;
-          case 'help_next_actions':
-            if (!params.target_tool || !params.target_action) {
-              result = { error: 'Parameters "target_tool" and "target_action" are required' };
-            } else {
-              result = await queryHelpNextActions(getAdapter(), params.target_tool, params.target_action);
-            }
-            break;
-          case 'help':
-            const statsHelpContent = statsHelp();
-            trackAndReturnHelp('stats', 'help', JSON.stringify(statsHelpContent));
-            result = statsHelpContent;
-            break;
-          case 'example':
-            const statsExampleContent = statsExample();
-            trackAndReturnHelp('stats', 'example', JSON.stringify(statsExampleContent));
-            result = statsExampleContent;
-            break;
-          case 'use_case':
-            result = await queryHelpListUseCases(getAdapter(), {
-              category: params.category,
-              complexity: params.complexity,
-              limit: params.limit,
-              offset: params.offset
-            });
-            break;
-          default: throw new Error(`Unknown action: ${action}`);
-        }
-        break;
-      }
-
       case 'task': {
         const action = params.action as TaskAction;
         switch (action) {
@@ -287,7 +207,19 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
           case 'move': result = await moveTask(params); break;
           case 'link': result = await linkTask(params); break;
           case 'archive': result = await archiveTask(params); break;
-          case 'batch_create': result = await batchCreateTasks({ tasks: params.tasks, atomic: params.atomic }); break;
+          case 'create_batch': {
+            // MCP client serializes arrays as JSON strings - parse if needed
+            let tasks = params.tasks;
+            if (typeof tasks === 'string') {
+              try {
+                tasks = JSON.parse(tasks);
+              } catch (error) {
+                throw new Error(`Invalid JSON in "tasks" parameter: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }
+            result = await batchCreateTasks({ tasks, atomic: params.atomic });
+            break;
+          }
           case 'add_dependency': result = await addDependency(params); break;
           case 'remove_dependency': result = await removeDependency(params); break;
           case 'get_dependencies': result = await getDependencies(params); break;
@@ -306,12 +238,167 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
             result = taskExampleContent;
             break;
           case 'use_case':
-            result = await queryHelpListUseCases(getAdapter(), {
+            const taskUseCaseContent = taskUseCase();
+            trackAndReturnHelp('task', 'use_case', JSON.stringify(taskUseCaseContent));
+            result = taskUseCaseContent;
+            break;
+          default: throw new Error(`Unknown action: ${action}`);
+        }
+        break;
+      }
+
+      case 'help': {
+        const action = params.action as string;
+        switch (action) {
+          case 'query_action':
+            if (!params.tool || !params.target_action) {
+              result = { error: 'Parameters "tool" and "target_action" are required for query_action' };
+            } else {
+              result = await queryAction({ action: 'query_action', tool: params.tool, target_action: params.target_action });
+            }
+            break;
+          case 'query_params':
+            if (!params.tool || !params.target_action) {
+              result = { error: 'Parameters "tool" and "target_action" are required for query_params' };
+            } else {
+              result = await queryParams({ action: 'query_params', tool: params.tool, target_action: params.target_action });
+            }
+            break;
+          case 'query_tool':
+            if (!params.tool) {
+              result = { error: 'Parameter "tool" is required for query_tool' };
+            } else {
+              result = await queryTool({ action: 'query_tool', tool: params.tool });
+            }
+            break;
+          case 'workflow_hints':
+            if (!params.tool || !params.current_action) {
+              result = { error: 'Parameters "tool" and "current_action" are required for workflow_hints' };
+            } else {
+              result = await workflowHints({ action: 'workflow_hints', tool: params.tool, current_action: params.current_action });
+            }
+            break;
+          case 'batch_guide':
+            if (!params.operation) {
+              result = { error: 'Parameter "operation" is required for batch_guide' };
+            } else {
+              result = await batchGuide({ action: 'batch_guide', operation: params.operation });
+            }
+            break;
+          case 'error_recovery':
+            if (!params.error_message) {
+              result = { error: 'Parameter "error_message" is required for error_recovery' };
+            } else {
+              result = await errorRecovery({
+                action: 'error_recovery',
+                error_message: params.error_message,
+                tool: params.tool
+              });
+            }
+            break;
+          case 'help':
+            const helpHelpContent = helpHelp();
+            trackAndReturnHelp('help', 'help', JSON.stringify(helpHelpContent));
+            result = helpHelpContent;
+            break;
+          case 'example':
+            const helpExampleContent = helpExample();
+            trackAndReturnHelp('help', 'example', JSON.stringify(helpExampleContent));
+            result = helpExampleContent;
+            break;
+          default: throw new Error(`Unknown action: ${action}`);
+        }
+        break;
+      }
+
+      case 'example': {
+        const action = params.action as ExampleAction;
+        switch (action) {
+          case 'get':
+            result = await getExample({
+              action: 'get',
+              tool: params.tool,
+              action_name: params.action_name,
+              topic: params.topic
+            });
+            break;
+          case 'search':
+            if (!params.keyword) {
+              result = { error: 'Parameter "keyword" is required for search' };
+            } else {
+              result = await searchExamples({
+                action: 'search',
+                keyword: params.keyword,
+                tool: params.tool,
+                action_name: params.action_name,
+                complexity: params.complexity
+              });
+            }
+            break;
+          case 'list_all':
+            result = await listAllExamples({
+              action: 'list_all',
+              tool: params.tool,
+              complexity: params.complexity,
+              limit: params.limit,
+              offset: params.offset
+            });
+            break;
+          case 'help':
+            const exampleHelpContent = exampleHelp();
+            trackAndReturnHelp('example', 'help', JSON.stringify(exampleHelpContent));
+            result = exampleHelpContent;
+            break;
+          case 'example':
+            const exampleExampleContent = exampleExample();
+            trackAndReturnHelp('example', 'example', JSON.stringify(exampleExampleContent));
+            result = exampleExampleContent;
+            break;
+          default: throw new Error(`Unknown action: ${action}`);
+        }
+        break;
+      }
+
+      case 'use_case': {
+        const action = params.action as string;
+        switch (action) {
+          case 'get':
+            if (!params.use_case_id) {
+              result = { error: 'Parameter "use_case_id" is required for get' };
+            } else {
+              result = await getUseCase({ action: 'get', use_case_id: params.use_case_id });
+            }
+            break;
+          case 'search':
+            if (!params.keyword) {
+              result = { error: 'Parameter "keyword" is required for search' };
+            } else {
+              result = await searchUseCases({
+                action: 'search',
+                keyword: params.keyword,
+                category: params.category,
+                complexity: params.complexity
+              });
+            }
+            break;
+          case 'list_all':
+            result = await listAllUseCases({
+              action: 'list_all',
               category: params.category,
               complexity: params.complexity,
               limit: params.limit,
               offset: params.offset
             });
+            break;
+          case 'help':
+            const useCaseHelpContent = useCaseHelp();
+            trackAndReturnHelp('use_case', 'help', JSON.stringify(useCaseHelpContent));
+            result = useCaseHelpContent;
+            break;
+          case 'example':
+            const useCaseExampleContent = useCaseExample();
+            trackAndReturnHelp('use_case', 'example', JSON.stringify(useCaseExampleContent));
+            result = useCaseExampleContent;
             break;
           default: throw new Error(`Unknown action: ${action}`);
         }

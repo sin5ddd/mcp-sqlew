@@ -13,7 +13,7 @@
 6. [Action: move](#action-move)
 7. [Action: link](#action-link)
 8. [Action: archive](#action-archive)
-9. [Action: batch_create](#action-batch_create)
+9. [Action: create_batch](#action-create_batch)
 10. [Action: add_dependency](#action-add_dependency) (NEW in 3.2.0)
 11. [Action: remove_dependency](#action-remove_dependency) (NEW in 3.2.0)
 12. [Action: get_dependencies](#action-get_dependencies) (NEW in 3.2.0)
@@ -621,14 +621,14 @@ Archive completed task (soft delete).
 { action: "archive", task_id: 1 }
 ```
 
-## Action: batch_create
+## Action: create_batch
 
 Create multiple tasks atomically or best-effort.
 
 ### Parameters
 
 **Required:**
-- `action`: "batch_create"
+- `action`: "create_batch"
 - `tasks`: Array of task objects (max 50)
 
 **Optional:**
@@ -639,7 +639,7 @@ Create multiple tasks atomically or best-effort.
 **Atomic Batch (All-or-Nothing):**
 ```javascript
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: [
     {
       title: "Setup database schema",
@@ -661,7 +661,7 @@ Create multiple tasks atomically or best-effort.
 **Best-Effort Batch (Recommended for AI):**
 ```javascript
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: [
     {
       title: "Setup database schema",
@@ -1001,8 +1001,8 @@ create({ action: "create", title: "Task 2" });
 create({ action: "create", title: "Task 3" });
 
 // ✅ EFFICIENT (one call)
-batch_create({
-  action: "batch_create",
+create_batch({
+  action: "create_batch",
   tasks: [
     { title: "Task 1" },
     { title: "Task 2" },

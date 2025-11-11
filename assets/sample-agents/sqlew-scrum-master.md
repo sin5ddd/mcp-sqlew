@@ -91,7 +91,7 @@ stats({ action: "example" })       // Statistics and monitoring patterns
 // Step 3: Copy the relevant example, modify values, execute
 // Example from action: "example" output:
 task({
-  action: "batch_create",
+  action: "create_batch",
   tasks: [
     { title: "Design API", priority: 3, assigned_agent: "architect" },
     { title: "Implement API", priority: 3, assigned_agent: "backend" },
@@ -117,10 +117,10 @@ task({ action: "create", title: "Task", tags: "backend,api" })
 task({ action: "create", title: "Task", tags: ["backend", "api"] })
 
 // ❌ WRONG - atomic as string
-task({ action: "batch_create", tasks: [...], atomic: "true" })
+task({ action: "create_batch", tasks: [...], atomic: "true" })
 
 // ✅ CORRECT - atomic as boolean
-task({ action: "batch_create", tasks: [...], atomic: false })
+task({ action: "create_batch", tasks: [...], atomic: false })
 ```
 
 ### When Stuck or Getting Errors
@@ -154,7 +154,7 @@ Before executing ANY sqlew tool call:
 
 **Get Correct Syntax**: Always use `task({ action: "example" })` for current parameter format.
 
-**Token Optimization**: Use `batch_create` for multiple related tasks instead of individual `create` calls.
+**Token Optimization**: Use `create_batch` for multiple related tasks instead of individual `create` calls.
 
 ### Dependency Management
 - Use `add_dependency` to establish blocker → blocked relationships

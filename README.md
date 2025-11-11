@@ -94,10 +94,21 @@ It's Ready!
 
 ## Configuration
 
+### Database Support
+
+sqlew supports multiple database backends for different deployment scenarios:
+
+| Database | Use Case | Status |
+|----------|----------|--------|
+| **SQLite** | Development, small projects | ✅ Default |
+| **MySQL 8.0 / MariaDB 10+** | Production, shared environments | ✅ Supported |
+| **PostgreSQL 12+** | Production, enterprise | ✅ v3.8.0+ |
+
 ### Optional Config File
 
 On first run, `.sqlew/config.toml` will be created for persistent settings:
 
+**SQLite (Default):**
 ```toml
 [database]
 path = ".sqlew/custom.db"
@@ -107,11 +118,69 @@ ignore_weekend = true
 message_hours = 48
 ```
 
+**PostgreSQL:**
+```toml
+[database]
+type = "postgres"
+
+[database.connection]
+host = "localhost"
+port = 5432
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "secret"
+```
+
+**MySQL/MariaDB:**
+```toml
+[database]
+type = "mysql"
+
+[database.connection]
+host = "localhost"
+port = 3306
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "secret"
+```
+
 Also `.sqlew/config.example.toml` is created for reference.
 
 **Settings Priority:** CLI args > config.toml > database defaults
 
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all options and validation rules.
+
+### CLI Configuration (Recommended)
+
+Configuration is managed via **`.sqlew/config.toml`** file and **CLI arguments only**. The MCP `config` tool has been removed for simplicity.
+
+**Why CLI-only configuration?**
+- **No drift:** Single source of truth (config file)
+- **Version control:** Commit config to git, share with team
+- **Clear documentation:** Config file documents project requirements
+- **Type safety:** TOML validation catches errors at startup
+
+**Common CLI arguments:**
+```bash
+# Custom database path
+npx sqlew /path/to/database.db
+
+# Auto-deletion settings
+npx sqlew --autodelete-message-hours=48
+npx sqlew --autodelete-file-history-days=30
+npx sqlew --autodelete-ignore-weekend
+
+# Custom config file
+npx sqlew --config-path=.sqlew/custom.toml
+```
+
+For persistent settings, edit `.sqlew/config.toml` instead of using CLI arguments.
 
 ## Quick Start
 

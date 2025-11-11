@@ -13,7 +13,6 @@ import * as path from 'path';
 import { setDecision, getDecision, searchByTags, getVersions, searchByLayer, addDecisionContextAction, listDecisionContextsAction } from '../tools/context/index.js';
 import { recordFileChange, getFileChanges, checkFileLock } from '../tools/files/index.js';
 import { addConstraint, getConstraints, deactivateConstraint } from '../tools/constraints/index.js';
-import { getLayerSummary, clearOldData, getStats } from '../tools/stats/index.js';
 import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies } from '../tools/tasks.js';
 
 const TEST_DB_PATH = '.sqlew/tmp/test-all-features.db';
@@ -199,38 +198,6 @@ async function testConstraintTool() {
   }
 }
 
-async function testStatsTool() {
-  log('\n=== Testing Stats Tool ===');
-
-  // Test layer_summary action
-  try {
-    const start = Date.now();
-    await getLayerSummary();
-    recordResult('stats', 'layer_summary', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('stats', 'layer_summary', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-
-  // Test db_stats action
-  try {
-    const start = Date.now();
-    await getStats();
-    recordResult('stats', 'db_stats', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('stats', 'db_stats', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-
-  // Test clear action
-  try {
-    const start = Date.now();
-    await clearOldData({});
-    recordResult('stats', 'clear', 'PASS', undefined, Date.now() - start);
-  } catch (error) {
-    recordResult('stats', 'clear', 'CRASH', error instanceof Error ? error.message : String(error));
-  }
-}
-
-
 async function testTaskTool() {
   log('\n=== Testing Task Tool ===');
 
@@ -254,7 +221,7 @@ async function testTaskTool() {
     recordResult('task', 'create', 'CRASH', error instanceof Error ? error.message : String(error));
   }
 
-  // Test batch_create action
+  // Test create_batch action
   try {
     const start = Date.now();
     const results = await batchCreateTasks({
@@ -270,9 +237,9 @@ async function testTaskTool() {
       ]
     });
     taskId2 = results.results[0]?.task_id;
-    recordResult('task', 'batch_create', results.success ? 'PASS' : 'FAIL', undefined, Date.now() - start);
+    recordResult('task', 'create_batch', results.success ? 'PASS' : 'FAIL', undefined, Date.now() - start);
   } catch (error) {
-    recordResult('task', 'batch_create', 'CRASH', error instanceof Error ? error.message : String(error));
+    recordResult('task', 'create_batch', 'CRASH', error instanceof Error ? error.message : String(error));
   }
 
   // Test get action
@@ -432,7 +399,6 @@ async function runAllTests() {
     await testDecisionTool();
     await testFileTool();
     await testConstraintTool();
-    await testStatsTool();
     await testTaskTool();
   } finally {
     await closeDatabase();

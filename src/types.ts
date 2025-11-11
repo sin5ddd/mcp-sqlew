@@ -810,10 +810,11 @@ export interface ListTemplatesResponse {
 // Note: ValidationError interface is defined at the top of this file (lines 58-71)
 
 /**
- * Batch validation error for batch operations
+ * Batch validation error for batch operations (legacy)
+ * @deprecated Use BatchValidationError from batch-validation.ts instead
  * Reports validation failures across multiple items
  */
-export interface BatchValidationError {
+export interface LegacyBatchValidationError {
   error: string;
   batch_param: string;
   item_errors: Array<{
@@ -857,7 +858,7 @@ export type DecisionAction =
  */
 export type TaskAction =
   | 'create' | 'update' | 'get' | 'list' | 'move' | 'link'
-  | 'archive' | 'batch_create' | 'add_dependency' | 'remove_dependency'
+  | 'archive' | 'create_batch' | 'add_dependency' | 'remove_dependency'
   | 'get_dependencies' | 'watch_files' | 'get_pruned_files' | 'link_pruned_file'
   | 'watcher'
   | 'help' | 'example' | 'use_case';
@@ -868,6 +869,7 @@ export type TaskAction =
  */
 export type FileAction =
   | 'record' | 'get' | 'check_lock' | 'record_batch'
+  | 'sqlite_flush'
   | 'help' | 'example' | 'use_case';
 
 /**
@@ -879,16 +881,6 @@ export type ConstraintAction =
   | 'help' | 'example' | 'use_case';
 
 /**
- * Stats tool actions
- * Provides compile-time type checking for action parameters
- */
-export type StatsAction =
-  | 'layer_summary' | 'db_stats' | 'clear' | 'activity_log' | 'flush'
-  | 'help_action' | 'help_params' | 'help_tool' | 'help_use_case'
-  | 'help_list_use_cases' | 'help_next_actions'
-  | 'help' | 'example' | 'use_case';
-
-/**
  * Config tool actions
  * Provides compile-time type checking for action parameters
  */
@@ -897,12 +889,19 @@ export type ConfigAction =
   | 'help' | 'example' | 'use_case';
 
 /**
- * Message tool actions
- * @deprecated Messaging system removed in v3.6.6. This type remains for backward compatibility.
+ * Example tool actions
+ * Provides compile-time type checking for action parameters
  */
-export type MessageAction =
-  | 'send' | 'get' | 'mark_read' | 'send_batch'
-  | 'help' | 'example' | 'use_case';
+export type ExampleAction =
+  | 'get' | 'search' | 'list_all'
+  | 'help' | 'example';
+
+/**
+ * Message tool actions
+ * @deprecated Messaging system removed in v3.8.0. Message tool has been completely removed.
+ * This type is kept only for backward compatibility with existing code references.
+ */
+export type MessageAction = never;
 
 // ============================================================================
 // JSON Import System Types (v3.7.3)

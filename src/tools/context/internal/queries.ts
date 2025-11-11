@@ -55,7 +55,7 @@ export async function setDecisionInternal(
   // Validate layer if provided
   let layerId: number | null = null;
   if (params.layer) {
-    const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
+    const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting', 'documentation'];
     if (!validLayers.includes(params.layer)) {
       throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
     }
@@ -63,6 +63,16 @@ export async function setDecisionInternal(
     if (layerId === null) {
       throw new Error(`Layer not found in database: ${params.layer}`);
     }
+  }
+
+  // Scope validation warning (v3.8.0)
+  if (!params.scopes || params.scopes.length === 0) {
+    console.warn(`⚠️  Decision "${params.key}" has no scope specified. Defaulting to GLOBAL scope.`);
+    console.warn(`   💡 Consider using scopes for better organization:`);
+    console.warn(`      - "FEATURE:<name>" for feature-specific decisions`);
+    console.warn(`      - "COMPONENT:<name>" for component-level decisions`);
+    console.warn(`      - "MODULE:<name>" for module-scoped decisions`);
+    console.warn(`      - "GLOBAL" for project-wide decisions (current default)`);
   }
 
   // Get or create master records
