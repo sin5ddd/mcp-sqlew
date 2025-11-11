@@ -7,6 +7,248 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.8.0] - 2025-11-09
+
+### BREAKING CHANGES
+
+**Batch Action Naming Standardization**
+
+`task.batch_create` has been renamed to `task.create_batch` to follow the `<verb>_batch` naming pattern used by other batch actions (`set_batch`, `record_batch`).
+
+**Migration Required:**
+```typescript
+// ❌ Old (v3.7.x and earlier)
+task({ action: "batch_create", tasks: [...] })
+
+// ✅ New (v3.8.0+)
+task({ action: "create_batch", tasks: [...] })
+```
+
+**Rationale:**
+- Achieves 100% consistency across all batch actions
+- Improves alphabetical sorting in IDE auto-completion (create → create_batch)
+- Aligns with industry standard (REST APIs, GraphQL, ORMs use suffix pattern)
+- See docs/ADR-batch-naming-standard.md for full justification
+
+**Impact:**
+- All code using `task.batch_create` must update to `task.create_batch`
+- Simple find-replace migration (estimated 2-5 minutes per integration)
+- No database schema changes required
+
+### Removed
+
+**Config Tool Removed (Phase 6)**
+
+The orphaned config tool has been removed in favor of CLI-only configuration:
+
+- **Deleted**: `src/tools/config.ts` (307 lines)
+- **Removed**: `ConfigAction` type from `src/types.ts` and `src/types/actions.ts`
+- **Removed**: ConfigAction import from `src/utils/parameter-validator.ts`
+- **Updated**: README.md with CLI-only config approach documentation
+- **Updated**: docs/CONFIGURATION.md already documented config tool removal
+
+**Why removed:**
+- Config tool was never registered in `tool-registry.ts` (orphaned code)
+- Messaging system deprecated (primary use case eliminated)
+- File-based configuration (`.sqlew/config.toml`) is clearer and more maintainable
+- Runtime updates were confusing (changes lost on restart unless manually synced to file)
+- Configuration drift between `m_config` table and config file
+
+**Migration Path:**
+- ✅ **Use `.sqlew/config.toml`** for all configuration (persistent, version-controlled)
+- ✅ **Use CLI arguments** for one-time overrides (`--autodelete-message-hours=48`)
+- ✅ **Internal config operations** preserved (`src/database/config/config-ops.ts`)
+- ✅ **m_config table** preserved (used internally by retention logic)
+
+**Impact:**
+- Cleaner codebase with ~300 lines removed
+- No functional impact - tool was never registered
+- Configuration via file and CLI arguments only
+
+**Message Tool Completely Removed**
+
+The deprecated message tool has been completely removed from the codebase:
+
+- **Deleted**: `src/tools/messaging.ts` (599 lines)
+- **Removed**: Message tool entry from `tool-registry.ts`
+- **Removed**: Message tool handler from `tool-handlers.ts`
+- **Removed**: Message imports from `cli.ts`
+- **Updated**: `MessageAction` type changed to `never` (backward compatibility stub)
+- **CLI**: `sqlew query messages` now returns error message
+
+**Migration Path**:
+- No action required - messaging system was already marked deprecated in v3.6.6
+- The `t_agent_messages` table was dropped in v3.6.6
+- All message tool actions returned deprecation warnings since v3.6.6
+
+**Impact**:
+- Cleaner codebase with ~700 lines removed
+- No functional impact - messaging system was unused
+- MessageAction type remains as deprecated stub for backward compatibility
+
+### Added
+
+**Layer Expansion (5→9 layers)**
+
+Added 4 new layers to enable better task classification and semantic validation:
+
+**New FILE_REQUIRED layers:**
+- `documentation` - README, CHANGELOG, API docs, architecture docs (file_actions required)
+
+**New FILE_OPTIONAL layers:**
+- `planning` - Research, spike tasks, investigation (file_actions optional)
+- `coordination` - Multi-agent orchestration, task delegation (file_actions optional)
+- `review` - Code review, design review, verification (file_actions optional)
+
+**Existing layers** (5→6 FILE_REQUIRED):
+- presentation, business, data, infrastructure, cross-cutting (file_actions required or empty array)
+
+**Benefits:**
+- Documentation layer enforces file operations for docs work
+- Planning layers allow pure research tasks without file boilerplate
+- Better semantic task classification across the development lifecycle
+
+**file_actions Parameter for Tasks**
+
+Introduced semantic `file_actions` parameter to replace generic `watch_files`:
+
+```typescript
+// New file_actions parameter
+task.create({
+  title: "Implement OAuth",
+  layer: "business",
+  file_actions: [
+    { action: "create", path: "src/auth/oauth.ts" },
+    { action: "edit", path: "src/api/router.ts" },
+    { action: "delete", path: "src/auth/legacy.ts" }
+  ]
+});
+
+// Backward compatible - watch_files still works
+task.create({
+  title: "Update config",
+  layer: "infrastructure",
+  watch_files: ["config.toml"]  // Auto-converts to file_actions
+});
+```
+
+**Layer-Based Validation:**
+- FILE_REQUIRED layers (6) → Must provide `file_actions` or `[]`
+- FILE_OPTIONAL layers (3) → Can omit `file_actions` entirely
+- Clear error messages with layer-specific guidance
+
+**Benefits:**
+- Self-documenting: `action: 'create'` vs `action: 'edit'` shows intent
+- Prevents forgotten file watchers (validation enforced)
+- No boilerplate for planning tasks (can omit parameter)
+- Better token efficiency with automatic file watching
+
+**PostgreSQL Adapter Implementation**
+
+Full PostgreSQL 12+ support with complete adapter implementation:
+
+**Adapter Features:**
+- All 15 abstract methods implemented (`insertReturning`, `upsert`, `jsonExtract`, etc.)
+- PostgreSQL-specific SQL syntax (RETURNING, ON CONFLICT, string_agg)
+- Strict type handling (TRUE/FALSE for booleans, not 1/0)
+- Timezone-aware timestamp functions
+- Transaction support with savepoints
+
+**Migration Compatibility:**
+- All 22 migrations tested and verified on PostgreSQL 16.10
+- Cross-database helper functions for view creation
+- Proper CASCADE handling for foreign key dependencies
+- Sequence management after explicit ID inserts
+- GROUP BY strictness compliance
+
+**Supported Databases:**
+- SQLite 3.x (default, development)
+- MySQL 8.0 / MariaDB 10+ (production)
+- PostgreSQL 12+ (production) ✨ NEW
+
+**Configuration:**
+```toml
+[database]
+type = "postgres"
+
+[database.connection]
+host = "localhost"
+port = 5432
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "secret"
+```
+
+### Fixed
+
+**Batch Action Parameter Parsing**
+
+Fixed MCP client array serialization issue affecting all batch actions:
+
+**Problem:** MCP client serializes array parameters as JSON strings:
+```typescript
+// MCP sends:
+decisions: "[{\"key\": \"test\", \"value\": \"val\"}]"  // String!
+
+// Expected:
+decisions: [{key: "test", value: "val"}]  // Array
+```
+
+**Solution:** Added JSON parsing in `tool-handlers.ts` for all batch actions:
+- `decision.set_batch` - parse `decisions` parameter
+- `file.record_batch` - parse `file_changes` parameter
+- `task.create_batch` - parse `tasks` parameter
+
+**Impact:** All batch actions now work correctly with array parameters from MCP client.
+
+**Help System Synchronization**
+
+Fixed critical bug where help database was severely out of sync with code:
+
+**Problem:** 25 actions missing from `m_help_actions` table, causing help system to lie about available actions.
+
+**Missing Actions:**
+- decision: 9 actions (quick_set, search_advanced, set_batch, has_updates, etc.)
+- task: 14 actions (update, get, list, move, link, archive, create_batch, etc.)
+- constraint: 1 action (use_case)
+
+**Solution:** Created migration `20251109020000_fix_missing_help_actions_v3_8_0.ts` to:
+- Add all 25 missing actions with correct descriptions
+- Idempotent checks to prevent duplicates
+- Full synchronization between code and database
+
+**Impact:** Help system now accurately reports all available actions.
+
+### Changed
+
+**Tool Registry Schema Fix**
+
+Added `additionalProperties: true` to all tool schemas in `tool-registry.ts`:
+
+**Problem:** MCP couldn't pass action-specific parameters (key, value, tags, etc.) because schemas only defined `action` property.
+
+**Solution:**
+```typescript
+{
+  name: 'decision',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      action: { ... }
+    },
+    required: ['action'],
+    additionalProperties: true,  // ← CRITICAL FIX
+  },
+}
+```
+
+**Impact:** All MCP tools now accept action-specific parameters correctly.
+
+---
+
 ## [3.7.4] - 2025-11-08
 
 ### Added - Complete JSON Import/Export System
@@ -1186,7 +1428,7 @@ This version was replaced by v3.2.4. Use v3.2.4 or later.
 - New triggers: `trg_log_task_create`, `trg_log_task_status_change`, `trg_update_task_timestamp`
 
 #### MCP Actions (task tool)
-- `create`, `update`, `get`, `list`, `move`, `link`, `archive`, `batch_create`
+- `create`, `update`, `get`, `list`, `move`, `link`, `archive`, `create_batch`
 - `watch_files` - Start file watching for auto-transitions
 
 #### Documentation

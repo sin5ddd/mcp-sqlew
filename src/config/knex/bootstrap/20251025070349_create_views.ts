@@ -58,6 +58,64 @@ function getCreateViewStatement(knex: Knex, viewName: string): string {
   }
 }
 
+/**
+ * Returns database-specific string aggregation function
+ * @param knex - Knex instance with database client configuration
+ * @param column - Column name to aggregate
+ * @param separator - Separator string (default: ',')
+ * @returns SQL function string for string aggregation
+ */
+function getStringAggFunction(knex: Knex, column: string, separator: string = ','): string {
+  const client = knex.client.config.client;
+
+  switch (client) {
+    case 'mysql':
+    case 'mysql2':
+    case 'better-sqlite3':
+    case 'sqlite3':
+      return `GROUP_CONCAT(${column}, '${separator}')`;
+    case 'pg':
+    case 'postgresql':
+      return `string_agg(${column}, '${separator}')`;
+    default:
+      return `GROUP_CONCAT(${column}, '${separator}')`;
+  }
+}
+
+/**
+ * Returns database-specific boolean TRUE value
+ * @param knex - Knex instance with database client configuration
+ * @returns SQL boolean TRUE value
+ */
+function getBooleanTrue(knex: Knex): string {
+  const client = knex.client.config.client;
+
+  switch (client) {
+    case 'pg':
+    case 'postgresql':
+      return 'TRUE';
+    default: // MySQL, SQLite use 1 for true
+      return '1';
+  }
+}
+
+/**
+ * Returns database-specific boolean FALSE value
+ * @param knex - Knex instance with database client configuration
+ * @returns SQL boolean FALSE value
+ */
+function getBooleanFalse(knex: Knex): string {
+  const client = knex.client.config.client;
+
+  switch (client) {
+    case 'pg':
+    case 'postgresql':
+      return 'FALSE';
+    default: // MySQL, SQLite use 0 for false
+      return '0';
+  }
+}
+
 export async function up(knex: Knex): Promise<void> {
   // ============================================================================
   // Token-Efficient Views (v_ prefix)
@@ -72,10 +130,10 @@ export async function up(knex: Knex): Promise<void> {
         d.version,
         CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' ELSE 'draft' END as status,
         l.name as layer,
-        (SELECT GROUP_CONCAT(t2.name, ',') FROM t_decision_tags dt2
+        (SELECT ${getStringAggFunction(knex, 't2.name', ',')} FROM t_decision_tags dt2
          JOIN m_tags t2 ON dt2.tag_id = t2.id
          WHERE dt2.decision_key_id = d.key_id) as tags,
-        (SELECT GROUP_CONCAT(s2.name, ',') FROM t_decision_scopes ds2
+        (SELECT ${getStringAggFunction(knex, 's2.name', ',')} FROM t_decision_scopes ds2
          JOIN m_scopes s2 ON ds2.scope_id = s2.id
          WHERE ds2.decision_key_id = d.key_id) as scopes,
         a.name as decided_by,
@@ -115,7 +173,7 @@ export async function up(knex: Knex): Promise<void> {
     FROM m_layers l
     LEFT JOIN t_decisions d ON l.id = d.layer_id AND d.status = 1
     LEFT JOIN t_file_changes fc ON l.id = fc.layer_id AND fc.ts > ${getCurrentUnixTimestamp(knex)} - 3600
-    LEFT JOIN t_constraints c ON l.id = c.layer_id AND c.active = 1
+    LEFT JOIN t_constraints c ON l.id = c.layer_id AND c.active = ${getBooleanTrue(knex)}
     GROUP BY l.id
   `);
 
@@ -128,8 +186,8 @@ export async function up(knex: Knex): Promise<void> {
         COUNT(*) as count
     FROM t_agent_messages m
     JOIN m_agents a ON m.to_agent_id = a.id
-    WHERE m.read = 0
-    GROUP BY m.to_agent_id, m.priority
+    WHERE m.read = ${getBooleanFalse(knex)}
+    GROUP BY a.name, m.priority
     ORDER BY m.priority DESC
   `);
 
@@ -160,7 +218,7 @@ export async function up(knex: Knex): Promise<void> {
         l.name as layer,
         c.constraint_text,
         CASE c.priority WHEN 4 THEN 'critical' WHEN 3 THEN 'high' WHEN 2 THEN 'medium' ELSE 'low' END as priority,
-        (SELECT GROUP_CONCAT(t2.name, ',') FROM t_constraint_tags ct2
+        (SELECT ${getStringAggFunction(knex, 't2.name', ',')} FROM t_constraint_tags ct2
          JOIN m_tags t2 ON ct2.tag_id = t2.id
          WHERE ct2.constraint_id = c.id) as tags,
         a.name as created_by,
@@ -169,7 +227,7 @@ export async function up(knex: Knex): Promise<void> {
     JOIN m_constraint_categories cc ON c.category_id = cc.id
     LEFT JOIN m_layers l ON c.layer_id = l.id
     LEFT JOIN m_agents a ON c.agent_id = a.id
-    WHERE c.active = 1
+    WHERE c.active = ${getBooleanTrue(knex)}
     ORDER BY c.priority DESC, cc.name, c.ts DESC
   `);
 
@@ -186,7 +244,7 @@ export async function up(knex: Knex): Promise<void> {
         t.created_ts,
         t.updated_ts,
         t.completed_ts,
-        (SELECT GROUP_CONCAT(tg2.name, ', ')
+        (SELECT ${getStringAggFunction(knex, 'tg2.name', ', ')}
          FROM t_task_tags tt2
          JOIN m_tags tg2 ON tt2.tag_id = tg2.id
          WHERE tt2.task_id = t.id) as tags

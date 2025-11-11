@@ -252,7 +252,7 @@ For large-scale migration, use batch operations:
 
 // Step 2: Create tasks in batch
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: [
     {
       title: "Task 1",
@@ -407,7 +407,7 @@ async function migrateDecisionsToTasks(db) {
 
   // 5. Create tasks
   const createdTasks = await mcp.task({
-    action: "batch_create",
+    action: "create_batch",
     tasks: tasksToCreate,
     atomic: false
   });

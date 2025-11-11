@@ -1,16 +1,28 @@
 #!/usr/bin/env sh
 echo "🔍 Running pre-push checks..."
 
-echo "🗄️  Running migration safety tests (v3.5→v3.6→v3.7)..."
-npm run test:migrations || {
-  echo "❌ Migration tests failed\! Please fix migration issues before pushing."
-  exit 1
-}
-
 echo "🧪 Running comprehensive feature tests..."
 npm run test:all-features || {
-  echo "❌ Feature tests failed\! Please fix failing tests before committing."
+  echo "❌ Feature tests failed! Please fix failing tests before pushing."
   exit 1
 }
 
-echo "✅ Pre-push checks passed\!"
+# Check if migration files changed since remote branch
+REMOTE_BRANCH=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "origin/main")
+if git diff --name-only HEAD "$REMOTE_BRANCH" 2>/dev/null | grep -q "src/config/knex/"; then
+  echo "🗄️  Migration files detected, running migration tests..."
+
+  npm run test:migrations || {
+    echo "❌ Migration safety tests failed! Please fix migration issues before pushing."
+    exit 1
+  }
+
+  npm run test:migrations:ci || {
+    echo "❌ Historical migration tests failed! Please fix backward compatibility before pushing."
+    exit 1
+  }
+else
+  echo "✅ No migration files changed, skipping migration tests"
+fi
+
+echo "✅ All pre-push checks passed!"

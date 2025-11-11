@@ -8,8 +8,9 @@ import { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
-import { validateBatchParams } from '../internal/validation.js';
+import { validateDecisionItem } from '../internal/validation.js';
 import { setDecisionInternal } from '../internal/queries.js';
+import { validateBatch, formatBatchValidationError } from '../../../utils/batch-validation.js';
 import type { SetDecisionBatchParams, SetDecisionBatchResponse } from '../types.js';
 
 /**
@@ -23,10 +24,23 @@ export async function setDecisionBatch(
   params: SetDecisionBatchParams,
   adapter?: DatabaseAdapter
 ): Promise<SetDecisionBatchResponse> {
-  // Validate batch parameters
-  validateBatchParams('decision', 'decisions', params.decisions, 'set', 50);
-
   const actualAdapter = adapter ?? getAdapter();
+
+  // Basic parameter validation
+  if (!params.decisions || !Array.isArray(params.decisions)) {
+    throw new Error('Parameter "decisions" is required and must be an array');
+  }
+
+  if (params.decisions.length > 50) {
+    throw new Error('Parameter "decisions" must contain at most 50 items');
+  }
+
+  // Pre-validate all decisions before transaction (v3.8.0 enhancement)
+  // Comprehensive field-level validation replaces old validateBatchParams
+  const validationResult = await validateBatch(params.decisions, validateDecisionItem, actualAdapter);
+  if (!validationResult.valid) {
+    throw new Error(formatBatchValidationError(validationResult));
+  }
 
   if (params.decisions.length === 0) {
     return {

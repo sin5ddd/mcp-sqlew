@@ -1,23 +1,19 @@
 #!/usr/bin/env node
 /**
  * CLI for sqlew - Standalone query commands for mcp-sqlew
- * Provides quick terminal access to decisions, messages, files, and activity logs
+ * Provides quick terminal access to decisions, messages, and files
  */
 
 import { initializeDatabase } from './database.js';
 import { getContext, searchAdvanced } from './tools/context/index.js';
-import { getMessages } from './tools/messaging.js';
 import { getFileChanges } from './tools/files/index.js';
-import { getActivityLog } from './tools/stats/index.js';
 import { dbDumpCommand } from './cli/db-dump.js';
 import { dbExportCommand } from './cli/db-export.js';
 import { dbImportCommand } from './cli/db-import.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
-  GetMessagesParams,
   GetFileChangesParams,
-  GetActivityLogParams,
 } from './types.js';
 
 // ============================================================================
@@ -139,7 +135,7 @@ USAGE:
   sqlew <command> [subcommand] [options]
 
 COMMANDS:
-  query      Query context data (decisions, messages, files, activity)
+  query      Query context data (decisions, messages, files)
   db:dump    Generate SQL dump for database migration (schema + data)
   db:export  Export project data to JSON format (data-only, for append-import)
   db:import  Import project data from JSON export (append to existing database)
@@ -148,7 +144,6 @@ QUERY SUBCOMMANDS:
   decisions  Query decisions with filtering
   messages   Query agent messages
   files      Query file changes
-  activity   Query activity log
 
 QUERY OPTIONS:
   --layer <layer>          Filter by layer (presentation, business, data, infrastructure, cross-cutting)
@@ -157,7 +152,6 @@ QUERY OPTIONS:
   --unread                 Show only unread messages (messages only)
   --priority <priority>    Filter by priority (low, medium, high, critical)
   --agent <agent>          Filter by agent name
-  --actions <actions>      Filter by action types (comma-separated, activity only)
   --limit <number>         Limit number of results
   --output <format>        Output format: json or table (default: json)
   --db-path <path>         Database file path (default: .sqlew/sqlew.db)
@@ -231,39 +225,12 @@ async function queryDecisions(args: CLIArgs): Promise<void> {
 
 /**
  * Query messages command
+ * @deprecated Messaging system removed in v3.8.0
  */
 async function queryMessages(args: CLIArgs): Promise<void> {
-  const outputFormat = args.output || 'json';
-
-  // Agent name is required for messages
-  const agentName = args.agent || 'cli';
-
-  // Build query params
-  const params: GetMessagesParams = {
-    agent_name: agentName,
-  };
-
-  if (args.unread) {
-    params.unread_only = true;
-  }
-
-  if (args.priority) {
-    params.priority_filter = args.priority;
-  }
-
-  if (args.limit) {
-    params.limit = args.limit;
-  }
-
-  // Execute query
-  const result = await getMessages(params);
-
-  // Output results
-  if (outputFormat === 'json') {
-    formatJSON(result);
-  } else {
-    formatTable(result.messages, ['id', 'from_agent', 'msg_type', 'priority', 'timestamp', 'read']);
-  }
+  console.error('Error: The messaging system has been removed in v3.8.0.');
+  console.error('The "messages" query command is no longer available.');
+  process.exit(1);
 }
 
 /**
@@ -299,47 +266,6 @@ async function queryFiles(args: CLIArgs): Promise<void> {
     formatJSON(result);
   } else {
     formatTable(result.changes, ['path', 'changed_by', 'change_type', 'layer', 'changed_at']);
-  }
-}
-
-/**
- * Query activity command
- */
-async function queryActivity(args: CLIArgs): Promise<void> {
-  const outputFormat = args.output || 'json';
-
-  // Build query params
-  const params: GetActivityLogParams = {};
-
-  if (args.since) {
-    params.since = args.since;
-  }
-
-  if (args.agent) {
-    // Support wildcard for all agents
-    if (args.agent === '*') {
-      params.agent_names = ['*'];
-    } else {
-      params.agent_names = args.agent.split(',').map(a => a.trim());
-    }
-  }
-
-  if (args.actions) {
-    params.actions = args.actions.split(',').map(a => a.trim());
-  }
-
-  if (args.limit) {
-    params.limit = args.limit;
-  }
-
-  // Execute query
-  const result = await getActivityLog(params);
-
-  // Output results
-  if (outputFormat === 'json') {
-    formatJSON(result);
-  } else {
-    formatTable(result.activities, ['id', 'timestamp', 'agent', 'action', 'target', 'layer']);
   }
 }
 
@@ -391,9 +317,6 @@ async function main(): Promise<void> {
           break;
         case 'files':
           await queryFiles(args);
-          break;
-        case 'activity':
-          await queryActivity(args);
           break;
         default:
           console.error(`Unknown subcommand: ${args.subcommand}`);

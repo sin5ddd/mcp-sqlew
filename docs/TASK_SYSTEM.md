@@ -669,12 +669,12 @@ Archive completed task (soft delete).
 
 **Note:** Only tasks with `status="done"` can be archived.
 
-### Action: `batch_create`
+### Action: `create_batch`
 
 Create multiple tasks atomically or best-effort.
 
 **Required Parameters:**
-- `action`: "batch_create"
+- `action`: "create_batch"
 - `tasks`: Array of task objects (max 50)
 
 **Optional Parameters:**
@@ -683,7 +683,7 @@ Create multiple tasks atomically or best-effort.
 **Example:**
 ```javascript
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: [
     {
       title: "Setup database schema",
@@ -1032,7 +1032,7 @@ WHERE f.file_path = '/src/auth/jwt.ts';
    ```javascript
    // Create 5 tasks in one call
    {
-     action: "batch_create",
+     action: "create_batch",
      tasks: [...]
    }
    ```
@@ -1090,7 +1090,7 @@ WHERE t.task_id = 1;
    ```javascript
    // Create multiple tasks in one call
    {
-     action: "batch_create",
+     action: "create_batch",
      tasks: [...]
    }
    ```

@@ -6,6 +6,13 @@ import { validateRequired, validateStatus, validateLayer } from '../../../utils/
 import { validateActionParams, validateBatchParams } from '../../../utils/parameter-validator.js';
 import { STRING_TO_STATUS } from '../../../constants.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import {
+  BatchValidationError,
+  validateRequiredField,
+  validateEnum,
+  validateType,
+} from '../../../utils/batch-validation.js';
 
 /**
  * Validate required decision parameters
@@ -34,7 +41,7 @@ export function validateStatusParam(status?: string): void {
  */
 export function validateLayerParam(layer?: string): void {
   if (layer) {
-    const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
+    const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting', 'documentation'];
     if (!validLayers.includes(layer)) {
       throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
     }
@@ -88,6 +95,59 @@ export function parseRelativeTime(relativeTime: string): number | null {
     case 'h': return now - (value * 3600);
     case 'd': return now - (value * 86400);
     default: return null;
+  }
+}
+
+// ============================================================================
+// Batch Validation for Decision Items
+// ============================================================================
+
+const VALID_DECISION_STATUSES = ['active', 'deprecated', 'draft'] as const;
+const VALID_DECISION_LAYERS = [
+  'presentation',
+  'business',
+  'data',
+  'infrastructure',
+  'cross-cutting',
+  'documentation'
+] as const;
+
+/**
+ * Validate single decision item in batch operation
+ * Pre-validates all fields before database transaction
+ */
+export async function validateDecisionItem(
+  item: any,
+  index: number,
+  adapter: DatabaseAdapter,
+  errors: BatchValidationError[]
+): Promise<void> {
+  const identifier = item.key || `Item ${index + 1}`;
+
+  // Required: key
+  validateRequiredField(item.key, 'key', index, identifier, errors);
+
+  // Required: value
+  validateRequiredField(item.value, 'value', index, identifier, errors);
+
+  // Optional but must be valid: status
+  if (item.status !== undefined) {
+    validateEnum(item.status, 'status', VALID_DECISION_STATUSES, index, identifier, errors);
+  }
+
+  // Optional but must be valid: layer
+  if (item.layer !== undefined) {
+    validateEnum(item.layer, 'layer', VALID_DECISION_LAYERS, index, identifier, errors);
+  }
+
+  // Optional but must be array: tags
+  if (item.tags !== undefined) {
+    validateType(item.tags, 'tags', 'array', index, identifier, errors);
+  }
+
+  // Optional but must be array: scopes
+  if (item.scopes !== undefined) {
+    validateType(item.scopes, 'scopes', 'array', index, identifier, errors);
   }
 }
 

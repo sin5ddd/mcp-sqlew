@@ -6,9 +6,10 @@
 
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter } from '../../../database.js';
-import { validateBatchParams } from '../internal/validation.js';
+import { validateBatchParams, validateFileChangeItem } from '../internal/validation.js';
 import { recordFileChangeInternal } from '../internal/queries.js';
 import { getProjectContext } from '../../../utils/project-context.js';
+import { validateBatch, formatBatchValidationError } from '../../../utils/batch-validation.js';
 import type {
   RecordFileChangeBatchParams,
   RecordFileChangeBatchResponse
@@ -39,6 +40,17 @@ export async function recordFileChangeBatch(
       failed: 0,
       results: []
     };
+  }
+
+  // Pre-validate all items before transaction
+  const validationResult = await validateBatch(
+    params.file_changes,
+    validateFileChangeItem,
+    actualAdapter
+  );
+
+  if (!validationResult.valid) {
+    throw new Error(formatBatchValidationError(validationResult));
   }
 
   // Fail-fast: Validate project context is initialized (Constraint #29)

@@ -395,7 +395,7 @@ const tasks = decisions.map(d => {
 
 // Step 3: Batch create tasks
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: tasks,
   atomic: false  // Allow partial success
 }
@@ -537,7 +537,7 @@ const tasks = decisions.map(d => {
 ```javascript
 // ✅ GOOD: Migrate in manageable batches
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: first20Tasks,
   atomic: false
 }
@@ -545,7 +545,7 @@ const tasks = decisions.map(d => {
 
 // ❌ BAD: Try to migrate 200+ tasks at once
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: all200Tasks,  // Too large, may fail
   atomic: true
 }
@@ -587,7 +587,7 @@ const tasks = decisions.map(d => {
 ```javascript
 // Batch create fails after 50 tasks
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: [...100 tasks...],
   atomic: true  // All-or-nothing mode
 }
@@ -598,7 +598,7 @@ const tasks = decisions.map(d => {
 ```javascript
 // Use best-effort mode
 {
-  action: "batch_create",
+  action: "create_batch",
   tasks: [...100 tasks...],
   atomic: false  // Allow partial success
 }

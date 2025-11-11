@@ -12,58 +12,16 @@
  *   // Throws ValidationError with structured details if validation fails
  */
 
-import { getActionSpec, ACTION_SPECS_BY_TOOL } from './action-specs.js';
+import { getActionSpec, ACTION_SPECS_BY_TOOL } from './action-specs/index.js';
+import { levenshteinDistance } from './levenshtein.js';
+import type { ValidationError } from '../types.js';
 import type {
-  ValidationError,
   DecisionAction,
   TaskAction,
   FileAction,
   ConstraintAction,
-  StatsAction,
-  ConfigAction,
-  MessageAction
-} from '../types.js';
-
-/**
- * Calculate Levenshtein distance between two strings
- * Used for typo detection (e.g., "context_key" → "key")
- *
- * @param a First string
- * @param b Second string
- * @returns Edit distance (number of single-character edits needed)
- */
-function levenshteinDistance(a: string, b: string): number {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-
-  const matrix: number[][] = [];
-
-  // Initialize matrix
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
-
-  // Fill matrix
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
-        );
-      }
-    }
-  }
-
-  return matrix[b.length][a.length];
-}
+  StatsAction
+} from '../types/actions.js';
 
 /**
  * Common abbreviation patterns for AI parameter typos
@@ -192,7 +150,7 @@ function findTypoSuggestions(
  */
 export function validateActionParams(
   tool: string,
-  action: DecisionAction | TaskAction | FileAction | ConstraintAction | StatsAction | ConfigAction | MessageAction | string,
+  action: DecisionAction | TaskAction | FileAction | ConstraintAction | StatsAction | string,
   params: any
 ): void {
   // Skip validation for help actions
@@ -276,7 +234,7 @@ export function validateActionParams(
 
 /**
  * Validate batch operation parameters
- * Used by set_batch, record_batch, batch_create actions
+ * Used by set_batch, record_batch, create_batch actions
  *
  * @param tool Tool name
  * @param batchParamName Name of the batch array parameter (e.g., 'decisions', 'tasks', 'file_changes')

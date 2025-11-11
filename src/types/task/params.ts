@@ -6,6 +6,20 @@
  */
 
 /**
+ * File action types for task-file associations (v3.8.0)
+ */
+export type TaskFileActionType = 'create' | 'edit' | 'delete';
+
+/**
+ * Task file action interface (v3.8.0)
+ * Specifies what action will be performed on a file for a task
+ */
+export interface TaskFileAction {
+  action: TaskFileActionType;
+  path: string;  // Relative path from project root
+}
+
+/**
  * Acceptance check types for automated task validation
  */
 export type AcceptanceCheckType = 'tests_pass' | 'code_removed' | 'code_contains' | 'file_exists';
@@ -36,7 +50,8 @@ export interface TaskCreateParams {
   layer?: string;
   tags?: string[];
   status?: 'todo' | 'in_progress' | 'waiting_review' | 'blocked' | 'done' | 'archived';
-  watch_files?: string[];  // Array of file paths to watch (v3.4.1)
+  watch_files?: string[];  // Array of file paths to watch (v3.4.1) - DEPRECATED in v3.8.0, use file_actions
+  file_actions?: TaskFileAction[];  // Array of file actions (v3.8.0) - replaces watch_files
 }
 
 /**
@@ -51,7 +66,8 @@ export interface TaskUpdateParams {
   description?: string;
   acceptance_criteria?: string | AcceptanceCheck[];  // Can be string or array of AcceptanceCheck objects
   notes?: string;
-  watch_files?: string[];  // Array of file paths to watch (v3.4.1)
+  watch_files?: string[];  // Array of file paths to watch (v3.4.1) - DEPRECATED in v3.8.0, use file_actions
+  file_actions?: TaskFileAction[];  // Array of file actions (v3.8.0) - replaces watch_files
 }
 
 /**

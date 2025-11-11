@@ -21,7 +21,7 @@ import {
 import { estimateTokens } from '../utils/token-estimation.js';
 
 // Test configuration
-const TEST_TOOLS = ['decision', 'task', 'message', 'file', 'constraint', 'config', 'stats'];
+const TEST_TOOLS = ['decision', 'task', 'message', 'file', 'constraint', 'config'];
 const TEST_ACTIONS = {
   decision: ['set', 'get', 'list'],
   task: ['create'],

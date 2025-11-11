@@ -1,0 +1,1 @@
+Testing Write tool with backslashes deny list

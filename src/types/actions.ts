@@ -24,7 +24,7 @@ export type DecisionAction =
  */
 export type TaskAction =
   | 'create' | 'update' | 'get' | 'list' | 'move' | 'link'
-  | 'archive' | 'batch_create' | 'add_dependency' | 'remove_dependency'
+  | 'archive' | 'create_batch' | 'add_dependency' | 'remove_dependency'
   | 'get_dependencies' | 'watch_files' | 'get_pruned_files' | 'link_pruned_file'
   | 'watcher'
   | 'help' | 'example' | 'use_case';
@@ -35,6 +35,7 @@ export type TaskAction =
  */
 export type FileAction =
   | 'record' | 'get' | 'check_lock' | 'record_batch'
+  | 'sqlite_flush'
   | 'help' | 'example' | 'use_case';
 
 /**
@@ -47,26 +48,14 @@ export type ConstraintAction =
 
 /**
  * Stats tool actions
- * Provides compile-time type checking for action parameters
+ * @deprecated Stats tool removed in v3.8.0. Stats functionality migrated to file tool (sqlite_flush).
+ * This type is kept only for backward compatibility with existing code references.
  */
-export type StatsAction =
-  | 'layer_summary' | 'db_stats' | 'clear' | 'activity_log' | 'flush'
-  | 'help_action' | 'help_params' | 'help_tool' | 'help_use_case'
-  | 'help_list_use_cases' | 'help_next_actions'
-  | 'help' | 'example' | 'use_case';
-
-/**
- * Config tool actions
- * Provides compile-time type checking for action parameters
- */
-export type ConfigAction =
-  | 'get' | 'update'
-  | 'help' | 'example' | 'use_case';
+export type StatsAction = never;
 
 /**
  * Message tool actions
- * @deprecated Messaging system removed in v3.6.6. This type remains for backward compatibility.
+ * @deprecated Messaging system removed in v3.8.0. Message tool has been completely removed.
+ * This type is kept only for backward compatibility with existing code references.
  */
-export type MessageAction =
-  | 'send' | 'get' | 'mark_read' | 'send_batch'
-  | 'help' | 'example' | 'use_case';
+export type MessageAction = never;
