@@ -35,7 +35,7 @@
         "test:migration-upgrade-paths": "npm run build && node --test dist/tests/migration-upgrade-paths.test.js",
         "test:migration-idempotency": "npm run build && node --test dist/tests/migration-idempotency.test.js",
         "test:migrations:all": "npm run build && node dist/tests/migrations/test-all-versions-real.js",
-        "test:migrations:ci": "npm run build && SKIP_DOCKER_TESTS=true node dist/tests/migrations/test-all-versions-real.js",
+        "test:migrations:ci": "npm run build && node dist/tests/migrations/test-all-versions-real.js",
         "prepare": "husky",
         "prepublishOnly": "npm run rebuild",
         "knex": "tsx node_modules/.bin/knex --knexfile src/knexfile.ts",
