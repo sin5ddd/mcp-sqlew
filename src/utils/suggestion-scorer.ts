@@ -1,0 +1,222 @@
+/**
+ * Suggestion scoring algorithm for Decision Intelligence System
+ *
+ * Scores suggestions based on:
+ * - Tag overlap (40 points max)
+ * - Layer match (25 points)
+ * - Key pattern similarity (20 points)
+ * - Recency (10 points)
+ * - Priority (5 points)
+ *
+ * Total: 100 points max
+ */
+
+import { Knex } from 'knex';
+
+export interface SuggestionContext {
+  key: string;
+  tags: string[];
+  layer?: string;
+  priority?: number;
+}
+
+export interface ScoredSuggestion {
+  key_id: number;
+  key: string;
+  value: string;
+  score: number;
+  score_breakdown: {
+    tag_overlap: number;
+    layer_match: number;
+    key_similarity: number;
+    recency: number;
+    priority: number;
+  };
+  reason: string;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ * Used for key pattern similarity scoring
+ */
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Find common prefix between two strings
+ */
+function commonPrefix(a: string, b: string): string {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) {
+    i++;
+  }
+  return a.substring(0, i);
+}
+
+/**
+ * Calculate key similarity score (0-20 points)
+ * Based on Levenshtein distance and common prefix/suffix
+ */
+function calculateKeySimilarity(key1: string, key2: string): number {
+  // Exact match
+  if (key1 === key2) return 20;
+
+  // Common prefix (e.g., "security/jwt" vs "security/oauth")
+  const prefix = commonPrefix(key1, key2);
+  const prefixScore = Math.min(prefix.length * 2, 10);
+
+  // Levenshtein distance
+  const distance = levenshteinDistance(key1, key2);
+  const maxLength = Math.max(key1.length, key2.length);
+  const similarity = 1 - distance / maxLength;
+  const distanceScore = Math.floor(similarity * 10);
+
+  return prefixScore + distanceScore;
+}
+
+/**
+ * Calculate tag overlap score (0-40 points, 10 per tag, max 4)
+ */
+function calculateTagOverlap(contextTags: string[], decisionTags: string[]): number {
+  const overlap = contextTags.filter(t => decisionTags.includes(t)).length;
+  return Math.min(overlap * 10, 40);
+}
+
+/**
+ * Calculate layer match score (0 or 25 points)
+ */
+function calculateLayerMatch(contextLayer: string | undefined, decisionLayer: string): number {
+  if (!contextLayer) return 0;
+  return contextLayer === decisionLayer ? 25 : 0;
+}
+
+/**
+ * Calculate recency score (0-10 points)
+ * Decisions updated in last 30 days get full points, older ones decay
+ */
+function calculateRecencyScore(updatedTs: number): number {
+  const now = Math.floor(Date.now() / 1000);
+  const ageSeconds = now - updatedTs;
+  const ageDays = ageSeconds / 86400;
+
+  if (ageDays <= 30) return 10;
+  if (ageDays <= 90) return 5;
+  if (ageDays <= 180) return 2;
+  return 0;
+}
+
+/**
+ * Calculate priority score (0-5 points)
+ * Critical: 5, High: 4, Medium: 3, Low: 2
+ */
+function calculatePriorityScore(priority: number): number {
+  const scoreMap: Record<number, number> = {
+    4: 5, // Critical
+    3: 4, // High
+    2: 3, // Medium
+    1: 2, // Low
+  };
+  return scoreMap[priority] ?? 0;
+}
+
+/**
+ * Main scoring function
+ *
+ * @param context - Decision context (key, tags, layer, priority)
+ * @param candidates - Candidate decisions from database
+ * @returns Scored and ranked suggestions
+ */
+export function scoreAndRankSuggestions(
+  context: SuggestionContext,
+  candidates: Array<{
+    key_id: number;
+    key: string;
+    value: string;
+    tags: string[];
+    layer: string;
+    priority: number;
+    updated_ts: number;
+  }>
+): ScoredSuggestion[] {
+  const scored = candidates.map(candidate => {
+    const tagOverlap = calculateTagOverlap(context.tags, candidate.tags);
+    const layerMatch = calculateLayerMatch(context.layer, candidate.layer);
+    const keySimilarity = calculateKeySimilarity(context.key, candidate.key);
+    const recency = calculateRecencyScore(candidate.updated_ts);
+    const priority = calculatePriorityScore(candidate.priority);
+
+    const totalScore = tagOverlap + layerMatch + keySimilarity + recency + priority;
+
+    // Generate human-readable reason
+    const reasons: string[] = [];
+    if (tagOverlap >= 20) reasons.push(`${tagOverlap / 10} matching tags`);
+    if (layerMatch > 0) reasons.push('same layer');
+    if (keySimilarity >= 15) reasons.push('similar key pattern');
+    if (recency >= 5) reasons.push('recently updated');
+
+    return {
+      key_id: candidate.key_id,
+      key: candidate.key,
+      value: candidate.value,
+      score: totalScore,
+      score_breakdown: {
+        tag_overlap: tagOverlap,
+        layer_match: layerMatch,
+        key_similarity: keySimilarity,
+        recency,
+        priority,
+      },
+      reason: reasons.length > 0 ? reasons.join(', ') : 'low similarity',
+    };
+  });
+
+  // Sort by score descending
+  return scored.sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Filter suggestions by minimum score threshold
+ * Default: 30 points (moderate relevance)
+ */
+export function filterByThreshold(
+  suggestions: ScoredSuggestion[],
+  minScore: number = 30
+): ScoredSuggestion[] {
+  return suggestions.filter(s => s.score >= minScore);
+}
+
+/**
+ * Limit number of suggestions
+ * Default: 5 suggestions
+ */
+export function limitSuggestions(
+  suggestions: ScoredSuggestion[],
+  limit: number = 5
+): ScoredSuggestion[] {
+  return suggestions.slice(0, limit);
+}

@@ -276,6 +276,7 @@ export interface SetDecisionParams {
   agent?: string;
   layer?: string;
   version?: string;
+  auto_increment?: 'major' | 'minor' | 'patch';
   status?: 'active' | 'deprecated' | 'draft';
   tags?: string[];
   scopes?: string[];
@@ -519,7 +520,22 @@ export interface SetDecisionResponse {
   key: string;
   key_id: number;
   version: string;
+  version_action?: 'initial' | 'explicit' | 'auto_increment_major' | 'auto_increment_minor' | 'auto_increment_patch';
   message?: string;
+  policy_validation?: {
+    matched_policy?: string;
+    violations?: string[];
+  };
+  suggestions?: {
+    triggered_by: string;
+    reason: string;
+    suggestions: Array<{
+      key: string;
+      value: string;
+      score: number;
+      reason: string;
+    }>;
+  };
 }
 
 export interface QuickSetDecisionResponse {
@@ -850,7 +866,10 @@ export type DecisionAction =
   | 'versions' | 'quick_set' | 'search_advanced' | 'set_batch'
   | 'has_updates' | 'set_from_template' | 'create_template'
   | 'list_templates' | 'hard_delete' | 'add_decision_context'
-  | 'list_decision_contexts' | 'help' | 'example' | 'use_case';
+  | 'list_decision_contexts'
+  | 'create_policy' | 'list_policies' | 'set_from_policy'  // v3.9.0 policy actions
+  | 'analytics'  // v3.9.0 analytics action
+  | 'help' | 'example' | 'use_case';
 
 /**
  * Task tool actions

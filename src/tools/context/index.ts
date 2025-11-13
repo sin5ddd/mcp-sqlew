@@ -21,6 +21,7 @@ export { listTemplates } from './actions/list-templates.js';
 export { hardDeleteDecision } from './actions/hard-delete.js';
 export { addDecisionContextAction } from './actions/add-context.js';
 export { listDecisionContextsAction } from './actions/list-contexts.js';
+export { handleAnalytics } from './actions/analytics.js';
 
 // Help exports
 export { decisionHelp } from './help/help.js';
@@ -60,3 +61,6 @@ export type {
   HardDeleteDecisionResponse,
   DecisionAction
 } from './types.js';
+
+// Analytics type exports
+export type { AnalyticsParams, AnalyticsResponse } from './actions/analytics.js';

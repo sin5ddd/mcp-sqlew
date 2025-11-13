@@ -8,6 +8,7 @@ export interface SetDecisionParams {
   agent?: string;
   layer?: string;
   version?: string;
+  auto_increment?: 'major' | 'minor' | 'patch';
   status?: 'active' | 'deprecated' | 'draft';
   tags?: string[];
   scopes?: string[];

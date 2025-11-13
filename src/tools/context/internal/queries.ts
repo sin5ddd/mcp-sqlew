@@ -14,6 +14,9 @@ import {
 import { STRING_TO_STATUS, DEFAULT_VERSION, DEFAULT_STATUS } from '../../../constants.js';
 import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../../../utils/activity-logging.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
+import { incrementSemver, isValidSemver } from '../../../utils/semver.js';
+import { validateAgainstPolicies } from '../../../utils/policy-validator.js';
+import { handleSuggestAction } from '../../suggest.js';
 import type { SetDecisionParams, SetDecisionResponse } from '../types.js';
 
 /**
@@ -48,7 +51,6 @@ export async function setDecisionInternal(
   const value = params.value;
 
   // Set defaults
-  const version = params.version || DEFAULT_VERSION;
   const status = params.status ? STRING_TO_STATUS[params.status] : DEFAULT_STATUS;
   const agentName = params.agent || 'system';
 
@@ -82,10 +84,49 @@ export async function setDecisionInternal(
   // Current timestamp
   const ts = Math.floor(Date.now() / 1000);
 
-  // Check if decision already exists for activity logging
+  // Check if decision already exists for activity logging and version management
   const existingDecision = await knex(isNumeric ? 't_decisions_numeric' : 't_decisions')
     .where({ key_id: keyId, project_id: projectId })
     .first();
+
+  // Auto-versioning logic (Task 409)
+  let version: string;
+  let versionAction: 'initial' | 'explicit' | 'auto_increment_major' | 'auto_increment_minor' | 'auto_increment_patch';
+
+  if (existingDecision) {
+    // Update existing decision
+
+    if (params.version) {
+      // Explicit version provided - validate and use it
+      if (!isValidSemver(params.version)) {
+        throw new Error(`Invalid semver format: ${params.version}. Expected MAJOR.MINOR.PATCH (e.g., "1.2.3")`);
+      }
+      version = params.version;
+      versionAction = 'explicit';
+    } else if (params.auto_increment) {
+      // Auto-increment with specified level
+      if (!['major', 'minor', 'patch'].includes(params.auto_increment)) {
+        throw new Error(`Invalid auto_increment level: ${params.auto_increment}. Expected: major, minor, or patch`);
+      }
+      version = incrementSemver(existingDecision.version, params.auto_increment);
+      versionAction = `auto_increment_${params.auto_increment}` as 'auto_increment_major' | 'auto_increment_minor' | 'auto_increment_patch';
+    } else {
+      // Default: auto-increment patch version
+      version = incrementSemver(existingDecision.version, 'patch');
+      versionAction = 'auto_increment_patch';
+    }
+  } else {
+    // New decision
+    if (params.version) {
+      if (!isValidSemver(params.version)) {
+        throw new Error(`Invalid semver format: ${params.version}. Expected MAJOR.MINOR.PATCH (e.g., "1.2.3")`);
+      }
+      version = params.version;
+    } else {
+      version = DEFAULT_VERSION;
+    }
+    versionAction = 'initial';
+  }
 
   // Insert or update decision based on value type
   const tableName = isNumeric ? 't_decisions_numeric' : 't_decisions';
@@ -187,11 +228,80 @@ export async function setDecisionInternal(
     }
   }
 
-  return {
+  // Build response object
+  const response: SetDecisionResponse = {
     success: true,
     key: params.key,
     key_id: keyId,
     version: version,
-    message: `Decision "${params.key}" set successfully`
+    version_action: versionAction,
+    message: existingDecision
+      ? `Decision "${params.key}" updated to version ${version}`
+      : `Decision "${params.key}" created at version ${version}`
   };
+
+  // Task 407: Policy validation and auto-trigger suggestions
+  try {
+    // Validate decision against policies
+    const validationResult = await validateAgainstPolicies(
+      adapter,
+      params.key,
+      value,
+      {
+        rationale: (params as any).rationale,
+        alternatives: (params as any).alternatives,
+        tradeoffs: (params as any).tradeoffs,
+        ...params
+      }
+    );
+
+    // Add policy validation result to response
+    if (validationResult.matchedPolicy) {
+      response.policy_validation = {
+        matched_policy: validationResult.matchedPolicy.name,
+        violations: validationResult.violations
+      };
+    }
+
+    // Auto-trigger suggestions if policy has suggest_similar=1
+    if (validationResult.matchedPolicy && validationResult.valid) {
+      // Query policy to check suggest_similar flag
+      const policy = await knex('t_decision_policies')
+        .where({ id: validationResult.matchedPolicy.id })
+        .select('suggest_similar')
+        .first();
+
+      if (policy && policy.suggest_similar === 1) {
+        try {
+          // Auto-trigger suggestions with higher threshold
+          const tags = params.tags ? parseStringArray(params.tags) : [];
+          const suggestions = await handleSuggestAction({
+            action: 'by_context',
+            key: params.key,
+            tags,
+            layer: params.layer,
+            limit: 3,
+            min_score: 50
+          });
+
+          // Add suggestions to response if any found
+          if (suggestions.count > 0) {
+            response.suggestions = {
+              triggered_by: validationResult.matchedPolicy.name,
+              reason: 'Policy has suggest_similar enabled',
+              suggestions: suggestions.suggestions
+            };
+          }
+        } catch (suggestError) {
+          // Non-critical - log but don't fail the decision.set operation
+          console.warn('[Auto-trigger] Suggestion failed:', suggestError);
+        }
+      }
+    }
+  } catch (validationError) {
+    // Non-critical - log but don't fail the decision.set operation
+    console.warn('[Policy Validation] Validation failed:', validationError);
+  }
+
+  return response;
 }

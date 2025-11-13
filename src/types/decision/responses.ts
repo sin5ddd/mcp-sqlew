@@ -9,6 +9,7 @@ export interface SetDecisionResponse {
   key: string;
   key_id: number;
   version: string;
+  version_action?: 'initial' | 'explicit' | 'auto_increment_major' | 'auto_increment_minor' | 'auto_increment_patch';
   message?: string;
 }
 
