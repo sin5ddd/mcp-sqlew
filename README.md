@@ -40,7 +40,8 @@ Traditional code analysis like git tells you **WHAT** is done, sqlew adds **WHY*
 **60-75% token reduction** in multi-session projects through structured data storage and selective querying.
 
 ### 🎯 Key Features
-- **5 Specialized Tools**: decisions, tasks, files, constraints, stats
+- **6 Specialized Tools**: decisions, tasks, files, constraints, stats, **suggest** (NEW in v3.9.0)
+- **Decision Intelligence**: Auto-suggest similar decisions, duplicate detection, pattern-based search
 - **Runtime Reconnection**: Automatic database connection recovery with exponential backoff
 - **Parameter Validation**: Typo detection, required/optional markers, 70-85% more concise error messages
 - **Metadata-Driven**: Tag, layer, scope, and version everything

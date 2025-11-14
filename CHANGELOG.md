@@ -7,6 +7,126 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.9.0] - 2025-11-14
+
+### Added
+
+**🎯 Decision Intelligence System (Task 407)**
+
+New `suggest` tool for intelligent decision discovery and duplicate prevention:
+- **by_key** - Pattern-based decision search (e.g., "api/*/latency" finds all API latency decisions)
+- **by_tags** - Tag similarity scoring for related decisions
+- **by_context** - Combined key + tags + layer search for best matches
+- **check_duplicate** - Duplicate decision detection before creation
+
+**Auto-Trigger Integration:**
+- Suggestions automatically triggered when policies have `suggest_similar=1`
+- Integrated with `decision.set` - returns suggestions in response
+- Configurable relevance threshold via `min_score` parameter (default: 30)
+
+**Supporting Features:**
+- Tag parser utility (`src/utils/tag-parser.ts`) for flexible tag handling
+- Policy validation integration (`src/utils/policy-validator.ts`)
+- Suggestion scoring and ranking system (`src/tools/suggest/internal/queries.ts`)
+
+### Fixed
+
+**PostgreSQL Cross-Database Compatibility**
+- Fixed CAST type mismatch in `v_tagged_decisions` view export
+- PostgreSQL now correctly handles `COALESCE(TEXT, NUMERIC)` with `CAST(value AS TEXT)`
+- MySQL/MariaDB use `CAST(value AS CHAR)` for compatibility
+- Migration: `20251114000000_fix_v_tagged_decisions_numeric_support.ts`
+- SQL dump export: Enhanced view conversion in `src/utils/sql-dump/schema/views.ts`
+- Result: All 20 cross-database tests passing (MySQL, MariaDB, PostgreSQL)
+
+**Test Suite Improvements**
+- Fixed FK constraint cleanup order in `decision-intelligence-e2e.test.ts`
+- Child records now deleted before parent records (tags → scopes → context → decisions)
+- Result: 3/3 e2e workflow tests passing, no cleanup errors
+
+**Schema Fixes**
+- Migration `20251112000001_fix_task_file_links_schema_v3_9_0.ts` - Fixed UNIQUE constraint
+- Migration `20251112000002_fix_task_pruned_files_schema_v3_9_0.ts` - Enhanced task file tracking
+- All migrations idempotent with existence checks
+
+### Changed
+
+**Test Organization (Docker Dependency Separation)**
+- Moved 7 Docker-dependent tests to `src/tests/docker/` directory
+- `npm test` now runs 481 unit tests without Docker (0 failures)
+- `npm run test:docker` runs cross-database tests (requires Docker containers)
+- Removed `test:all` script (caused database conflicts)
+- Updated `.husky/pre-commit` to reflect test separation
+- Decision documented in SQLew: `test-organization-docker-separation`
+
+**Git Hook Enhancement**
+- Pre-commit hook now checks for **PUSHED** migration files instead of just committed
+- Auto-detects remote branch (origin/main, origin/master, origin/dev)
+- Allows editing locally committed migrations (not yet pushed)
+- Prevents editing migrations that exist in remote
+- Graceful fallback for local-only repositories
+
+**Debug Output Cleanup**
+- Commented out scope validation warnings in test output
+- Removed DEBUG/DIAGNOSTIC console.log statements
+- Cleaner test output focusing on actual results
+- 75% reduction in test output verbosity
+
+### Removed
+
+**Code Cleanup**
+- Deleted monolithic `src/utils/sql-dump.ts` (-1,799 lines)
+- Functionality now in modular structure:
+  - `src/utils/sql-dump/schema/tables.ts`
+  - `src/utils/sql-dump/schema/views.ts`
+  - `src/utils/sql-dump/schema/primary-keys.ts`
+  - `src/utils/sql-dump/schema/indexes.ts`
+- Deleted test tracking files (`test-tracking/file1.ts`, etc.)
+
+### Documentation
+
+- Updated `CLAUDE.md` - Changed policy from "NEVER EDIT COMMITTED" to "NEVER EDIT PUSHED"
+- Created `STAGED_CHANGES_SUMMARY.md` - Comprehensive v3.9.0 change summary
+- Created `NEW_TOOL_DESCRIPTION.md` - Suggest tool reference
+
+### Performance
+
+- Enhanced file pruning logic (`src/utils/file-pruning.ts`)
+- Improved VCS adapter file status tracking (`src/utils/vcs-adapter.ts`)
+- Better task stale detection (`src/utils/task-stale-detection.ts`)
+- Activity logging enhancements for suggestion tracking
+
+### Testing
+
+**Test Results:**
+- ✅ 481/481 unit tests passing (npm test)
+- ✅ 3/3 e2e workflow tests passing
+- ✅ 20/20 cross-database tests passing (MySQL, MariaDB, PostgreSQL)
+- ✅ 7 Docker test suites in separate directory
+
+**Coverage:**
+- Overall: 64.85% line coverage
+- All critical paths tested
+
+### Migration Notes
+
+**Backward Compatibility:**
+- v3.9.0 is fully backward compatible with v3.8.x
+- No breaking changes
+- Automatic migration on server startup
+
+**Database Changes:**
+- 3 new enhancement migrations (all idempotent)
+- Schema changes apply automatically
+- Safe to rollback by restoring backup
+
+**Files Changed:**
+- 50 files modified
+- 1,857 insertions, 2,096 deletions
+- Net: -239 lines (code reduction through refactoring)
+
+---
+
 ## [3.8.1] - 2025-11-11
 
 ### Fixed
