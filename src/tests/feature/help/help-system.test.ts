@@ -8,8 +8,8 @@
  * 4. Database queries are performant
  */
 
-import { initializeDatabase, getDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
+import { initializeDatabase, getDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
 import {
   queryHelpAction,
   queryHelpParams,
@@ -17,8 +17,8 @@ import {
   queryHelpUseCase,
   queryHelpListUseCases,
   queryHelpNextActions
-} from '../tools/help-queries.js';
-import { estimateTokens } from '../utils/token-estimation.js';
+} from '../../../tools/help-queries.js';
+import { estimateTokens } from '../../../utils/token-estimation.js';
 
 // Test configuration
 const TEST_TOOLS = ['decision', 'task', 'message', 'file', 'constraint', 'config'];

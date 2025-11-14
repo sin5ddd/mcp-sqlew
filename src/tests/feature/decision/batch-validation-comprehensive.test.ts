@@ -11,12 +11,12 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { batchCreateTasks } from '../tools/tasks/index.js';
-import { setDecisionBatch } from '../tools/context/index.js';
-import { recordFileChangeBatch } from '../tools/files/index.js';
-import { DatabaseAdapter } from '../adapters/index.js';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import { ProjectContext } from '../utils/project-context.js';
+import { batchCreateTasks } from '../../../tools/tasks/index.js';
+import { setDecisionBatch } from '../../../tools/context/index.js';
+import { recordFileChangeBatch } from '../../../tools/files/index.js';
+import { DatabaseAdapter } from '../../../adapters/index.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 import { unlink } from 'node:fs/promises';
 
 const TEST_DB_PATH = '.tmp-test/batch-validation-comprehensive.db';

@@ -3,14 +3,14 @@
  * Tests the complete workflow: staging → done, commit → archived
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { existsSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { detectAndCompleteOnStaging, detectAndArchiveOnCommit } from '../utils/task-stale-detection.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { detectAndCompleteOnStaging, detectAndArchiveOnCommit } from '../../../utils/task-stale-detection.js';
 
 const TEST_DIR = join(process.cwd(), 'test-two-step-git');
 

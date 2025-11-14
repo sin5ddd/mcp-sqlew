@@ -4,7 +4,7 @@
  * Tests regex pattern conversions for cross-database SQL migration
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import {
   convertIdentifierQuotes,
@@ -14,9 +14,10 @@ import {
   convertDataTypes,
   removeCheckConstraints,
   removeSqliteDefaultFunctions,
-} from '../utils/sql-dump-converters.js';
+} from '../../../utils/sql-dump-converters.js';
 
 describe('SQL Dump Converters', () => {
+
   describe('convertIdentifierQuotes', () => {
     it('should convert double quotes to backticks for MySQL', () => {
       const input = 'CREATE TABLE "users" ("id" INTEGER, "name" TEXT)';

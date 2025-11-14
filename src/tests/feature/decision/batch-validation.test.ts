@@ -3,12 +3,12 @@
  * Tests that batch validation prevents database errors by catching issues before transaction
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { setDecisionBatch } from '../tools/context/index.js';
-import { DatabaseAdapter } from '../adapters/index.js';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import { ProjectContext } from '../utils/project-context.js';
+import { setDecisionBatch } from '../../../tools/context/index.js';
+import { DatabaseAdapter } from '../../../adapters/index.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 import { unlink } from 'node:fs/promises';
 
 const TEST_DB_PATH = '.tmp-test/decision-batch-validation.db';

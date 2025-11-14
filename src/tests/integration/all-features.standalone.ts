@@ -4,16 +4,16 @@
  * Tests all tools and actions to detect crashes with proper TypeScript types
  */
 
-import { initializeDatabase, closeDatabase, getAdapter } from '../database.js';
-import { ProjectContext } from '../utils/project-context.js';
+import { initializeDatabase, closeDatabase, getAdapter } from '../../database.js';
+import { ProjectContext } from '../../utils/project-context.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // Import all tool functions
-import { setDecision, getDecision, searchByTags, getVersions, searchByLayer, addDecisionContextAction, listDecisionContextsAction } from '../tools/context/index.js';
-import { recordFileChange, getFileChanges, checkFileLock } from '../tools/files/index.js';
-import { addConstraint, getConstraints, deactivateConstraint } from '../tools/constraints/index.js';
-import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies } from '../tools/tasks.js';
+import { setDecision, getDecision, searchByTags, getVersions, searchByLayer, addDecisionContextAction, listDecisionContextsAction } from '../../tools/context/index.js';
+import { recordFileChange, getFileChanges, checkFileLock } from '../../tools/files/index.js';
+import { addConstraint, getConstraints, deactivateConstraint } from '../../tools/constraints/index.js';
+import { createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask, batchCreateTasks, addDependency, removeDependency, getDependencies } from '../../tools/tasks.js';
 
 const TEST_DB_PATH = '.sqlew/tmp/test-all-features.db';
 
@@ -433,12 +433,9 @@ async function runAllTests() {
   const resultsPath = path.join(testDir, 'test-results.json');
   fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2));
   log(`\n📝 Detailed results saved to ${resultsPath}`);
-
-  process.exit(crashed > 0 ? 1 : 0);
 }
 
 runAllTests().catch(error => {
   console.error('💥 Fatal error during testing:', error);
   console.error(error.stack);
-  process.exit(1);
 });

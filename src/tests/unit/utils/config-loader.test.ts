@@ -9,8 +9,8 @@ import {
   loadConfigFile,
   validateDatabaseConfig,
   normalizeDatabaseConfig,
-} from '../config/loader.js';
-import type { DatabaseConfig } from '../config/types.js';
+} from '../../../config/loader.js';
+import type { DatabaseConfig } from '../../../config/types.js';
 
 // Test directory
 const TEST_DIR = join(process.cwd(), '.sqlew-test');

@@ -1,13 +1,22 @@
 /**
  * Unit tests for Task watch_files action (v3.4.1)
  * Tests the new watch_files action: watch, unwatch, list
+ *
+ * **v3.9.0 Update**: Uses shared test helpers from test-helpers.ts
  */
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { getOrCreateAgent, getOrCreateFile } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { SQLiteAdapter } from '../adapters/sqlite-adapter.js';
+import { getOrCreateFile } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { SQLiteAdapter } from '../../../adapters/sqlite-adapter.js';
+import { createTestTask } from '../../utils/test-helpers.js';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const projectRoot = join(__dirname, '../../../../');
 
 /**
  * Test database instance
@@ -33,6 +42,16 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
     client: 'better-sqlite3',
     connection: { filename: ':memory:' },
     useNullAsDefault: true,
+    migrations: {
+      directory: [
+        join(projectRoot, 'dist/config/knex/bootstrap'),
+        join(projectRoot, 'dist/config/knex/upgrades'),
+        join(projectRoot, 'dist/config/knex/enhancements'),
+      ],
+      extension: 'js',
+      tableName: 'knex_migrations',
+      loadExtensions: ['.js'],
+    },
   });
 
   // Run migrations to set up schema
@@ -43,26 +62,8 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
 }
 
 /**
- * Helper: Create a test task
- */
-async function createTestTask(db: DatabaseAdapter, title: string): Promise<number> {
-  const agentId = await getOrCreateAgent(db, 'test-agent');
-  const statusId = 1; // todo
-
-  const knex = db.getKnex();
-  const [id] = await knex('t_tasks').insert({
-    title,
-    status_id: statusId,
-    priority: 2,
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
-  });
-
-  return id;
-}
-
-/**
  * Inline implementation of watchFiles action for testing
+ * **v3.9.0 Update**: Fixed v3.8.0+ schema compatibility (project_id, linked_ts)
  */
 async function watchFilesAction(db: DatabaseAdapter, params: {
   task_id: number;
@@ -96,22 +97,30 @@ async function watchFilesAction(db: DatabaseAdapter, params: {
     }
 
     const addedFiles: string[] = [];
+    const currentTs = Math.floor(Date.now() / 1000);
+    const projectId = 1; // Default project for tests
+
     for (const filePath of params.file_paths) {
-      const fileId = await getOrCreateFile(db, 1, filePath);
+      const fileId = await getOrCreateFile(db, projectId, filePath);
 
       // Try to insert, check if row was actually inserted
       const rowsBefore = await knex('t_task_file_links')
-        .where({ task_id: params.task_id, file_id: fileId })
+        .where({ project_id: projectId, task_id: params.task_id, file_id: fileId })
         .count('* as count')
         .first();
 
       await knex('t_task_file_links')
-        .insert({ task_id: params.task_id, file_id: fileId })
-        .onConflict(['task_id', 'file_id'])
+        .insert({
+          task_id: params.task_id,
+          file_id: fileId,
+          project_id: projectId,  // Required v3.7.0+
+          linked_ts: currentTs     // Required v3.8.0+
+        })
+        .onConflict(['project_id', 'task_id', 'file_id'])  // v3.8.0+ UNIQUE constraint
         .ignore();
 
       const rowsAfter = await knex('t_task_file_links')
-        .where({ task_id: params.task_id, file_id: fileId })
+        .where({ project_id: projectId, task_id: params.task_id, file_id: fileId })
         .count('* as count')
         .first();
 
@@ -192,7 +201,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should list watched files for task with no files', async () => {
-    const taskId = await createTestTask(testDb, 'Task without files');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task without files', projectId: 1 });
 
     const result = await watchFilesAction(testDb, {
       task_id: taskId,
@@ -206,7 +216,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should watch files for a task', async () => {
-    const taskId = await createTestTask(testDb, 'Task to watch files');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task to watch files', projectId: 1 });
 
     const result = await watchFilesAction(testDb, {
       task_id: taskId,
@@ -221,7 +232,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should list watched files after watching', async () => {
-    const taskId = await createTestTask(testDb, 'Task with watched files');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task with watched files', projectId: 1 });
 
     // Watch files
     await watchFilesAction(testDb, {
@@ -246,7 +258,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should handle watching duplicate files (idempotent)', async () => {
-    const taskId = await createTestTask(testDb, 'Task for idempotent test');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for idempotent test', projectId: 1 });
 
     // Watch files first time
     const result1 = await watchFilesAction(testDb, {
@@ -276,7 +289,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should unwatch files from a task', async () => {
-    const taskId = await createTestTask(testDb, 'Task for unwatch test');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for unwatch test', projectId: 1 });
 
     // Watch files
     await watchFilesAction(testDb, {
@@ -310,7 +324,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should unwatch multiple files at once', async () => {
-    const taskId = await createTestTask(testDb, 'Task for batch unwatch');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for batch unwatch', projectId: 1 });
 
     // Watch files
     await watchFilesAction(testDb, {
@@ -340,7 +355,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should handle unwatching non-existent file gracefully', async () => {
-    const taskId = await createTestTask(testDb, 'Task for non-existent unwatch');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for non-existent unwatch', projectId: 1 });
 
     // Watch one file
     await watchFilesAction(testDb, {
@@ -373,7 +389,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should throw error when watch action missing file_paths', async () => {
-    const taskId = await createTestTask(testDb, 'Task for error test');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for error test', projectId: 1 });
 
     await assert.rejects(
       async () => {
@@ -387,7 +404,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should throw error when unwatch action missing file_paths', async () => {
-    const taskId = await createTestTask(testDb, 'Task for error test');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for error test', projectId: 1 });
 
     await assert.rejects(
       async () => {
@@ -401,7 +419,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should handle empty file_paths array for watch', async () => {
-    const taskId = await createTestTask(testDb, 'Task for empty array test');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for empty array test', projectId: 1 });
 
     await assert.rejects(
       async () => {
@@ -416,7 +435,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should watch then unwatch all files', async () => {
-    const taskId = await createTestTask(testDb, 'Task for full cycle test');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for full cycle test', projectId: 1 });
 
     // Watch files
     await watchFilesAction(testDb, {
@@ -448,7 +468,8 @@ describe('Task watch_files action tests', () => {
   });
 
   it('should handle various file path formats', async () => {
-    const taskId = await createTestTask(testDb, 'Task for path formats');
+    const knex = testDb.getKnex();
+    const taskId = await createTestTask(knex, { title: 'Task for path formats', projectId: 1 });
 
     const result = await watchFilesAction(testDb, {
       task_id: taskId,

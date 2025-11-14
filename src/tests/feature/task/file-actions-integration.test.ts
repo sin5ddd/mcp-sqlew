@@ -9,13 +9,13 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createDatabaseAdapter } from '../adapters/index.js';
-import { createTask } from '../tools/tasks/actions/create.js';
-import { parseArrayParam } from '../tools/tasks/internal/validation.js';
-import { ProjectContext } from '../utils/project-context.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import type { TaskFileAction } from '../tools/tasks/types.js';
-import knexConfig from '../knexfile.js';
+import { createDatabaseAdapter } from '../../../adapters/index.js';
+import { createTask } from '../../../tools/tasks/actions/create.js';
+import { parseArrayParam } from '../../../tools/tasks/internal/validation.js';
+import { ProjectContext } from '../../../utils/project-context.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import type { TaskFileAction } from '../../../tools/tasks/types.js';
+import knexConfig from '../../../knexfile.js';
 
 let testDb: DatabaseAdapter;
 

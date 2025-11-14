@@ -14,10 +14,10 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { validateAgainstPolicies } from '../utils/policy-validator.js';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import { ProjectContext } from '../utils/project-context.js';
-import type { DatabaseAdapter } from '../adapters/index.js';
+import { validateAgainstPolicies } from '../../../utils/policy-validator.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import { ProjectContext } from '../../../utils/project-context.js';
+import type { DatabaseAdapter } from '../../../adapters/index.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -25,6 +25,7 @@ const TEST_DB_PATH = '.sqlew/tmp/test-policy-validation.db';
 
 describe('Policy Validation Tests', () => {
   let adapter: DatabaseAdapter;
+  let projectId: number;
 
   before(async () => {
     // Create temporary test database
@@ -48,9 +49,18 @@ describe('Policy Validation Tests', () => {
     await projectContext.ensureProject(knex, 'test-policy-validation', 'config', {
       projectRootPath: process.cwd(),
     });
+
+    // Get actual project ID for use in tests
+    projectId = projectContext.getProjectId();
   });
 
   after(async () => {
+    // Cleanup test policies to prevent foreign key errors
+    const knex = adapter.getKnex();
+    await knex('t_decision_policies')
+      .where('project_id', projectId)
+      .delete();
+
     // Cleanup
     await closeDatabase();
 
@@ -67,7 +77,7 @@ describe('Policy Validation Tests', () => {
       // Insert security_vulnerability policy
       await knex('t_decision_policies').insert({
         name: 'security_vulnerability',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({ layer: 'security' }),
         validation_rules: JSON.stringify({
           patterns: { cve_id: '^CVE-\\d{4}-\\d{4,7}$' }
@@ -96,7 +106,7 @@ describe('Policy Validation Tests', () => {
       // Insert breaking_change policy
       await knex('t_decision_policies').insert({
         name: 'breaking_change',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({ layer: 'business' }),
         validation_rules: JSON.stringify({
           patterns: { semver: '^\\d+\\.\\d+\\.\\d+$' }
@@ -123,7 +133,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'architecture_decision',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({ layer: 'infrastructure' }),
         quality_gates: JSON.stringify({
           required_fields: ['rationale', 'alternatives', 'tradeoffs']
@@ -149,7 +159,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_cve_pattern',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         validation_rules: JSON.stringify({
           patterns: { cve_id: '^CVE-\\d{4}-\\d{4,7}$' }
@@ -185,7 +195,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_semver_pattern',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         validation_rules: JSON.stringify({
           patterns: { semver: '^\\d+\\.\\d+\\.\\d+$' }
@@ -219,7 +229,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_multi_pattern',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         validation_rules: JSON.stringify({
           patterns: {
@@ -258,7 +268,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_required_fields',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         required_fields: JSON.stringify(['field1', 'field2', 'field3'])
       });
@@ -291,7 +301,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_empty_string',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         required_fields: JSON.stringify(['important_field'])
       });
@@ -314,7 +324,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_quality_gates',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         quality_gates: JSON.stringify({
           required_fields: ['rationale', 'impact', 'timeline']
@@ -348,7 +358,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_combined_validation',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         validation_rules: JSON.stringify({
           patterns: { version: '^\\d+\\.\\d+\\.\\d+$' }
@@ -440,7 +450,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_malformed_validation',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         validation_rules: 'INVALID JSON'
       });
@@ -461,7 +471,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_malformed_gates',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         quality_gates: 'NOT VALID JSON'
       });
@@ -481,7 +491,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'test_clear_errors',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         validation_rules: JSON.stringify({
           patterns: { email: '^[^@]+@[^@]+\\.[^@]+$' }
@@ -514,7 +524,7 @@ describe('Policy Validation Tests', () => {
 
       await knex('t_decision_policies').insert({
         name: 'custom_policy',
-        project_id: 1,
+        project_id: projectId,
         defaults: JSON.stringify({}),
         quality_gates: JSON.stringify({
           required_fields: ['custom_field']

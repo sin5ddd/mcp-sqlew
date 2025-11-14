@@ -10,38 +10,20 @@
  */
 
 import knex, { Knex } from 'knex';
-import { getAllIndexes, getCreateIndexStatement } from '../utils/sql-dump.js';
+import { getAllIndexes, getCreateIndexStatement } from '../../../utils/sql-dump/index.js';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { getTestConfig } from '../testing-config.js';
 
-// Test database configurations
+// Test database configurations (using centralized config)
 const configs = {
-  sqlite: {
-    client: 'better-sqlite3',
-    connection: { filename: ':memory:' },
-    useNullAsDefault: true,
-  },
-  postgresql: {
-    client: 'pg',
-    connection: {
-      host: 'localhost',
-      port: 5433,
-      user: 'testuser',
-      password: 'testpass',
-      database: 'sqlew_test',
-    },
-  },
-  mysql: {
-    client: 'mysql2',
-    connection: {
-      host: 'localhost',
-      port: 3308,
-      user: 'testuser',
-      password: 'testpass',
-      database: 'sqlew_test',
-    },
-  },
+  sqlite: getTestConfig('sqlite'),
+  postgresql: getTestConfig('postgresql'),
+  mysql: getTestConfig('mysql'),
 };
+
+// Override SQLite to use in-memory database for this test
+configs.sqlite.connection = { filename: ':memory:' };
 
 describe('Index Export Tests', () => {
   let sqliteDb: Knex;
@@ -187,7 +169,7 @@ describe('Index Export Tests', () => {
 
       try {
         // Export table definition to MySQL (should apply prefix length)
-        const { generateSqlDump } = await import('../utils/sql-dump.js');
+        const { generateSqlDump } = await import('../../../utils/sql-dump/index.js');
         const dump = await generateSqlDump(mysqlDb, 'mysql', {
           tables: ['test_pk_prefix'],
           includeSchema: true,

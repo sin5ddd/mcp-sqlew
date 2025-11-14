@@ -5,12 +5,13 @@
  * for accurate cross-database type conversions.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, before, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { generateBulkInsert } from '../utils/sql-dump.js';
-import type { DatabaseFormat } from '../utils/sql-dump.js';
+import { generateBulkInsert } from '../../../utils/sql-dump/index.js';
+import type { DatabaseFormat } from '../../../utils/sql-dump/index.js';
 
 describe('Type-Aware Value Conversion', () => {
+
   describe('Boolean Conversion', () => {
     it('should convert SQLite 0/1 to PostgreSQL TRUE/FALSE', () => {
       const rows = [

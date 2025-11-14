@@ -15,8 +15,8 @@ import {
   formatBatchValidationError,
   type BatchValidationError,
   type BatchValidationResult
-} from '../utils/batch-validation.js';
-import { STANDARD_LAYERS } from '../constants.js';
+} from '../../../utils/batch-validation.js';
+import { STANDARD_LAYERS } from '../../../constants.js';
 
 describe('Batch Validation - Required Fields', () => {
   it('should detect missing required field (undefined)', () => {

@@ -5,9 +5,10 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/index.js';
-import { getOrCreateAgent } from '../database.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/index.js';
+import { getOrCreateAgent } from '../../../database.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 
 /**
  * Test database instance
@@ -38,14 +39,19 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
 async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<number> {
   const knex = adapter.getKnex();
   const agentId = await getOrCreateAgent(adapter, 'test-agent');
+  const projectId = ProjectContext.getInstance().getProjectId();
   const statusId = 5; // done (ready to archive)
+  const now = Math.floor(Date.now() / 1000);
 
   const [taskId] = await knex('t_tasks').insert({
     title,
     status_id: statusId,
     priority: 2,
+    project_id: projectId,  // Required after v3.7.0
     created_by_agent_id: agentId,
     assigned_agent_id: agentId,
+    created_ts: now,  // Required NOT NULL field
+    updated_ts: now   // Required NOT NULL field
   });
 
   return taskId;
@@ -60,11 +66,13 @@ async function createPrunedFileRecord(
   filePath: string
 ): Promise<number> {
   const knex = adapter.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
 
   const [id] = await knex('t_task_pruned_files').insert({
     task_id: taskId,
     file_path: filePath,
     pruned_ts: knex.raw('unixepoch()'),
+    project_id: projectId,  // Required after v3.7.0
   });
 
   return id;
@@ -153,12 +161,28 @@ async function getPrunedFiles(adapter: DatabaseAdapter, taskId: number): Promise
 }
 
 describe('Auto-pruning: Audit trail persistence after archival', () => {
+  let testCount = 0;
+  const totalTests = 6; // Total number of tests in this suite
+
   beforeEach(async () => {
     testDb = await createTestDatabase();
+
+    // Reset and re-initialize ProjectContext after creating new database
+    ProjectContext.reset();
+    const knex = testDb.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-auto-pruning-persistence', 'config', {
+      projectRootPath: process.cwd(),
+    });
   });
 
   afterEach(async () => {
+    testCount++;
+
     await closeDatabase();
+
+    // Detect if running filtered tests (IDE scenario with --test-name-pattern)
+    const isFilteredTest = process.argv.some(arg => arg.includes('--test-name-pattern'));
   });
 
   it('should preserve audit trail after task archival', async () => {

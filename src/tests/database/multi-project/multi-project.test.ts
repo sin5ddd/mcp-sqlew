@@ -4,12 +4,12 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { ProjectContext } from '../utils/project-context.js';
-import { setDecision, getContext, searchByLayer } from '../tools/context/index.js';
-import { createTask, listTasks } from '../tools/tasks.js';
-import { recordFileChange } from '../tools/files/index.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { ProjectContext } from '../../../utils/project-context.js';
+import { setDecision, getContext, searchByLayer } from '../../../tools/context/index.js';
+import { createTask, listTasks } from '../../../tools/tasks.js';
+import { recordFileChange } from '../../../tools/files/index.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

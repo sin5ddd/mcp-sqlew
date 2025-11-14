@@ -5,9 +5,9 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { SQLiteAdapter } from '../adapters/sqlite-adapter.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { getOrCreateAgent, getOrCreateFile } from '../database.js';
+import { SQLiteAdapter } from '../../../adapters/sqlite-adapter.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { getOrCreateAgent, getOrCreateFile } from '../../../database.js';
 
 /**
  * Test database instance

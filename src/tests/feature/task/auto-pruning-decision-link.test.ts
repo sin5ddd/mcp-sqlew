@@ -3,13 +3,14 @@
  * Tests the workflow of linking decisions to pruned files for WHY reasoning (project archaeology)
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { getOrCreateAgent } from '../database.js';
-import { setDecision } from '../tools/context/index.js';
-import { getPrunedFiles, linkPrunedFile } from '../tools/tasks.js';
+import { initializeDatabase } from '../../../database/index.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { getOrCreateAgent } from '../../../database/index.js';
+import { setDecision } from '../../../tools/context/index.js';
+import { getPrunedFiles, linkPrunedFile } from '../../../tools/tasks/index.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -34,6 +35,7 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
     connection: { filename: dbPath }
   });
 
+  // Project context setup moved to beforeEach to ensure proper singleton reset
   return adapter;
 }
 
@@ -44,13 +46,18 @@ async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<
   const agentId = await getOrCreateAgent(adapter, 'test-agent');
   const statusId = 2; // in_progress
   const knex = adapter.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
+  const now = Math.floor(Date.now() / 1000);
 
   const [id] = await knex('t_tasks').insert({
     title,
     status_id: statusId,
     priority: 2,
+    project_id: projectId,  // Required after v3.7.0
     created_by_agent_id: agentId,
-    assigned_agent_id: agentId
+    assigned_agent_id: agentId,
+    created_ts: now,  // Required NOT NULL field
+    updated_ts: now   // Required NOT NULL field
   });
 
   return id;
@@ -61,19 +68,36 @@ async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<
  */
 async function createPrunedFileRecord(adapter: DatabaseAdapter, taskId: number, filePath: string): Promise<number> {
   const knex = adapter.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
 
   const [id] = await knex('t_task_pruned_files').insert({
     task_id: taskId,
     file_path: filePath,
-    pruned_ts: knex.raw('unixepoch()')
+    pruned_ts: Math.floor(Date.now() / 1000),  // Unix epoch timestamp
+    project_id: projectId  // Required after v3.7.0
   });
 
   return id;
 }
 
 describe('Auto-pruning: Decision linking workflow', () => {
+  let testCount = 0;
+  const totalTests = 9; // Total number of tests in this suite
+
   beforeEach(async () => {
     testDb = await createTestDatabase();
+    // Reset and re-initialize ProjectContext after creating new database
+    // This ensures the singleton points to the current test's database
+    ProjectContext.reset();
+    const knex = testDb.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-auto-pruning', 'config', {
+      projectRootPath: process.cwd(),
+    });
+  });
+
+  afterEach(() => {
+    testCount++;
   });
 
   it('should link decisions to pruned files for WHY reasoning', async () => {

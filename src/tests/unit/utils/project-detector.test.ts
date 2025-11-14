@@ -9,7 +9,7 @@
 
 import { describe, it, mock } from 'node:test';
 import * as assert from 'node:assert';
-import { detectProjectNameSync, detectProjectName } from '../utils/project-detector.js';
+import { detectProjectNameSync, detectProjectName } from '../../../utils/project-detector.js';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 

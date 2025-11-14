@@ -6,32 +6,20 @@
  */
 
 import knex, { Knex } from 'knex';
-import { generateSqlDump } from '../utils/sql-dump.js';
+import { generateSqlDump } from '../../../utils/sql-dump/index.js';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { getTestConfig, getDockerExecPrefix } from '../testing-config.js';
 
 const execAsync = promisify(exec);
 
 // Test database configurations
 const configs = {
-  sqlite: {
-    client: 'better-sqlite3',
-    connection: { filename: '.sqlew/sqlew.db' },
-    useNullAsDefault: true,
-  },
-  postgresql: {
-    client: 'pg',
-    connection: {
-      host: 'localhost',
-      port: 5433,
-      user: 'testuser',
-      password: 'testpass',
-      database: 'sqlew_test',
-    },
-  },
+  sqlite: getTestConfig('sqlite'),
+  postgresql: getTestConfig('postgresql'),
 };
 
 describe('Schema Migration Tests (No Data)', () => {
@@ -87,10 +75,10 @@ describe('Schema Migration Tests (No Data)', () => {
     writeFileSync(tempFile, dump);
 
     try {
-      await execAsync(`docker cp ${tempFile} mcp-sqlew_postgres_1:/tmp/schema.sql`);
-      await execAsync(
-        `docker exec mcp-sqlew_postgres_1 psql -U testuser -d sqlew_test -f /tmp/schema.sql -v ON_ERROR_STOP=1 -q`
-      );
+      const dockerPrefix = getDockerExecPrefix('postgresql');
+      const containerName = dockerPrefix.split(' ')[2]; // Extract container name from "docker exec container_name"
+      await execAsync(`docker cp ${tempFile} ${containerName}:/tmp/schema.sql`);
+      await execAsync(`${dockerPrefix} psql -U mcp_user -d mcp_test -f /tmp/schema.sql -v ON_ERROR_STOP=1 -q`);
     } finally {
       unlinkSync(tempFile);
     }

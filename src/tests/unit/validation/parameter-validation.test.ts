@@ -5,8 +5,8 @@
  * Covers all 42 actions across 5 tools
  */
 
-import { validateActionParams, validateBatchParams } from '../utils/parameter-validator.js';
-import { getActionSpec } from '../utils/action-specs/index.js';
+import { validateActionParams, validateBatchParams } from '../../../utils/parameter-validator.js';
+import { getActionSpec } from '../../../utils/action-specs/index.js';
 import * as assert from 'assert';
 import { test } from 'node:test';
 
@@ -247,7 +247,7 @@ const validParameterTests: ValidationTest[] = [
       title: 'Test task',
       status: 'todo',
       priority: 3,
-      assigned_to: 'developer',
+      assigned_agent: 'developer',
       layer: 'business',
       tags: ['feature', 'api']
     },
@@ -351,32 +351,29 @@ function runValidationTest(testCase: ValidationTest): void {
       return;
     }
 
-    // Verify error structure has required fields
+    // Verify error structure has required fields (new v3.9.0 format)
     assert.ok(parsedError.error, 'Error should have "error" field');
     assert.ok(parsedError.action, 'Error should have "action" field');
-    assert.ok(Array.isArray(parsedError.required_params), 'Error should have "required_params" array');
-    assert.ok(Array.isArray(parsedError.optional_params), 'Error should have "optional_params" array');
-    assert.ok(Array.isArray(parsedError.you_provided), 'Error should have "you_provided" array');
-    assert.ok(parsedError.example, 'Error should have "example" field');
+    assert.ok(parsedError.reference, 'Error should have "reference" field');
 
     // Verify expected error details
     if (testCase.expectedError?.missing_params) {
-      assert.ok(Array.isArray(parsedError.missing_params), 'Error should have "missing_params" array');
+      assert.ok(Array.isArray(parsedError.missing), 'Error should have "missing" array');
       for (const param of testCase.expectedError.missing_params) {
         assert.ok(
-          parsedError.missing_params.includes(param),
-          `missing_params should include "${param}"`
+          parsedError.missing.includes(param),
+          `missing should include "${param}"`
         );
       }
     }
 
     if (testCase.expectedError?.did_you_mean) {
-      assert.ok(parsedError.did_you_mean, 'Error should have "did_you_mean" field');
+      assert.ok(parsedError.typos, 'Error should have "typos" field');
       for (const [typo, suggestion] of Object.entries(testCase.expectedError.did_you_mean)) {
         assert.strictEqual(
-          parsedError.did_you_mean[typo],
+          parsedError.typos[typo],
           suggestion,
-          `did_you_mean["${typo}"] should suggest "${suggestion}"`
+          `typos["${typo}"] should suggest "${suggestion}"`
         );
       }
     }

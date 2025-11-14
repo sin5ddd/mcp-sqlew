@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { incrementSemver, isValidSemver, compareSemver, DEFAULT_VERSION } from '../utils/semver.js';
+import { incrementSemver, isValidSemver, compareSemver, DEFAULT_VERSION } from '../../../utils/semver.js';
 
 describe('semver utilities', () => {
   describe('incrementSemver', () => {

@@ -11,22 +11,38 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { detectAndTransitionToReview } from '../utils/task-stale-detection.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { detectAndTransitionToReview } from '../../../utils/task-stale-detection.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 
 describe('Auto-pruning: Safety check when all files pruned', () => {
   let db: DatabaseAdapter;
+  let testCount = 0;
+  const totalTests = 3; // Total number of tests in this suite
 
   beforeEach(async () => {
     db = await initializeDatabase({
       databaseType: 'sqlite',
       connection: { filename: ':memory:' }
     });
+
+    // Reset and re-initialize ProjectContext after creating new database
+    ProjectContext.reset();
+    const knex = db.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-auto-pruning-safety', 'config', {
+      projectRootPath: process.cwd(),
+    });
   });
 
   afterEach(async () => {
+    testCount++;
+
     await closeDatabase();
+
+    // Detect if running filtered tests (IDE scenario with --test-name-pattern)
+    const isFilteredTest = process.argv.some(arg => arg.includes('--test-name-pattern'));
   });
 
   it('should block transition when all watched files are non-existent', async () => {
@@ -45,11 +61,11 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     await addWatchedFiles(db, taskId, nonExistentFiles);
 
     // 3. Make task appear "stale" by backdating its updated_ts
-    // Set updated_ts to 10 minutes ago (older than default 3-minute idle threshold)
-    const tenMinutesAgo = Math.floor(Date.now() / 1000) - (10 * 60);
+    // Set updated_ts to 16 minutes ago (older than default 15-minute idle threshold)
+    const sixteenMinutesAgo = Math.floor(Date.now() / 1000) - (16 * 60);
     await knex('t_tasks')
       .where({ id: taskId })
-      .update({ updated_ts: tenMinutesAgo });
+      .update({ updated_ts: sixteenMinutesAgo });
 
     // 4. Verify task is in 'in_progress' before attempt
     const beforeStatus = await knex('t_tasks as t')
@@ -117,11 +133,11 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     ];
     await addWatchedFiles(db, taskId, mixedFiles);
 
-    // Make task appear stale
-    const tenMinutesAgo = Math.floor(Date.now() / 1000) - (10 * 60);
+    // Make task appear stale (older than 15-minute default threshold)
+    const sixteenMinutesAgo = Math.floor(Date.now() / 1000) - (16 * 60);
     await knex('t_tasks')
       .where({ id: taskId })
-      .update({ updated_ts: tenMinutesAgo });
+      .update({ updated_ts: sixteenMinutesAgo });
 
     // Verify initial watch count
     const beforeWatchCount = await knex('t_task_file_links')
@@ -195,6 +211,7 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
  */
 async function createTestTask(db: DatabaseAdapter): Promise<number> {
   const knex = db.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
 
   // Create test agent
   const [agentId] = await knex('m_agents')
@@ -228,6 +245,7 @@ async function createTestTask(db: DatabaseAdapter): Promise<number> {
       title: 'Test task for auto-pruning',
       status_id: statusRow.id,
       priority: 2,
+      project_id: projectId,  // Required after v3.7.0
       assigned_agent_id: actualAgentId,
       created_by_agent_id: actualAgentId,
       created_ts: currentTs,
@@ -243,25 +261,34 @@ async function createTestTask(db: DatabaseAdapter): Promise<number> {
  */
 async function addWatchedFiles(db: DatabaseAdapter, taskId: number, filePaths: string[]): Promise<void> {
   const knex = db.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
+  const now = Math.floor(Date.now() / 1000);
 
   for (const filePath of filePaths) {
-    // Insert file (ignore if exists)
-    await knex('m_files')
-      .insert({ path: filePath })
-      .onConflict('path')
-      .ignore();
-
-    // Get file ID
-    const fileRow = await knex('m_files')
-      .where({ path: filePath })
-      .select('id')
-      .first() as { id: number };
+    // Insert file - use try/catch instead of onConflict().returning()
+    // because SQLite doesn't return ID when conflict is ignored
+    let fileId: number;
+    try {
+      const [fileResult] = await knex('m_files')
+        .insert({ path: filePath })
+        .returning('id');
+      fileId = fileResult.id || fileResult;
+    } catch (error) {
+      // File already exists, get its ID
+      const fileRow = await knex('m_files')
+        .where({ path: filePath })
+        .select('id')
+        .first() as { id: number };
+      fileId = fileRow.id;
+    }
 
     // Link file to task
     await knex('t_task_file_links')
       .insert({
         task_id: taskId,
-        file_id: fileRow.id
+        file_id: fileId,
+        project_id: projectId,  // Required after v3.8.0
+        linked_ts: now,  // Required after v3.8.0
       });
   }
 }

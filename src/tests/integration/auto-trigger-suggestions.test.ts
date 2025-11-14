@@ -6,9 +6,9 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { setDecision } from '../tools/context/index.js';
-import { getAdapter, initializeDatabase, closeDatabase } from '../database.js';
-import { getProjectContext, ProjectContext } from '../utils/project-context.js';
+import { setDecision } from '../../tools/context/index.js';
+import { getAdapter, initializeDatabase, closeDatabase } from '../../database.js';
+import { getProjectContext, ProjectContext } from '../../utils/project-context.js';
 
 describe('Auto-Trigger Suggestions (Task 407)', () => {
   before(async () => {

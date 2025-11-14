@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { ConnectionManager } from '../utils/connection-manager.js';
+import { ConnectionManager } from '../../../utils/connection-manager.js';
 
 describe('ConnectionManager', () => {
   let connectionManager: ConnectionManager;

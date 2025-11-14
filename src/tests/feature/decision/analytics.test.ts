@@ -6,33 +6,30 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { handleAnalytics } from '../tools/context/actions/analytics.js';
-import { setDecision } from '../tools/context/actions/set.js';
-import { getAdapter, initializeDatabase, closeDatabase } from '../database.js';
+import { handleAnalytics } from '../../../tools/context/index.js';
+import { setDecision } from '../../../tools/context/index.js';
+import { getAdapter, initializeDatabase, closeDatabase } from '../../../database.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 
 const TEST_DB_PATH = '.tmp-test/decision-analytics.db';
 
 describe('Decision Analytics Action', () => {
   before(async () => {
-    // Initialize database with SQLite (default)
-    await initializeDatabase({ databaseType: 'sqlite' });
+    // Initialize database with SQLite using test-specific database
+    const adapter = await initializeDatabase({
+      databaseType: 'sqlite',
+      connection: { filename: TEST_DB_PATH }
+    });
+
+    // Set up project context (required after v3.7.0)
+    const knex = adapter.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-decision-analytics', 'config', {
+      projectRootPath: process.cwd(),
+    });
   });
 
   after(async () => {
-    // Clean up test data
-    const adapter = getAdapter();
-    const knex = adapter.getKnex();
-
-    await knex('t_decisions_numeric')
-      .join('m_context_keys', 't_decisions_numeric.key_id', 'm_context_keys.id')
-      .where('m_context_keys.key', 'like', 'test/metric/%')
-      .del();
-
-    await knex('m_context_keys')
-      .where('key', 'like', 'test/metric/%')
-      .del();
-
-    // Close database
     await closeDatabase();
   });
 

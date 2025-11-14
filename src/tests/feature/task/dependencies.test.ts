@@ -7,8 +7,8 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Knex } from 'knex';
-import { initializeDatabase, getOrCreateAgent, closeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
+import { initializeDatabase, getOrCreateAgent, closeDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

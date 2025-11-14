@@ -3,12 +3,13 @@
  * Tests layer-based file_actions requirements and backward compatibility
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeDatabase } from '../database.js';
-import { createTask } from '../tools/tasks/actions/create.js';
-import { updateTask } from '../tools/tasks/actions/update.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
+import { initializeDatabase } from '../../../database.js';
+import { createTask } from '../../../tools/tasks/actions/create.js';
+import { updateTask } from '../../../tools/tasks/actions/update.js';
+import { ProjectContext } from '../../../utils/project-context.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
 
 /**
  * Test database instance
@@ -29,6 +30,13 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
 describe('Task file_actions validation (v3.8.0)', () => {
   beforeEach(async () => {
     testDb = await createTestDatabase();
+
+    // Initialize ProjectContext (required for v3.7.0+ multi-project support)
+    const knex = testDb.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-file-actions-validation', 'config', {
+      projectRootPath: process.cwd(),
+    });
   });
 
   describe('Code layers - file_actions REQUIRED', () => {

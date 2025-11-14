@@ -5,12 +5,13 @@
  * Focus: INTEGER timestamp defaults (strftime('%s', 'now') → UNIX_TIMESTAMP() / EXTRACT(epoch...))
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import knex from 'knex';
-import { generateSqlDump } from '../utils/sql-dump.js';
+import { generateSqlDump } from '../../../utils/sql-dump/index.js';
 
 describe('SQL Dump DEFAULT Value Conversions', () => {
+
   describe('INTEGER Timestamp Defaults', () => {
     it('should convert strftime(\'%s\', \'now\') to UNIX_TIMESTAMP() for MySQL', async () => {
       // Create in-memory SQLite database with INTEGER timestamp DEFAULT

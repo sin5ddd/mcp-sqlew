@@ -5,9 +5,10 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeDatabase, getOrCreateAgent, getOrCreateFile, closeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { detectAndTransitionToReview } from '../utils/task-stale-detection.js';
+import { initializeDatabase, getOrCreateAgent, getOrCreateFile, closeDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { detectAndTransitionToReview } from '../../../utils/task-stale-detection.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -16,6 +17,8 @@ describe('Auto-pruning: Partial file existence', () => {
   let db: DatabaseAdapter;
   let tempDir: string;
   let tempDbPath: string;
+  let testCount = 0;
+  const totalTests = 4; // Total number of tests in this suite
 
   beforeEach(async () => {
     // Create temp directory for test files and database
@@ -29,14 +32,27 @@ describe('Auto-pruning: Partial file existence', () => {
         filename: tempDbPath,
       },
     });
+
+    // Reset and re-initialize ProjectContext after creating new database
+    ProjectContext.reset();
+    const knex = db.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-auto-pruning-partial', 'config', {
+      projectRootPath: process.cwd(),
+    });
   });
 
   afterEach(async () => {
+    testCount++;
+
     await closeDatabase();
     // Cleanup temp directory
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+
+    // Detect if running filtered tests (IDE scenario with --test-name-pattern)
+    const isFilteredTest = process.argv.some(arg => arg.includes('--test-name-pattern'));
   });
 
   it('should prune non-existent files and keep existing ones', async () => {
@@ -320,13 +336,18 @@ describe('Auto-pruning: Partial file existence', () => {
 async function createTestTask(db: DatabaseAdapter): Promise<number> {
   const agentId = await getOrCreateAgent(db, 'test-agent');
   const knex = db.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
+  const now = Math.floor(Date.now() / 1000);
 
   const [taskId] = await knex('t_tasks').insert({
     title: 'Test Task for Auto-Pruning',
     status_id: 2,
     priority: 2,
+    project_id: projectId,  // Required after v3.7.0
     created_by_agent_id: agentId,
     assigned_agent_id: agentId,
+    created_ts: now,  // Required NOT NULL field
+    updated_ts: now   // Required NOT NULL field
   });
 
   return taskId;
@@ -341,6 +362,8 @@ async function addWatchedFiles(
   filePaths: string[]
 ): Promise<void> {
   const knex = db.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
+  const now = Math.floor(Date.now() / 1000);
 
   for (const filePath of filePaths) {
     // Extract just the filename (last segment) for relative paths
@@ -351,8 +374,10 @@ async function addWatchedFiles(
       .insert({
         task_id: taskId,
         file_id: fileId,
+        project_id: projectId,  // Required after v3.8.0
+        linked_ts: now,  // Required after v3.8.0
       })
-      .onConflict(['task_id', 'file_id'])
+      .onConflict(['project_id', 'task_id', 'file_id'])  // Fixed for v3.8.0 UNIQUE constraint
       .ignore();
   }
 }

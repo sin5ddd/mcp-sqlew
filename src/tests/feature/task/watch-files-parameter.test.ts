@@ -1,13 +1,16 @@
 /**
  * Unit tests for Task watch_files parameter feature (v3.4.1)
  * Tests the new watch_files parameter in createTask and updateTask actions
+ *
+ * **v3.9.0 Update**: Uses shared test helpers from test-helpers.ts
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeDatabase } from '../database.js';
-import { getOrCreateAgent, getOrCreateFile } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
+import { initializeDatabase } from '../../../database.js';
+import { getOrCreateAgent, getOrCreateFile } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { createTestTask, addWatchedFiles } from '../../utils/test-helpers.js';
 
 /**
  * Test database instance
@@ -27,6 +30,7 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
 
 /**
  * Inline implementation of createTask with watch_files for testing
+ * **v3.9.0 Update**: Fixed v3.8.0+ schema compatibility (project_id, linked_ts, created_ts, updated_ts)
  */
 async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   title: string;
@@ -40,19 +44,27 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   const knex = adapter.getKnex();
   const agentId = await getOrCreateAgent(adapter, params.created_by_agent || 'system');
   const statusId = 1; // todo
+  const currentTs = Math.floor(Date.now() / 1000);
+  const projectId = 1; // Default project for tests
 
   const [taskId] = await knex('t_tasks').insert({
     title: params.title,
     status_id: statusId,
     priority: params.priority || 2,
+    project_id: projectId,        // Required v3.7.0+
     created_by_agent_id: agentId,
-    assigned_agent_id: agentId
+    assigned_agent_id: agentId,
+    created_ts: currentTs,          // Required v3.8.0+
+    updated_ts: currentTs           // Required v3.8.0+
   });
+
+  // Extract numeric ID (better-sqlite3 returns {id: number} object)
+  const numericTaskId = typeof taskId === 'object' && taskId !== null ? (taskId as any).id : taskId;
 
   // Add description if provided
   if (params.description || params.acceptance_criteria) {
     await knex('t_task_details').insert({
-      task_id: taskId,
+      task_id: numericTaskId,
       description: params.description || null,
       acceptance_criteria: params.acceptance_criteria || null
     });
@@ -61,31 +73,37 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   // Add tags if provided
   if (params.tags && params.tags.length > 0) {
     for (const tag of params.tags) {
-      await knex('m_tags').insert({ name: tag }).onConflict('name').ignore();
-      const tagResult = await knex('m_tags').where({ name: tag }).first('id');
+      // Check if tag exists first (m_tags doesn't have UNIQUE constraint on name in test DB)
+      let tagResult = await knex('m_tags').where({ name: tag }).first('id');
+      if (!tagResult) {
+        const [tagId] = await knex('m_tags').insert({ name: tag });
+        const numericTagId = typeof tagId === 'object' && tagId !== null ? (tagId as any).id : tagId;
+        tagResult = { id: numericTagId };
+      }
+
+      // Link tag to task (idempotent via onConflict)
       await knex('t_task_tags').insert({
-        task_id: taskId,
+        task_id: numericTaskId,
         tag_id: tagResult.id
       }).onConflict().ignore();
     }
   }
 
-  // Add watch_files if provided
+  // Add watch_files if provided using shared helper
   const watchedFiles: string[] = [];
   if (params.watch_files && params.watch_files.length > 0) {
-    for (const filePath of params.watch_files) {
-      const fileId = await getOrCreateFile(adapter, 1, filePath);
-      await knex('t_task_file_links').insert({
-        task_id: taskId,
-        file_id: fileId
-      }).onConflict().ignore();
-      watchedFiles.push(filePath);
+    try {
+      const addedFiles = await addWatchedFiles(knex, numericTaskId, params.watch_files, projectId);
+      watchedFiles.push(...addedFiles);
+    } catch (error: any) {
+      console.error('Error adding watched files:', error);
+      throw error;
     }
   }
 
   return {
     success: true,
-    task_id: taskId,
+    task_id: numericTaskId,
     title: params.title,
     status: 'todo',
     ...(watchedFiles.length > 0 && { watched_files: watchedFiles })
@@ -94,6 +112,7 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
 
 /**
  * Inline implementation of updateTask with watch_files for testing
+ * **v3.9.0 Update**: Uses shared helper for v3.8.0+ schema compatibility
  */
 async function updateTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   task_id: number;
@@ -106,15 +125,11 @@ async function updateTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   }
 
   const watchedFiles: string[] = [];
+  const projectId = 1; // Default project for tests
+
   if (params.watch_files && params.watch_files.length > 0) {
-    for (const filePath of params.watch_files) {
-      const fileId = await getOrCreateFile(adapter, 1, filePath);
-      await knex('t_task_file_links').insert({
-        task_id: params.task_id,
-        file_id: fileId
-      }).onConflict().ignore();
-      watchedFiles.push(filePath);
-    }
+    const addedFiles = await addWatchedFiles(knex, params.task_id, params.watch_files, projectId);
+    watchedFiles.push(...addedFiles);
   }
 
   return {
@@ -126,22 +141,33 @@ async function updateTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
 
 describe('Task watch_files parameter tests', () => {
   beforeEach(async () => {
-    testDb = await createTestDatabase();
+    // Create a fresh database for the first test, reuse for subsequent tests
+    // (in-memory DB, so no persistence issues)
+    if (!testDb) {
+      testDb = await createTestDatabase();
+    }
   });
 
   it('should create task with watch_files parameter', async () => {
-    const result = await createTaskWithWatchFiles(testDb, {
-      title: 'Test Task with File Watching',
-      description: 'Testing watch_files parameter',
-      watch_files: ['src/index.ts', 'src/database.ts'],
-      created_by_agent: 'test-agent',
-      tags: ['test'],
-      priority: 2
-    });
+    try {
+      const result = await createTaskWithWatchFiles(testDb, {
+        title: 'Test Task with File Watching',
+        description: 'Testing watch_files parameter',
+        watch_files: ['src/index.ts', 'src/database.ts'],
+        created_by_agent: 'test-agent',
+        tags: ['test'],
+        priority: 2
+      });
 
-    assert.ok(result.success, 'Task creation should succeed');
-    assert.strictEqual(result.task_id, 1, 'First task should have ID 1');
-    assert.deepStrictEqual(result.watched_files, ['src/index.ts', 'src/database.ts'], 'Should return watched files list');
+      assert.ok(result.success, 'Task creation should succeed');
+      assert.strictEqual(result.task_id, 1, 'First task should have ID 1');
+      assert.deepStrictEqual(result.watched_files, ['src/index.ts', 'src/database.ts'], 'Should return watched files list');
+    } catch (error: any) {
+      console.error('Test failed with error:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      throw error;
+    }
   });
 
   it('should link files in database', async () => {
@@ -187,7 +213,7 @@ describe('Task watch_files parameter tests', () => {
     assert.strictEqual(result.watched_files, undefined, 'Should not have watched_files in response');
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links').where('task_id', 1);
+    const links = await knex('t_task_file_links').where('task_id', result.task_id);
     assert.strictEqual(links.length, 0, 'Should have no file links');
   });
 
@@ -200,7 +226,7 @@ describe('Task watch_files parameter tests', () => {
     assert.strictEqual(result.watched_files, undefined, 'Should not have watched_files in response');
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links').where('task_id', 1);
+    const links = await knex('t_task_file_links').where('task_id', result.task_id);
     assert.strictEqual(links.length, 0, 'Should have no file links');
   });
 

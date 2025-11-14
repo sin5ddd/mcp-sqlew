@@ -3,14 +3,15 @@
  * Tests for detectAndCompleteReviewedTasks function
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
-import { initializeDatabase, closeDatabase } from '../database.js';
-import type { DatabaseAdapter } from '../adapters/types.js';
-import { detectAndCompleteReviewedTasks } from '../utils/task-stale-detection.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
+import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { detectAndCompleteReviewedTasks } from '../../../utils/task-stale-detection.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 
 const TEST_DIR = join(process.cwd(), 'test-tracking');
 
@@ -38,6 +39,12 @@ describe('Git-Aware Auto-Complete', () => {
 
     const knex = db.getKnex();
 
+    // Initialize ProjectContext (required for v3.7.0+ multi-project support)
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-git-aware-completion', 'config', {
+      projectRootPath: process.cwd(),
+    });
+
     // Add test config for git auto-complete
     await knex('m_config').insert({ key: 'git_auto_complete_enabled', value: '1' })
       .onConflict('key').merge();
@@ -62,26 +69,27 @@ describe('Git-Aware Auto-Complete', () => {
 
   it('should auto-complete task when all watched files are committed', async () => {
     const knex = db.getKnex();
+    const projectId = ProjectContext.getInstance().getProjectId();
 
     // 1. Create a task in waiting_review status with watched files
     const [agentId] = await knex('m_agents').insert({ name: 'test-agent' });
     const statusRow = await knex('m_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('t_tasks').insert({
+      title: 'Test git-aware task',
       assigned_agent_id: agentId,
       status_id: statusRow.id,
       priority: 2,
+      project_id: projectId,
       created_ts: Math.floor(Date.now() / 1000),
       updated_ts: Math.floor(Date.now() / 1000)
     });
-
-    await knex('t_task_details').insert({ task_id: taskId, title: 'Test git-aware task' });
 
     // 2. Add watched files
     const [file1Id] = await knex('m_files').insert({ path: 'test-tracking/file1.ts' });
     const [file2Id] = await knex('m_files').insert({ path: 'test-tracking/file2.ts' });
 
-    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file1Id, link_type: 'watch' });
-    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file2Id, link_type: 'watch' });
+    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file1Id, project_id: projectId, linked_ts: Math.floor(Date.now() / 1000) });
+    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file2Id, project_id: projectId, linked_ts: Math.floor(Date.now() / 1000) });
 
     // 3. Commit the files to git
     execSync(`touch ${TEST_DIR}/file1.ts`);
@@ -103,26 +111,27 @@ describe('Git-Aware Auto-Complete', () => {
 
   it('should NOT auto-complete task when only some files are committed', async () => {
     const knex = db.getKnex();
+    const projectId = ProjectContext.getInstance().getProjectId();
 
     // 1. Create a task in waiting_review
     const agent = await knex('m_agents').where({ name: 'test-agent' }).first('id');
     const statusRow = await knex('m_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('t_tasks').insert({
+      title: 'Partial commit task',
       assigned_agent_id: agent.id,
       status_id: statusRow.id,
       priority: 2,
+      project_id: projectId,
       created_ts: Math.floor(Date.now() / 1000),
       updated_ts: Math.floor(Date.now() / 1000)
     });
-
-    await knex('t_task_details').insert({ task_id: taskId, title: 'Partial commit task' });
 
     // 2. Add watched files
     const [file3Id] = await knex('m_files').insert({ path: 'test-tracking/file3.ts' });
     const [file4Id] = await knex('m_files').insert({ path: 'test-tracking/file4.ts' });
 
-    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file3Id, link_type: 'watch' });
-    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file4Id, link_type: 'watch' });
+    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file3Id, project_id: projectId, linked_ts: Math.floor(Date.now() / 1000) });
+    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file4Id, project_id: projectId, linked_ts: Math.floor(Date.now() / 1000) });
 
     // 3. Commit only ONE file
     execSync(`touch ${TEST_DIR}/file3.ts`);
@@ -143,19 +152,20 @@ describe('Git-Aware Auto-Complete', () => {
 
   it('should skip tasks with no watched files', async () => {
     const knex = db.getKnex();
+    const projectId = ProjectContext.getInstance().getProjectId();
 
     // 1. Create a task in waiting_review with NO watched files
     const agent = await knex('m_agents').where({ name: 'test-agent' }).first('id');
     const statusRow = await knex('m_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('t_tasks').insert({
+      title: 'No watched files task',
       assigned_agent_id: agent.id,
       status_id: statusRow.id,
       priority: 2,
+      project_id: projectId,
       created_ts: Math.floor(Date.now() / 1000),
       updated_ts: Math.floor(Date.now() / 1000)
     });
-
-    await knex('t_task_details').insert({ task_id: taskId, title: 'No watched files task' });
 
     // 2. Run git-aware auto-complete
     const completedCount = await detectAndCompleteReviewedTasks(db);
@@ -171,6 +181,7 @@ describe('Git-Aware Auto-Complete', () => {
 
   it('should respect git_auto_complete_enabled config', async () => {
     const knex = db.getKnex();
+    const projectId = ProjectContext.getInstance().getProjectId();
 
     // 1. Disable git auto-complete
     await knex('m_config').where({ key: 'git_auto_complete_enabled' }).update({ value: '0' });
@@ -179,17 +190,17 @@ describe('Git-Aware Auto-Complete', () => {
     const agent = await knex('m_agents').where({ name: 'test-agent' }).first('id');
     const statusRow = await knex('m_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('t_tasks').insert({
+      title: 'Config disabled task',
       assigned_agent_id: agent.id,
       status_id: statusRow.id,
       priority: 2,
+      project_id: projectId,
       created_ts: Math.floor(Date.now() / 1000),
       updated_ts: Math.floor(Date.now() / 1000)
     });
 
-    await knex('t_task_details').insert({ task_id: taskId, title: 'Config disabled task' });
-
     const [file5Id] = await knex('m_files').insert({ path: 'test-tracking/file5.ts' });
-    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file5Id, link_type: 'watch' });
+    await knex('t_task_file_links').insert({ task_id: taskId, file_id: file5Id, project_id: projectId, linked_ts: Math.floor(Date.now() / 1000) });
 
     execSync(`touch ${TEST_DIR}/file5.ts`);
     execSync(`git add ${TEST_DIR}/file5.ts`);

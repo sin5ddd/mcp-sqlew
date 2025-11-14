@@ -13,42 +13,36 @@
  */
 
 import knex, { Knex } from 'knex';
-import { generateSqlDump } from '../utils/sql-dump.js';
-import { describe, it, before, after } from 'node:test';
+import { generateSqlDump } from '../../../utils/sql-dump/index.js';
+import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { getTestConfig, getDockerExecPrefix, getDockerConfig } from '../testing-config.js';
 
 const execAsync = promisify(exec);
 
-// Test database configurations
+/**
+ * Execute async command with 30-second timeout to prevent hanging
+ * (Docker commands can stall on Windows/WSL or when containers are not responding)
+ */
+const execAsyncWithTimeout = async (
+  command: string,
+  options: Parameters<typeof execAsync>[1] = {}
+): Promise<{ stdout: string; stderr: string }> => {
+  return execAsync(command, {
+    timeout: 30000,           // 30-second timeout prevents hanging
+    encoding: 'utf8',        // Force UTF-8 to prevent Buffer type issues
+    ...options
+  }) as Promise<{ stdout: string; stderr: string }>;
+};
+
+// Test database configurations (using centralized config)
 const configs = {
-  sqlite: {
-    client: 'better-sqlite3',
-    connection: { filename: '.sqlew/sqlew.db' },
-    useNullAsDefault: true,
-  },
-  postgresql: {
-    client: 'pg',
-    connection: {
-      host: 'localhost',
-      port: 5433,
-      user: 'testuser',
-      password: 'testpass',
-      database: 'sqlew_test',
-    },
-  },
-  mysql: {
-    client: 'mysql2',
-    connection: {
-      host: 'localhost',
-      port: 3308,
-      user: 'testuser',
-      password: 'testpass',
-      database: 'sqlew_test',
-    },
-  },
+  sqlite: getTestConfig('sqlite'),
+  postgresql: getTestConfig('postgresql'),
+  mysql: getTestConfig('mysql'),
 };
 
 describe('Cross-Database Migration Tests', () => {
@@ -118,9 +112,11 @@ describe('Cross-Database Migration Tests', () => {
 
       try {
         // Copy file to container and execute
-        await execAsync(`docker cp ${tempFile} mcp-sqlew_postgres_1:/tmp/import.sql`);
-        await execAsync(
-          `docker exec mcp-sqlew_postgres_1 psql -U testuser -d sqlew_test -f /tmp/import.sql -v ON_ERROR_STOP=1 -q`,
+        const pgDocker = getDockerConfig('postgresql');
+        const pgPrefix = getDockerExecPrefix('postgresql');
+        await execAsyncWithTimeout(`docker cp ${tempFile} ${pgDocker.name}:/tmp/import.sql`);
+        await execAsyncWithTimeout(
+          `${pgPrefix} psql -U ${pgDocker.user} -d ${pgDocker.database} -f /tmp/import.sql -v ON_ERROR_STOP=1 -q`,
           { maxBuffer: 10 * 1024 * 1024 }
         );
       } finally {
@@ -212,9 +208,11 @@ describe('Cross-Database Migration Tests', () => {
 
       try {
         // Copy file to container and execute
-        await execAsync(`docker cp ${tempFile} mcp-sqlew_mysql_1:/tmp/import.sql`);
-        await execAsync(
-          `docker exec mcp-sqlew_mysql_1 sh -c "mysql -u testuser -ptestpass sqlew_test < /tmp/import.sql"`,
+        const mysqlDocker = getDockerConfig('mysql');
+        const mysqlPrefix = getDockerExecPrefix('mysql');
+        await execAsyncWithTimeout(`docker cp ${tempFile} ${mysqlDocker.name}:/tmp/import.sql`);
+        await execAsyncWithTimeout(
+          `${mysqlPrefix} sh -c "mysql -u ${mysqlDocker.user} -p${mysqlDocker.password} ${mysqlDocker.database} < /tmp/import.sql"`,
           { maxBuffer: 10 * 1024 * 1024 }
         );
       } finally {

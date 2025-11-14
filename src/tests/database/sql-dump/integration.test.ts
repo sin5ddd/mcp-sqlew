@@ -14,38 +14,20 @@
  */
 
 import knex, { Knex } from 'knex';
-import { generateSqlDump } from '../utils/sql-dump.js';
+import { generateSqlDump } from '../../../utils/sql-dump/index.js';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { getTestConfig } from '../testing-config.js';
 
-// Test database configurations
+// Test database configurations (using centralized config)
 const configs = {
-  sqlite: {
-    client: 'better-sqlite3',
-    connection: { filename: ':memory:' },
-    useNullAsDefault: true,
-  },
-  postgresql: {
-    client: 'pg',
-    connection: {
-      host: 'localhost',
-      port: 5433,
-      user: 'testuser',
-      password: 'testpass',
-      database: 'sqlew_test',
-    },
-  },
-  mysql: {
-    client: 'mysql2',
-    connection: {
-      host: 'localhost',
-      port: 3308,
-      user: 'testuser',
-      password: 'testpass',
-      database: 'sqlew_test',
-    },
-  },
+  sqlite: getTestConfig('sqlite'),
+  postgresql: getTestConfig('postgresql'),
+  mysql: getTestConfig('mysql'),
 };
+
+// Override SQLite to use in-memory database for this test
+configs.sqlite.connection = { filename: ':memory:' };
 
 describe('SQL Dump Integration Tests (All Phases)', () => {
   let sqliteDb: Knex;

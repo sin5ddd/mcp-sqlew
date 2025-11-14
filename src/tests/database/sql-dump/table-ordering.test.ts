@@ -3,15 +3,37 @@
  *
  * Tests the foreign key dependency resolution and topological sorting logic.
  * Uses DRY shared test utilities from test-helpers.ts
+ *
+ * MAINTENANCE NOTE:
+ * The "End-to-End Sorting with Real Schema" test validates table ordering against
+ * the actual mcp-sqlew schema by running all migrations. This test MUST be updated
+ * whenever new tables or foreign key relationships are added to the schema.
+ *
+ * What to update after schema changes:
+ * 1. Add assertions for new FK dependencies (e.g., "new_table should come after parent_table")
+ * 2. Verify master tables (m_*) still come before transaction tables (t_*)
+ * 3. Check that the test database isolation (unique temp files) prevents conflicts
+ *
+ * Why this matters:
+ * SQL dumps export tables in dependency order. If topological sort fails or produces
+ * wrong order, importing the dump will fail with "table does not exist" errors.
+ *
+ * Test structure:
+ * - Pure algorithm tests: Validate sorting logic with synthetic data
+ * - SQLite integration tests: Test FK extraction from real schema
+ * - End-to-end test: Validate with full production schema (requires maintenance)
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { getTableDependencies, topologicalSort } from '../utils/sql-dump.js';
-import { connectDb, disconnectDb, getDbConfig, dropAllTables } from './utils/test-helpers.js';
+import { getTableDependencies, topologicalSort } from '../../../utils/sql-dump/index.js';
+import { connectDb, disconnectDb, getDbConfig, dropAllTables } from '../../utils/test-helpers.js';
 import { Knex } from 'knex';
 
 describe('Topological Sort Unit Tests', () => {
+  // Generate unique database path for this test suite to avoid conflicts
+  const TEST_DB_PATH = `.tmp-test/table-ordering-${Date.now()}.db`;
+
   describe('topologicalSort() - Pure Algorithm Tests', () => {
     it('should handle empty table list', () => {
       const tables: string[] = [];
@@ -183,7 +205,7 @@ describe('Topological Sort Unit Tests', () => {
     let db: Knex;
 
     it('should extract FK dependencies from SQLite schema', async () => {
-      const config = getDbConfig('sqlite');
+      const config = getDbConfig('sqlite', TEST_DB_PATH);
       db = await connectDb(config);
 
       // Create test schema with FK relationships
@@ -218,7 +240,7 @@ describe('Topological Sort Unit Tests', () => {
     });
 
     it('should handle self-referential FK (categories example)', async () => {
-      const config = getDbConfig('sqlite');
+      const config = getDbConfig('sqlite', TEST_DB_PATH);
       db = await connectDb(config);
 
       // Categories table with parent_id self-reference
@@ -239,7 +261,7 @@ describe('Topological Sort Unit Tests', () => {
     });
 
     it('should handle tables with no FKs', async () => {
-      const config = getDbConfig('sqlite');
+      const config = getDbConfig('sqlite', TEST_DB_PATH);
       db = await connectDb(config);
 
       await db.schema.createTable('standalone_table', (table) => {
@@ -256,7 +278,7 @@ describe('Topological Sort Unit Tests', () => {
     });
 
     it('should ignore FKs to tables not in the list', async () => {
-      const config = getDbConfig('sqlite');
+      const config = getDbConfig('sqlite', TEST_DB_PATH);
       db = await connectDb(config);
 
       await db.schema.createTable('external_table', (table) => {
@@ -281,8 +303,12 @@ describe('Topological Sort Unit Tests', () => {
   });
 
   describe('End-to-End Sorting with Real Schema', () => {
+    // ⚠️ MAINTENANCE REQUIRED: Update this test when adding new tables or FK relationships
+    // This test validates dependency order using the REAL production schema
     it('should correctly sort mcp-sqlew schema tables', async () => {
-      const config = getDbConfig('sqlite');
+      // Use separate database for migration test to avoid conflicts
+      const E2E_DB_PATH = `.tmp-test/table-ordering-e2e-${Date.now()}.db`;
+      const config = getDbConfig('sqlite', E2E_DB_PATH);
       const db = await connectDb(config);
 
       // Run migrations to get real schema
@@ -304,6 +330,7 @@ describe('Topological Sort Unit Tests', () => {
       const sorted = topologicalSort(tables, dependencies);
 
       // Verify master tables come before transaction tables
+      // ⚠️ ADD NEW ASSERTIONS HERE when adding tables with FK dependencies
       const projectsIndex = sorted.indexOf('m_projects');
       const decisionsIndex = sorted.indexOf('t_decisions');
       const tasksIndex = sorted.indexOf('t_tasks');
