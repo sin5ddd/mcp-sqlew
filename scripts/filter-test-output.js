@@ -26,6 +26,7 @@ const summaryPattern = /^ℹ /;
 let inSummary = false;
 let previousLine = null;
 let linesAfterFailure = 0;
+let hasFailures = false; // Track if any failures were detected
 
 rl.on('line', (line) => {
   // If we encounter a summary line, enter summary mode
@@ -51,6 +52,7 @@ rl.on('line', (line) => {
   const isFailure = includePattern.test(line) && !excludePattern.test(line);
 
   if (isFailure) {
+    hasFailures = true; // Mark that we detected failures
     // Show previous line (context before failure, e.g., "test at ...")
     if (previousLine !== null) {
       console.log(previousLine);
@@ -66,5 +68,7 @@ rl.on('line', (line) => {
 });
 
 rl.on('close', () => {
-  process.exit(0);
+  // Exit with code 1 if failures detected, 0 otherwise
+  // This propagates test failure to shell exit code
+  process.exit(hasFailures ? 1 : 0);
 });
