@@ -60,7 +60,7 @@ export async function runHelpSystemTests(): Promise<{
     const actions = TEST_ACTIONS[tool as keyof typeof TEST_ACTIONS] || ['set', 'get'];
     for (const action of actions) {
       try {
-        const result = queryHelpAction(db, tool, action);
+        const result = await queryHelpAction(db, tool, action);
 
         if ('error' in result) {
           results.push({
@@ -112,7 +112,7 @@ export async function runHelpSystemTests(): Promise<{
     const actions = TEST_ACTIONS[tool as keyof typeof TEST_ACTIONS] || ['set'];
     for (const action of actions.slice(0, 1)) {
       try {
-        const result = queryHelpParams(db, tool, action);
+        const result = await queryHelpParams(db, tool, action);
 
         if ('error' in result) {
           results.push({
@@ -162,7 +162,7 @@ export async function runHelpSystemTests(): Promise<{
   console.log('\nTest Group 3: help_tool queries');
   for (const tool of TEST_TOOLS) {
     try {
-      const result = queryHelpTool(db, tool);
+      const result = await queryHelpTool(db, tool);
 
       if ('error' in result) {
         results.push({
@@ -212,7 +212,7 @@ export async function runHelpSystemTests(): Promise<{
   const useCaseIds = [1, 2, 3, 10, 20, 30]; // Test various IDs
   for (const id of useCaseIds) {
     try {
-      const result = queryHelpUseCase(db, id);
+      const result = await queryHelpUseCase(db, id);
 
       if ('error' in result) {
         // Expected for non-existent IDs
@@ -278,7 +278,7 @@ export async function runHelpSystemTests(): Promise<{
 
   for (const test of listTests) {
     try {
-      const result = queryHelpListUseCases(db, test.params);
+      const result = await queryHelpListUseCases(db, test.params);
 
       if ('error' in result) {
         results.push({
@@ -333,7 +333,7 @@ export async function runHelpSystemTests(): Promise<{
 
   for (const test of nextActionsTests) {
     try {
-      const result = queryHelpNextActions(db, test.tool, test.action);
+      const result = await queryHelpNextActions(db, test.tool, test.action);
 
       if ('error' in result) {
         results.push({

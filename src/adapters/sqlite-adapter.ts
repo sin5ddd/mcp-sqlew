@@ -15,8 +15,6 @@ const { knex } = knexLib;
  * @extends BaseAdapter
  */
 export class SQLiteAdapter extends BaseAdapter {
-  private rawConnection: any = null;
-
   // Feature detection
   readonly supportsReturning = false;
   readonly supportsJSON = false;
@@ -99,42 +97,12 @@ export class SQLiteAdapter extends BaseAdapter {
         // Ignore errors if WAL mode is not enabled or other pragma failures
       }
 
-      // Close raw connection if it was acquired
-      if (this.rawConnection) {
-        if (typeof this.rawConnection.close === 'function') {
-          this.rawConnection.close();
-        }
-        this.rawConnection = null;
-      }
-
       // Force immediate destruction of all connections
       await this.knexInstance.destroy();
       this.knexInstance = null;
     }
   }
 
-  /**
-   * Get raw better-sqlite3 Database instance
-   * For legacy code that uses db.prepare() directly
-   *
-   * Note: Acquires connection on first call and caches it.
-   * This connection will be closed when disconnect() is called.
-   */
-  getRawDatabase(): any {
-    if (!this.knexInstance) {
-      throw new Error('Database not connected. Call connect() first.');
-    }
-
-    // Lazy-load the raw connection on first access
-    if (!this.rawConnection) {
-      // Get the underlying better-sqlite3 connection from Knex
-      const client = (this.knexInstance.client as any);
-      // For better-sqlite3, the connection is available directly
-      this.rawConnection = client.driver;
-    }
-
-    return this.rawConnection;
-  }
 
   // Query Adaptations
   async insertReturning<T extends Record<string, any>>(
