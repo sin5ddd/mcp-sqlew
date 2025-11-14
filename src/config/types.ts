@@ -317,6 +317,24 @@ export interface AgentsConfig {
 }
 
 /**
+ * Slash commands configuration
+ */
+export interface CommandsConfig {
+  /** Install /sqlew-architect command (architectural documentation) */
+  architect?: boolean;
+  /** Install /sqlew-decide command (decision workflow) */
+  decide?: boolean;
+  /** Install /sqlew-plan command (planning workflow) */
+  plan?: boolean;
+  /** Install /sqlew-research command (research workflow) */
+  research?: boolean;
+  /** Install /sqlew-review command (review workflow) */
+  review?: boolean;
+  /** Install /sqlew-scrum command (scrum workflow) */
+  scrum?: boolean;
+}
+
+/**
  * Project configuration (v3.7.0+)
  *
  * Multi-project support requires explicit project identification.
@@ -361,6 +379,8 @@ export interface SqlewConfig {
   debug?: DebugConfig;
   /** Specialized agents settings */
   agents?: AgentsConfig;
+  /** Slash commands settings */
+  commands?: CommandsConfig;
 }
 
 /**
@@ -412,5 +432,13 @@ export const DEFAULT_CONFIG: SqlewConfig = {
     scrum_master: true,
     researcher: true,
     architect: true,
+  },
+  commands: {
+    architect: true,
+    decide: true,
+    plan: true,
+    research: true,
+    review: true,
+    scrum: true,
   },
 };

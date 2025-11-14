@@ -43,6 +43,40 @@ architect = true
 # architect = false
 
 # ============================================================================
+# Slash Commands Settings
+# ============================================================================
+[commands]
+# Which slash commands to install on server startup
+# Set to false to skip commands you don't need
+
+# /sqlew-architect: Architectural documentation workflow
+architect = true
+
+# /sqlew-decide: Decision-making workflow
+decide = true
+
+# /sqlew-plan: Planning workflow (architect + scrum master)
+plan = true
+
+# /sqlew-research: Research workflow
+research = true
+
+# /sqlew-review: Review workflow
+review = true
+
+# /sqlew-scrum: Scrum/task management workflow
+scrum = true
+
+# Example: Minimal installation (only core workflows)
+# [commands]
+# plan = true
+# decide = true
+# research = false
+# review = false
+# architect = false
+# scrum = false
+
+# ============================================================================
 # Other Settings (Optional - uncomment to customize)
 # ============================================================================
 

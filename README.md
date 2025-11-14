@@ -237,6 +237,39 @@ Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
 
 **See [docs/SPECIALIZED_AGENTS.md](docs/SPECIALIZED_AGENTS.md) for complete installation guide, usage examples, and customization.**
 
+## Slash Commands
+
+Quick-access workflows that invoke specialized agents to use mcp-sqlew tools. Installed automatically to `.claude/commands/` on server startup.
+
+| Command | Purpose | Agent(s) Used |
+|---------|---------|---------------|
+| `/sqlew-plan` | Comprehensive planning (architecture + tasks) | architect + scrum-master |
+| `/sqlew-architect` | Document architectural decisions | architect |
+| `/sqlew-scrum` | Sprint/task management | scrum-master |
+| `/sqlew-decide` | Quick decision workflow | architect |
+| `/sqlew-research` | Query and analyze context | researcher |
+| `/sqlew-review` | Code/design review workflow | researcher + architect |
+
+**Usage Examples**:
+```bash
+/sqlew-plan "Implement user authentication"
+/sqlew-decide "Use PostgreSQL for production database"
+/sqlew-research "Why did we choose Knex for migrations?"
+```
+
+**Configuration**: Edit `.sqlew/config.toml` to customize which commands are installed:
+```toml
+[commands]
+plan = true        # Comprehensive planning workflow
+architect = true   # Architectural documentation
+scrum = true       # Task management
+decide = true      # Quick decisions
+research = true    # Context queries
+review = true      # Code/design review
+```
+
+**See [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) for complete guide, usage patterns, and customization.**
+
 ### Available Tools
 
 | Tool | Purpose | Example Use |
