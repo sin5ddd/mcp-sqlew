@@ -103,14 +103,28 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       .where('project_id', projectId)
       .delete();
 
+    // Get system agent
+    let systemAgentId: number;
+    const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+    if (systemAgent) {
+      systemAgentId = systemAgent.id;
+    } else {
+      const [agentId] = await knex('m_agents').insert({
+        name: 'system',
+        last_active_ts: Math.floor(Date.now() / 1000)
+      });
+      systemAgentId = agentId;
+    }
+
     // Create test policy with suggest_similar=1 (no validation rules to avoid blocking auto-trigger)
     await knex('t_decision_policies').insert({
       name: 'security_vulnerability',
       project_id: projectId,
-      description: 'Test policy for auto-trigger',
+      defaults: JSON.stringify({ layer: 'cross-cutting', tags: ['security', 'vulnerability'] }),
       suggest_similar: 1,
       validation_rules: null,  // No validation rules - focus on auto-trigger
       quality_gates: null,     // No quality gates - focus on auto-trigger
+      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
 
@@ -174,11 +188,36 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
     const knex = adapter.getKnex();
     const projectId = getProjectContext().getProjectId();
 
-    // Update policy to disable auto-trigger
+    // Delete existing policy from previous test
     await knex('t_decision_policies')
       .where('name', 'security_vulnerability')
       .where('project_id', projectId)
-      .update({ suggest_similar: 0 });
+      .delete();
+
+    // Get system agent
+    let systemAgentId: number;
+    const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+    if (systemAgent) {
+      systemAgentId = systemAgent.id;
+    } else {
+      const [agentId] = await knex('m_agents').insert({
+        name: 'system',
+        last_active_ts: Math.floor(Date.now() / 1000)
+      });
+      systemAgentId = agentId;
+    }
+
+    // Create policy with suggest_similar=0 (auto-trigger disabled)
+    await knex('t_decision_policies').insert({
+      name: 'security_vulnerability',
+      project_id: projectId,
+      defaults: JSON.stringify({ layer: 'cross-cutting', tags: ['security', 'vulnerability'] }),
+      suggest_similar: 0,  // Disabled
+      validation_rules: null,
+      quality_gates: null,
+      created_by: systemAgentId,
+      ts: Math.floor(Date.now() / 1000)
+    });
 
     // Create decision that matches policy but should NOT trigger suggestions
     const result = await setDecision({
@@ -235,11 +274,36 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
     const knex = adapter.getKnex();
     const projectId = getProjectContext().getProjectId();
 
-    // Re-enable auto-trigger
+    // Delete existing policy from previous test
     await knex('t_decision_policies')
       .where('name', 'security_vulnerability')
       .where('project_id', projectId)
-      .update({ suggest_similar: 1 });
+      .delete();
+
+    // Get system agent
+    let systemAgentId: number;
+    const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+    if (systemAgent) {
+      systemAgentId = systemAgent.id;
+    } else {
+      const [agentId] = await knex('m_agents').insert({
+        name: 'system',
+        last_active_ts: Math.floor(Date.now() / 1000)
+      });
+      systemAgentId = agentId;
+    }
+
+    // Create policy with auto-trigger enabled
+    await knex('t_decision_policies').insert({
+      name: 'security_vulnerability',
+      project_id: projectId,
+      defaults: JSON.stringify({ layer: 'cross-cutting', tags: ['security', 'vulnerability'] }),
+      suggest_similar: 1,  // Enabled
+      validation_rules: null,
+      quality_gates: null,
+      created_by: systemAgentId,
+      ts: Math.floor(Date.now() / 1000)
+    });
 
     // Create decision with invalid data that might cause suggestion error
     const result = await setDecision({

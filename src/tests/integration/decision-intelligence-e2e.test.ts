@@ -117,10 +117,28 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
 
       // Step 1: Create policy for security vulnerabilities
       console.log('  Step 1: Creating security vulnerability policy...');
+
+      // Get system agent ID
+      let systemAgentId: number;
+      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+      if (systemAgent) {
+        systemAgentId = systemAgent.id;
+      } else {
+        const [agentId] = await knex('m_agents').insert({
+          name: 'system',
+          last_active_ts: Math.floor(Date.now() / 1000)
+        });
+        systemAgentId = agentId;
+      }
+
       await knex('t_decision_policies').insert({
         project_id: projectId,
         name: 'e2e-security-vulnerability-policy',
         category: 'security',
+        defaults: JSON.stringify({
+          layer: 'cross-cutting',
+          tags: ['security', 'vulnerability']
+        }),
         validation_rules: JSON.stringify({
           patterns: {
             key: '^e2e/security/cve/CVE-\\d{4}-\\d{4,7}$'  // CVE-ID format
@@ -129,7 +147,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
         quality_gates: JSON.stringify({
           required_fields: ['severity', 'affected_versions']
         }),
-        created_by: 'system',
+        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 
@@ -356,10 +374,28 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
 
       // Step 1: Create policy for feature flag naming
       console.log('  Step 1: Creating feature flag naming policy...');
+
+      // Get system agent ID
+      let systemAgentId: number;
+      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+      if (systemAgent) {
+        systemAgentId = systemAgent.id;
+      } else {
+        const [agentId] = await knex('m_agents').insert({
+          name: 'system',
+          last_active_ts: Math.floor(Date.now() / 1000)
+        });
+        systemAgentId = agentId;
+      }
+
       await knex('t_decision_policies').insert({
         project_id: projectId,
         name: 'e2e-feature-flag-policy',
         category: 'feature-management',
+        defaults: JSON.stringify({
+          layer: 'business',
+          tags: ['feature-flag']
+        }),
         validation_rules: JSON.stringify({
           patterns: {
             key: '^e2e/feature/[a-z-]+/enabled$'  // Kebab-case feature names
@@ -368,7 +404,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
         quality_gates: JSON.stringify({
           required_fields: ['rollout_percentage', 'target_audience']
         }),
-        created_by: 'system',
+        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 
@@ -493,10 +529,28 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
 
       // Phase 1: Policy Setup
       console.log('    Phase 1: Setting up decision policy...');
+
+      // Get system agent ID
+      let systemAgentId: number;
+      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+      if (systemAgent) {
+        systemAgentId = systemAgent.id;
+      } else {
+        const [agentId] = await knex('m_agents').insert({
+          name: 'system',
+          last_active_ts: Math.floor(Date.now() / 1000)
+        });
+        systemAgentId = agentId;
+      }
+
       await knex('t_decision_policies').insert({
         project_id: projectId,
         name: 'e2e-lifecycle-policy',
         category: 'general',
+        defaults: JSON.stringify({
+          layer: 'infrastructure',
+          tags: ['lifecycle']
+        }),
         validation_rules: JSON.stringify({
           patterns: {
             key: '^e2e/lifecycle/[a-z-]+$'
@@ -506,7 +560,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
           required_fields: ['rationale']
         }),
         suggest_similar: 1,  // Auto-suggest enabled
-        created_by: 'system',
+        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 

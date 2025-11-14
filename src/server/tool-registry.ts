@@ -20,7 +20,7 @@ export function getToolRegistry(): Tool[] {
           action: {
             type: 'string',
             description: 'Action',
-            enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'add_decision_context', 'list_decision_contexts', 'analytics', 'help', 'example', 'use_case']
+            enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'add_decision_context', 'list_decision_contexts', 'analytics', 'create_policy', 'list_policies', 'set_from_policy', 'help', 'example', 'use_case']
           }
         },
         required: ['action'],

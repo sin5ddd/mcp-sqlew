@@ -32,23 +32,24 @@ function cleanupTestDir() {
 
 // Test cases
 function runTests() {
-  console.log('Starting Configuration Loader Tests...\n');
-
   setupTestDir();
+
+  let passedCount = 0;
+  let failedCount = 0;
+  const failures: string[] = [];
 
   try {
     // Test 1: SQLite configuration (backward compatibility)
-    console.log('Test 1: SQLite configuration');
     const sqliteConfig: DatabaseConfig = { path: '.sqlew/test.db' };
     const sqliteValidation = validateDatabaseConfig(sqliteConfig);
-    console.log('  Result:', sqliteValidation.valid ? '✓ PASS' : '✗ FAIL');
-    if (!sqliteValidation.valid) {
-      console.log('  Errors:', sqliteValidation.errors);
+    if (sqliteValidation.valid) {
+      passedCount++;
+    } else {
+      failedCount++;
+      failures.push(`Test 1 (SQLite config): ${sqliteValidation.errors?.join(', ')}`);
     }
-    console.log('');
 
     // Test 2: PostgreSQL with direct auth
-    console.log('Test 2: PostgreSQL with direct authentication');
     const pgDirectConfig: DatabaseConfig = {
       type: 'postgres',
       connection: {
@@ -63,14 +64,14 @@ function runTests() {
       },
     };
     const pgDirectValidation = validateDatabaseConfig(pgDirectConfig);
-    console.log('  Result:', pgDirectValidation.valid ? '✓ PASS' : '✗ FAIL');
-    if (!pgDirectValidation.valid) {
-      console.log('  Errors:', pgDirectValidation.errors);
+    if (pgDirectValidation.valid) {
+      passedCount++;
+    } else {
+      failedCount++;
+      failures.push(`Test 2 (PostgreSQL direct auth): ${pgDirectValidation.errors?.join(', ')}`);
     }
-    console.log('');
 
     // Test 3: MySQL with SSL (SSH tests removed - manual tunneling only)
-    console.log('Test 3: MySQL with SSL');
     const mysqlSSLConfig: DatabaseConfig = {
       type: 'mysql',
       connection: {
@@ -89,14 +90,14 @@ function runTests() {
       },
     };
     const mysqlSSLValidation = validateDatabaseConfig(mysqlSSLConfig);
-    console.log('  Result:', mysqlSSLValidation.valid ? '✓ PASS' : '✗ FAIL');
-    if (!mysqlSSLValidation.valid) {
-      console.log('  Errors:', mysqlSSLValidation.errors);
+    if (mysqlSSLValidation.valid) {
+      passedCount++;
+    } else {
+      failedCount++;
+      failures.push(`Test 3 (MySQL SSL): ${mysqlSSLValidation.errors?.join(', ')}`);
     }
-    console.log('');
 
-    // Test 4: Invalid database type
-    console.log('Test 4: Invalid database type (should fail)');
+    // Test 4: Invalid database type (should fail)
     const invalidTypeConfig: DatabaseConfig = {
       type: 'mongodb' as any,
       connection: {
@@ -106,14 +107,14 @@ function runTests() {
       },
     };
     const invalidTypeValidation = validateDatabaseConfig(invalidTypeConfig);
-    console.log('  Result:', !invalidTypeValidation.valid ? '✓ PASS' : '✗ FAIL');
     if (!invalidTypeValidation.valid) {
-      console.log('  Errors:', invalidTypeValidation.errors);
+      passedCount++;
+    } else {
+      failedCount++;
+      failures.push('Test 4 (Invalid type): Expected validation to fail but it passed');
     }
-    console.log('');
 
-    // Test 5: Missing required fields
-    console.log('Test 5: Missing required fields (should fail)');
+    // Test 5: Missing required fields (should fail)
     const missingFieldsConfig: DatabaseConfig = {
       type: 'postgres',
       connection: {
@@ -124,14 +125,14 @@ function runTests() {
       // auth is missing
     };
     const missingFieldsValidation = validateDatabaseConfig(missingFieldsConfig);
-    console.log('  Result:', !missingFieldsValidation.valid ? '✓ PASS' : '✗ FAIL');
     if (!missingFieldsValidation.valid) {
-      console.log('  Errors:', missingFieldsValidation.errors);
+      passedCount++;
+    } else {
+      failedCount++;
+      failures.push('Test 5 (Missing fields): Expected validation to fail but it passed');
     }
-    console.log('');
 
     // Test 6: SSL defaults normalization
-    console.log('Test 6: Config normalization with SSL defaults');
     const unnormalizedConfig: DatabaseConfig = {
       type: 'postgres',
       connection: {
@@ -151,12 +152,14 @@ function runTests() {
     };
     const normalized = normalizeDatabaseConfig(unnormalizedConfig);
     const hasDefaults = normalized.auth?.ssl?.rejectUnauthorized === true;
-    console.log('  Result:', hasDefaults ? '✓ PASS' : '✗ FAIL');
-    console.log('  Normalized SSL config:', normalized.auth?.ssl);
-    console.log('');
+    if (hasDefaults) {
+      passedCount++;
+    } else {
+      failedCount++;
+      failures.push(`Test 6 (SSL normalization): rejectUnauthorized not defaulted correctly`);
+    }
 
     // Test 7: Load from TOML file
-    console.log('Test 7: Load configuration from TOML file');
     const tomlContent = `
 [database]
 type = "postgres"
@@ -176,18 +179,21 @@ ca = "/path/to/ca.pem"
 rejectUnauthorized = true
 `;
     writeFileSync(TEST_CONFIG_PATH, tomlContent, 'utf-8');
-    const loadedConfig = loadConfigFile(TEST_CONFIG_PATH);
+    const loadedConfig = loadConfigFile(TEST_DIR, 'config.toml');
     const loadSuccess =
       loadedConfig.database?.type === 'postgres' &&
       loadedConfig.database?.connection?.host === 'localhost' &&
       loadedConfig.database?.auth?.type === 'direct' &&
       loadedConfig.database?.auth?.user === 'postgres';
-    console.log('  Result:', loadSuccess ? '✓ PASS' : '✗ FAIL');
-    console.log('  Loaded database config:', loadedConfig.database);
-    console.log('');
+    if (loadSuccess) {
+      passedCount++;
+    } else {
+      failedCount++;
+      const actual = JSON.stringify(loadedConfig.database || {});
+      failures.push(`Test 7 (Load TOML): Config not loaded correctly. Got: ${actual}`);
+    }
 
-    // Test 8: Invalid port validation
-    console.log('Test 8: Invalid port validation (should fail)');
+    // Test 8: Invalid port validation (should fail)
     const invalidPortConfig: DatabaseConfig = {
       type: 'postgres',
       connection: {
@@ -202,13 +208,21 @@ rejectUnauthorized = true
       },
     };
     const invalidPortValidation = validateDatabaseConfig(invalidPortConfig);
-    console.log('  Result:', !invalidPortValidation.valid ? '✓ PASS' : '✗ FAIL');
     if (!invalidPortValidation.valid) {
-      console.log('  Errors:', invalidPortValidation.errors);
+      passedCount++;
+    } else {
+      failedCount++;
+      failures.push('Test 8 (Invalid port): Expected validation to fail but it passed');
     }
-    console.log('');
 
-    console.log('All tests completed!');
+    // Summary
+    console.log(`\nConfig Loader Tests: ${passedCount} passed, ${failedCount} failed`);
+
+    // Show failures if any
+    if (failures.length > 0) {
+      console.log('\nFailures:');
+      failures.forEach(failure => console.log(`  ✗ ${failure}`));
+    }
   } catch (error) {
     console.error('Test failed with error:', error);
   } finally {

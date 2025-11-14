@@ -12,6 +12,11 @@ export interface SetDecisionParams {
   status?: 'active' | 'deprecated' | 'draft';
   tags?: string[];
   scopes?: string[];
+  // Policy validation context (v3.9.0)
+  rationale?: string;
+  alternatives?: any[];
+  tradeoffs?: any;
+  policy_name?: string;  // Explicit policy to validate against
 }
 
 export interface QuickSetDecisionParams {

@@ -57,10 +57,27 @@ describe('Workflow 1 Debug', () => {
         .where({ name: 'test-cve-policy', project_id: projectId })
         .del();
 
+      // Get system agent ID
+      let systemAgentId: number;
+      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+      if (systemAgent) {
+        systemAgentId = systemAgent.id;
+      } else {
+        const [agentId] = await knex('m_agents').insert({
+          name: 'system',
+          last_active_ts: Math.floor(Date.now() / 1000)
+        });
+        systemAgentId = agentId;
+      }
+
       await knex('t_decision_policies').insert({
         project_id: projectId,
         name: 'test-cve-policy',
         category: 'security',
+        defaults: JSON.stringify({
+          layer: 'cross-cutting',
+          tags: ['security', 'vulnerability']
+        }),
         validation_rules: JSON.stringify({
           patterns: {
             key: '^test/cve/CVE-\\d{4}-\\d{4,7}$'
@@ -69,7 +86,7 @@ describe('Workflow 1 Debug', () => {
         quality_gates: JSON.stringify({
           required_fields: ['severity']
         }),
-        created_by: 'system',
+        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 
