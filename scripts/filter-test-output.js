@@ -24,6 +24,8 @@ const excludePattern = /(✔|✅|▶)/;
 const summaryPattern = /^ℹ /;
 
 let inSummary = false;
+let previousLine = null;
+let linesAfterFailure = 0;
 
 rl.on('line', (line) => {
   // If we encounter a summary line, enter summary mode
@@ -37,10 +39,30 @@ rl.on('line', (line) => {
     return;
   }
 
-  // Otherwise, show line if it matches include pattern AND doesn't match exclude pattern
-  if (includePattern.test(line) && !excludePattern.test(line)) {
+  // If we're tracking lines after a failure, show them
+  if (linesAfterFailure > 0) {
     console.log(line);
+    linesAfterFailure--;
+    previousLine = line;
+    return;
   }
+
+  // Check if current line is a failure
+  const isFailure = includePattern.test(line) && !excludePattern.test(line);
+
+  if (isFailure) {
+    // Show previous line (context before failure, e.g., "test at ...")
+    if (previousLine !== null) {
+      console.log(previousLine);
+    }
+    // Show the failure line itself
+    console.log(line);
+    // Show next 1 line after failure (error details)
+    linesAfterFailure = 1;
+  }
+
+  // Remember current line as previous for next iteration
+  previousLine = line;
 });
 
 rl.on('close', () => {
