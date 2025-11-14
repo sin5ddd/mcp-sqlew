@@ -40,7 +40,44 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
     const adapter = getAdapter();
     const knex = adapter.getKnex();
 
-    // Delete numeric decisions for e2e keys
+    // Delete child records first (foreign key constraints)
+    // 1. Delete decision tags
+    await knex('t_decision_tags')
+      .whereIn('decision_key_id', function() {
+        this.select('id')
+          .from('m_context_keys')
+          .where('key', 'like', 'e2e/%');
+      })
+      .del();
+
+    // 2. Delete decision scopes
+    await knex('t_decision_scopes')
+      .whereIn('decision_key_id', function() {
+        this.select('id')
+          .from('m_context_keys')
+          .where('key', 'like', 'e2e/%');
+      })
+      .del();
+
+    // 3. Delete decision context
+    await knex('t_decision_context')
+      .whereIn('decision_key_id', function() {
+        this.select('id')
+          .from('m_context_keys')
+          .where('key', 'like', 'e2e/%');
+      })
+      .del();
+
+    // 4. Delete decision history
+    await knex('t_decision_history')
+      .whereIn('key_id', function() {
+        this.select('id')
+          .from('m_context_keys')
+          .where('key', 'like', 'e2e/%');
+      })
+      .del();
+
+    // 5. Delete numeric decisions for e2e keys
     await knex('t_decisions_numeric')
       .whereIn('key_id', function() {
         this.select('id')
@@ -49,7 +86,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       })
       .del();
 
-    // Delete text decisions for e2e keys
+    // 6. Delete text decisions for e2e keys
     await knex('t_decisions')
       .whereIn('key_id', function() {
         this.select('id')
@@ -58,12 +95,12 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       })
       .del();
 
-    // Delete e2e context keys
+    // 7. Delete e2e context keys
     await knex('m_context_keys')
       .where('key', 'like', 'e2e/%')
       .del();
 
-    // Delete e2e policies
+    // 8. Delete e2e policies
     await knex('t_decision_policies')
       .where('name', 'like', 'e2e-%')
       .del();
@@ -372,13 +409,13 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       console.log('  Step 5: Finding similar feature flags...');
 
       // DIAGNOSTIC: Check dark-mode decision exists
-      const darkModeDecision = await knex('t_decisions as d')
-        .join('m_context_keys as ck', 'd.key_id', 'ck.id')
-        .where('ck.key', 'e2e/feature/dark-mode/enabled')
-        .where('d.project_id', projectId)
-        .select('d.*', 'ck.key')
-        .first();
-      console.log(`  [DIAGNOSTIC] Dark mode decision in t_decisions:`, JSON.stringify(darkModeDecision, null, 2));
+      // const darkModeDecision = await knex('t_decisions as d')
+      //   .join('m_context_keys as ck', 'd.key_id', 'ck.id')
+      //   .where('ck.key', 'e2e/feature/dark-mode/enabled')
+      //   .where('d.project_id', projectId)
+      //   .select('d.*', 'ck.key')
+      //   .first();
+      // console.log(`  [DIAGNOSTIC] Dark mode decision in t_decisions:`, JSON.stringify(darkModeDecision, null, 2));
 
       const keySuggestions = await handleSuggestAction({
         action: 'by_key',
@@ -386,7 +423,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
         limit: 5,
         min_score: 40
       });
-      console.log(`  [DIAGNOSTIC] by_key suggestions:`, JSON.stringify(keySuggestions, null, 2));
+      // console.log(`  [DIAGNOSTIC] by_key suggestions:`, JSON.stringify(keySuggestions, null, 2));
 
       assert.ok(keySuggestions.suggestions.length > 0, 'Should suggest similar feature flags');
       const darkModeFlag = keySuggestions.suggestions.find((s: any) =>

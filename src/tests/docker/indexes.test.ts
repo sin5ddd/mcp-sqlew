@@ -10,10 +10,10 @@
  */
 
 import knex, { Knex } from 'knex';
-import { getAllIndexes, getCreateIndexStatement } from '../../../utils/sql-dump/index.js';
+import { getAllIndexes, getCreateIndexStatement } from '../../utils/sql-dump/index.js';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { getTestConfig } from '../testing-config.js';
+import { getTestConfig } from '../database/testing-config.js';
 
 // Test database configurations (using centralized config)
 const configs = {
@@ -169,7 +169,7 @@ describe('Index Export Tests', () => {
 
       try {
         // Export table definition to MySQL (should apply prefix length)
-        const { generateSqlDump } = await import('../../../utils/sql-dump/index.js');
+        const { generateSqlDump } = await import('../../utils/sql-dump/index.js');
         const dump = await generateSqlDump(mysqlDb, 'mysql', {
           tables: ['test_pk_prefix'],
           includeSchema: true,

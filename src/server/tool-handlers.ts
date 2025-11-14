@@ -40,7 +40,7 @@ import {
 import { debugLogToolCall, debugLogToolResponse } from '../utils/debug-logger.js';
 import { handleToolError } from '../utils/error-handler.js';
 import { DecisionAction, TaskAction, FileAction, ConstraintAction, ExampleAction } from '../types.js';
-import { handleSuggestAction } from '../tools/suggest.js';
+import { handleSuggestAction } from '../tools/suggest/index.js';
 
 /**
  * Handle CallToolRequest - dispatch to appropriate tool action

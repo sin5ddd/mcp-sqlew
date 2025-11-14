@@ -5,57 +5,39 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { SQLiteAdapter } from '../../../adapters/sqlite-adapter.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
-import { getOrCreateAgent, getOrCreateFile } from '../../../database.js';
+import { initializeDatabase, getOrCreateAgent, getOrCreateFile, closeDatabase } from '../../../database.js';
+import { ProjectContext } from '../../../utils/project-context.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 /**
  * Test database instance
  */
 let testDb: DatabaseAdapter;
-
-/**
- * Create an in-memory test database
- */
-async function createTestDatabase(): Promise<DatabaseAdapter> {
-  const adapter = new SQLiteAdapter({
-    type: 'sqlite',
-    connection: {
-      host: '',
-      port: 0,
-      database: ':memory:',
-    },
-    auth: {
-      type: 'direct',
-    },
-  });
-  await adapter.connect({
-    client: 'better-sqlite3',
-    connection: ':memory:',
-    useNullAsDefault: true,
-  });
-
-  // Run migrations to set up schema
-  const knex = adapter.getKnex();
-  await knex.migrate.latest();
-
-  return adapter;
-}
+let tempDir: string;
+let tempDbPath: string;
 
 /**
  * Helper: Create a test task
  */
 async function createTestTask(db: DatabaseAdapter, title: string): Promise<number> {
   const agentId = await getOrCreateAgent(db, 'test-agent');
+  const projectId = ProjectContext.getInstance().getProjectId();
   const statusId = 1; // todo
 
   const knex = db.getKnex();
+  const now = Math.floor(Date.now() / 1000);
   const [taskId] = await knex('t_tasks').insert({
     title,
     status_id: statusId,
     priority: 2,
     created_by_agent_id: agentId,
     assigned_agent_id: agentId,
+    project_id: projectId,
+    created_ts: now,
+    updated_ts: now,
   });
 
   return taskId;
@@ -87,11 +69,18 @@ async function linkTaskFile(db: DatabaseAdapter, params: {
   // console.warn(`⚠️  DEPRECATION WARNING: task.link(link_type="file") is deprecated as of v3.4.1.`);
 
   const filePath = String(params.target_id);
-  const fileId = await getOrCreateFile(db, 1, filePath);
+  const projectId = ProjectContext.getInstance().getProjectId();
+  const fileId = await getOrCreateFile(db, projectId, filePath);
+  const now = Math.floor(Date.now() / 1000);
 
   await knex('t_task_file_links')
-    .insert({ task_id: params.task_id, file_id: fileId })
-    .onConflict(['task_id', 'file_id'])
+    .insert({
+      task_id: params.task_id,
+      file_id: fileId,
+      project_id: projectId,
+      linked_ts: now
+    })
+    .onConflict(['project_id', 'task_id', 'file_id'])
     .ignore();
 
   return {
@@ -106,12 +95,34 @@ async function linkTaskFile(db: DatabaseAdapter, params: {
 
 describe('Backward compatibility: task.link(link_type="file")', () => {
   beforeEach(async () => {
-    testDb = await createTestDatabase();
+    // Create temp directory for test files and database
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlew-test-'));
+    tempDbPath = path.join(tempDir, 'test.db');
+
+    // Initialize database with Knex adapter
+    testDb = await initializeDatabase({
+      databaseType: 'sqlite',
+      connection: {
+        filename: tempDbPath,
+      },
+    });
+
+    // Initialize project context (required after v3.7.0)
+    const knex = testDb.getKnex();
+    const projectContext = ProjectContext.getInstance();
+    await projectContext.ensureProject(knex, 'test-link-file-compat', 'config', {
+      projectRootPath: process.cwd()
+    });
   });
 
   afterEach(async () => {
-    if (testDb) {
-      await testDb.disconnect();
+    await closeDatabase();
+    // Reset ProjectContext singleton for test isolation
+    ProjectContext.reset();
+
+    // Clean up temp directory
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -227,11 +238,18 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     });
 
     // Use new API (simulated by direct DB insert)
-    const fileId = await getOrCreateFile(testDb, 1, 'src/database.ts');
+    const projectId = ProjectContext.getInstance().getProjectId();
+    const fileId = await getOrCreateFile(testDb, projectId, 'src/database.ts');
     const knex = testDb.getKnex();
+    const now = Math.floor(Date.now() / 1000);
     await knex('t_task_file_links')
-      .insert({ task_id: taskId, file_id: fileId })
-      .onConflict(['task_id', 'file_id'])
+      .insert({
+        task_id: taskId,
+        file_id: fileId,
+        project_id: projectId,
+        linked_ts: now
+      })
+      .onConflict(['project_id', 'task_id', 'file_id'])
       .ignore();
 
     // Both files should be linked
@@ -296,11 +314,18 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     });
 
     // New API (simulated)
-    const fileId = await getOrCreateFile(testDb, 1, 'src/index.ts');
+    const projectId = ProjectContext.getInstance().getProjectId();
+    const fileId = await getOrCreateFile(testDb, projectId, 'src/index.ts');
     const knex = testDb.getKnex();
+    const now = Math.floor(Date.now() / 1000);
     await knex('t_task_file_links')
-      .insert({ task_id: taskId2, file_id: fileId })
-      .onConflict(['task_id', 'file_id'])
+      .insert({
+        task_id: taskId2,
+        file_id: fileId,
+        project_id: projectId,
+        linked_ts: now
+      })
+      .onConflict(['project_id', 'task_id', 'file_id'])
       .ignore();
 
     // Both should create identical links

@@ -65,6 +65,10 @@ export async function getCreateViewStatement(knex: Knex, viewName: string, targe
       // Convert to MySQL syntax using shared converters
       createSql = convertIdentifierQuotes(createSql, 'mysql');
       createSql = convertTimestampFunctions(createSql, 'mysql');
+      // Fix type mismatch in COALESCE with numeric values: dn.value → CAST(dn.value AS CHAR)
+      // MySQL doesn't allow mixing TEXT and DOUBLE PRECISION in COALESCE
+      createSql = createSql.replace(/COALESCE\s*\(\s*NULLIF\s*\(\s*d\.value\s*,\s*''\s*\)\s*,\s*dn\.value\s*\)/gi,
+                                   "COALESCE(NULLIF(d.value, ''), CAST(dn.value AS CHAR))");
     } else if (targetFormat === 'postgresql') {
       // Convert to PostgreSQL syntax using shared converters
       createSql = convertIdentifierQuotes(createSql, 'postgresql');
@@ -74,6 +78,10 @@ export async function getCreateViewStatement(knex: Knex, viewName: string, targe
       // Cast integer comparisons to be type-safe: column = 1 → column::integer = 1
       // This works for both boolean columns (TRUE::integer = 1) and integer enum columns
       createSql = createSql.replace(/(\w+)\s*=\s*([01])\b/g, '$1::integer = $2');
+      // Fix type mismatch in COALESCE with numeric values: dn.value → CAST(dn.value AS TEXT)
+      // PostgreSQL strictly enforces type compatibility in COALESCE
+      createSql = createSql.replace(/COALESCE\s*\(\s*NULLIF\s*\(\s*d\.value\s*,\s*''\s*\)\s*,\s*dn\.value\s*\)/gi,
+                                   "COALESCE(NULLIF(d.value, ''), CAST(dn.value AS TEXT))");
     }
 
     return createSql + ';';

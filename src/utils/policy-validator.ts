@@ -11,6 +11,7 @@
  */
 
 import type { DatabaseAdapter } from '../adapters/index.js';
+import type { Knex } from 'knex';
 import { getProjectContext } from './project-context.js';
 
 /**
@@ -59,20 +60,23 @@ interface QualityGates {
  * @param key - Decision key (for pattern matching)
  * @param value - Decision value (for completeness checking)
  * @param metadata - Decision metadata (rationale, alternatives, etc.)
+ * @param trx - Optional Knex transaction context (prevents connection pool exhaustion)
  * @returns Validation result with violations or success
  */
 export async function validateAgainstPolicies(
   adapter: DatabaseAdapter,
   key: string,
   value: string | number,
-  metadata: Record<string, any> = {}
+  metadata: Record<string, any> = {},
+  trx?: Knex.Transaction
 ): Promise<ValidationResult> {
   const knex = adapter.getKnex();
   const projectId = getProjectContext().getProjectId();
 
   try {
     // Fetch all active policies for current project
-    const policies = await knex('t_decision_policies')
+    // Use transaction context if provided to avoid connection pool exhaustion
+    const policies = await (trx || knex)('t_decision_policies')
       .where('project_id', projectId)
       .select('id', 'name', 'validation_rules', 'quality_gates', 'category', 'required_fields') as PolicyRow[];
 
@@ -96,10 +100,16 @@ export async function validateAgainstPolicies(
     if (matchedPolicy.validation_rules) {
       try {
         const rules: ValidationRules = JSON.parse(matchedPolicy.validation_rules);
-        const patternViolations = validatePatterns(rules, metadata);
+        // Include key in validation context so patterns can validate it
+        const validationContext = { ...metadata, key };
+        const patternViolations = validatePatterns(rules, validationContext);
         violations.push(...patternViolations);
       } catch (error) {
-        console.error(`[Policy Validator] Failed to parse validation_rules for policy ${matchedPolicy.name}:`, error);
+        // Silently ignore JSON parse errors (expected for malformed policies)
+        // Set DEBUG=1 environment variable to see error details
+        if (process.env.DEBUG) {
+          console.error(`[Policy Validator] Failed to parse validation_rules for policy ${matchedPolicy.name}:`, error);
+        }
       }
     }
 
@@ -110,7 +120,11 @@ export async function validateAgainstPolicies(
         const fieldViolations = validateRequiredFields(requiredFields, metadata);
         violations.push(...fieldViolations);
       } catch (error) {
-        console.error(`[Policy Validator] Failed to parse required_fields for policy ${matchedPolicy.name}:`, error);
+        // Silently ignore JSON parse errors (expected for malformed policies)
+        // Set DEBUG=1 environment variable to see error details
+        if (process.env.DEBUG) {
+          console.error(`[Policy Validator] Failed to parse required_fields for policy ${matchedPolicy.name}:`, error);
+        }
       }
     }
 
@@ -121,7 +135,11 @@ export async function validateAgainstPolicies(
         const gateViolations = validateQualityGates(gates, metadata);
         violations.push(...gateViolations);
       } catch (error) {
-        console.error(`[Policy Validator] Failed to parse quality_gates for policy ${matchedPolicy.name}:`, error);
+        // Silently ignore JSON parse errors (expected for malformed policies)
+        // Set DEBUG=1 environment variable to see error details
+        if (process.env.DEBUG) {
+          console.error(`[Policy Validator] Failed to parse quality_gates for policy ${matchedPolicy.name}:`, error);
+        }
       }
     }
 

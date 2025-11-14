@@ -1,4 +1,5 @@
 import { Knex } from 'knex';
+import { getProjectContext } from './project-context.js';
 
 /**
  * Cross-database aggregation utilities
@@ -39,11 +40,14 @@ export async function aggregateNumericDecisions(
   aggregation: AggregationType,
   layer?: string
 ): Promise<AggregationResult & { aggregation: AggregationType; pattern: string }> {
+  const projectId = getProjectContext().getProjectId();
+
   // Build base query
   let query = knex('t_decisions_numeric as dn')
     .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
     .where('ck.key', 'like', keyPattern)
-    .where('dn.status', 1);  // Active decisions only
+    .where('dn.status', 1)  // Active decisions only
+    .where('dn.project_id', projectId);  // Multi-project support (v3.7.0+)
 
   // Add layer filter if provided
   if (layer) {
@@ -128,6 +132,8 @@ export async function timeSeriesAggregation(
   startTs: number,
   endTs: number
 ): Promise<Array<AggregationResult & { bucket_ts: number }>> {
+  const projectId = getProjectContext().getProjectId();
+
   // Calculate bucket size in seconds
   const bucketSize = {
     hour: 3600,
@@ -141,6 +147,7 @@ export async function timeSeriesAggregation(
     .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
     .where('ck.key', 'like', keyPattern)
     .where('dn.status', 1)
+    .where('dn.project_id', projectId)  // Multi-project support (v3.7.0+)
     .whereBetween('dn.updated_ts', [startTs, endTs])
     .select('dn.value', 'dn.updated_ts');
 
@@ -186,11 +193,14 @@ export async function calculatePercentiles(
   keyPattern: string,
   percentiles: number[]
 ): Promise<Record<number, number>> {
+  const projectId = getProjectContext().getProjectId();
+
   // Fetch all values
   const results = await knex('t_decisions_numeric as dn')
     .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
     .where('ck.key', 'like', keyPattern)
     .where('dn.status', 1)
+    .where('dn.project_id', projectId)  // Multi-project support (v3.7.0+)
     .select('dn.value')
     .orderBy('dn.value');
 

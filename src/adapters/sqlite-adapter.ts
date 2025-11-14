@@ -79,9 +79,6 @@ export class SQLiteAdapter extends BaseAdapter {
     // Create Knex instance
     this.knexInstance = knex(connectionConfig);
 
-    // Get and store the raw better-sqlite3 connection
-    this.rawConnection = await (this.knexInstance.client as any).acquireRawConnection();
-
     // Initialize SQLite settings
     await this.initialize();
 
@@ -93,20 +90,49 @@ export class SQLiteAdapter extends BaseAdapter {
    */
   async disconnect(): Promise<void> {
     if (this.knexInstance) {
+      try {
+        // Checkpoint WAL to ensure all changes are written to main database
+        await this.knexInstance.raw('PRAGMA wal_checkpoint(TRUNCATE)');
+        // Optimize database before closing
+        await this.knexInstance.raw('PRAGMA optimize');
+      } catch (error) {
+        // Ignore errors if WAL mode is not enabled or other pragma failures
+      }
+
+      // Close raw connection if it was acquired
+      if (this.rawConnection) {
+        if (typeof this.rawConnection.close === 'function') {
+          this.rawConnection.close();
+        }
+        this.rawConnection = null;
+      }
+
+      // Force immediate destruction of all connections
       await this.knexInstance.destroy();
       this.knexInstance = null;
-      this.rawConnection = null;
     }
   }
 
   /**
    * Get raw better-sqlite3 Database instance
    * For legacy code that uses db.prepare() directly
+   *
+   * Note: Acquires connection on first call and caches it.
+   * This connection will be closed when disconnect() is called.
    */
   getRawDatabase(): any {
-    if (!this.rawConnection) {
-      throw new Error('Raw database connection not available. Call connect() first.');
+    if (!this.knexInstance) {
+      throw new Error('Database not connected. Call connect() first.');
     }
+
+    // Lazy-load the raw connection on first access
+    if (!this.rawConnection) {
+      // Get the underlying better-sqlite3 connection from Knex
+      const client = (this.knexInstance.client as any);
+      // For better-sqlite3, the connection is available directly
+      this.rawConnection = client.driver;
+    }
+
     return this.rawConnection;
   }
 

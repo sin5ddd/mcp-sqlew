@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { Knex } from 'knex';
 import { initializeDatabase, getOrCreateAgent, closeDatabase } from '../../../database.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
+import { ProjectContext } from '../../../utils/project-context.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -25,6 +26,7 @@ let tempDbPath: string;
  */
 async function createTestTask(db: DatabaseAdapter, title: string, status: string = 'todo'): Promise<number> {
   const agentId = await getOrCreateAgent(db, 'test-agent');
+  const projectId = ProjectContext.getInstance().getProjectId();
   const statusIdMap: Record<string, number> = {
     'todo': 1,
     'in_progress': 2,
@@ -44,6 +46,7 @@ async function createTestTask(db: DatabaseAdapter, title: string, status: string
     priority: 2,
     created_by_agent_id: agentId,
     assigned_agent_id: agentId,
+    project_id: projectId,
     created_ts: now,
     updated_ts: now
   });
@@ -105,10 +108,12 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
     }
 
     // Validation 4: No direct circular (reverse relationship)
+    const projectId = ProjectContext.getInstance().getProjectId();
     const reverseExists = await trx('t_task_dependencies')
       .where({
-        depends_on_task_id: params.task_id,
-        task_id: params.depends_on_task_id
+        project_id: projectId,
+        blocker_task_id: params.task_id,
+        blocked_task_id: params.depends_on_task_id
       })
       .first();
 
@@ -120,41 +125,41 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
     const cycleCheck = await trx.raw(`
       WITH RECURSIVE dependency_chain AS (
         -- Start from the task that would have the dependency
-        SELECT task_id, 1 as depth
+        SELECT blocked_task_id, 1 as depth
         FROM t_task_dependencies
-        WHERE depends_on_task_id = ?
+        WHERE blocker_task_id = ?
 
         UNION ALL
 
         -- Follow the chain of dependencies
-        SELECT d.task_id, dc.depth + 1
+        SELECT d.blocked_task_id, dc.depth + 1
         FROM t_task_dependencies d
-        JOIN dependency_chain dc ON d.depends_on_task_id = dc.task_id
+        JOIN dependency_chain dc ON d.blocker_task_id = dc.blocked_task_id
         WHERE dc.depth < 100
       )
-      SELECT task_id FROM dependency_chain WHERE task_id = ?
-    `, [params.task_id, params.depends_on_task_id]) as { task_id: number } | undefined;
+      SELECT blocked_task_id FROM dependency_chain WHERE blocked_task_id = ?
+    `, [params.task_id, params.depends_on_task_id]) as { blocked_task_id: number } | undefined;
 
     const cycleResult = Array.isArray(cycleCheck) ? cycleCheck[0] : cycleCheck;
 
-    if (cycleResult && cycleResult.task_id) {
+    if (cycleResult && cycleResult.blocked_task_id) {
       // Build cycle path for error message
       const cyclePathResult = await trx.raw(`
         WITH RECURSIVE dependency_chain AS (
-          SELECT task_id, 1 as depth,
-                 CAST(task_id AS TEXT) as path
+          SELECT blocked_task_id, 1 as depth,
+                 CAST(blocked_task_id AS TEXT) as path
           FROM t_task_dependencies
-          WHERE depends_on_task_id = ?
+          WHERE blocker_task_id = ?
 
           UNION ALL
 
-          SELECT d.task_id, dc.depth + 1,
-                 dc.path || ' → ' || d.task_id
+          SELECT d.blocked_task_id, dc.depth + 1,
+                 dc.path || ' → ' || d.blocked_task_id
           FROM t_task_dependencies d
-          JOIN dependency_chain dc ON d.depends_on_task_id = dc.task_id
+          JOIN dependency_chain dc ON d.blocker_task_id = dc.blocked_task_id
           WHERE dc.depth < 100
         )
-        SELECT path FROM dependency_chain WHERE task_id = ? ORDER BY depth DESC LIMIT 1
+        SELECT path FROM dependency_chain WHERE blocked_task_id = ? ORDER BY depth DESC LIMIT 1
       `, [params.task_id, params.depends_on_task_id]) as { path: string } | undefined;
 
       const pathResult = Array.isArray(cyclePathResult) ? cyclePathResult[0] : cyclePathResult;
@@ -165,8 +170,9 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
     // All validations passed - insert dependency
     const now = Math.floor(Date.now() / 1000);
     await trx('t_task_dependencies').insert({
-      depends_on_task_id: params.depends_on_task_id,
-      task_id: params.task_id,
+      project_id: projectId,
+      blocker_task_id: params.depends_on_task_id,
+      blocked_task_id: params.task_id,
       created_ts: now
     });
 
@@ -193,11 +199,13 @@ async function removeDependencyTest(db: DatabaseAdapter, params: {
   }
 
   const knex = db.getKnex();
+  const projectId = ProjectContext.getInstance().getProjectId();
 
   await knex('t_task_dependencies')
     .where({
-      depends_on_task_id: params.depends_on_task_id,
-      task_id: params.task_id
+      project_id: projectId,
+      blocker_task_id: params.depends_on_task_id,
+      blocked_task_id: params.task_id
     })
     .delete();
 
@@ -255,10 +263,10 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
 
   // Get blockers (tasks that this task depends on)
   let blockersQuery = knex('t_tasks as t')
-    .join('t_task_dependencies as d', 't.id', 'd.depends_on_task_id')
+    .join('t_task_dependencies as d', 't.id', 'd.blocker_task_id')
     .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
     .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
-    .where('d.task_id', params.task_id)
+    .where('d.blocked_task_id', params.task_id)
     .select(selectFields);
 
   if (includeDetails) {
@@ -269,10 +277,10 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
 
   // Get blocking (tasks that depend on this task)
   let blockingQuery = knex('t_tasks as t')
-    .join('t_task_dependencies as d', 't.id', 'd.task_id')
+    .join('t_task_dependencies as d', 't.id', 'd.blocked_task_id')
     .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
     .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
-    .where('d.depends_on_task_id', params.task_id)
+    .where('d.blocker_task_id', params.task_id)
     .select(selectFields);
 
   if (includeDetails) {
@@ -303,10 +311,19 @@ beforeEach(async () => {
       filename: tempDbPath,
     },
   });
+
+  // Initialize project context (required after v3.7.0)
+  const knex = testDb.getKnex();
+  const projectContext = ProjectContext.getInstance();
+  await projectContext.ensureProject(knex, 'test-task-dependencies', 'config', {
+    projectRootPath: process.cwd()
+  });
 });
 
 afterEach(async () => {
   await closeDatabase();
+  // Reset ProjectContext singleton for test isolation
+  ProjectContext.reset();
   // Cleanup temp directory
   if (fs.existsSync(tempDir)) {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -337,8 +354,8 @@ describe('add_dependency - Success Cases', () => {
     const knex = testDb.getKnex();
     const deps = await knex('t_task_dependencies')
       .where({
-        depends_on_task_id: task1,
-        task_id: task2
+        blocker_task_id: task1,
+        blocked_task_id: task2
       })
       .first();
 
@@ -757,8 +774,8 @@ describe('CASCADE Deletion', () => {
 
     // Assert - Dependency should be deleted
     const depsInDb = await knex('t_task_dependencies')
-      .where('depends_on_task_id', taskA)
-      .orWhere('task_id', taskA);
+      .where('blocker_task_id', taskA)
+      .orWhere('blocked_task_id', taskA);
 
     assert.strictEqual(depsInDb.length, 0);
 
@@ -787,7 +804,7 @@ describe('CASCADE Deletion', () => {
 
     // Assert - Dependency should be deleted
     const depsInDb = await knex('t_task_dependencies')
-      .where('task_id', taskB);
+      .where('blocked_task_id', taskB);
 
     assert.strictEqual(depsInDb.length, 0);
 

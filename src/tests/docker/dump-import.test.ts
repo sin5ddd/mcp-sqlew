@@ -13,13 +13,13 @@
  */
 
 import knex, { Knex } from 'knex';
-import { generateSqlDump } from '../../../utils/sql-dump/index.js';
+import { generateSqlDump } from '../../utils/sql-dump/index.js';
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { getTestConfig, getDockerExecPrefix, getDockerConfig } from '../testing-config.js';
+import { getTestConfig, getDockerExecPrefix, getDockerConfig } from '../database/testing-config.js';
 
 const execAsync = promisify(exec);
 

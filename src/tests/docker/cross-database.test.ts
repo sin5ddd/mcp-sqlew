@@ -26,7 +26,7 @@ if (process.env.SKIP_DOCKER_TESTS === 'true' || process.env.CI === 'true') {
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { generateSqlDump } from '../../../utils/sql-dump/index.js';
+import { generateSqlDump } from '../../utils/sql-dump/index.js';
 import {
   getDbConfig,
   connectDb,
@@ -40,7 +40,7 @@ import {
   assertSeededDataExists,
   importSqlToDocker,
   type DatabaseType,
-} from '../../utils/test-helpers.js';
+} from '../utils/test-helpers.js';
 import type { Knex } from 'knex';
 import { join } from 'node:path';
 import { existsSync, unlinkSync, mkdirSync } from 'node:fs';

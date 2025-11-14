@@ -49,6 +49,15 @@ export function validateLayerParam(layer?: string): void {
 }
 
 /**
+ * Validate auto_increment parameter
+ */
+export function validateAutoIncrementParam(autoIncrement?: string): void {
+  if (autoIncrement && !['major', 'minor', 'patch'].includes(autoIncrement)) {
+    throw new Error(`Invalid auto_increment level: ${autoIncrement}. Expected: major, minor, or patch`);
+  }
+}
+
+/**
  * Validate pagination parameters
  */
 export function validatePaginationParams(limit?: number, offset?: number): void {
@@ -111,6 +120,7 @@ const VALID_DECISION_LAYERS = [
   'cross-cutting',
   'documentation'
 ] as const;
+const VALID_AUTO_INCREMENT_LEVELS = ['major', 'minor', 'patch'] as const;
 
 /**
  * Validate single decision item in batch operation
@@ -138,6 +148,11 @@ export async function validateDecisionItem(
   // Optional but must be valid: layer
   if (item.layer !== undefined) {
     validateEnum(item.layer, 'layer', VALID_DECISION_LAYERS, index, identifier, errors);
+  }
+
+  // Optional but must be valid: auto_increment
+  if (item.auto_increment !== undefined) {
+    validateEnum(item.auto_increment, 'auto_increment', VALID_AUTO_INCREMENT_LEVELS, index, identifier, errors);
   }
 
   // Optional but must be array: tags

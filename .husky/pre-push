@@ -1,28 +1,17 @@
 #!/usr/bin/env sh
-echo "🔍 Running pre-push checks..."
+echo "🚀 Running minimal pre-push smoke tests..."
+echo "💡 Full testing already done in pre-commit"
 
-echo "🧪 Running comprehensive feature tests..."
-npm run test:all-features || {
-  echo "❌ Feature tests failed! Please fix failing tests before pushing."
+# ============================================================================
+# Minimal Smoke Test: Just verify build still works
+# ============================================================================
+echo "📦 Verifying build..."
+npm run build || {
+  echo "❌ Build verification failed!"
+  echo "💡 This should not happen if pre-commit passed."
+  echo "   Something may have changed since last commit."
   exit 1
 }
 
-# Check if migration files changed since remote branch
-REMOTE_BRANCH=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "origin/main")
-if git diff --name-only HEAD "$REMOTE_BRANCH" 2>/dev/null | grep -q "src/config/knex/"; then
-  echo "🗄️  Migration files detected, running migration tests..."
-
-  npm run test:migrations || {
-    echo "❌ Migration safety tests failed! Please fix migration issues before pushing."
-    exit 1
-  }
-
-  npm run test:migrations:ci || {
-    echo "❌ Historical migration tests failed! Please fix backward compatibility before pushing."
-    exit 1
-  }
-else
-  echo "✅ No migration files changed, skipping migration tests"
-fi
-
-echo "✅ All pre-push checks passed!"
+echo "✅ Pre-push smoke test passed!"
+echo "🎉 Ready to push!"

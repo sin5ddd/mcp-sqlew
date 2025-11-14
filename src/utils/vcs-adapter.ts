@@ -4,6 +4,17 @@ import { exec } from 'child_process';
 const execAsync = promisify(exec);
 
 /**
+ * Execute async command with 5-second timeout to prevent hanging
+ * (especially important on Windows/WSL where git commands can stall)
+ */
+const execAsyncWithTimeout = async (
+  command: string,
+  options: Parameters<typeof execAsync>[1] = {}
+): Promise<{ stdout: string; stderr: string }> => {
+  return execAsync(command, { timeout: 5000, encoding: 'utf8', ...options }) as Promise<{ stdout: string; stderr: string }>;
+};
+
+/**
  * VCS Adapter Interface
  *
  * Provides abstraction layer for version control systems to support
@@ -64,7 +75,7 @@ export class GitAdapter implements VCSAdapter {
 
   async isRepository(): Promise<boolean> {
     try {
-      await execAsync('git rev-parse --git-dir', { cwd: this.projectRoot });
+      await execAsyncWithTimeout('git rev-parse --git-dir', { cwd: this.projectRoot });
       return true;
     } catch {
       return false;
@@ -73,7 +84,7 @@ export class GitAdapter implements VCSAdapter {
 
   async getCommittedFilesSince(sinceTimestamp: string): Promise<string[]> {
     const gitCommand = `git log --since="${sinceTimestamp}" --name-only --pretty=format:""`;
-    const { stdout } = await execAsync(gitCommand, { cwd: this.projectRoot });
+    const { stdout } = await execAsyncWithTimeout(gitCommand, { cwd: this.projectRoot });
 
     const committedFiles = stdout
       .split('\n')
@@ -87,7 +98,7 @@ export class GitAdapter implements VCSAdapter {
   async getStagedFiles(): Promise<string[]> {
     try {
       const gitCommand = 'git diff --cached --name-only';
-      const { stdout } = await execAsync(gitCommand, { cwd: this.projectRoot });
+      const { stdout } = await execAsyncWithTimeout(gitCommand, { cwd: this.projectRoot });
 
       const stagedFiles = stdout
         .split('\n')
@@ -111,7 +122,7 @@ export class GitAdapter implements VCSAdapter {
    */
   async getRepositoryRoot(): Promise<string | null> {
     try {
-      const { stdout } = await execAsync('git rev-parse --show-toplevel', {
+      const { stdout } = await execAsyncWithTimeout('git rev-parse --show-toplevel', {
         cwd: this.projectRoot,
       });
       return stdout.trim();
@@ -127,7 +138,7 @@ export class GitAdapter implements VCSAdapter {
    */
   async getRemoteUrl(): Promise<string | null> {
     try {
-      const { stdout } = await execAsync('git config --get remote.origin.url', {
+      const { stdout } = await execAsyncWithTimeout('git config --get remote.origin.url', {
         cwd: this.projectRoot,
       });
       return stdout.trim();
@@ -197,7 +208,7 @@ export class SVNAdapter implements VCSAdapter {
 
   async isRepository(): Promise<boolean> {
     try {
-      await execAsync('svn info', { cwd: this.projectRoot });
+      await execAsyncWithTimeout('svn info', { cwd: this.projectRoot });
       return true;
     } catch {
       return false;
@@ -211,7 +222,7 @@ export class SVNAdapter implements VCSAdapter {
 
     // Get log with changed paths since the date
     const svnCommand = `svn log -v --xml -r {${svnDate}}:HEAD`;
-    const { stdout } = await execAsync(svnCommand, { cwd: this.projectRoot });
+    const { stdout } = await execAsyncWithTimeout(svnCommand, { cwd: this.projectRoot });
 
     // Parse XML to extract file paths
     const pathMatches = stdout.matchAll(/<path[^>]*>([^<]+)<\/path>/g);
@@ -227,7 +238,7 @@ export class SVNAdapter implements VCSAdapter {
       // SVN doesn't have a staging area - all changes are "staged"
       // Get modified (M) and added (A) files
       const svnCommand = 'svn status';
-      const { stdout } = await execAsync(svnCommand, { cwd: this.projectRoot });
+      const { stdout } = await execAsyncWithTimeout(svnCommand, { cwd: this.projectRoot });
 
       const stagedFiles = stdout
         .split('\n')
@@ -257,7 +268,7 @@ export class SVNAdapter implements VCSAdapter {
 
   async getRemoteUrl(): Promise<string | null> {
     try {
-      const { stdout } = await execAsync('svn info --show-item url', {
+      const { stdout } = await execAsyncWithTimeout('svn info --show-item url', {
         cwd: this.projectRoot,
       });
       return stdout.trim();
@@ -302,7 +313,7 @@ export class MercurialAdapter implements VCSAdapter {
 
   async isRepository(): Promise<boolean> {
     try {
-      await execAsync('hg root', { cwd: this.projectRoot });
+      await execAsyncWithTimeout('hg root', { cwd: this.projectRoot });
       return true;
     } catch {
       return false;
@@ -316,7 +327,7 @@ export class MercurialAdapter implements VCSAdapter {
 
     // Get files changed since date
     const hgCommand = `hg log --style default --template "{files}\\n" -d ">${hgDate}"`;
-    const { stdout } = await execAsync(hgCommand, { cwd: this.projectRoot });
+    const { stdout } = await execAsyncWithTimeout(hgCommand, { cwd: this.projectRoot });
 
     const committedFiles = stdout
       .split('\n')
@@ -332,7 +343,7 @@ export class MercurialAdapter implements VCSAdapter {
     try {
       // Get modified (M), added (A), and removed (R) files in working directory
       const hgCommand = 'hg status -m -a -r';
-      const { stdout } = await execAsync(hgCommand, { cwd: this.projectRoot });
+      const { stdout } = await execAsyncWithTimeout(hgCommand, { cwd: this.projectRoot });
 
       const stagedFiles = stdout
         .split('\n')
@@ -356,7 +367,7 @@ export class MercurialAdapter implements VCSAdapter {
 
   async getRepositoryRoot(): Promise<string | null> {
     try {
-      const { stdout } = await execAsync('hg root', { cwd: this.projectRoot });
+      const { stdout } = await execAsyncWithTimeout('hg root', { cwd: this.projectRoot });
       return stdout.trim();
     } catch {
       return null;
@@ -365,7 +376,7 @@ export class MercurialAdapter implements VCSAdapter {
 
   async getRemoteUrl(): Promise<string | null> {
     try {
-      const { stdout } = await execAsync('hg paths default', {
+      const { stdout } = await execAsyncWithTimeout('hg paths default', {
         cwd: this.projectRoot,
       });
       return stdout.trim();

@@ -14,10 +14,10 @@
  */
 
 import knex, { Knex } from 'knex';
-import { generateSqlDump } from '../../../utils/sql-dump/index.js';
+import { generateSqlDump } from '../../utils/sql-dump/index.js';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { getTestConfig } from '../testing-config.js';
+import { getTestConfig } from '../database/testing-config.js';
 
 // Test database configurations (using centralized config)
 const configs = {

@@ -16,7 +16,7 @@ import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../../
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { incrementSemver, isValidSemver } from '../../../utils/semver.js';
 import { validateAgainstPolicies } from '../../../utils/policy-validator.js';
-import { handleSuggestAction } from '../../suggest.js';
+import { handleSuggestAction } from '../../suggest/index.js';
 import type { SetDecisionParams, SetDecisionResponse } from '../types.js';
 
 /**
@@ -54,7 +54,30 @@ export async function setDecisionInternal(
   const status = params.status ? STRING_TO_STATUS[params.status] : DEFAULT_STATUS;
   const agentName = params.agent || 'system';
 
-  // Validate layer if provided
+  // Scope validation warning (v3.8.0)
+  // if (!params.scopes || params.scopes.length === 0) {
+  //   console.warn(`⚠️  Decision "${params.key}" has no scope specified. Defaulting to GLOBAL scope.`);
+  //   console.warn(`   💡 Consider using scopes for better organization:`);
+  //   console.warn(`      - "FEATURE:<name>" for feature-specific decisions`);
+  //   console.warn(`      - "COMPONENT:<name>" for component-level decisions`);
+  //   console.warn(`      - "MODULE:<name>" for module-scoped decisions`);
+  //   console.warn(`      - "GLOBAL" for project-wide decisions (current default)`);
+  // }
+
+  // Get or create master records
+  const agentId = await getOrCreateAgent(adapter, agentName, trx);
+  const keyId = await getOrCreateContextKey(adapter, params.key, trx);
+
+  // Current timestamp
+  const ts = Math.floor(Date.now() / 1000);
+
+  // Check if decision already exists for activity logging and version management
+  // Always check t_decisions since all decisions now have a row there
+  const existingDecision = await knex('t_decisions')
+    .where({ key_id: keyId, project_id: projectId })
+    .first();
+
+  // Validate layer if provided; preserve existing layer if not provided on update
   let layerId: number | null = null;
   if (params.layer) {
     const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting', 'documentation'];
@@ -65,29 +88,10 @@ export async function setDecisionInternal(
     if (layerId === null) {
       throw new Error(`Layer not found in database: ${params.layer}`);
     }
+  } else if (existingDecision) {
+    // Preserve existing layer when updating decision without specifying layer
+    layerId = existingDecision.layer_id;
   }
-
-  // Scope validation warning (v3.8.0)
-  if (!params.scopes || params.scopes.length === 0) {
-    console.warn(`⚠️  Decision "${params.key}" has no scope specified. Defaulting to GLOBAL scope.`);
-    console.warn(`   💡 Consider using scopes for better organization:`);
-    console.warn(`      - "FEATURE:<name>" for feature-specific decisions`);
-    console.warn(`      - "COMPONENT:<name>" for component-level decisions`);
-    console.warn(`      - "MODULE:<name>" for module-scoped decisions`);
-    console.warn(`      - "GLOBAL" for project-wide decisions (current default)`);
-  }
-
-  // Get or create master records
-  const agentId = await getOrCreateAgent(adapter, agentName, trx);
-  const keyId = await getOrCreateContextKey(adapter, params.key, trx);
-
-  // Current timestamp
-  const ts = Math.floor(Date.now() / 1000);
-
-  // Check if decision already exists for activity logging and version management
-  const existingDecision = await knex(isNumeric ? 't_decisions_numeric' : 't_decisions')
-    .where({ key_id: keyId, project_id: projectId })
-    .first();
 
   // Auto-versioning logic (Task 409)
   let version: string;
@@ -128,12 +132,13 @@ export async function setDecisionInternal(
     versionAction = 'initial';
   }
 
-  // Insert or update decision based on value type
-  const tableName = isNumeric ? 't_decisions_numeric' : 't_decisions';
-  const decisionData = {
+  // Insert or update decision
+  // For ALL decisions (text and numeric), create a row in t_decisions
+  // For numeric decisions, ALSO create a row in t_decisions_numeric
+  const textDecisionData = {
     key_id: keyId,
     project_id: projectId,
-    value: isNumeric ? value : String(value),
+    value: isNumeric ? '' : String(value),  // Empty string for numeric decisions (value column is NOT NULL)
     agent_id: agentId,
     layer_id: layerId,
     version: version,
@@ -141,20 +146,44 @@ export async function setDecisionInternal(
     ts: ts
   };
 
-  // Use transaction-aware upsert
+  // Use transaction-aware upsert for t_decisions
   const conflictColumns = ['key_id', 'project_id'];
-  const updateColumns = Object.keys(decisionData).filter(
+  const updateColumns = Object.keys(textDecisionData).filter(
     key => !conflictColumns.includes(key)
   );
   const updateData = updateColumns.reduce((acc, col) => {
-    acc[col] = decisionData[col as keyof typeof decisionData];
+    acc[col] = textDecisionData[col as keyof typeof textDecisionData];
     return acc;
   }, {} as Record<string, any>);
 
-  await knex(tableName)
-    .insert(decisionData)
+  await knex('t_decisions')
+    .insert(textDecisionData)
     .onConflict(conflictColumns)
     .merge(updateData);
+
+  // For numeric decisions, ALSO insert into t_decisions_numeric
+  if (isNumeric) {
+    const numericDecisionData = {
+      key_id: keyId,
+      project_id: projectId,
+      value: value as number,
+      agent_id: agentId,
+      layer_id: layerId,
+      version: version,
+      status: status,
+      ts: ts
+    };
+
+    const numericUpdateData = updateColumns.reduce((acc, col) => {
+      acc[col] = numericDecisionData[col as keyof typeof numericDecisionData];
+      return acc;
+    }, {} as Record<string, any>);
+
+    await knex('t_decisions_numeric')
+      .insert(numericDecisionData)
+      .onConflict(conflictColumns)
+      .merge(numericUpdateData);
+  }
 
   // Activity logging (replaces triggers)
   if (existingDecision) {
@@ -243,6 +272,7 @@ export async function setDecisionInternal(
   // Task 407: Policy validation and auto-trigger suggestions
   try {
     // Validate decision against policies
+    // Pass transaction context to prevent connection pool exhaustion
     const validationResult = await validateAgainstPolicies(
       adapter,
       params.key,
@@ -252,7 +282,8 @@ export async function setDecisionInternal(
         alternatives: (params as any).alternatives,
         tradeoffs: (params as any).tradeoffs,
         ...params
-      }
+      },
+      trx  // Pass transaction context
     );
 
     // Add policy validation result to response
@@ -264,16 +295,24 @@ export async function setDecisionInternal(
     }
 
     // Auto-trigger suggestions if policy has suggest_similar=1
+    // console.log('[DEBUG] Auto-trigger check:', {
+    //   matchedPolicy: validationResult.matchedPolicy?.name,
+    //   valid: validationResult.valid,
+    //   violations: validationResult.violations
+    // });
+
     if (validationResult.matchedPolicy && validationResult.valid) {
-      // Query policy to check suggest_similar flag
-      const policy = await knex('t_decision_policies')
+      // Query policy to check suggest_similar flag (use transaction context)
+      const policy = await (trx || knex)('t_decision_policies')
         .where({ id: validationResult.matchedPolicy.id })
         .select('suggest_similar')
         .first();
 
+      // console.log('[DEBUG] Policy suggest_similar:', policy?.suggest_similar);
+
       if (policy && policy.suggest_similar === 1) {
         try {
-          // Auto-trigger suggestions with higher threshold
+          // Auto-trigger suggestions with higher threshold (pass transaction context)
           const tags = params.tags ? parseStringArray(params.tags) : [];
           const suggestions = await handleSuggestAction({
             action: 'by_context',
@@ -281,8 +320,11 @@ export async function setDecisionInternal(
             tags,
             layer: params.layer,
             limit: 3,
-            min_score: 50
+            min_score: 50,
+            knex: trx || knex  // Pass transaction context to avoid connection pool exhaustion
           });
+
+          // console.log('[DEBUG] Suggestions returned:', { count: suggestions.count, suggestions: suggestions.suggestions });
 
           // Add suggestions to response if any found
           if (suggestions.count > 0) {
@@ -291,12 +333,18 @@ export async function setDecisionInternal(
               reason: 'Policy has suggest_similar enabled',
               suggestions: suggestions.suggestions
             };
+          } else {
+            // console.log('[DEBUG] No suggestions found (count = 0)');
           }
         } catch (suggestError) {
           // Non-critical - log but don't fail the decision.set operation
           console.warn('[Auto-trigger] Suggestion failed:', suggestError);
         }
+      } else {
+        // console.log('[DEBUG] Policy not found or suggest_similar != 1');
       }
+    } else {
+      // console.log('[DEBUG] No matched policy or validation failed');
     }
   } catch (validationError) {
     // Non-critical - log but don't fail the decision.set operation

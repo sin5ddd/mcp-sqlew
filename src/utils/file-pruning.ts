@@ -1,11 +1,15 @@
 /**
  * File pruning utilities for v3.5.0 Auto-Pruning feature
  * Automatically removes non-existent watched files with audit trail
+ *
+ * UPDATED v3.7.0: Added project_id support for multi-project compatibility
  */
 
 import { Database } from '../types.js';
+import type { Knex } from 'knex';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { getProjectContext } from './project-context.js';
 
 /**
  * Prune non-existent files from a task's watch list
@@ -71,9 +75,12 @@ export function pruneNonExistentFiles(
 
   // 5. Prune non-existent files in a transaction
   db.transaction(() => {
+    // Get project_id (required after v3.7.0 multi-project support)
+    const projectId = getProjectContext().getProjectId();
+
     const insertPruned = db.prepare(`
-      INSERT INTO t_task_pruned_files (task_id, file_path, pruned_ts)
-      VALUES (?, ?, unixepoch())
+      INSERT INTO t_task_pruned_files (task_id, file_path, pruned_ts, project_id)
+      VALUES (?, ?, unixepoch(), ?)
     `);
 
     const deleteLink = db.prepare(`
@@ -83,10 +90,98 @@ export function pruneNonExistentFiles(
 
     // Record each pruned file to audit table and remove link
     for (const file of nonExistentFiles) {
-      insertPruned.run(taskId, file.path);
+      insertPruned.run(taskId, file.path, projectId);
       deleteLink.run(taskId, file.file_id);
     }
   })();
+
+  return {
+    prunedCount: nonExistentFiles.length,
+    remainingCount: existingFiles.length,
+    prunedPaths: nonExistentFiles.map(f => f.path),
+  };
+}
+
+/**
+ * Prune non-existent files from a task's watch list (Knex.js version)
+ * Records pruned files to audit table for project archaeology
+ *
+ * Quality gate enforcement:
+ * - If ALL watched files are non-existent → throw error (prevents zero-work completion)
+ * - If SOME watched files are non-existent → prune them and continue
+ *
+ * @param trx - Knex transaction instance
+ * @param taskId - Task ID to prune files for
+ * @param projectRoot - Project root directory (default: process.cwd())
+ * @returns Object with pruned count, remaining count, and pruned paths
+ * @throws Error if ALL files are non-existent (safety check)
+ */
+export async function pruneNonExistentFilesKnex(
+  trx: Knex.Transaction,
+  taskId: number,
+  projectRoot: string = process.cwd()
+): Promise<{ prunedCount: number; remainingCount: number; prunedPaths: string[] }> {
+  // 1. Get all watched files for this task
+  const watchedFiles = await trx('t_task_file_links as tfl')
+    .join('m_files as f', 'tfl.file_id', 'f.id')
+    .where('tfl.task_id', taskId)
+    .select('f.id as file_id', 'f.path');
+
+  if (watchedFiles.length === 0) {
+    // No watched files - nothing to prune
+    return { prunedCount: 0, remainingCount: 0, prunedPaths: [] };
+  }
+
+  // 2. Check which files exist on filesystem
+  const existingFiles: Array<{ file_id: number; path: string }> = [];
+  const nonExistentFiles: Array<{ file_id: number; path: string }> = [];
+
+  for (const file of watchedFiles) {
+    const fullPath = join(projectRoot, file.path);
+    if (existsSync(fullPath)) {
+      existingFiles.push(file);
+    } else {
+      nonExistentFiles.push(file);
+    }
+  }
+
+  // 3. Safety check: If ALL files are non-existent, block the operation
+  if (nonExistentFiles.length === watchedFiles.length) {
+    throw new Error(
+      `Cannot prune files for task #${taskId}: ALL ${watchedFiles.length} watched files are non-existent. ` +
+      `This indicates no work was done. Please verify watched files or mark task as invalid.`
+    );
+  }
+
+  // 4. If no files need pruning, return early
+  if (nonExistentFiles.length === 0) {
+    return {
+      prunedCount: 0,
+      remainingCount: watchedFiles.length,
+      prunedPaths: [],
+    };
+  }
+
+  // 5. Prune non-existent files (transaction already provided)
+  // Get project_id (required after v3.7.0 multi-project support)
+  const projectId = getProjectContext().getProjectId();
+  const currentTs = Math.floor(Date.now() / 1000);
+
+  // Record each pruned file to audit table and remove link
+  for (const file of nonExistentFiles) {
+    // Insert audit record
+    await trx('t_task_pruned_files').insert({
+      task_id: taskId,
+      file_path: file.path,
+      pruned_ts: currentTs,
+      project_id: projectId,
+    });
+
+    // Remove link
+    await trx('t_task_file_links')
+      .where({ task_id: taskId, file_id: file.file_id })
+      .delete();
+  }
 
   return {
     prunedCount: nonExistentFiles.length,

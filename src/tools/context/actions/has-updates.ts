@@ -53,25 +53,9 @@ export async function hasUpdates(
 
     const decisionsCount = (decisionCount1?.count || 0) + (decisionCount2?.count || 0);
 
-    // Get agent_id for the requesting agent
-    const agentResult = await knex('m_agents')
-      .where({ name: params.agent_name })
-      .first('id') as { id: number } | undefined;
-
-    // Count messages for the agent (received messages - to_agent_id matches OR broadcast messages)
-    let messagesCount = 0;
-    if (agentResult) {
-      const agentId = agentResult.id;
-      const messageResult = await knex('t_agent_messages')
-        .where('ts', '>', sinceTs)
-        .where((builder) => {
-          builder.where('to_agent_id', agentId)
-            .orWhereNull('to_agent_id');
-        })
-        .count('* as count')
-        .first() as { count: number };
-      messagesCount = messageResult?.count || 0;
-    }
+    // v3.6.5: t_agent_messages table removed - messaging system deprecated
+    // Messages count always 0
+    const messagesCount = 0;
 
     // Count file changes since timestamp (project-scoped)
     const fileResult = await knex('t_file_changes')
@@ -82,7 +66,7 @@ export async function hasUpdates(
     const filesCount = fileResult?.count || 0;
 
     // Determine if there are any updates
-    const hasUpdatesFlag = decisionsCount > 0 || messagesCount > 0 || filesCount > 0;
+    const hasUpdatesFlag = decisionsCount > 0 || filesCount > 0;
 
     return {
       has_updates: hasUpdatesFlag,
