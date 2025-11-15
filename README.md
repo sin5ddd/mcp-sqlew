@@ -84,6 +84,30 @@ The first time, sqlew install custom agents and initialize database. Custom agen
 
 It's Ready!
 
+## 🚀 Quick Start: Slash Commands (Recommended)
+
+**Slash commands are the easiest way to use sqlew!** Just type `/sqw-` in Claude Code to see available commands.
+
+### Most Common Commands
+
+```bash
+# Plan a new feature (architecture + tasks)
+/sqw-plan "Implement user authentication"
+
+# Record a decision (like meeting minutes)
+/sqw-secretary "Use PostgreSQL 15 for production database"
+
+# Implement a feature (creates tasks AND coordinates agents to build it!)
+/sqw-scrum implement JWT authentication
+
+# Search past decisions
+/sqw-research "Why did we choose Knex for migrations?"
+```
+
+**All 6 commands** are installed automatically on first run. See [Slash Commands](#slash-commands) section below for complete guide.
+
+---
+
 **⚠️Note**: Global install (`npm install -g`) is **not recommended** because sqlew requires an independent settings per project. Each project should maintain its own context database in `.sqlew/sqlew.db`.
 
 **Custom database path:** Add path as argument: `"args": ["sqlew", "/path/to/db.db"]`
@@ -239,37 +263,68 @@ Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
 
 ## Slash Commands
 
-Quick-access workflows that invoke specialized agents to use mcp-sqlew tools. Installed automatically to `.claude/commands/` on server startup.
+**🎯 Recommended for Human Users** - Slash commands provide guided workflows that are easier than raw MCP tool calls.
 
-| Command | Purpose | Agent(s) Used |
-|---------|---------|---------------|
-| `/sqw-plan` | Comprehensive planning (architecture + tasks) | architect + scrum-master |
-| `/sqw-documentor` | Document architectural decisions | architect |
-| `/sqw-scrum` | Task management + agent coordination | scrum-master + dynamic agents |
-| `/sqw-secretary` | Record decisions (meeting minutes) | architect |
-| `/sqw-research` | Query and analyze context | researcher |
-| `/sqw-review` | Code/design review workflow | researcher + architect |
+Installed automatically to `.claude/commands/` on server startup. Just type `/sqw-` in Claude Code to get started!
 
-**Usage Examples**:
+### Available Commands
+
+| Command | What It Does | Perfect For |
+|---------|--------------|-------------|
+| **`/sqw-plan`** | Complete feature planning (architecture + tasks) | Starting new features, planning sprints |
+| **`/sqw-secretary`** | Record decisions like meeting minutes | Documenting team decisions, capturing context |
+| **`/sqw-scrum`** | Create tasks AND coordinate agents to implement them | Actually building features end-to-end |
+| **`/sqw-documentor`** | Document architectural decisions with full context | Design reviews, architecture documentation |
+| **`/sqw-research`** | Search past decisions and analyze patterns | Onboarding, understanding past choices |
+| **`/sqw-review`** | Validate code/design against decisions & constraints | Code reviews, ensuring consistency |
+
+### Why Use Slash Commands?
+
+✅ **Guided workflows** - Commands prompt you through the process
+✅ **Agent coordination** - Automatically invokes the right agents
+✅ **Error handling** - Built-in validation and helpful error messages
+✅ **Mode detection** - `/sqw-scrum plan` manages tasks, `/sqw-scrum implement` builds code
+✅ **No MCP knowledge needed** - Just describe what you want in plain English
+
+### Quick Examples
+
 ```bash
-/sqw-plan "Implement user authentication"
-/sqw-secretary "Use PostgreSQL for production database"
-/sqw-scrum implement JWT authentication  # Plans AND executes!
-/sqw-research "Why did we choose Knex for migrations?"
+# Starting a new feature
+/sqw-plan "Add OAuth2 social login with Google and GitHub"
+# → Architect documents decisions, Scrum creates tasks
+
+# Recording a decision from today's meeting
+/sqw-secretary "Team decided to use PostgreSQL 15 for production"
+# → Saves with context, checks for duplicates
+
+# Actually implementing a feature (game changer!)
+/sqw-scrum implement JWT authentication
+# → Creates tasks, coordinates agents, writes code, runs tests
+
+# Finding out why something was done
+/sqw-research "Why did we choose Knex over Prisma?"
+# → Searches decisions, shows rationale and tradeoffs
 ```
 
-**Configuration**: Edit `.sqlew/config.toml` to customize which commands are installed:
+### Configuration
+
+All commands install by default. Customize in `.sqlew/config.toml`:
+
 ```toml
 [commands]
-plan = true        # Comprehensive planning workflow
-documentor = true  # Architectural documentation
-scrum = true       # Task management + execution
+plan = true        # Feature planning
 secretary = true   # Record decisions
-research = true    # Context queries
-review = true      # Code/design review
+scrum = true       # Task management + execution
+documentor = true  # Architecture docs
+research = true    # Search history
+review = true      # Code/design validation
 ```
 
-**See [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) for complete guide, usage patterns, and customization.**
+**📚 Complete Guide**: [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) - Usage patterns, customization, examples
+
+### Advanced: Direct MCP Tool Access
+
+Power users can still call MCP tools directly. See [Available Tools](#available-tools) section below.
 
 ### Available Tools
 
