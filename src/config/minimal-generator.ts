@@ -49,31 +49,31 @@ architect = true
 # Which slash commands to install on server startup
 # Set to false to skip commands you don't need
 
-# /sqlew-architect: Architectural documentation workflow
-architect = true
+# /sqw-documentor: Document architectural decisions with context
+documentor = true
 
-# /sqlew-decide: Decision-making workflow
-decide = true
+# /sqw-secretary: Record decisions (like meeting minutes)
+secretary = true
 
-# /sqlew-plan: Planning workflow (architect + scrum master)
+# /sqw-plan: Planning workflow (architecture + tasks)
 plan = true
 
-# /sqlew-research: Research workflow
+# /sqw-research: Search and analyze decision/task history
 research = true
 
-# /sqlew-review: Review workflow
+# /sqw-review: Validate architectural consistency
 review = true
 
-# /sqlew-scrum: Scrum/task management workflow
+# /sqw-scrum: Task management + agent coordination
 scrum = true
 
 # Example: Minimal installation (only core workflows)
 # [commands]
 # plan = true
-# decide = true
+# secretary = true
 # research = false
 # review = false
-# architect = false
+# documentor = false
 # scrum = false
 
 # ============================================================================

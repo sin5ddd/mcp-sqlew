@@ -21,12 +21,12 @@ interface CommandConfig {
 }
 
 const COMMANDS: CommandConfig[] = [
-  { filename: 'sqlew-architect.md', configKey: 'architect', displayName: 'Architect' },
-  { filename: 'sqlew-decide.md', configKey: 'decide', displayName: 'Decide' },
-  { filename: 'sqlew-plan.md', configKey: 'plan', displayName: 'Plan' },
-  { filename: 'sqlew-research.md', configKey: 'research', displayName: 'Research' },
-  { filename: 'sqlew-review.md', configKey: 'review', displayName: 'Review' },
-  { filename: 'sqlew-scrum.md', configKey: 'scrum', displayName: 'Scrum' },
+  { filename: 'sqw-documentor.md', configKey: 'documentor', displayName: 'Documentor' },
+  { filename: 'sqw-secretary.md', configKey: 'secretary', displayName: 'Secretary' },
+  { filename: 'sqw-plan.md', configKey: 'plan', displayName: 'Plan' },
+  { filename: 'sqw-research.md', configKey: 'research', displayName: 'Research' },
+  { filename: 'sqw-review.md', configKey: 'review', displayName: 'Review' },
+  { filename: 'sqw-scrum.md', configKey: 'scrum', displayName: 'Scrum' },
 ];
 
 /**
@@ -124,7 +124,7 @@ export function syncCommandsWithConfig(): void {
 
     // Show usage hint if any commands were copied
     if (copied.length > 0) {
-      console.log(`  Use commands with / prefix: /sqlew-plan, /sqlew-architect, /sqlew-scrum`);
+      console.log(`  Use commands with / prefix: /sqw-plan, /sqw-documentor, /sqw-scrum`);
     }
 
   } catch (error) {

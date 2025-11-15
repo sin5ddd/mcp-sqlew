@@ -63,12 +63,12 @@ EXAMPLES:
   npx mcp-sqlew init-commands --path /path/to/commands
 
 SLASH COMMANDS:
-  - /sqlew-architect    Architectural documentation workflow
-  - /sqlew-decide       Decision-making workflow
-  - /sqlew-plan         Planning workflow (architect + scrum)
-  - /sqlew-research     Research workflow
-  - /sqlew-review       Review workflow
-  - /sqlew-scrum        Scrum/task management workflow
+  - /sqw-documentor     Document architectural decisions
+  - /sqw-secretary      Record decisions (meeting minutes)
+  - /sqw-plan           Planning workflow (architecture + tasks)
+  - /sqw-research       Search decision/task history
+  - /sqw-review         Validate architectural consistency
+  - /sqw-scrum          Task management + agent coordination
 `);
 }
 
@@ -105,28 +105,28 @@ function getCommandsToInstall(): { files: string[]; summary: string } {
   const files: string[] = [];
   const installed: string[] = [];
 
-  if (commandConfig.architect !== false) {
-    files.push('sqlew-architect.md');
-    installed.push('Architect');
+  if (commandConfig.documentor !== false) {
+    files.push('sqw-documentor.md');
+    installed.push('Documentor');
   }
-  if (commandConfig.decide !== false) {
-    files.push('sqlew-decide.md');
-    installed.push('Decide');
+  if (commandConfig.secretary !== false) {
+    files.push('sqw-secretary.md');
+    installed.push('Secretary');
   }
   if (commandConfig.plan !== false) {
-    files.push('sqlew-plan.md');
+    files.push('sqw-plan.md');
     installed.push('Plan');
   }
   if (commandConfig.research !== false) {
-    files.push('sqlew-research.md');
+    files.push('sqw-research.md');
     installed.push('Research');
   }
   if (commandConfig.review !== false) {
-    files.push('sqlew-review.md');
+    files.push('sqw-review.md');
     installed.push('Review');
   }
   if (commandConfig.scrum !== false) {
-    files.push('sqlew-scrum.md');
+    files.push('sqw-scrum.md');
     installed.push('Scrum');
   }
 
@@ -179,7 +179,7 @@ function main(): void {
       console.log('To enable commands, edit .sqlew/config.toml:');
       console.log('[commands]');
       console.log('plan = true');
-      console.log('architect = true');
+      console.log('documentor = true');
       console.log('scrum = true\n');
       process.exit(1);
     }
@@ -205,14 +205,14 @@ function main(): void {
     console.log('NEXT STEPS:');
     console.log('  1. Use slash commands with / prefix:');
 
-    if (files.includes('sqlew-plan.md')) {
-      console.log('     /sqlew-plan "Implement feature X"');
+    if (files.includes('sqw-plan.md')) {
+      console.log('     /sqw-plan "Implement feature X"');
     }
-    if (files.includes('sqlew-architect.md')) {
-      console.log('     /sqlew-architect "Document API design"');
+    if (files.includes('sqw-documentor.md')) {
+      console.log('     /sqw-documentor "Document API design"');
     }
-    if (files.includes('sqlew-scrum.md')) {
-      console.log('     /sqlew-scrum "Review sprint tasks"');
+    if (files.includes('sqw-scrum.md')) {
+      console.log('     /sqw-scrum "Review sprint tasks"');
     }
 
     console.log('\n  2. Customize command selection:');

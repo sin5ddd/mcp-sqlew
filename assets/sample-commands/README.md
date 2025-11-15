@@ -10,12 +10,12 @@ This directory contains slash command templates for Claude Code integration with
 
 ## Command Files
 
-- `sqlew-architect.md` - Architectural documentation workflow
-- `sqlew-decide.md` - Decision-making workflow
-- `sqlew-plan.md` - Planning workflow (architect + scrum master)
-- `sqlew-research.md` - Research workflow
-- `sqlew-review.md` - Review workflow
-- `sqlew-scrum.md` - Scrum/task management workflow
+- `sqw-documentor.md` - Document architectural decisions
+- `sqw-secretary.md` - Record decisions (meeting minutes)
+- `sqw-plan.md` - Planning workflow (architecture + tasks)
+- `sqw-research.md` - Search decision/task history
+- `sqw-review.md` - Validate architectural consistency
+- `sqw-scrum.md` - Task management + agent coordination
 
 ## Quick Install
 
@@ -25,8 +25,8 @@ Commands are automatically installed when the MCP server starts. Configure in `.
 
 ```toml
 [commands]
-architect = true
-decide = true
+documentor = true
+secretary = true
 plan = true
 research = true
 review = true
@@ -45,7 +45,7 @@ npx mcp-sqlew init-commands --path /custom/path
 
 Commands are installed to `.claude/commands/` in your project directory.
 
-**Usage**: Invoke commands with the `/` prefix: `/sqlew-plan`, `/sqlew-architect`, `/sqlew-scrum`
+**Usage**: Invoke commands with the `/` prefix: `/sqw-plan`, `/sqw-documentor`, `/sqw-scrum`
 
 See [docs/SLASH_COMMANDS.md](../../docs/SLASH_COMMANDS.md) for detailed usage examples and customization options.
 
