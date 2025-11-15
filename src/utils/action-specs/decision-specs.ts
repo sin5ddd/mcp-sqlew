@@ -10,7 +10,7 @@ import { ActionSpec } from './types.js';
 export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
   set: {
     required: ['key', 'value'],
-    optional: ['agent', 'layer', 'tags', 'status', 'version', 'scopes'],
+    optional: ['agent', 'layer', 'tags', 'status', 'version', 'scopes', 'ignore_suggest', 'ignore_reason'],
     example: {
       action: 'set',
       key: 'database/postgresql-choice',

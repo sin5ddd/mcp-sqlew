@@ -123,7 +123,8 @@ export function buildTagIndexQuery(
  */
 export function buildContextQuery(
   knex: Knex,
-  tags?: string[]
+  tags?: string[],
+  excludeKey?: string
 ): Knex.QueryBuilder {
   const projectId = getProjectContext().getProjectId();
 
@@ -137,6 +138,11 @@ export function buildContextQuery(
         .whereRaw('ti.decision_id = d.key_id')
         .whereIn('ti.tag_name', tags);
     });
+  }
+
+  // Exclude specific key (v3.9.0: prevent suggesting decision to itself)
+  if (excludeKey) {
+    query = query.whereNot('ck.key', excludeKey);
   }
 
   return query;

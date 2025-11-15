@@ -39,8 +39,8 @@ export async function suggestByContext(params: ByContextParams): Promise<Suggest
   // Use provided knex (transaction context) or get adapter
   const knex = params.knex || getAdapter().getKnex();
 
-  // Build and execute context query
-  const candidates = await buildContextQuery(knex, params.tags) as DecisionCandidate[];
+  // Build and execute context query (exclude current key to prevent self-suggestion)
+  const candidates = await buildContextQuery(knex, params.tags, params.key) as DecisionCandidate[];
 
   // Parse tags from GROUP_CONCAT and add defaults for scorer
   const parsed = candidates.map((c: DecisionCandidate) => ({

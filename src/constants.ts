@@ -30,6 +30,29 @@ export const DEFAULT_DB_PATH = `${DEFAULT_DB_FOLDER}/${DEFAULT_DB_FILENAME}`;
 export const DB_BUSY_TIMEOUT = 5000;
 
 // ============================================================================
+// Suggestion & Duplicate Detection (v3.9.0)
+// ============================================================================
+
+/**
+ * Suggestion score thresholds for duplicate detection
+ * v3.9.0: Adjusted thresholds for better usability (35/60 instead of 50/85)
+ */
+export const SUGGEST_THRESHOLDS = {
+  GENTLE_NUDGE: 35,       // Warning threshold (non-blocking)
+  HARD_BLOCK: 60,         // Blocking threshold (throws error)
+  CHECK_DUPLICATE: 50,    // Used by suggest.check_duplicate action
+} as const;
+
+/**
+ * Suggestion limits for response optimization
+ */
+export const SUGGEST_LIMITS = {
+  MAX_SUGGESTIONS_NUDGE: 3,      // Max suggestions in gentle nudge warning
+  MAX_SUGGESTIONS_BLOCK: 1,      // Max suggestions in blocking error
+  VERSION_HISTORY_COUNT: 2,      // Recent versions to show in preview
+} as const;
+
+// ============================================================================
 // Enum String Mappings
 // ============================================================================
 

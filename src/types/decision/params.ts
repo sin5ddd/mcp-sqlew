@@ -17,6 +17,9 @@ export interface SetDecisionParams {
   alternatives?: any[];
   tradeoffs?: any;
   policy_name?: string;  // Explicit policy to validate against
+  // Duplicate detection bypass (v3.9.0)
+  ignore_suggest?: boolean;  // Skip similarity checks
+  ignore_reason?: string;    // Explanation for bypassing check
 }
 
 export interface QuickSetDecisionParams {

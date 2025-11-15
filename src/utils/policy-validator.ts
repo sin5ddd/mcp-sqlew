@@ -37,6 +37,7 @@ interface PolicyRow {
   quality_gates: string | null;     // JSON
   category: string | null;
   required_fields: string | null;   // JSON
+  suggest_similar: number;           // 0 or 1 (boolean in SQLite)
 }
 
 /**
@@ -78,7 +79,7 @@ export async function validateAgainstPolicies(
     // Use transaction context if provided to avoid connection pool exhaustion
     const policies = await (trx || knex)('t_decision_policies')
       .where('project_id', projectId)
-      .select('id', 'name', 'validation_rules', 'quality_gates', 'category', 'required_fields') as PolicyRow[];
+      .select('id', 'name', 'validation_rules', 'quality_gates', 'category', 'required_fields', 'suggest_similar') as PolicyRow[];
 
     if (policies.length === 0) {
       // No policies defined - pass validation by default
@@ -207,6 +208,32 @@ function findMatchingPolicy(policies: PolicyRow[], key: string, metadata: Record
     const deprecationPolicy = policies.find(p => p.name === 'deprecation');
     if (deprecationPolicy) return deprecationPolicy;
   }
+
+  // Strategy 3: Catch-all policy (validation_rules: null AND suggest_similar: 1)
+  // Policies with validation_rules explicitly set to null, suggest_similar=1, AND not in the predefined
+  // keyword-matching list match any decision. This enables similarity detection policies
+  // (like test policies) while preserving keyword matching for built-in policies.
+  // Requiring suggest_similar=1 prevents unintended catch-all matching.
+  const predefinedPolicyNames = [
+    'security_vulnerability',
+    'breaking_change',
+    'architecture_decision',
+    'performance_optimization',
+    'deprecation'
+  ];
+
+  const catchAllPolicy = policies.find(p => {
+    try {
+      return (
+        p.validation_rules === null &&
+        p.suggest_similar === 1 &&
+        !predefinedPolicyNames.includes(p.name)
+      );
+    } catch {
+      return false;
+    }
+  });
+  if (catchAllPolicy) return catchAllPolicy;
 
   // No match found
   return null;

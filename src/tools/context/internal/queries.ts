@@ -11,13 +11,333 @@ import {
   getOrCreateScope,
   getLayerId
 } from '../../../database.js';
-import { STRING_TO_STATUS, DEFAULT_VERSION, DEFAULT_STATUS } from '../../../constants.js';
+import { STRING_TO_STATUS, DEFAULT_VERSION, DEFAULT_STATUS, SUGGEST_THRESHOLDS, SUGGEST_LIMITS } from '../../../constants.js';
 import { logDecisionSet, logDecisionUpdate, recordDecisionHistory } from '../../../utils/activity-logging.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { incrementSemver, isValidSemver } from '../../../utils/semver.js';
 import { validateAgainstPolicies } from '../../../utils/policy-validator.js';
 import { handleSuggestAction } from '../../suggest/index.js';
 import type { SetDecisionParams, SetDecisionResponse } from '../types.js';
+
+// ============================================================================
+// Helper Functions for Hybrid Similarity Detection (v3.9.0)
+// ============================================================================
+
+/**
+ * Calculate confidence scores for duplicate detection
+ * @param suggestions - Similarity suggestions from suggest engine
+ * @returns Confidence scores (0-1 scale)
+ */
+function calculateConfidence(suggestions: any[]): { is_duplicate: number; should_update: number } {
+  if (suggestions.length === 0) {
+    return { is_duplicate: 0, should_update: 0 };
+  }
+
+  const maxScore = suggestions[0]?.score || 0;
+
+  return {
+    // Scale: 50 score = 0.50, 85 score = 0.85, cap at 0.95
+    is_duplicate: Math.min(maxScore / 100, 0.95),
+    // Higher confidence for action (+20 points bias)
+    should_update: Math.min((maxScore + 20) / 100, 0.95)
+  };
+}
+
+/**
+ * Format timestamp as human-readable relative time
+ * @param timestamp - Unix timestamp in seconds
+ * @returns Human-readable string (e.g., "2h ago", "3d ago")
+ */
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor(Date.now() / 1000) - timestamp;
+
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+/**
+ * Increment semantic version (patch level)
+ * @param version - Current version (e.g., "1.2.3")
+ * @returns Next patch version (e.g., "1.2.4")
+ */
+function incrementVersion(version: string): string {
+  const parts = version.split('.').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) {
+    return '1.0.1'; // Default if invalid
+  }
+  return `${parts[0]}.${parts[1]}.${parts[2] + 1}`;
+}
+
+/**
+ * Detect key pattern similarity
+ * @param key1 - First key
+ * @param key2 - Second key
+ * @returns Pattern description if similar, undefined otherwise
+ */
+function detectKeyPattern(key1: string, key2: string): string | undefined {
+  // CVE pattern: CVE-YYYY-NNNNN
+  const cvePattern = /^CVE-\d{4}-\d+$/;
+  if (cvePattern.test(key1) && cvePattern.test(key2)) {
+    return 'CVE-YYYY-NNNNN';
+  }
+
+  // Path pattern: api/v1/resource
+  const pathPattern = /^[a-z]+\/[^/]+\/[^/]+$/;
+  if (pathPattern.test(key1) && pathPattern.test(key2)) {
+    return 'path/based/structure';
+  }
+
+  // Versioned key: feature-v1, feature-v2
+  const versionPattern = /^(.+)-v\d+$/;
+  const match1 = key1.match(versionPattern);
+  const match2 = key2.match(versionPattern);
+  if (match1 && match2 && match1[1] === match2[1]) {
+    return 'versioned-key';
+  }
+
+  return undefined;
+}
+
+/**
+ * Build match details showing what's similar and different
+ * @param suggestion - Suggestion from suggest engine
+ * @param params - Decision parameters
+ * @param knex - Knex instance
+ * @returns Match details object
+ */
+async function buildMatchDetails(
+  suggestion: any,
+  params: SetDecisionParams,
+  knex: Knex
+): Promise<{
+  matches: { tags: string[]; layer?: string; key_pattern?: string };
+  differs?: { tags?: string };
+}> {
+  // Get existing decision's tags from suggestion object (already populated by suggest engine)
+  const existingTags = suggestion.tags || [];
+
+  const paramTags = params.tags ? (Array.isArray(params.tags) ? params.tags : parseStringArray(params.tags)) : [];
+
+  // Calculate overlaps and differences
+  const matchingTags = paramTags.filter((t: string) => existingTags.includes(t));
+  const differentTags = {
+    existing: existingTags.filter((t: string) => !paramTags.includes(t)),
+    proposed: paramTags.filter((t: string) => !existingTags.includes(t))
+  };
+
+  const result: any = {
+    matches: {
+      tags: matchingTags
+    }
+  };
+
+  // Add layer match if same
+  if (suggestion.layer && suggestion.layer === params.layer) {
+    result.matches.layer = params.layer;
+  }
+
+  // Add key pattern if detected
+  const pattern = detectKeyPattern(suggestion.key, params.key);
+  if (pattern) {
+    result.matches.key_pattern = pattern;
+  }
+
+  // Add differences if any exist
+  if (differentTags.existing.length > 0 || differentTags.proposed.length > 0) {
+    result.differs = {
+      tags: `[${differentTags.existing.join(', ')}] vs [${differentTags.proposed.join(', ')}]`
+    };
+  }
+
+  return result;
+}
+
+/**
+ * Get version history preview for a decision
+ * @param key - Decision key
+ * @param knex - Knex instance
+ * @param limit - Number of recent versions to fetch
+ * @returns Array of version strings with timestamps
+ */
+async function getVersionHistory(
+  key: string,
+  knex: Knex,
+  limit: number = SUGGEST_LIMITS.VERSION_HISTORY_COUNT
+): Promise<string[]> {
+  // Get key_id from key name
+  const keyRecord = await knex('m_context_keys')
+    .where({ key })
+    .select('id')
+    .first();
+
+  if (!keyRecord) {
+    return []; // No history if key doesn't exist
+  }
+
+  const history = await knex('t_decision_history')
+    .where({ key_id: keyRecord.id })
+    .orderBy('ts', 'desc')
+    .limit(limit)
+    .select('version', 'ts');
+
+  return history.map(h => {
+    const timeAgo = formatTimeAgo(h.ts);
+    return `${h.version} (${timeAgo})`;
+  });
+}
+
+/**
+ * Generate reasoning text for why a suggestion is relevant
+ * @param suggestion - Suggestion object
+ * @param matchDetails - Match details
+ * @param isTopMatch - Whether this is the best match
+ * @returns Reasoning string
+ */
+function generateReasoning(suggestion: any, matchDetails: any, isTopMatch: boolean): string {
+  const reasons: string[] = [];
+
+  if (matchDetails.matches.tags.length > 0) {
+    reasons.push(`${matchDetails.matches.tags.length} matching tags`);
+  }
+
+  if (matchDetails.matches.layer) {
+    reasons.push('same layer');
+  }
+
+  if (matchDetails.matches.key_pattern) {
+    reasons.push('similar key pattern');
+  }
+
+  if (isTopMatch && reasons.length > 0) {
+    return `Best match: ${reasons.join(', ')}`;
+  }
+
+  return reasons.join(', ') || 'Related decision';
+}
+
+/**
+ * Determine recommended action based on confidence scores
+ * @param confidence - Confidence scores
+ * @returns Recommended action
+ */
+function determineAction(confidence: { is_duplicate: number; should_update: number }): 'UPDATE_EXISTING' | 'REVIEW_MANUALLY' | 'CREATE_NEW' {
+  if (confidence.should_update >= 0.75) {
+    return 'UPDATE_EXISTING';
+  } else if (confidence.is_duplicate >= 0.60) {
+    return 'REVIEW_MANUALLY';
+  } else {
+    return 'CREATE_NEW';
+  }
+}
+
+/**
+ * Build complete duplicate risk warning structure
+ * @param suggestions - Suggestions from suggest engine
+ * @param params - Decision parameters
+ * @param knex - Knex instance
+ * @returns Duplicate risk warning object
+ */
+async function buildDuplicateRiskWarning(
+  suggestions: any[],
+  params: SetDecisionParams,
+  knex: Knex
+): Promise<any> {
+  const topSuggestion = suggestions[0];
+  const confidence = calculateConfidence(suggestions);
+
+  // Enrich top N suggestions
+  const enrichedSuggestions = await Promise.all(
+    suggestions.slice(0, SUGGEST_LIMITS.MAX_SUGGESTIONS_NUDGE).map(async (s, idx) => {
+      const matchDetails = await buildMatchDetails(s, params, knex);
+      const versionHistory = await getVersionHistory(s.key, knex);
+      const currentVersion = versionHistory[0]?.split(' ')[0] || '1.0.0';
+      const nextVersion = incrementVersion(currentVersion);
+
+      return {
+        key: s.key,
+        value: s.value,
+        score: s.score,
+        recommended: idx === 0, // First is best match
+        ...matchDetails,
+        last_updated: formatTimeAgo(s.ts || Math.floor(Date.now() / 1000)),
+        version_info: {
+          current: currentVersion,
+          next_suggested: nextVersion,
+          recent_changes: versionHistory
+        },
+        reasoning: generateReasoning(s, matchDetails, idx === 0),
+        update_command: {
+          key: s.key,
+          value: params.value,
+          version: nextVersion,
+          layer: params.layer,
+          tags: params.tags
+        }
+      };
+    })
+  );
+
+  return {
+    severity: 'MODERATE' as const,
+    max_score: topSuggestion.score,
+    recommended_action: determineAction(confidence),
+    confidence,
+    suggestions: enrichedSuggestions
+  };
+}
+
+/**
+ * Format blocking error message for high-similarity duplicates
+ * @param match - Top matching suggestion (enriched)
+ * @returns Formatted error message
+ */
+function formatBlockingError(match: any): string {
+  const similarityParts: string[] = [];
+
+  if (match.matches.tags.length > 0) {
+    similarityParts.push(`${match.matches.tags.length} matching tags`);
+  }
+  if (match.matches.layer) {
+    similarityParts.push(`same layer (${match.matches.layer})`);
+  }
+  if (match.matches.key_pattern) {
+    similarityParts.push(`similar key pattern (${match.matches.key_pattern})`);
+  }
+
+  return `
+HIGH-SIMILARITY DUPLICATE DETECTED (score: ${match.score})
+
+Extremely similar decision exists:
+  Key: "${match.key}"
+  Value: "${match.value}"
+  Score: ${match.score}
+  Similarity: ${similarityParts.join(' + ')}
+  Current Version: ${match.version_info.current}
+
+RECOMMENDED: Update existing decision
+  decision.set({
+    key: "${match.key}",
+    value: "YOUR_NEW_VALUE",
+    version: "${match.version_info.next_suggested}"
+  })
+
+ALTERNATIVE: Force creation if truly distinct
+  decision.set({
+    key: "YOUR_KEY",
+    value: "YOUR_VALUE",
+    ignore_suggest: true,
+    ignore_reason: "Explain why this is not a duplicate"
+  })
+
+This check prevents accidental duplicate decisions.
+`.trim();
+}
+
+// ============================================================================
+// Main Decision Operations
+// ============================================================================
 
 /**
  * Internal helper: Set decision without wrapping in transaction
@@ -294,61 +614,81 @@ export async function setDecisionInternal(
       };
     }
 
-    // Auto-trigger suggestions if policy has suggest_similar=1
-    // console.log('[DEBUG] Auto-trigger check:', {
-    //   matchedPolicy: validationResult.matchedPolicy?.name,
-    //   valid: validationResult.valid,
-    //   violations: validationResult.violations
-    // });
+    // v3.9.0: Two-tier duplicate detection (50-84 gentle nudge, 85+ hard block)
+    // Only applies to CREATE operations when policy has suggest_similar=1
+    const isCreate = !existingDecision;
+    const ignoreCheck = (params as any).ignore_suggest === true;
 
-    if (validationResult.matchedPolicy && validationResult.valid) {
+    if (validationResult.matchedPolicy && validationResult.valid && isCreate && !ignoreCheck) {
       // Query policy to check suggest_similar flag (use transaction context)
       const policy = await (trx || knex)('t_decision_policies')
         .where({ id: validationResult.matchedPolicy.id })
         .select('suggest_similar')
         .first();
 
-      // console.log('[DEBUG] Policy suggest_similar:', policy?.suggest_similar);
-
       if (policy && policy.suggest_similar === 1) {
         try {
-          // Auto-trigger suggestions with higher threshold (pass transaction context)
+          // Run suggestions with min_score=50 to catch both tiers
           const tags = params.tags ? parseStringArray(params.tags) : [];
           const suggestions = await handleSuggestAction({
             action: 'by_context',
             key: params.key,
             tags,
             layer: params.layer,
-            limit: 3,
-            min_score: 50,
-            knex: trx || knex  // Pass transaction context to avoid connection pool exhaustion
+            limit: 5, // Get more results for filtering
+            min_score: SUGGEST_THRESHOLDS.GENTLE_NUDGE,
+            knex: trx || knex
           });
 
-          // console.log('[DEBUG] Suggestions returned:', { count: suggestions.count, suggestions: suggestions.suggestions });
-
-          // Add suggestions to response if any found
           if (suggestions.count > 0) {
-            response.suggestions = {
-              triggered_by: validationResult.matchedPolicy.name,
-              reason: 'Policy has suggest_similar enabled',
-              suggestions: suggestions.suggestions
-            };
-          } else {
-            // console.log('[DEBUG] No suggestions found (count = 0)');
+            const topScore = suggestions.suggestions[0].score;
+
+            // Tier 2: Hard block (score >= 85)
+            if (topScore >= SUGGEST_THRESHOLDS.HARD_BLOCK) {
+              // Enrich top suggestion with full context
+              const topSuggestion = suggestions.suggestions[0];
+              const enriched = await buildDuplicateRiskWarning(
+                [topSuggestion],
+                params,
+                trx || knex
+              );
+
+              // Throw blocking error with actionable resolution
+              const errorMessage = formatBlockingError(enriched.suggestions[0]);
+              throw new Error(errorMessage);
+            }
+
+            // Tier 1: Gentle nudge (50 <= score < 85)
+            if (topScore >= SUGGEST_THRESHOLDS.GENTLE_NUDGE) {
+              // Enrich top N suggestions (max 3 for token efficiency)
+              const topSuggestions = suggestions.suggestions.slice(0, SUGGEST_LIMITS.MAX_SUGGESTIONS_NUDGE);
+              const duplicateRisk = await buildDuplicateRiskWarning(
+                topSuggestions,
+                params,
+                trx || knex
+              );
+
+              // Add duplicate_risk to response (non-blocking)
+              (response as any).duplicate_risk = duplicateRisk;
+            }
           }
         } catch (suggestError) {
-          // Non-critical - log but don't fail the decision.set operation
-          console.warn('[Auto-trigger] Suggestion failed:', suggestError);
+          // Hard block errors should propagate
+          if (suggestError instanceof Error && suggestError.message.includes('DUPLICATE DETECTED')) {
+            throw suggestError;
+          }
+          // Other errors are non-critical - log but don't fail operation
+          console.warn('[Auto-trigger] Non-blocking suggestion error (ignored):', suggestError);
         }
-      } else {
-        // console.log('[DEBUG] Policy not found or suggest_similar != 1');
       }
-    } else {
-      // console.log('[DEBUG] No matched policy or validation failed');
     }
   } catch (validationError) {
-    // Non-critical - log but don't fail the decision.set operation
-    console.warn('[Policy Validation] Validation failed:', validationError);
+    // Hard block errors must propagate (v3.9.0)
+    if (validationError instanceof Error && validationError.message.includes('DUPLICATE DETECTED')) {
+      throw validationError;
+    }
+    // Other validation errors are non-critical - log but don't fail the decision.set operation
+    console.warn('[Policy Validation] Non-blocking validation error (ignored):', validationError);
   }
 
   return response;
