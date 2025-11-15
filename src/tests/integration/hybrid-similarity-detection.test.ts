@@ -1,6 +1,7 @@
 /**
  * Integration tests for v3.9.0 Hybrid Similarity Detection
- * Tests two-tier duplicate detection (50-84 gentle nudge, 85+ hard block)
+ * Tests three-tier duplicate detection (35-44 gentle nudge, 45-59 hard block, 60+ auto-update)
+ * v3.9.1: Three-tier system with AI-friendly auto-update (Option B thresholds)
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -34,14 +35,17 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
 
     projectId = projectContext.getProjectId();
 
-    // Clean up any existing test data from previous runs
+    // Clean up any existing test data from previous runs (including old key patterns)
     const testKeyIds = await knex('m_context_keys')
       .select('id')
       .where(function(this: any) {
         this.where('key', 'like', 'test-%')
-          .orWhere('key', 'like', 'test-db-%')
-          .orWhere('key', 'like', 'test-block-%')
-          .orWhere('key', 'like', 'test-resolution-%');
+          .orWhere('key', 'like', 'infra-%')
+          .orWhere('key', 'like', 'pattern-%')
+          .orWhere('key', 'like', 'tier2-%')
+          .orWhere('key', 'like', 'v390-%')  // Covers v390-tier2 and v390-tier3
+          .orWhere('key', 'like', 'config-%')
+          .orWhere('key', 'like', 'DB-%');
       });
 
     const keyIds = testKeyIds.map((row: any) => row.id);
@@ -117,7 +121,7 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
     await closeDatabase();
   });
 
-  describe('Tier 1: Gentle Nudge (35-59)', () => {
+  describe('Tier 1: Gentle Nudge (35-44)', () => {
     it('should return duplicate_risk warning for similar decisions (non-blocking)', async () => {
       // Create baseline decision
       await createDecision({
@@ -129,12 +133,12 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       });
 
       // Create similar decision (should trigger gentle nudge)
-      // Different layer and partial tag overlap to score in 35-59 range
+      // Different layer and minimal tag overlap to score in 35-44 range
       const result = await createDecision({
         key: 'test-2024-0002',
-        value: 'Fixed authentication bypass in API module',
-        tags: ['security', 'vulnerability', 'api'],  // 2/3 tag match
-        layer: 'business',  // Different layer (no layer match bonus)
+        value: 'Implemented input validation for user registration form',
+        tags: ['security', 'validation', 'frontend'],  // Only 1/3 tag match (security)
+        layer: 'presentation',  // Different layer (no layer match bonus)
         version: '1.0.0'
       });
 
@@ -148,7 +152,7 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
 
       assert.strictEqual(risk.severity, 'MODERATE');
       assert.ok(risk.max_score >= SUGGEST_THRESHOLDS.GENTLE_NUDGE, 'Score should be >= 35');
-      assert.ok(risk.max_score < SUGGEST_THRESHOLDS.HARD_BLOCK, 'Score should be < 60');
+      assert.ok(risk.max_score < SUGGEST_THRESHOLDS.HARD_BLOCK, 'Score should be < 45');
 
       // Assert confidence scores
       assert.ok(risk.confidence.is_duplicate >= 0 && risk.confidence.is_duplicate <= 1);
@@ -177,11 +181,11 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
         version: '1.0.0'
       });
 
-      // Create similar decision - partial tag overlap, different layer, similar value
+      // Create similar decision - minimal tag overlap, different layer, different value
       const result = await createDecision({
         key: 'test-db-002',
-        value: 'Improved database query caching',  // More similar value
-        tags: ['database', 'performance', 'caching'],  // 2/3 tag match
+        value: 'Added connection pooling to Redis cache layer',  // Different value
+        tags: ['database', 'redis', 'caching'],  // Only 1/3 tag match (database)
         layer: 'infrastructure',  // Different layer to reduce score
         version: '1.0.0'
       });
@@ -208,31 +212,32 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
     });
   });
 
-  describe('Tier 2: Hard Block (60+)', () => {
-    it('should throw error for very similar decisions (blocking)', async () => {
-      // Create baseline decision with completely distinct content
+  describe('Tier 2: Hard Block (45-59)', () => {
+    it('should throw error for similar decisions (blocking)', async () => {
+      // Create baseline decision
       await createDecision({
-        key: 'test-block-001',
-        value: 'Configured load balancer for production',
-        tags: ['infrastructure', 'deployment', 'loadbalancer'],
+        key: 'v390-tier2-baseline-001',
+        value: 'Configured HAProxy load balancer with health monitoring',
+        tags: ['v390-tier2', 'loadbalancer', 'monitoring'],
         layer: 'infrastructure',
         version: '1.0.0'
       });
 
-      // Try to create near-identical decision (should throw)
-      // Use identical value and tags to ensure score >= 60
+      // Try to create similar decision
+      // 2/3 tags (+20) + same layer (+25) + key similarity (+12) + recency (+10) = ~67 points
+      // Wait - still Tier 3. Need to use DIFFERENT keys to reduce key similarity
       try {
         await createDecision({
-          key: 'test-block-002',
-          value: 'Configured load balancer for production',  // Identical value
-          tags: ['infrastructure', 'deployment', 'loadbalancer'],  // Identical tags
-          layer: 'infrastructure',  // Same layer
+          key: 'nginx-proxy-ssl-001',  // Completely different key pattern (-10 key pts)
+          value: 'Configured nginx reverse proxy with SSL configuration',  // Different value
+          tags: ['loadbalancer', 'monitoring', 'nginx'],  // 2/3 tag match (+20 pts)
+          layer: 'infrastructure',  // Same layer (+25 pts)
           version: '1.0.0'
         });
         assert.fail('Should have thrown HARD BLOCK error');
       } catch (error: any) {
         assert.ok(error.message.includes('DUPLICATE DETECTED'), 'Should contain DUPLICATE DETECTED');
-        assert.ok(error.message.includes('test-block-001'), 'Should mention existing decision');
+        assert.ok(error.message.includes('v390-tier2-baseline-001'), 'Should mention existing decision');
         assert.ok(error.message.includes('Update existing decision'), 'Should suggest update action');
       }
 
@@ -240,39 +245,159 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       const adapter = getAdapter();
       const check = await adapter.getKnex()('t_decisions')
         .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
-        .where('m_context_keys.key', 'test-block-002')
+        .where('m_context_keys.key', 'v390-tier2-duplicate-001')
         .first();
 
       assert.strictEqual(check, undefined, 'Decision should not have been created');
     });
 
     it('should include actionable resolution in error message', async () => {
-      // Create baseline with distinct key
+      // Create baseline
       await createDecision({
-        key: 'test-resolution-001',
-        value: 'Added caching layer for user profiles',
-        tags: ['caching', 'performance', 'users'],
-        layer: 'data',
+        key: 'v390-tier2-resolution-002',
+        value: 'Implemented circuit breaker pattern for external API calls',
+        tags: ['v390-tier2', 'circuit-breaker', 'resilience'],
+        layer: 'cross-cutting',
         version: '1.0.0'
       });
 
-      // Try to create duplicate with identical value and tags
+      // Try to create similar decision
+      // 2/3 tags (+20) + same layer (+25) + different key (+3) + recency (+10) = ~58 points
       try {
         await createDecision({
-          key: 'test-resolution-002',
-          value: 'Added caching layer for user profiles',  // Identical value
-          tags: ['caching', 'performance', 'users'],  // Identical tags
-          layer: 'data',  // Same layer
+          key: 'retry-db-pattern-001',  // Completely different key pattern
+          value: 'Implemented retry pattern for database connections',  // Different enough
+          tags: ['circuit-breaker', 'resilience', 'database'],  // 2/3 tag match (+20 pts)
+          layer: 'cross-cutting',  // Same layer (+25 pts)
           version: '1.0.0'
         });
         assert.fail('Should have thrown error');
       } catch (error: any) {
         // Check error structure - verify key fields are present
         assert.ok(error.message.includes('DUPLICATE DETECTED'), 'Should indicate duplicate');
-        assert.ok(error.message.includes('test-resolution-001'), 'Should mention existing decision');
+        assert.ok(error.message.includes('v390-tier2-resolution-002'), 'Should mention existing decision');
         assert.ok(error.message.includes('Update existing decision'), 'Should suggest update');
         assert.ok(error.message.includes('ignore_suggest'), 'Should mention bypass option');
       }
+    });
+  });
+
+  describe('Tier 3: Auto-Update (60+)', () => {
+    it('should auto-update existing decision for very high similarity', async () => {
+      // Create baseline decision
+      await createDecision({
+        key: 'v390-tier3-baseline-001',
+        value: 'Implemented rate limiting for public API endpoints',
+        tags: ['tier3-test1', 'rate-limiting', 'api-security'],  // Unique tag prefix
+        layer: 'infrastructure',
+        version: '1.0.0'
+      });
+
+      // Try to create near-identical decision (should auto-update)
+      // 3/3 tags (+30) + same layer (+25) + key similarity (~12) + identical value (+15) + recency (+10) = ~92 points
+      const result = await createDecision({
+        key: 'v390-tier3-duplicate-001',
+        value: 'Implemented rate limiting for public API endpoints',  // Identical value
+        tags: ['tier3-test1', 'rate-limiting', 'api-security'],  // 3/3 tag match (+30)
+        layer: 'infrastructure',  // Same layer (+25)
+        version: '1.0.0'
+      });
+
+      // Assert auto-update occurred
+      assert.strictEqual(result.success, true, 'Should succeed');
+      assert.strictEqual(result.auto_updated, true, 'Should have auto_updated flag');
+      assert.strictEqual(result.requested_key, 'v390-tier3-duplicate-001', 'Should track requested key');
+      assert.strictEqual(result.actual_key, 'v390-tier3-baseline-001', 'Should track actual key');
+      assert.ok(result.similarity_score! >= SUGGEST_THRESHOLDS.AUTO_UPDATE, 'Score should be >= 60');
+
+      // Assert duplicate_reason metadata
+      assert.ok(result.duplicate_reason, 'Should have duplicate_reason');
+      assert.ok(result.duplicate_reason.similarity, 'Should have similarity explanation');
+      assert.ok(Array.isArray(result.duplicate_reason.matched_tags), 'Should have matched tags');
+      assert.strictEqual(result.duplicate_reason.layer, 'infrastructure', 'Should track layer match');
+
+      // Verify decision 'v390-tier3-duplicate-001' was NOT created (updated existing instead)
+      const adapter = getAdapter();
+      const check = await adapter.getKnex()('t_decisions')
+        .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
+        .where('m_context_keys.key', 'v390-tier3-duplicate-001')
+        .first();
+
+      assert.strictEqual(check, undefined, 'New decision should not have been created');
+
+      // Verify 'v390-tier3-baseline-001' was updated to version 1.0.1
+      const updated = await adapter.getKnex()('t_decisions')
+        .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
+        .where('m_context_keys.key', 'v390-tier3-baseline-001')
+        .select('t_decisions.version')
+        .first();
+
+      assert.ok(updated, 'Original decision should still exist');
+      assert.ok(updated.version > '1.0.0', 'Version should have been incremented');
+    });
+
+    it('should include transparent metadata in response', async () => {
+      // Create baseline
+      await createDecision({
+        key: 'v390-tier3-transparent-002',
+        value: 'Configured Redis cluster for distributed session storage',
+        tags: ['tier3-test2-unique', 'tier3-redis', 'tier3-sessions'],  // All unique tags
+        layer: 'infrastructure',
+        version: '1.0.0'
+      });
+
+      // Auto-update with identical content
+      // 3/3 tags (+30) + same layer (+25) + key similarity (~12) + identical value (+15) + recency (+10) = ~92 points
+      const result = await createDecision({
+        key: 'v390-tier3-transparent-003',
+        value: 'Configured Redis cluster for distributed session storage',  // Identical value
+        tags: ['tier3-test2-unique', 'tier3-redis', 'tier3-sessions'],  // 3/3 tag match (+30)
+        layer: 'infrastructure',  // Same layer (+25)
+        version: '1.0.0'
+      });
+
+      // Check response structure
+      assert.strictEqual(result.auto_updated, true);
+      assert.strictEqual(result.key, 'v390-tier3-transparent-002', 'Should return actual key');
+      assert.ok(result.message, 'Should have message');
+      assert.ok(result.message!.includes('Auto-updated'), 'Message should mention auto-update');
+      assert.ok(result.message!.includes('similarity'), 'Message should mention similarity');
+    });
+
+    it('should preserve value from new decision when auto-updating', async () => {
+      // Create baseline
+      await createDecision({
+        key: 'v390-tier3-preserve-004',
+        value: 'Use PostgreSQL 14 for primary database',
+        tags: ['tier3-test3-unique', 'tier3-postgres', 'tier3-db'],  // All unique tags
+        layer: 'infrastructure',
+        version: '1.0.0'
+      });
+
+      // Auto-update with different value (upgrade decision)
+      // 3/3 tags (+30) + same layer (+25) + key similarity (~12) + similar value (~12) + recency (+10) = ~89 points
+      const newValue = 'Use PostgreSQL 15 for primary database';
+      const result = await createDecision({
+        key: 'v390-tier3-preserve-005',
+        value: newValue,  // Different value (upgrade version)
+        tags: ['tier3-test3-unique', 'tier3-postgres', 'tier3-db'],  // 3/3 tag match (+30)
+        layer: 'infrastructure',  // Same layer (+25)
+        version: '1.0.0'
+      });
+
+      // Assert auto-update preserved new value
+      assert.strictEqual(result.auto_updated, true);
+      assert.strictEqual(result.value, newValue, 'Should preserve new value from request');
+
+      // Verify database was updated with new value
+      const adapter = getAdapter();
+      const updated = await adapter.getKnex()('t_decisions')
+        .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
+        .where('m_context_keys.key', 'v390-tier3-preserve-004')
+        .select('t_decisions.value')
+        .first();
+
+      assert.strictEqual(updated.value, newValue, 'Database should have new value');
     });
   });
 
@@ -335,8 +460,8 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       // Create baseline
       const created = await createDecision({
         key: 'test-update-scope',
-        value: 'Initial value',
-        tags: ['test'],
+        value: 'Initial value for scope testing',
+        tags: ['scope-test', 'update-test'],
         layer: 'business',
         version: '1.0.0'
       });
@@ -344,8 +469,8 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       // Update the decision (should not trigger detection)
       const updated = await createDecision({
         key: 'test-update-scope',
-        value: 'Updated value',
-        tags: ['test'],
+        value: 'Updated value for scope testing',
+        tags: ['scope-test', 'update-test'],
         layer: 'business',
         version: '1.1.0'
       });
@@ -425,17 +550,17 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
     it('should handle decisions without tags', async () => {
       // Create baseline without tags
       await createDecision({
-        key: 'test-no-tags-baseline',
-        value: 'Decision without tags',
+        key: 'config-auth-jwt-001',
+        value: 'Enable JWT token authentication mechanism for REST API endpoints',
         layer: 'business',
         version: '1.0.0'
       });
 
-      // Create similar decision without tags
+      // Create very dissimilar decision without tags (different key pattern, layer, and completely different value)
       const result = await createDecision({
-        key: 'test-no-tags-similar',
-        value: 'Another decision without tags',
-        layer: 'business',
+        key: 'infra-redis-cluster-xyz',
+        value: 'Configure Redis cache cluster with master-slave replication for production environment',
+        layer: 'infrastructure',  // Different layer to reduce score
         version: '1.0.0'
       });
 
@@ -444,11 +569,12 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
     });
 
     it('should handle empty suggestion list gracefully', async () => {
-      // Create decision in a new layer with no existing decisions
+      // Create decision with very unique tags and value that won't match anything
       const result = await createDecision({
-        key: 'test-isolated-layer',
-        value: 'First decision in presentation layer',
-        layer: 'presentation',
+        key: 'test-isolated-xyz123',
+        value: 'Initialize blockchain consensus mechanism for distributed ledger',
+        tags: ['blockchain', 'consensus', 'experimental'],
+        layer: 'documentation',
         version: '1.0.0'
       });
 

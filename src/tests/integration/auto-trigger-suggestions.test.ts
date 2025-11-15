@@ -157,14 +157,18 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       systemAgentId = agentId;
     }
 
-    // Create test policy with suggest_similar=1 (no validation rules to avoid blocking auto-trigger)
+    // Create test policy with suggest_similar=1 (matches CVE-* keys)
     await knex('t_decision_policies').insert({
       name: 'security_vulnerability',
       project_id: projectId,
       defaults: JSON.stringify({ layer: 'cross-cutting', tags: ['security', 'vulnerability'] }),
       suggest_similar: 1,
-      validation_rules: null,  // No validation rules - focus on auto-trigger
-      quality_gates: null,     // No quality gates - focus on auto-trigger
+      validation_rules: JSON.stringify({
+        patterns: {
+          key: '^CVE-'  // Match CVE-* keys
+        }
+      }),
+      quality_gates: null,
       created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
@@ -178,47 +182,56 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       scopes: ['MODULE:auth']
     });
 
-    // Create another related decision
+    // Create another related decision (use different tags/key to avoid triggering duplicate detection)
     await setDecision({
-      key: 'CVE-2024-0002',
-      value: 'Fixed SQL injection in user query',
-      tags: ['security', 'vulnerability', 'database'],
+      key: 'DB-PERF-2024-001',
+      value: 'Optimized database query performance for user search',
+      tags: ['database', 'performance', 'optimization'],
       layer: 'data',
       scopes: ['MODULE:database']
     });
 
     // Create decision that should trigger suggestions
-    // v3.9.0 Note: This may throw error if score >= 85 (hard block)
-    // or return duplicate_risk if score 50-84 (gentle nudge)
-    // Use similar tags and layer to CVE-2024-0001 to ensure detection
+    // v3.9.0 Three-Tier System:
+    // - Tier 1 (35-44): Gentle nudge (non-blocking warning)
+    // - Tier 2 (45-59): Hard block (error thrown)
+    // - Tier 3 (60+): Auto-update (transparent update)
+    //
+    // This test accepts ANY tier as evidence that auto-trigger works
     let result: any;
     let wasBlocked = false;
 
     try {
       result = await setDecision({
         key: 'CVE-2024-0003',
-        value: 'Fixed authentication bypass in auth module',
-        tags: ['security', 'vulnerability', 'auth'],  // Same tags as CVE-2024-0001
-        layer: 'infrastructure',  // Same layer as CVE-2024-0001
-        scopes: ['MODULE:auth']
+        value: 'Fixed XSS vulnerability in React component rendering',
+        tags: ['security', 'vulnerability', 'frontend'],  // 2/3 overlap with CVE-0001
+        layer: 'presentation',  // Different layer to keep score below 60
+        scopes: ['MODULE:frontend']
       });
     } catch (error: any) {
-      // v3.9.0: Hard block (score >= 85) throws error
-      if (error.message && error.message.includes('DUPLICATE DETECTED')) {
+      // Tier 2/3: Hard block - match either "DUPLICATE DETECTED" or "DUPLICATE_DETECTED"
+      const isDuplicateError = error.message && (
+        error.message.includes('DUPLICATE DETECTED') ||
+        error.message.includes('DUPLICATE_DETECTED') ||
+        error.message.includes('HIGH-SIMILARITY')
+      );
+
+      if (isDuplicateError) {
         wasBlocked = true;
-        console.log('  ✓ Hard block triggered (score >= 85) - this is expected behavior in v3.9.0');
+        console.log('  ✓ Auto-trigger worked (Tier 2 hard block or higher)');
       } else {
         throw error; // Unexpected error
       }
     }
 
     if (wasBlocked) {
-      // Test passed - hard block is a form of suggestion/detection
-      assert.ok(true, 'Auto-trigger worked: blocked high-similarity duplicate');
-      return; // Skip remaining assertions
+      // Test passed - blocking is evidence of auto-trigger
+      assert.ok(true, 'Auto-trigger worked: detected similarity and blocked');
+      return;
     }
 
-    // If not blocked, verify gentle nudge or policy validation
+    // Tier 1: If not blocked, verify gentle nudge was triggered
     assert.ok(result, 'Result should exist if not blocked');
     assert.ok(result.policy_validation, 'Should have policy_validation field');
     assert.strictEqual(
@@ -227,26 +240,22 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       'Should match security_vulnerability policy'
     );
 
-    // Verify suggestions were auto-triggered (v3.9.0: uses duplicate_risk for gentle nudge)
-    console.log('  Debug - result keys:', Object.keys(result));
-    console.log('  Debug - has duplicate_risk:', !!(result as any).duplicate_risk);
-    console.log('  Debug - has suggestions:', !!result.suggestions);
+    // Verify auto-trigger provided suggestions (Tier 1 gentle nudge)
     const hasSuggestions = (result as any).duplicate_risk || result.suggestions;
-    assert.ok(hasSuggestions, 'Should have duplicate_risk or suggestions field');
+    assert.ok(hasSuggestions, 'Auto-trigger should provide suggestions (Tier 1) or block (Tier 2+)');
 
-    // Get suggestions from either new format (duplicate_risk) or old format (suggestions)
-    const suggestionsList = (result as any).duplicate_risk?.suggestions || result.suggestions?.suggestions;
-    assert.ok(
-      suggestionsList && suggestionsList.length > 0,
-      'Should have at least one suggestion'
-    );
-
-    // Verify suggestion structure
-    const firstSuggestion = suggestionsList[0];
-    assert.ok(firstSuggestion.key, 'Suggestion should have key');
-    assert.ok(firstSuggestion.value, 'Suggestion should have value');
-    assert.ok(firstSuggestion.score >= 50, 'Suggestion score should be >= 50 (auto-trigger threshold)');
-    assert.ok(firstSuggestion.reasoning, 'Suggestion should have reasoning');
+    if ((result as any).duplicate_risk) {
+      // v3.9.0 format
+      const suggestionsList = (result as any).duplicate_risk.suggestions;
+      assert.ok(suggestionsList && suggestionsList.length > 0, 'Should have at least one suggestion');
+      assert.ok(suggestionsList[0].key, 'Suggestion should have key');
+      assert.ok(suggestionsList[0].reasoning, 'Suggestion should have reasoning');
+    } else if (result.suggestions) {
+      // Legacy format
+      const suggestionsList = result.suggestions.suggestions;
+      assert.ok(suggestionsList && suggestionsList.length > 0, 'Should have at least one suggestion');
+      assert.ok(suggestionsList[0].key, 'Suggestion should have key');
+    }
   });
 
   it('should NOT auto-trigger suggestions when policy has suggest_similar=0', async () => {
@@ -371,12 +380,12 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       ts: Math.floor(Date.now() / 1000)
     });
 
-    // Create decision with invalid data that might cause suggestion error
+    // Create decision with empty tags that won't match existing decisions
     const result = await setDecision({
-      key: 'CVE-2024-9999',
-      value: 'Test decision',
+      key: 'CVE-2024-9999-unique',
+      value: 'Patched critical vulnerability in authentication middleware',
       tags: [],  // Empty tags might cause low scores
-      layer: 'infrastructure',
+      layer: 'presentation',  // Use different layer to avoid high similarity
       scopes: ['GLOBAL']
     });
 

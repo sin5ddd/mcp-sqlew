@@ -33,6 +33,9 @@ export interface ScoredSuggestion {
     priority: number;
   };
   reason: string;
+  tags: string[];  // For match detail analysis
+  layer?: string;  // For match detail analysis
+  updated_ts: number;  // For version info
 }
 
 /**
@@ -192,6 +195,9 @@ export function scoreAndRankSuggestions(
         priority,
       },
       reason: reasons.length > 0 ? reasons.join(', ') : 'low similarity',
+      tags: candidate.tags,
+      layer: candidate.layer,
+      updated_ts: candidate.updated_ts,
     };
   });
 

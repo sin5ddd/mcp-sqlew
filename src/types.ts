@@ -527,6 +527,7 @@ export interface SetDecisionResponse {
   version: string;
   version_action?: 'initial' | 'explicit' | 'auto_increment_major' | 'auto_increment_minor' | 'auto_increment_patch';
   message?: string;
+  value?: string | number; // Added for auto-update responses
   policy_validation?: {
     matched_policy?: string;
     violations?: string[];
@@ -540,6 +541,17 @@ export interface SetDecisionResponse {
       score: number;
       reason: string;
     }>;
+  };
+  // Auto-update metadata (v3.9.1 Tier 3)
+  auto_updated?: boolean;
+  requested_key?: string;
+  actual_key?: string;
+  similarity_score?: number;
+  duplicate_reason?: {
+    similarity: string;
+    matched_tags: string[];
+    layer?: string;
+    key_pattern?: string;
   };
 }
 

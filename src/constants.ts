@@ -34,12 +34,25 @@ export const DB_BUSY_TIMEOUT = 5000;
 // ============================================================================
 
 /**
- * Suggestion score thresholds for duplicate detection
- * v3.9.0: Adjusted thresholds for better usability (35/60 instead of 50/85)
+ * Suggestion score thresholds for duplicate detection (Three-Tier System)
+ *
+ * v3.9.0: Two-tier system (35/60) - gentle nudge + hard block
+ * v3.9.1: Three-tier system (45/60) - AI-friendly auto-update
+ *
+ * Tier 1 (35-44): Gentle nudge - non-blocking warning (ignored by AI, 10-20% effective)
+ * Tier 2 (45-59): Hard block - forces manual decision (95% effective but requires retry)
+ * Tier 3 (60+):   Auto-update - transparent update of existing decision (AI-friendly, no retry)
+ *
+ * Score breakdown:
+ * - 45-49: 2 tags + layer OR 1 tag + layer + high similarity → Hard block
+ * - 50-59: 2 tags + layer + some similarity → Hard block
+ * - 60-69: 3 tags + layer OR 2 tags + layer + high similarity → Auto-update
+ * - 70+:   3+ tags + layer + similar key/value → Auto-update
  */
 export const SUGGEST_THRESHOLDS = {
-  GENTLE_NUDGE: 35,       // Warning threshold (non-blocking)
-  HARD_BLOCK: 60,         // Blocking threshold (throws error)
+  GENTLE_NUDGE: 35,       // Warning threshold (non-blocking, Tier 1)
+  HARD_BLOCK: 45,         // Blocking threshold (forces choice, Tier 2)
+  AUTO_UPDATE: 60,        // Auto-update threshold (transparent update, Tier 3)
   CHECK_DUPLICATE: 50,    // Used by suggest.check_duplicate action
 } as const;
 

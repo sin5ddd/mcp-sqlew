@@ -218,6 +218,37 @@ function generateReasoning(suggestion: any, matchDetails: any, isTopMatch: boole
 }
 
 /**
+ * Build token-efficient similarity breakdown (keyword format for AI consumers)
+ * @param matchDetails - Match details object
+ * @returns Compact similarity breakdown string (e.g., "3_tags+layer:business+key:api/*")
+ */
+function buildSimilarityBreakdown(matchDetails: any): string {
+  const parts: string[] = [];
+
+  // Tags (count + keyword)
+  if (matchDetails.matches.tags && matchDetails.matches.tags.length > 0) {
+    parts.push(`${matchDetails.matches.tags.length}_tags`);
+  }
+
+  // Layer (keyword + value)
+  if (matchDetails.matches.layer) {
+    parts.push(`layer:${matchDetails.matches.layer}`);
+  }
+
+  // Key pattern (keyword + pattern)
+  if (matchDetails.matches.key_pattern) {
+    parts.push(`key:${matchDetails.matches.key_pattern}`);
+  }
+
+  // Value similarity indicator (if no other matches but score is high)
+  if (parts.length === 0) {
+    parts.push('value_similar');
+  }
+
+  return parts.join('+');
+}
+
+/**
  * Determine recommended action based on confidence scores
  * @param confidence - Confidence scores
  * @returns Recommended action
@@ -261,6 +292,7 @@ async function buildDuplicateRiskWarning(
         score: s.score,
         recommended: idx === 0, // First is best match
         ...matchDetails,
+        similarity_breakdown: buildSimilarityBreakdown(matchDetails),
         last_updated: formatTimeAgo(s.ts || Math.floor(Date.now() / 1000)),
         version_info: {
           current: currentVersion,
@@ -396,6 +428,132 @@ export async function setDecisionInternal(
   const existingDecision = await knex('t_decisions')
     .where({ key_id: keyId, project_id: projectId })
     .first();
+
+  // v3.9.1: Three-tier duplicate detection (auto-trigger BEFORE decision creation)
+  // Only applies to CREATE operations
+  const isCreate = !existingDecision;
+  const ignoreCheck = (params as any).ignore_suggest === true;
+
+  if (isCreate && !ignoreCheck) {
+    try {
+      // Validate decision against policies to check if suggest_similar is enabled
+      const validationResult = await validateAgainstPolicies(
+        adapter,
+        params.key,
+        value,
+        {
+          rationale: (params as any).rationale,
+          alternatives: (params as any).alternatives,
+          tradeoffs: (params as any).tradeoffs,
+          ...params
+        },
+        trx  // Pass transaction context
+      );
+
+      if (validationResult.matchedPolicy && validationResult.valid) {
+        // Query policy to check suggest_similar flag
+        const policy = await (trx || knex)('t_decision_policies')
+          .where({ id: validationResult.matchedPolicy.id })
+          .select('suggest_similar')
+          .first();
+
+        if (policy && policy.suggest_similar === 1) {
+          // Run suggestions for duplicate detection
+          const tags = params.tags ? parseStringArray(params.tags) : [];
+          const suggestions = await handleSuggestAction({
+            action: 'by_context',
+            key: params.key,
+            tags,
+            layer: params.layer,
+            limit: 5,
+            min_score: SUGGEST_THRESHOLDS.GENTLE_NUDGE,
+            knex: trx || knex
+          });
+
+          if (suggestions.count > 0) {
+            const topScore = suggestions.suggestions[0].score;
+
+            // Tier 3: Auto-update (score >= 60, v3.9.1)
+            if (topScore >= SUGGEST_THRESHOLDS.AUTO_UPDATE) {
+              const topSuggestion = suggestions.suggestions[0];
+              const enriched = await buildDuplicateRiskWarning(
+                [topSuggestion],
+                params,
+                trx || knex
+              );
+
+              const match = enriched.suggestions[0];
+
+              // Auto-update existing decision instead of creating new one
+              const updateParams: any = {
+                key: match.key,
+                value: params.value,
+                version: match.version_info.next_suggested,
+                layer: params.layer,
+                tags: params.tags,
+                rationale: params.rationale,
+                alternatives: params.alternatives,
+                tradeoffs: params.tradeoffs,
+                agent: params.agent,
+                scopes: params.scopes,
+                status: params.status,
+                ignore_suggest: true  // Prevent recursive duplicate detection
+              };
+
+              // Recursively call setDecisionInternal to update existing decision
+              const updateResponse = await setDecisionInternal(
+                updateParams,
+                adapter,
+                projectId,
+                trx
+              );
+
+              // Return success response with auto_updated metadata
+              return {
+                success: true,
+                auto_updated: true,
+                requested_key: params.key,
+                actual_key: match.key,
+                similarity_score: topScore,
+                version: updateResponse.version,
+                duplicate_reason: {
+                  similarity: match.reasoning,
+                  matched_tags: match.matches.tags,
+                  layer: match.matches.layer,
+                  key_pattern: match.matches.key_pattern
+                },
+                key: updateResponse.key,
+                key_id: updateResponse.key_id!,
+                value: params.value,
+                message: `Auto-updated existing decision "${match.key}" (similarity: ${topScore})`
+              } as SetDecisionResponse;
+            }
+
+            // Tier 2: Hard block (45 <= score < 60, v3.9.1)
+            if (topScore >= SUGGEST_THRESHOLDS.HARD_BLOCK) {
+              const topSuggestion = suggestions.suggestions[0];
+              const enriched = await buildDuplicateRiskWarning(
+                [topSuggestion],
+                params,
+                trx || knex
+              );
+
+              // Throw blocking error
+              const errorMessage = formatBlockingError(enriched.suggestions[0]);
+              throw new Error(errorMessage);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Hard block errors must propagate
+      if (error instanceof Error && error.message.includes('DUPLICATE DETECTED')) {
+        throw error;
+      }
+      // Other errors are non-critical - log but don't fail operation
+      console.warn('[Auto-trigger] Non-blocking error (ignored):', error);
+    }
+  }
 
   // Validate layer if provided; preserve existing layer if not provided on update
   let layerId: number | null = null;
@@ -589,53 +747,46 @@ export async function setDecisionInternal(
       : `Decision "${params.key}" created at version ${version}`
   };
 
-  // Task 407: Policy validation and auto-trigger suggestions
-  try {
-    // Validate decision against policies
-    // Pass transaction context to prevent connection pool exhaustion
-    const validationResult = await validateAgainstPolicies(
-      adapter,
-      params.key,
-      value,
-      {
-        rationale: (params as any).rationale,
-        alternatives: (params as any).alternatives,
-        tradeoffs: (params as any).tradeoffs,
-        ...params
-      },
-      trx  // Pass transaction context
-    );
+  // v3.9.1: Tier 1 gentle nudge (post-creation warning for CREATE operations)
+  // Tier 2 (hard block) and Tier 3 (auto-update) already handled before decision creation
+  if (isCreate && !ignoreCheck) {
+    try {
+      const validationResult = await validateAgainstPolicies(
+        adapter,
+        params.key,
+        value,
+        {
+          rationale: (params as any).rationale,
+          alternatives: (params as any).alternatives,
+          tradeoffs: (params as any).tradeoffs,
+          ...params
+        },
+        trx
+      );
 
-    // Add policy validation result to response
-    if (validationResult.matchedPolicy) {
-      response.policy_validation = {
-        matched_policy: validationResult.matchedPolicy.name,
-        violations: validationResult.violations
-      };
-    }
+      // Add policy validation result to response
+      if (validationResult.matchedPolicy) {
+        response.policy_validation = {
+          matched_policy: validationResult.matchedPolicy.name,
+          violations: validationResult.violations
+        };
+      }
 
-    // v3.9.0: Two-tier duplicate detection (50-84 gentle nudge, 85+ hard block)
-    // Only applies to CREATE operations when policy has suggest_similar=1
-    const isCreate = !existingDecision;
-    const ignoreCheck = (params as any).ignore_suggest === true;
+      if (validationResult.matchedPolicy && validationResult.valid) {
+        const policy = await (trx || knex)('t_decision_policies')
+          .where({ id: validationResult.matchedPolicy.id })
+          .select('suggest_similar')
+          .first();
 
-    if (validationResult.matchedPolicy && validationResult.valid && isCreate && !ignoreCheck) {
-      // Query policy to check suggest_similar flag (use transaction context)
-      const policy = await (trx || knex)('t_decision_policies')
-        .where({ id: validationResult.matchedPolicy.id })
-        .select('suggest_similar')
-        .first();
-
-      if (policy && policy.suggest_similar === 1) {
-        try {
-          // Run suggestions with min_score=50 to catch both tiers
+        if (policy && policy.suggest_similar === 1) {
+          // Run suggestions for gentle nudge warning
           const tags = params.tags ? parseStringArray(params.tags) : [];
           const suggestions = await handleSuggestAction({
             action: 'by_context',
             key: params.key,
             tags,
             layer: params.layer,
-            limit: 5, // Get more results for filtering
+            limit: 5,
             min_score: SUGGEST_THRESHOLDS.GENTLE_NUDGE,
             knex: trx || knex
           });
@@ -643,24 +794,9 @@ export async function setDecisionInternal(
           if (suggestions.count > 0) {
             const topScore = suggestions.suggestions[0].score;
 
-            // Tier 2: Hard block (score >= 85)
-            if (topScore >= SUGGEST_THRESHOLDS.HARD_BLOCK) {
-              // Enrich top suggestion with full context
-              const topSuggestion = suggestions.suggestions[0];
-              const enriched = await buildDuplicateRiskWarning(
-                [topSuggestion],
-                params,
-                trx || knex
-              );
-
-              // Throw blocking error with actionable resolution
-              const errorMessage = formatBlockingError(enriched.suggestions[0]);
-              throw new Error(errorMessage);
-            }
-
-            // Tier 1: Gentle nudge (50 <= score < 85)
-            if (topScore >= SUGGEST_THRESHOLDS.GENTLE_NUDGE) {
-              // Enrich top N suggestions (max 3 for token efficiency)
+            // Tier 1: Gentle nudge (35 <= score < 45, v3.9.1)
+            // Note: Tier 2/3 already handled before decision creation
+            if (topScore >= SUGGEST_THRESHOLDS.GENTLE_NUDGE && topScore < SUGGEST_THRESHOLDS.HARD_BLOCK) {
               const topSuggestions = suggestions.suggestions.slice(0, SUGGEST_LIMITS.MAX_SUGGESTIONS_NUDGE);
               const duplicateRisk = await buildDuplicateRiskWarning(
                 topSuggestions,
@@ -672,23 +808,12 @@ export async function setDecisionInternal(
               (response as any).duplicate_risk = duplicateRisk;
             }
           }
-        } catch (suggestError) {
-          // Hard block errors should propagate
-          if (suggestError instanceof Error && suggestError.message.includes('DUPLICATE DETECTED')) {
-            throw suggestError;
-          }
-          // Other errors are non-critical - log but don't fail operation
-          console.warn('[Auto-trigger] Non-blocking suggestion error (ignored):', suggestError);
         }
       }
+    } catch (error) {
+      // Errors in post-creation warning are non-critical
+      console.warn('[Gentle nudge warning] Non-blocking error (ignored):', error);
     }
-  } catch (validationError) {
-    // Hard block errors must propagate (v3.9.0)
-    if (validationError instanceof Error && validationError.message.includes('DUPLICATE DETECTED')) {
-      throw validationError;
-    }
-    // Other validation errors are non-critical - log but don't fail the decision.set operation
-    console.warn('[Policy Validation] Non-blocking validation error (ignored):', validationError);
   }
 
   return response;

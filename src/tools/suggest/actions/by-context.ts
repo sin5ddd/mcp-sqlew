@@ -79,6 +79,9 @@ export async function suggestByContext(params: ByContextParams): Promise<Suggest
       score: s.score,
       reason: s.reason,
       score_breakdown: s.score_breakdown,
+      tags: s.tags,  // Include tags for match detail analysis
+      layer: s.layer,  // Include layer for match detail analysis
+      ts: s.updated_ts,  // Include timestamp for version info
     })),
   };
 }
