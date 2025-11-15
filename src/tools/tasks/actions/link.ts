@@ -56,8 +56,10 @@ export async function linkTask(params: {
           await trx('t_task_decision_links').insert({
             task_id: params.task_id,
             decision_key_id: keyId,
-            link_type: linkRelation
-          }).onConflict(['task_id', 'decision_key_id']).merge();
+            project_id: projectId,
+            link_type: linkRelation,
+            linked_ts: Math.floor(Date.now() / 1000)
+          }).onConflict(['task_id', 'decision_key_id']).merge({ link_type: linkRelation });
 
           return {
             success: true,
