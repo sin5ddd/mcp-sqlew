@@ -8,6 +8,7 @@ import { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter, getDecisionWithContext as dbGetDecisionWithContext } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import { validateActionParams } from '../internal/validation.js';
+import { getTaggedDecisions } from '../../../utils/view-queries.js';
 import type { GetDecisionParams, GetDecisionResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -61,7 +62,8 @@ export async function getDecision(
           decided_by: result.decided_by,
           updated: result.updated,
           tags: null,
-          scopes: null
+          scopes: null,
+          project_id: projectId
         },
         context: result.context.map(ctx => ({
           ...ctx,
@@ -72,9 +74,8 @@ export async function getDecision(
     }
 
     // Standard query without context (backward compatible)
-    const row = await knex('v_tagged_decisions')
-      .where({ key: params.key, project_id: projectId })
-      .first() as TaggedDecision | undefined;
+    const rows = await getTaggedDecisions(knex);
+    const row = rows.find(r => r.key === params.key && r.project_id === projectId) as TaggedDecision | undefined;
 
     if (!row) {
       return {

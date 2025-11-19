@@ -63,7 +63,7 @@ const TEST_CONFIGS: Record<DatabaseType, Knex.Config | DockerContainerConfig> = 
   postgresql: {
     name: 'mcp-sqlew-postgres-test',
     host: 'localhost',
-    port: 5432,
+    port: 15432,
     user: 'mcp_user',
     password: 'mcp_pass',
     database: 'mcp_test',

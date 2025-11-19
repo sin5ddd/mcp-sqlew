@@ -13,6 +13,7 @@ import {
   validatePaginationParams,
   validateSortParams
 } from '../internal/validation.js';
+import { getTaggedDecisions } from '../../../utils/view-queries.js';
 import type { SearchAdvancedParams, SearchAdvancedResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -36,64 +37,60 @@ export async function searchAdvanced(
   const projectId = getProjectContext().getProjectId();
 
   try {
-    // Build base query using v_tagged_decisions view
-    let query = knex('v_tagged_decisions').where('project_id', projectId);
+    // Get all decisions then filter in JavaScript
+    let rows = await getTaggedDecisions(knex) as TaggedDecision[];
+
+    // Filter by project_id
+    rows = rows.filter(r => r.project_id === projectId);
 
     // Filter by layers (OR relationship)
     if (params.layers && params.layers.length > 0) {
-      query = query.whereIn('layer', params.layers);
+      rows = rows.filter(r => r.layer && params.layers!.includes(r.layer));
     }
 
     // Filter by tags_all (AND relationship - must have ALL tags)
     if (params.tags_all && params.tags_all.length > 0) {
       const tagsAll = parseStringArray(params.tags_all);
-      for (const tag of tagsAll) {
-        query = query.where((builder) => {
-          builder.where('tags', 'like', `%${tag}%`).orWhere('tags', tag);
-        });
-      }
+      rows = rows.filter(r => {
+        if (!r.tags) return false;
+        return tagsAll.every(tag => r.tags!.includes(tag));
+      });
     }
 
     // Filter by tags_any (OR relationship - must have ANY tag)
     if (params.tags_any && params.tags_any.length > 0) {
       const tagsAny = parseStringArray(params.tags_any);
-      query = query.where((builder) => {
-        for (const tag of tagsAny) {
-          builder.orWhere('tags', 'like', `%${tag}%`).orWhere('tags', tag);
-        }
+      rows = rows.filter(r => {
+        if (!r.tags) return false;
+        return tagsAny.some(tag => r.tags!.includes(tag));
       });
     }
 
     // Exclude tags
     if (params.exclude_tags && params.exclude_tags.length > 0) {
       const excludeTags = parseStringArray(params.exclude_tags);
-      for (const tag of excludeTags) {
-        query = query.where((builder) => {
-          builder.whereNull('tags')
-            .orWhere((subBuilder) => {
-              subBuilder.where('tags', 'not like', `%${tag}%`)
-                .where('tags', '!=', tag);
-            });
-        });
-      }
+      rows = rows.filter(r => {
+        if (!r.tags) return true; // No tags means no excluded tags
+        return !excludeTags.some(tag => r.tags!.includes(tag));
+      });
     }
 
     // Filter by scopes with wildcard support
     if (params.scopes && params.scopes.length > 0) {
       const scopes = parseStringArray(params.scopes);
-      query = query.where((builder) => {
-        for (const scope of scopes) {
+      rows = rows.filter(r => {
+        if (!r.scopes) return false;
+        return scopes.some(scope => {
           if (scope.includes('*')) {
-            // Wildcard pattern - convert to LIKE pattern
-            const likePattern = scope.replace(/\*/g, '%');
-            builder.orWhere('scopes', 'like', `%${likePattern}%`)
-              .orWhere('scopes', likePattern);
+            // Wildcard pattern - convert to regex
+            const regexPattern = scope.replace(/\*/g, '.*');
+            const regex = new RegExp(regexPattern);
+            return r.scopes!.split(',').some(s => regex.test(s.trim()));
           } else {
             // Exact match
-            builder.orWhere('scopes', 'like', `%${scope}%`)
-              .orWhere('scopes', scope);
+            return r.scopes!.includes(scope);
           }
-        }
+        });
       });
     }
 
@@ -101,7 +98,10 @@ export async function searchAdvanced(
     if (params.updated_after) {
       const timestamp = parseRelativeTime(params.updated_after);
       if (timestamp !== null) {
-        query = query.whereRaw('unixepoch(updated) >= ?', [timestamp]);
+        rows = rows.filter(r => {
+          const updatedTs = new Date(r.updated).getTime() / 1000;
+          return updatedTs >= timestamp;
+        });
       } else {
         throw new Error(`Invalid updated_after format: ${params.updated_after}. Use ISO timestamp or relative time like "7d", "2h", "30m"`);
       }
@@ -111,7 +111,10 @@ export async function searchAdvanced(
     if (params.updated_before) {
       const timestamp = parseRelativeTime(params.updated_before);
       if (timestamp !== null) {
-        query = query.whereRaw('unixepoch(updated) <= ?', [timestamp]);
+        rows = rows.filter(r => {
+          const updatedTs = new Date(r.updated).getTime() / 1000;
+          return updatedTs <= timestamp;
+        });
       } else {
         throw new Error(`Invalid updated_before format: ${params.updated_before}. Use ISO timestamp or relative time like "7d", "2h", "30m"`);
       }
@@ -119,23 +122,21 @@ export async function searchAdvanced(
 
     // Filter by decided_by (OR relationship)
     if (params.decided_by && params.decided_by.length > 0) {
-      query = query.whereIn('decided_by', params.decided_by);
+      rows = rows.filter(r => r.decided_by && params.decided_by!.includes(r.decided_by));
     }
 
     // Filter by statuses (OR relationship)
     if (params.statuses && params.statuses.length > 0) {
-      query = query.whereIn('status', params.statuses);
+      rows = rows.filter(r => params.statuses!.includes(r.status));
     }
 
     // Full-text search in value field
     if (params.search_text) {
-      query = query.where('value', 'like', `%${params.search_text}%`);
+      rows = rows.filter(r => r.value.includes(params.search_text!));
     }
 
     // Count total matching records (before pagination)
-    const countQuery = query.clone().count('* as total');
-    const countResult = await countQuery.first() as { total: number };
-    const totalCount = countResult.total;
+    const totalCount = rows.length;
 
     // Sorting
     const sortBy = params.sort_by || 'updated';
@@ -144,7 +145,24 @@ export async function searchAdvanced(
     // Validate sort parameters
     validateSortParams(sortBy, sortOrder);
 
-    query = query.orderBy(sortBy, sortOrder);
+    rows.sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      if (sortBy === 'updated') {
+        aVal = new Date(a.updated).getTime();
+        bVal = new Date(b.updated).getTime();
+      } else {
+        aVal = a[sortBy as keyof TaggedDecision];
+        bVal = b[sortBy as keyof TaggedDecision];
+      }
+
+      if (sortOrder === 'asc') {
+        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      } else {
+        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+      }
+    });
 
     // Pagination
     const limit = params.limit !== undefined ? params.limit : 20;
@@ -153,10 +171,7 @@ export async function searchAdvanced(
     // Validate pagination parameters
     validatePaginationParams(limit, offset);
 
-    query = query.limit(limit).offset(offset);
-
-    // Execute query
-    const rows = await query.select('*') as TaggedDecision[];
+    rows = rows.slice(offset, offset + limit);
 
     return {
       decisions: rows,
