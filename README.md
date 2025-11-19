@@ -353,6 +353,7 @@ Power users can still call MCP tools directly. See [Available Tools](#available-
 | **task** | Track work | "Implement feature X" |
 | **file** | Track changes | "Modified auth.ts" |
 | **stats** | Database metrics | Get layer summary |
+| **suggest** | Find similar decisions (v3.9.0) | Duplicate detection, pattern search |
 
 
 ## Documentation
@@ -384,6 +385,7 @@ All tools support:
 - [Task Migration](docs/TASK_MIGRATION.md) - Migrate from decision-based tracking
 
 **Advanced Features:**
+- [Decision Intelligence](docs/DECISION_INTELLIGENCE.md) - Three-tier duplicate detection (v3.9.0)
 - [Decision Context](docs/DECISION_CONTEXT.md) - Rich decision documentation
 - [Auto File Tracking](docs/AUTO_FILE_TRACKING.md) - Zero-token task management
 - [Acceptance Criteria](docs/ACCEPTANCE_CRITERIA.md) - All check types
@@ -422,8 +424,16 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.7.4**
+Current version: **3.9.0**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
+
+**What's New in v3.9.0:**
+- **Decision Intelligence System** - Three-tier duplicate detection (35-44 gentle nudge, 45-59 hard block, 60+ auto-update)
+- **New `suggest` Tool** - Find similar decisions by key, tags, or context
+- **Policy-Based Auto-Triggering** - Automatic suggestions when `suggest_similar=1`
+- **Enhanced Metadata** - Auto-update responses include `duplicate_reason`, `version_info`, `update_command`
+
+See [docs/DECISION_INTELLIGENCE.md](docs/DECISION_INTELLIGENCE.md) for details.
 
 ## License
 

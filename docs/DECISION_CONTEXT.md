@@ -1,8 +1,173 @@
-# Decision Context - Rich Decision Documentation (v3.2.2)
+# Decision Context - Rich Decision Documentation (v3.2.2+)
 
 ## Overview
 
 The **Decision Context** feature allows you to attach rich documentation to architectural and implementation decisions, explaining **WHY** a decision was made, what alternatives were considered, and the trade-offs involved. This goes beyond simple key-value storage to provide deep historical context that helps future developers (both human and AI) understand past reasoning.
+
+---
+
+## 🆕 Decision Intelligence Integration (v3.9.0)
+
+### Project Historical Records with Automatic Updates
+
+**v3.9.0 introduces intelligent duplicate detection** that treats decisions as **living historical records** rather than static entries. This transforms how you maintain project knowledge:
+
+#### The Problem: Decision Fragmentation
+
+Without intelligent detection, teams create fragmented decision records:
+```
+api-authentication → "Use JWT"
+auth-method → "JWT tokens"
+api-auth-strategy → "JWT with refresh tokens"
+```
+
+**Result**: 3 separate entries for the same decision, making it impossible to track the evolution of your authentication strategy.
+
+#### The Solution: Three-Tier Historical Record Management
+
+**Tier 1 (35-44 score): Related Record Alert**
+- Shows potentially related historical records
+- Allows you to link or update existing records
+- Perfect for discovering "we discussed this before"
+
+**Tier 2 (45-59 score): Update Existing Record**
+- High similarity suggests same topic
+- Prompts you to update the existing record with new context
+- Maintains decision continuity
+
+**Tier 3 (60+ score): Automatic Historical Update**
+- Transparently updates existing record
+- Preserves complete version history
+- Zero friction for iterative refinement
+
+#### Example: Evolving Authentication Decision
+
+**Initial Decision (January)**:
+```typescript
+{
+  action: "set",
+  key: "api-authentication",
+  value: "Use JWT tokens for API authentication",
+  tags: ["api", "security", "authentication"],
+  layer: "business"
+}
+```
+
+**Updated Context (March)** - After security review:
+```typescript
+{
+  action: "set",
+  key: "api-auth-jwt-expiration",  // Similar key
+  value: "JWT tokens with 15-minute expiration",
+  tags: ["api", "security", "authentication"],  // Same tags
+  layer: "business"  // Same layer
+}
+
+// v3.9.0 Response:
+{
+  "success": true,
+  "auto_updated": true,
+  "requested_key": "api-auth-jwt-expiration",
+  "actual_key": "api-authentication",  // Updated existing record!
+  "version": "1.0.1",  // Version incremented
+  "message": "Auto-updated existing decision (similarity: 85)"
+}
+```
+
+**Result**: Single historical record with version history:
+- v1.0.0: "Use JWT tokens for API authentication"
+- v1.0.1: "JWT tokens with 15-minute expiration"
+
+**Query version history**:
+```typescript
+{
+  action: "versions",
+  key: "api-authentication"
+}
+// Returns both versions with timestamps
+```
+
+### Benefits for Project History
+
+1. **Single Source of Truth**: One record per decision topic, not scattered duplicates
+2. **Complete Version Trail**: Track how decisions evolved over time
+3. **Context Accumulation**: Add context to existing decisions, building richer documentation
+4. **Automatic Consolidation**: Similar decisions merge into the canonical record
+5. **Discoverable History**: `suggest` tool finds related decisions instantly
+
+### Combining Context with Duplicate Detection
+
+**Best Practice**: Use duplicate detection to find existing records, then add context:
+
+```typescript
+// Step 1: Check for existing related decisions
+{
+  action: "check_duplicate",
+  key: "cache-strategy-redis",
+  tags: ["caching", "performance", "redis"]
+}
+
+// Response shows existing "cache-implementation" decision
+
+// Step 2: Update existing record (Tier 3 auto-update)
+{
+  action: "set",
+  key: "cache-strategy-redis",
+  value: "Redis LRU cache with 1000-item limit",
+  tags: ["caching", "performance", "redis"],
+  layer: "infrastructure"
+}
+// Auto-updates "cache-implementation" to v1.0.2
+
+// Step 3: Add rich context to the canonical record
+{
+  action: "add_decision_context",
+  key: "cache-implementation",  // The actual key that was updated
+  rationale: "Updated to Redis after hitting memory limits with in-process cache. 1000-item LRU covers 98% of requests.",
+  alternatives_considered: [
+    "Increase in-memory cache - Rejected: OOM risk",
+    "Memcached - Rejected: No persistence",
+    "Redis with TTL - Rejected: Hot items get evicted"
+  ],
+  tradeoffs: {
+    "pros": ["Persistent cache", "Shared across instances", "Built-in LRU"],
+    "cons": ["Network latency", "Operational complexity"]
+  }
+}
+```
+
+### Policy-Based Historical Record Management
+
+Enable automatic duplicate checking for all decisions in a category:
+
+```typescript
+{
+  action: "create_policy",
+  name: "architecture-decisions",
+  defaults: {
+    layer: "cross-cutting",
+    tags: ["architecture"]
+  },
+  suggest_similar: 1,  // Auto-check for duplicates
+  validation_rules: {
+    patterns: { key: "^arch/" }
+  }
+}
+
+// Now all arch/* decisions automatically check history
+{
+  action: "set",
+  key: "arch/database-strategy",
+  value: "PostgreSQL with read replicas",
+  // Automatically checks for related arch/* decisions
+  // Updates existing record if high similarity found
+}
+```
+
+### See Also
+
+- **[DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md)** - Complete three-tier system documentation
+- **[WORKFLOWS.md](WORKFLOWS.md)** - Workflow 5: Decision Intelligence & Duplicate Prevention
 
 ---
 
@@ -471,4 +636,28 @@ If you have old decisions that need context, add it retroactively:
 
 ---
 
+## Key Takeaways
+
+### Decision Context + Decision Intelligence = Complete Historical Records
+
+**v3.9.0 transforms how you manage project knowledge:**
+
+1. **Decision Context** (v3.2.2) → Adds rich documentation (rationale, alternatives, trade-offs)
+2. **Decision Intelligence** (v3.9.0) → Prevents fragmentation, maintains continuity
+
+**Together they provide:**
+- **Living historical records** that evolve with your project
+- **Version trails** showing decision evolution over time
+- **Automatic consolidation** preventing scattered duplicates
+- **Rich context** explaining WHY decisions were made
+- **Discoverable knowledge** via similarity search
+
+**Best workflow:**
+1. Use `check_duplicate` before creating new decisions
+2. Let auto-update merge similar decisions into canonical records
+3. Add rich context to the consolidated record
+4. Query `versions` to see decision evolution
+
 **Decision Context transforms decisions from "what" into "why"** - making your codebase understandable to future developers and AI agents across months or years of development.
+
+**Decision Intelligence ensures decisions are living records** - automatically updated and consolidated rather than scattered across fragmented entries.
