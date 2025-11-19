@@ -108,30 +108,28 @@
 }
 ```
 
-### Basic Messaging Workflow
+### Basic Suggestion Workflow (v3.9.0)
 
 ```javascript
-// 1. Send a message
+// 1. Check for duplicates before creating
 {
-  action: "send",
-  from_agent: "bot1",
-  msg_type: "info",
-  message: "Task completed successfully",
-  priority: "high"
+  action: "check_duplicate",
+  key: "api-rate-limiting",
+  tags: ["api", "performance"]
 }
 
-// 2. Get messages
+// 2. Find related decisions by tags
 {
-  action: "get",
-  agent_name: "bot1",
-  unread_only: true
+  action: "by_tags",
+  tags: ["api", "security"],
+  limit: 5
 }
 
-// 3. Mark as read
+// 3. Search by key pattern
 {
-  action: "mark_read",
-  agent_name: "bot1",
-  message_ids: [1, 2, 3]
+  action: "by_key",
+  key: "api/*",
+  limit: 10
 }
 ```
 
@@ -276,14 +274,16 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
 | **add_decision_context** | action, key, rationale | alternatives_considered, tradeoffs, decided_by, related_task_id, related_constraint_id |
 | **list_decision_contexts** | action | decision_key, related_task_id, related_constraint_id, decided_by, limit, offset |
 
-### `message` Tool
+### `message` Tool ⚠️ DEPRECATED (v3.6.5)
 
-| Action | Required | Optional |
-|--------|----------|----------|
-| **send** | action, from_agent, msg_type, message | to_agent, priority, payload |
-| **get** | action, agent_name | unread_only, priority_filter, msg_type_filter, limit |
-| **mark_read** | action, agent_name, message_ids | - |
-| **send_batch** | action, messages | atomic |
+> **Note:** The messaging system was removed in v3.6.5. The `t_agent_messages` table has been dropped.
+
+~~| Action | Required | Optional |~~
+~~|--------|----------|----------|~~
+~~| **send** | action, from_agent, msg_type, message | to_agent, priority, payload |~~
+~~| **get** | action, agent_name | unread_only, priority_filter, msg_type_filter, limit |~~
+~~| **mark_read** | action, agent_name, message_ids | - |~~
+~~| **send_batch** | action, messages | atomic |~~
 
 ### `file` Tool
 
@@ -340,6 +340,16 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
 | **get_dependencies** | action, task_id | include_details |
 | **watch_files** (v3.4.1) | action, task_id, action (watch/unwatch/list) | file_paths |
 | **watcher** | action | subaction (status/list_files/list_tasks/help) |
+
+### `suggest` Tool (v3.9.0)
+
+| Action | Required | Optional |
+|--------|----------|----------|
+| **by_key** | action, key | limit, min_score, layer |
+| **by_tags** | action, tags | limit, min_score, layer |
+| **by_context** | action | key, tags, layer, limit, min_score, priority |
+| **check_duplicate** | action, key | tags, layer, min_score |
+| **help** | action | - |
 
 ---
 
@@ -883,6 +893,137 @@ This returns:
 
 ---
 
+## Decision Intelligence System (v3.9.0)
+
+### Overview
+
+The Decision Intelligence System provides automatic duplicate detection and smart suggestions when creating decisions. It uses a three-tier approach to handle different similarity levels.
+
+### Three-Tier Detection
+
+| Tier | Score Range | Behavior | Use Case |
+|------|-------------|----------|----------|
+| **Gentle Nudge** | 35-44 | Non-blocking warning in `duplicate_risk` | May be related, user decides |
+| **Hard Block** | 45-59 | Blocking error, requires resolution | Likely duplicate, needs review |
+| **Auto-Update** | 60+ | Transparent update of existing decision | Clearly same decision |
+
+### Similarity Scoring
+
+**Total Score: 0-100 points**
+
+| Factor | Max Points | Calculation |
+|--------|------------|-------------|
+| Tag overlap | 40 | 10 per matching tag (max 4) |
+| Layer match | 25 | Same layer = 25, different = 0 |
+| Key similarity | 20 | Pattern + Levenshtein distance |
+| Recency | 10 | <30 days = 10, decay over time |
+| Priority | 5 | Critical = 5, High = 4, etc. |
+
+### Using the suggest Tool
+
+```javascript
+// Find by key pattern
+{
+  action: "by_key",
+  key: "api/*/latency",
+  limit: 5,
+  min_score: 30
+}
+
+// Find by tag similarity
+{
+  action: "by_tags",
+  tags: ["performance", "api"],
+  limit: 5
+}
+
+// Combined search
+{
+  action: "by_context",
+  key: "api/*",
+  tags: ["performance"],
+  layer: "infrastructure",
+  limit: 5
+}
+
+// Pre-creation duplicate check
+{
+  action: "check_duplicate",
+  key: "new-decision",
+  tags: ["tag1", "tag2"]
+}
+```
+
+### Auto-Trigger with Policies
+
+Enable automatic duplicate detection in policies:
+
+```javascript
+{
+  action: "create_policy",
+  name: "security-decisions",
+  defaults: {
+    layer: "cross-cutting",
+    tags: ["security"]
+  },
+  suggest_similar: 1,  // Enable auto-trigger
+  validation_rules: {
+    patterns: { key: "^security/" }
+  }
+}
+```
+
+When a decision matches this policy, suggestions are automatically triggered.
+
+### Bypass Mechanism
+
+Override duplicate detection when needed:
+
+```javascript
+{
+  action: "set",
+  key: "intentionally-similar",
+  value: "Different use case",
+  tags: ["same", "tags"],
+  ignore_suggest: true,  // Skip duplicate detection
+  ignore_reason: "Different use case - async tasks vs event bus"
+}
+```
+
+### Enhanced Response Fields (v3.9.0)
+
+**Tier 1 (Gentle Nudge):**
+```json
+{
+  "success": true,
+  "key": "new-decision",
+  "duplicate_risk": {
+    "severity": "MODERATE",
+    "max_score": 42,
+    "suggestions": [...]
+  }
+}
+```
+
+**Tier 3 (Auto-Update):**
+```json
+{
+  "success": true,
+  "auto_updated": true,
+  "requested_key": "similar-key",
+  "actual_key": "existing-key",
+  "similarity_score": 85,
+  "version": "1.0.1"
+}
+```
+
+### See Also
+
+- **[DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md)** - Comprehensive three-tier system guide
+- **[MIGRATION_GUIDE_V3.9.0.md](MIGRATION_GUIDE_V3.9.0.md)** - Migration instructions
+
+---
+
 ## Related Documentation
 
 - **[TOOL_SELECTION.md](TOOL_SELECTION.md)** - Choosing the right tool for your task
@@ -890,3 +1031,4 @@ This returns:
 - **[BEST_PRACTICES.md](BEST_PRACTICES.md)** - Common errors and best practices
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Layer definitions and system architecture
 - **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Complete guide (original comprehensive version)
+- **[DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md)** - Decision Intelligence System (v3.9.0)

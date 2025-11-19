@@ -1,5 +1,6 @@
 // src/utils/activity-logging.ts
 import { Knex } from 'knex';
+import { getProjectContext } from './project-context.js';
 
 /**
  * Activity log helper functions
@@ -21,6 +22,9 @@ export async function logActivity(
   knex: Knex | Knex.Transaction,
   entry: ActivityLogEntry
 ): Promise<void> {
+  // Get project context (required after v3.7.0 multi-project support)
+  const projectId = getProjectContext().getProjectId();
+
   await knex('t_activity_log').insert({
     agent_id: entry.agent_id,
     action_type: entry.action_type,
@@ -28,6 +32,7 @@ export async function logActivity(
     layer_id: entry.layer_id,
     details: entry.details ? JSON.stringify(entry.details) : null,
     ts: Math.floor(Date.now() / 1000), // Current Unix epoch
+    project_id: projectId,  // Required after v3.7.0
   });
 }
 
@@ -100,12 +105,16 @@ export async function recordDecisionHistory(
     ts: number;
   }
 ): Promise<void> {
+  // Get project context (required after v3.7.0 multi-project support)
+  const projectId = getProjectContext().getProjectId();
+
   await knex('t_decision_history').insert({
     key_id: params.key_id,
     version: params.version,
     value: params.value,
     agent_id: params.agent_id,
     ts: params.ts,
+    project_id: projectId,  // Required after v3.7.0
   });
 }
 

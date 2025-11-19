@@ -65,6 +65,10 @@ export function loadConfigFile(projectRoot: string = process.cwd(), configPath?:
         ...DEFAULT_CONFIG.agents,
         ...parsed.agents,
       },
+      commands: {
+        ...DEFAULT_CONFIG.commands,
+        ...parsed.commands,
+      },
     };
 
     // Validate the merged configuration

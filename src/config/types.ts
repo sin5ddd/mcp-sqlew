@@ -317,6 +317,24 @@ export interface AgentsConfig {
 }
 
 /**
+ * Slash commands configuration
+ */
+export interface CommandsConfig {
+  /** Install /sqw-documentor command (document architectural decisions) */
+  documentor?: boolean;
+  /** Install /sqw-secretary command (record decisions like meeting minutes) */
+  secretary?: boolean;
+  /** Install /sqw-plan command (planning workflow) */
+  plan?: boolean;
+  /** Install /sqw-research command (research workflow) */
+  research?: boolean;
+  /** Install /sqw-review command (review workflow) */
+  review?: boolean;
+  /** Install /sqw-scrum command (task management + agent coordination) */
+  scrum?: boolean;
+}
+
+/**
  * Project configuration (v3.7.0+)
  *
  * Multi-project support requires explicit project identification.
@@ -361,6 +379,8 @@ export interface SqlewConfig {
   debug?: DebugConfig;
   /** Specialized agents settings */
   agents?: AgentsConfig;
+  /** Slash commands settings */
+  commands?: CommandsConfig;
 }
 
 /**
@@ -412,5 +432,13 @@ export const DEFAULT_CONFIG: SqlewConfig = {
     scrum_master: true,
     researcher: true,
     architect: true,
+  },
+  commands: {
+    documentor: true,
+    secretary: true,
+    plan: true,
+    research: true,
+    review: true,
+    scrum: true,
   },
 };

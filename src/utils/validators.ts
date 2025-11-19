@@ -4,7 +4,7 @@
  * Token savings: ~2,600 tokens across 5 tool files
  */
 
-import type { Database } from '../types.js';
+import type { DatabaseAdapter } from '../adapters/index.js';
 
 /**
  * Validates required string parameter (trim and check non-empty)
@@ -69,13 +69,14 @@ export function validatePriorityRange(priority: number): number {
  * Validates layer and returns layer_id
  * @throws Error if layer is invalid
  */
-export function validateLayer(db: Database, layer: string): number {
+export async function validateLayer(adapter: DatabaseAdapter, layer: string): Promise<number> {
   const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
   if (!validLayers.includes(layer)) {
     throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
   }
 
-  const result = db.prepare('SELECT id FROM m_layers WHERE name = ?').get(layer) as { id: number } | undefined;
+  const knex = adapter.getKnex();
+  const result = await knex('m_layers').where({ name: layer }).select('id').first() as { id: number } | undefined;
   if (!result) {
     throw new Error(`Layer not found in database: ${layer}`);
   }

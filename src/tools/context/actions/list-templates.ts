@@ -30,7 +30,8 @@ export async function listTemplates(
   const projectId = getProjectContext().getProjectId();
 
   try {
-    const rows = await knex('t_decision_templates as t')
+    // v3.9.0: t_decision_templates → t_decision_policies
+    const rows = await knex('t_decision_policies as t')
       .leftJoin('m_agents as a', 't.created_by', 'a.id')
       .where('t.project_id', projectId)
       .select(

@@ -81,6 +81,8 @@ function convertDataType(columnType: string, targetFormat: DatabaseFormat, maxLe
  * Convert default value from SQLite functions to target format
  * Handles: unixepoch() → UNIX_TIMESTAMP() / EXTRACT(epoch FROM NOW())
  *         strftime() → DATE_FORMAT() / TO_CHAR()
+ *
+ * PostgreSQL-specific: Skip nextval() sequences (auto-increment, should use SERIAL)
  */
 function convertDefaultValue(defaultValue: string | null, targetFormat: DatabaseFormat): string | null {
   if (!defaultValue) {
@@ -88,6 +90,12 @@ function convertDefaultValue(defaultValue: string | null, targetFormat: Database
   }
 
   const lower = defaultValue.toLowerCase().trim();
+
+  // PostgreSQL: Skip nextval() sequences (SERIAL columns handle auto-increment)
+  // Example: nextval('table_id_seq'::regclass)
+  if (lower.includes('nextval')) {
+    return null; // Skip DEFAULT - column should use SERIAL type instead
+  }
 
   // SQLite unixepoch() conversions
   if (lower.includes('unixepoch()') || lower === 'unixepoch()') {
@@ -231,13 +239,18 @@ function buildColumnDefinition(col: Column, targetFormat: DatabaseFormat): strin
 
 /**
  * Build FOREIGN KEY definition from ForeignKey metadata
+ * Supports both single-column and composite (multi-column) foreign keys
  */
 function buildForeignKeyDefinition(fk: ForeignKey, targetFormat: DatabaseFormat): string {
-  const quotedColumn = quoteIdentifier(fk.column, targetFormat);
-  const quotedForeignTable = quoteIdentifier(fk.foreign_key_table, targetFormat);
-  const quotedForeignColumn = quoteIdentifier(fk.foreign_key_column, targetFormat);
+  // Handle both single column (string) and composite (array) foreign keys
+  const columns = Array.isArray(fk.column) ? fk.column : [fk.column];
+  const foreignColumns = Array.isArray(fk.foreign_key_column) ? fk.foreign_key_column : [fk.foreign_key_column];
 
-  let fkDef = `FOREIGN KEY (${quotedColumn}) REFERENCES ${quotedForeignTable}(${quotedForeignColumn})`;
+  const quotedColumns = columns.map(col => quoteIdentifier(col, targetFormat)).join(', ');
+  const quotedForeignTable = quoteIdentifier(fk.foreign_key_table, targetFormat);
+  const quotedForeignColumns = foreignColumns.map(col => quoteIdentifier(col, targetFormat)).join(', ');
+
+  let fkDef = `FOREIGN KEY (${quotedColumns}) REFERENCES ${quotedForeignTable}(${quotedForeignColumns})`;
 
   // Add ON DELETE clause
   if (fk.on_delete && fk.on_delete !== 'NO ACTION') {
@@ -304,12 +317,65 @@ export async function getCreateTableStatement(knex: Knex, table: string, targetF
     throw new Error(`Table ${table} not found or has no columns`);
   }
 
-  // Fix: knex-schema-inspector doesn't detect composite PRIMARY KEYs and UNIQUE constraints from SQLite properly
-  // Manually detect them using PRAGMA index_list
+  // Fix: knex-schema-inspector doesn't detect composite PRIMARY KEYs and UNIQUE constraints properly
+  // Manually detect them using database-specific queries
   const compositeUniqueConstraints: string[][] = []; // Track composite UNIQUE constraints
   let compositePrimaryKey: string[] | null = null; // Track composite PRIMARY KEY
 
-  if (client === 'better-sqlite3' || client === 'sqlite3') {
+  if (client === 'pg') {
+    // PostgreSQL: Query pg_constraint for composite PRIMARY KEY and UNIQUE constraints
+    const constraints = await knex.raw(`
+      SELECT
+        con.conname AS constraint_name,
+        con.contype AS constraint_type,
+        ARRAY_AGG(att.attname ORDER BY u.attposition) AS columns
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+      JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+      CROSS JOIN LATERAL UNNEST(con.conkey) WITH ORDINALITY AS u(attnum, attposition)
+      JOIN pg_attribute att ON att.attnum = u.attnum AND att.attrelid = con.conrelid
+      WHERE rel.relname = ?
+        AND nsp.nspname = 'public'
+        AND con.contype IN ('p', 'u')
+      GROUP BY con.conname, con.contype
+    `, [table]);
+
+    for (const constraint of constraints.rows) {
+      // PostgreSQL returns arrays as strings like "{col1,col2}" - parse them
+      let columnNames: string[];
+      if (typeof constraint.columns === 'string') {
+        // Parse PostgreSQL array format: "{col1,col2}" → ["col1", "col2"]
+        columnNames = constraint.columns
+          .replace(/^\{/, '') //Remove leading {
+          .replace(/\}$/, '') // Remove trailing }
+          .split(',')
+          .map((col: string) => col.trim());
+      } else if (Array.isArray(constraint.columns)) {
+        columnNames = constraint.columns;
+      } else {
+        continue; // Skip invalid format
+      }
+
+      if (constraint.constraint_type === 'p' && columnNames.length > 1) {
+        // Multi-column PRIMARY KEY
+        compositePrimaryKey = columnNames;
+        debugLog('DEBUG', `Found composite PRIMARY KEY on ${table}(${columnNames.join(', ')})`);
+      } else if (constraint.constraint_type === 'u') {
+        if (columnNames.length === 1) {
+          // Single-column UNIQUE
+          const col = columns.find(c => c.name === columnNames[0]);
+          if (col && !col.is_primary_key) {
+            col.is_unique = true;
+            debugLog('DEBUG', `Marked ${table}.${col.name} as UNIQUE`);
+          }
+        } else if (columnNames.length > 1) {
+          // Multi-column UNIQUE
+          compositeUniqueConstraints.push(columnNames);
+          debugLog('DEBUG', `Found composite UNIQUE on ${table}(${columnNames.join(', ')})`);
+        }
+      }
+    }
+  } else if (client === 'better-sqlite3' || client === 'sqlite3') {
     const indexResult = await knex.raw(`PRAGMA index_list(${table})`);
 
     // Knex raw() returns an array directly for SQLite
@@ -388,7 +454,67 @@ export async function getCreateTableStatement(knex: Knex, table: string, targetF
   }
 
   // Add FOREIGN KEY constraints using buildForeignKeyDefinition()
-  const foreignKeys: ForeignKey[] = await inspector.foreignKeys(table);
+  let foreignKeys: ForeignKey[] = await inspector.foreignKeys(table);
+
+  // PostgreSQL: Manually query composite foreign keys (knex-schema-inspector misses them)
+  if (client === 'pg') {
+    const compositeFks = await knex.raw(`
+      SELECT
+        con.conname AS constraint_name,
+        ARRAY_AGG(att.attname ORDER BY u.attposition) AS columns,
+        ref_class.relname AS foreign_table,
+        ARRAY_AGG(ref_att.attname ORDER BY u.attposition) AS foreign_columns,
+        con.confdeltype AS on_delete,
+        con.confupdtype AS on_update
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+      JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+      JOIN pg_class ref_class ON ref_class.oid = con.confrelid
+      CROSS JOIN LATERAL UNNEST(con.conkey) WITH ORDINALITY AS u(attnum, attposition)
+      JOIN pg_attribute att ON att.attnum = u.attnum AND att.attrelid = con.conrelid
+      JOIN pg_attribute ref_att ON ref_att.attnum = con.confkey[u.attposition] AND ref_att.attrelid = con.confrelid
+      WHERE rel.relname = ?
+        AND nsp.nspname = 'public'
+        AND con.contype = 'f'
+      GROUP BY con.conname, ref_class.relname, con.confdeltype, con.confupdtype
+    `, [table]);
+
+    for (const fk of compositeFks.rows) {
+      // Parse PostgreSQL arrays
+      const columns = typeof fk.columns === 'string'
+        ? fk.columns.replace(/^\{/, '').replace(/\}$/, '').split(',').map((s: string) => s.trim())
+        : fk.columns;
+      const foreignColumns = typeof fk.foreign_columns === 'string'
+        ? fk.foreign_columns.replace(/^\{/, '').replace(/\}$/, '').split(',').map((s: string) => s.trim())
+        : fk.foreign_columns;
+
+      // Convert PostgreSQL delete/update action codes to SQL keywords
+      const onDelete = fk.on_delete === 'c' ? 'CASCADE' : fk.on_delete === 'r' ? 'RESTRICT' : fk.on_delete === 'n' ? 'SET NULL' : 'NO ACTION';
+      const onUpdate = fk.on_update === 'c' ? 'CASCADE' : fk.on_update === 'r' ? 'RESTRICT' : fk.on_update === 'n' ? 'SET NULL' : 'NO ACTION';
+
+      // Create ForeignKey-like object
+      const compositeFk: ForeignKey = {
+        table: table,
+        column: columns,  // Array for composite FK
+        foreign_key_table: fk.foreign_table,
+        foreign_key_column: foreignColumns,  // Array for composite FK
+        on_delete: onDelete,
+        on_update: onUpdate,
+        constraint_name: fk.constraint_name
+      };
+
+      // Check if already exists in foreignKeys (single-column FKs from inspector)
+      const isDuplicate = foreignKeys.some((existingFk) =>
+        existingFk.constraint_name === compositeFk.constraint_name
+      );
+
+      if (!isDuplicate) {
+        foreignKeys.push(compositeFk);
+        debugLog('DEBUG', `Found composite FOREIGN KEY on ${table}(${columns.join(', ')}) → ${fk.foreign_table}(${foreignColumns.join(', ')})`);
+      }
+    }
+  }
+
   for (const fk of foreignKeys) {
     columnDefs.push(buildForeignKeyDefinition(fk, targetFormat));
   }

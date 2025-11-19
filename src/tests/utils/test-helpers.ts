@@ -13,8 +13,24 @@ import { dirname } from 'path';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'node:fs';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { getTestConfig, getDockerConfig, type DatabaseType as ConfigDatabaseType } from '../database/testing-config.js';
 
 const execAsync = promisify(exec);
+
+/**
+ * Execute async command with 30-second timeout to prevent hanging
+ * (Docker commands can stall on Windows/WSL or when containers are not responding)
+ */
+const execAsyncWithTimeout = async (
+  command: string,
+  options: Parameters<typeof execAsync>[1] = {}
+): Promise<{ stdout: string; stderr: string }> => {
+  return execAsync(command, {
+    timeout: 30000,           // 30-second timeout prevents hanging
+    encoding: 'utf8',        // Force UTF-8 to prevent Buffer type issues
+    ...options
+  }) as Promise<{ stdout: string; stderr: string }>;
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -23,7 +39,7 @@ const __dirname = dirname(__filename);
 // Database Configuration
 // ============================================================================
 
-export type DatabaseType = 'sqlite' | 'mysql' | 'mariadb' | 'postgresql';
+export type DatabaseType = ConfigDatabaseType;
 
 export interface DbConfig {
   type: DatabaseType;
@@ -43,73 +59,38 @@ const migrationDirs = [
 
 /**
  * Get database configuration by type
+ * Now uses centralized testing-config.ts for consistent credentials
  */
 export function getDbConfig(type: DatabaseType, customPath?: string): DbConfig {
-  switch (type) {
-    case 'sqlite':
-      return {
-        type: 'sqlite',
-        knexConfig: {
-          client: 'better-sqlite3',
-          connection: { filename: customPath || ':memory:' },
-          useNullAsDefault: true,
-          migrations: {
-            directory: migrationDirs,
-            extension: 'js',
-            tableName: 'knex_migrations',
-            loadExtensions: ['.js'],
-          },
-        },
-      };
+  const knexConfig = getTestConfig(type);
 
-    case 'mysql':
-      return {
-        type: 'mysql',
-        containerName: 'mcp-sqlew-mysql-test',
-        knexConfig: {
-          client: 'mysql2',
-          connection: {
-            host: 'localhost',
-            port: 3307,
-            user: 'mcp_user',
-            password: 'mcp_pass',
-            database: 'mcp_test',
-          },
-        },
-      };
-
-    case 'mariadb':
-      return {
-        type: 'mariadb',
-        containerName: 'mcp-sqlew-mariadb-test',
-        knexConfig: {
-          client: 'mysql2',
-          connection: {
-            host: 'localhost',
-            port: 3308,
-            user: 'mcp_user',
-            password: 'mcp_pass',
-            database: 'mcp_test',
-          },
-        },
-      };
-
-    case 'postgresql':
-      return {
-        type: 'postgresql',
-        containerName: 'mcp-sqlew-postgres-test',
-        knexConfig: {
-          client: 'pg',
-          connection: {
-            host: 'localhost',
-            port: 5432,
-            user: 'mcp_user',
-            password: 'mcp_pass',
-            database: 'mcp_test',
-          },
-        },
-      };
+  // For SQLite, override path if provided
+  if (type === 'sqlite' && customPath) {
+    knexConfig.connection = { filename: customPath };
   }
+
+  // Add migration configuration for all databases
+  if (!knexConfig.migrations) {
+    knexConfig.migrations = {
+      directory: migrationDirs,
+      extension: 'js',
+      tableName: 'knex_migrations',
+      loadExtensions: ['.js'],
+    };
+  }
+
+  // Get container name for Docker-based databases
+  let containerName: string | undefined;
+  if (type !== 'sqlite') {
+    const dockerConfig = getDockerConfig(type);
+    containerName = dockerConfig.name;
+  }
+
+  return {
+    type,
+    knexConfig,
+    containerName,
+  };
 }
 
 // ============================================================================
@@ -466,15 +447,15 @@ export async function importSqlToDocker(
 
   try {
     // Copy file to container
-    await execAsync(`docker cp ${tempFile} ${containerName}:/tmp/import.sql`);
+    await execAsyncWithTimeout(`docker cp ${tempFile} ${containerName}:/tmp/import.sql`);
 
     // Import based on database type
     if (type === 'mysql' || type === 'mariadb') {
-      await execAsync(
+      await execAsyncWithTimeout(
         `docker exec ${containerName} mysql -u mcp_user -pmcp_pass mcp_test -e "SOURCE /tmp/import.sql"`
       );
     } else if (type === 'postgresql') {
-      await execAsync(
+      await execAsyncWithTimeout(
         `docker exec ${containerName} psql -U mcp_user -d mcp_test -f /tmp/import.sql -v ON_ERROR_STOP=1 -q`
       );
     }
@@ -528,4 +509,246 @@ export async function teardownTestContext(context: TestContext): Promise<void> {
   for (const [, db] of context.dbs) {
     await disconnectDb(db);
   }
+}
+
+// ============================================================================
+// Better-SQLite3 Test Lifecycle Helpers (v3.9.0)
+// ============================================================================
+
+/**
+ * Force exit after test completion to prevent better-sqlite3 hanging
+ *
+ * **Problem**: better-sqlite3 native addon keeps Node.js event loop alive
+ * even after proper cleanup (db.destroy(), etc.)
+ *
+ * **Solution**: Embed forced exit in the LAST test of each test suite
+ *
+ * **Usage**:
+ * ```typescript
+ * describe('My Test Suite', () => {
+ *   it('test 1', async () => { ... });
+ *   it('test 2', async () => { ... });
+ *
+ *   it('test 3 (LAST)', async () => {
+ *     // ... test logic ...
+ *
+ *     // Call at the END of the last test
+ *     forceExitAfterTest();
+ *   });
+ * });
+ * ```
+ *
+ * **Why setImmediate()?**
+ * - Executes after current test completes but before Node test runner's `after()` hook
+ * - Allows test to finish properly and report results
+ * - Prevents event loop from hanging after all tests pass
+ *
+ * **Token Efficiency**: Reduces need for manual process.exit(0) in every test file
+ */
+export function forceExitAfterTest(): void {
+  setImmediate(async () => {
+    try {
+      // Database cleanup can be skipped for temporary test databases
+      // better-sqlite3 handles cleanup internally before exit
+    } catch (error) {
+      // Ignore cleanup errors
+    } finally {
+      // Force exit immediately (better-sqlite3 keeps event loop alive)
+      process.exit(0);
+    }
+  });
+}
+
+// ============================================================================
+// Task and File Link Test Helpers (v3.9.0)
+// ============================================================================
+
+/**
+ * Options for creating a test task
+ */
+export interface CreateTestTaskOptions {
+  title: string;
+  description?: string;
+  status_id?: number;
+  priority?: number;
+  projectId?: number;
+  agentName?: string;
+  acceptance_criteria?: string;
+}
+
+/**
+ * Create a test task with all required fields including timestamps
+ *
+ * **v3.8.0+ Compatible**: Includes created_ts and updated_ts (NOT NULL fields)
+ * **v3.7.0+ Compatible**: Uses provided projectId (required for multi-project support)
+ *
+ * @param db - Knex database connection
+ * @param options - Task creation options
+ * @returns Task ID
+ */
+export async function createTestTask(
+  db: Knex,
+  options: CreateTestTaskOptions
+): Promise<number> {
+  const currentTs = Math.floor(Date.now() / 1000);
+
+  // Get or create agent
+  let agentId: number;
+  const agentName = options.agentName || 'test-agent';
+
+  // Try to get existing agent
+  const existingAgent = await db('m_agents')
+    .where({ name: agentName })
+    .first('id');
+
+  if (existingAgent) {
+    agentId = existingAgent.id;
+  } else {
+    // Create new agent
+    const [newAgentId] = await db('m_agents')
+      .insert({ name: agentName })
+      .returning('id');
+    agentId = newAgentId?.id || newAgentId;
+  }
+
+  // Create task with all required fields
+  const [taskId] = await db('t_tasks')
+    .insert({
+      title: options.title,
+      status_id: options.status_id || 1, // Default to 'todo' (status_id=1)
+      priority: options.priority || 2,
+      project_id: options.projectId || 1, // Default to project 1 if not specified
+      created_by_agent_id: agentId,
+      assigned_agent_id: agentId,
+      created_ts: currentTs,  // Required NOT NULL field (v3.8.0+)
+      updated_ts: currentTs   // Required NOT NULL field (v3.8.0+)
+    })
+    .returning('id');
+
+  const actualTaskId = taskId?.id || taskId;
+
+  // Add task details if description or acceptance_criteria provided
+  if (options.description || options.acceptance_criteria) {
+    await db('t_task_details').insert({
+      task_id: actualTaskId,
+      description: options.description || null,
+      acceptance_criteria: options.acceptance_criteria || null
+    });
+  }
+
+  return actualTaskId;
+}
+
+/**
+ * Add watched files to a task with v3.8.0+ schema compatibility
+ *
+ * **v3.8.0+ Schema Requirements**:
+ * - `project_id` (NOT NULL, part of UNIQUE constraint)
+ * - `linked_ts` (NOT NULL, timestamp when file was linked)
+ * - UNIQUE constraint: `(project_id, task_id, file_id)`
+ *
+ * @param db - Knex database connection
+ * @param taskId - Task ID to link files to
+ * @param filePaths - Array of file paths to watch
+ * @param projectId - Project ID (required for v3.7.0+ multi-project support)
+ * @returns Array of successfully added file paths
+ */
+export async function addWatchedFiles(
+  db: Knex,
+  taskId: number,
+  filePaths: string[],
+  projectId: number = 1
+): Promise<string[]> {
+  const currentTs = Math.floor(Date.now() / 1000);
+  const addedFiles: string[] = [];
+
+  for (const filePath of filePaths) {
+    try {
+      // Get or create file
+      let fileId: number;
+
+      const existingFile = await db('m_files')
+        .where({ path: filePath })
+        .first('id');
+
+      if (existingFile) {
+        fileId = existingFile.id;
+      } else {
+        const [newFileId] = await db('m_files')
+          .insert({ path: filePath })
+          .returning('id');
+        fileId = newFileId?.id || newFileId;
+      }
+
+      // Add file link with v3.8.0+ schema fields
+      await db('t_task_file_links')
+        .insert({
+          task_id: taskId,
+          file_id: fileId,
+          project_id: projectId,    // Required v3.7.0+
+          linked_ts: currentTs       // Required v3.8.0+
+        })
+        .onConflict(['project_id', 'task_id', 'file_id'])  // v3.8.0+ UNIQUE constraint
+        .ignore();
+
+      addedFiles.push(filePath);
+    } catch (error) {
+      console.error(`Error adding file ${filePath}:`, error);
+      // Continue with next file
+    }
+  }
+
+  return addedFiles;
+}
+
+/**
+ * Create a pruned file record in the audit table
+ *
+ * **v3.7.0+ Compatible**: Includes project_id (required for multi-project support)
+ * **v3.5.0+ Feature**: Auto-pruning audit trail
+ *
+ * @param db - Knex database connection
+ * @param taskId - Task ID
+ * @param filePath - File path that was pruned
+ * @param projectId - Project ID (required for v3.7.0+)
+ * @returns Pruned file record ID
+ */
+export async function createPrunedFileRecord(
+  db: Knex,
+  taskId: number,
+  filePath: string,
+  projectId: number = 1
+): Promise<number> {
+  const currentTs = Math.floor(Date.now() / 1000);
+
+  const [id] = await db('t_task_pruned_files')
+    .insert({
+      task_id: taskId,
+      file_path: filePath,
+      pruned_ts: currentTs,
+      project_id: projectId  // Required v3.7.0+
+    })
+    .returning('id');
+
+  return id?.id || id;
+}
+
+/**
+ * Get watched files for a task
+ *
+ * @param db - Knex database connection
+ * @param taskId - Task ID
+ * @returns Array of file paths
+ */
+export async function getWatchedFiles(
+  db: Knex,
+  taskId: number
+): Promise<string[]> {
+  const files = await db('t_task_file_links as tfl')
+    .join('m_files as f', 'tfl.file_id', 'f.id')
+    .where('tfl.task_id', taskId)
+    .select('f.path')
+    .orderBy('f.path');
+
+  return files.map(f => f.path);
 }

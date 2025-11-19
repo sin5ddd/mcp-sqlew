@@ -5,6 +5,7 @@
 import type { DatabaseAdapter } from '../../adapters/index.js';
 import { createDatabaseAdapter } from '../../adapters/index.js';
 import { syncAgentsWithConfig } from '../../sync-agents.js';
+import { syncCommandsWithConfig } from '../../sync-commands.js';
 import { debugLog } from '../../utils/debug-logger.js';
 import knexConfig from '../../knexfile.js';
 
@@ -86,6 +87,9 @@ export async function initializeDatabase(
 
   // Sync agents with config.toml
   syncAgentsWithConfig();
+
+  // Sync commands with config.toml
+  syncCommandsWithConfig();
 
   adapterInstance = adapter;
   return adapter;

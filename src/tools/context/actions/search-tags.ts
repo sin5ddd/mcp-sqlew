@@ -8,6 +8,7 @@ import { getAdapter, getLayerId } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import { STRING_TO_STATUS } from '../../../constants.js';
 import { validateActionParams, parseStringArray } from '../internal/validation.js';
+import { getTaggedDecisions } from '../../../utils/view-queries.js';
 import type { SearchByTagsParams, SearchByTagsResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -44,20 +45,25 @@ export async function searchByTags(
     const tags = parseStringArray(params.tags);
 
     const matchMode = params.match_mode || 'OR';
-    let query = knex('v_tagged_decisions').where('project_id', projectId);
+
+    // Get all decisions then filter in JavaScript
+    let rows = await getTaggedDecisions(knex) as TaggedDecision[];
+
+    // Filter by project_id
+    rows = rows.filter(r => r.project_id === projectId);
 
     // Apply tag filtering based on match mode
     if (matchMode === 'AND') {
       // All tags must be present
-      for (const tag of tags) {
-        query = query.where('tags', 'like', `%${tag}%`);
-      }
+      rows = rows.filter(r => {
+        if (!r.tags) return false;
+        return tags.every(tag => r.tags!.includes(tag));
+      });
     } else if (matchMode === 'OR') {
       // Any tag must be present
-      query = query.where((builder) => {
-        for (const tag of tags) {
-          builder.orWhere('tags', 'like', `%${tag}%`);
-        }
+      rows = rows.filter(r => {
+        if (!r.tags) return false;
+        return tags.some(tag => r.tags!.includes(tag));
       });
     } else {
       throw new Error(`Invalid match_mode: ${matchMode}. Must be 'AND' or 'OR'`);
@@ -68,7 +74,7 @@ export async function searchByTags(
       if (!STRING_TO_STATUS[params.status]) {
         throw new Error(`Invalid status: ${params.status}. Must be 'active', 'deprecated', or 'draft'`);
       }
-      query = query.where('status', params.status);
+      rows = rows.filter(r => r.status === params.status);
     }
 
     // Optional layer filter
@@ -78,14 +84,15 @@ export async function searchByTags(
       if (layerId === null) {
         throw new Error(`Invalid layer: ${params.layer}. Must be one of: presentation, business, data, infrastructure, cross-cutting`);
       }
-      query = query.where('layer', params.layer);
+      rows = rows.filter(r => r.layer === params.layer);
     }
 
-    // Order by most recent
-    query = query.orderBy('updated', 'desc');
-
-    // Execute query
-    const rows = await query.select('*') as TaggedDecision[];
+    // Sort by most recent
+    rows.sort((a, b) => {
+      const dateA = new Date(a.updated).getTime();
+      const dateB = new Date(b.updated).getTime();
+      return dateB - dateA; // desc
+    });
 
     return {
       decisions: rows,

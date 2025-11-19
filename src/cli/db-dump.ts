@@ -4,7 +4,7 @@ import knex from 'knex';
 import * as fs from 'fs';
 import * as path from 'path';
 import knexConfig from '../knexfile.js';
-import { generateSqlDump, type DatabaseFormat, type ConflictMode } from '../utils/sql-dump.js';
+import { generateSqlDump, type DatabaseFormat, type ConflictMode } from '../utils/sql-dump/index.js';
 import { loadConfigFile } from '../config/loader.js';
 
 interface DbDumpArgs {

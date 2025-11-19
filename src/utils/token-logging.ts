@@ -4,8 +4,8 @@
  * Logs token usage to database for measuring help system efficiency.
  */
 
-import { Database } from 'better-sqlite3';
-import { getDatabase } from '../database.js';
+import type { DatabaseAdapter } from '../adapters/index.js';
+import { getAdapter } from '../database.js';
 
 export interface TokenLogEntry {
   query_type: string;
@@ -18,35 +18,29 @@ export interface TokenLogEntry {
 /**
  * Log token usage to database
  *
- * @param db - Database connection
+ * @param adapter - Database adapter (optional, will use global if not provided)
  * @param entry - Token log entry
  */
-export function logTokenUsage(db: Database, entry: TokenLogEntry): void {
+export async function logTokenUsage(entry: TokenLogEntry, adapter?: DatabaseAdapter): Promise<void> {
   try {
+    const actualAdapter = adapter ?? getAdapter();
+    const knex = actualAdapter.getKnex();
+
     // Check if table exists (migration may not have run yet)
-    const tableExists = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='t_help_token_usage'"
-    ).get();
+    const tableExists = await knex.schema.hasTable('t_help_token_usage');
 
     if (!tableExists) {
       // Silently skip if table doesn't exist
       return;
     }
 
-    const stmt = db.prepare(`
-      INSERT INTO t_help_token_usage
-        (query_type, tool_name, action_name, estimated_tokens, actual_chars)
-      VALUES
-        (?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
-      entry.query_type,
-      entry.tool_name || null,
-      entry.action_name || null,
-      entry.estimated_tokens,
-      entry.actual_chars
-    );
+    await knex('t_help_token_usage').insert({
+      query_type: entry.query_type,
+      tool_name: entry.tool_name || null,
+      action_name: entry.action_name || null,
+      estimated_tokens: entry.estimated_tokens,
+      actual_chars: entry.actual_chars
+    });
   } catch (error) {
     // Silently fail - logging should not break functionality
     console.error('Warning: Failed to log token usage:', error instanceof Error ? error.message : String(error));
@@ -56,42 +50,43 @@ export function logTokenUsage(db: Database, entry: TokenLogEntry): void {
 /**
  * Get token usage statistics for a query type
  *
- * @param db - Database connection
  * @param query_type - Type of query
+ * @param adapter - Database adapter (optional, will use global if not provided)
  * @returns Statistics object
  */
-export function getTokenStats(db: Database, query_type: string): {
+export async function getTokenStats(query_type: string, adapter?: DatabaseAdapter): Promise<{
   total_queries: number;
   avg_tokens: number;
   min_tokens: number;
   max_tokens: number;
   total_tokens: number;
-} | null {
+} | null> {
   try {
-    const tableExists = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='t_help_token_usage'"
-    ).get();
+    const actualAdapter = adapter ?? getAdapter();
+    const knex = actualAdapter.getKnex();
+
+    const tableExists = await knex.schema.hasTable('t_help_token_usage');
 
     if (!tableExists) {
       return null;
     }
 
-    const result = db.prepare(`
-      SELECT
-        COUNT(*) as total_queries,
-        AVG(estimated_tokens) as avg_tokens,
-        MIN(estimated_tokens) as min_tokens,
-        MAX(estimated_tokens) as max_tokens,
-        SUM(estimated_tokens) as total_tokens
-      FROM t_help_token_usage
-      WHERE query_type = ?
-    `).get(query_type) as {
-      total_queries: number;
-      avg_tokens: number;
-      min_tokens: number;
-      max_tokens: number;
-      total_tokens: number;
-    } | undefined;
+    const result = await knex('t_help_token_usage')
+      .where({ query_type })
+      .select(
+        knex.raw('COUNT(*) as total_queries'),
+        knex.raw('AVG(estimated_tokens) as avg_tokens'),
+        knex.raw('MIN(estimated_tokens) as min_tokens'),
+        knex.raw('MAX(estimated_tokens) as max_tokens'),
+        knex.raw('SUM(estimated_tokens) as total_tokens')
+      )
+      .first() as {
+        total_queries: number;
+        avg_tokens: number;
+        min_tokens: number;
+        max_tokens: number;
+        total_tokens: number;
+      } | undefined;
 
     if (!result || result.total_queries === 0) {
       return null;
@@ -113,46 +108,44 @@ export function getTokenStats(db: Database, query_type: string): {
 /**
  * Get all token usage statistics
  *
- * @param db - Database connection
+ * @param adapter - Database adapter (optional, will use global if not provided)
  * @returns Map of query type to statistics
  */
-export function getAllTokenStats(db: Database): Map<string, {
+export async function getAllTokenStats(adapter?: DatabaseAdapter): Promise<Map<string, {
   total_queries: number;
   avg_tokens: number;
   min_tokens: number;
   max_tokens: number;
   total_tokens: number;
-}> {
+}>> {
   const stats = new Map();
 
   try {
-    const tableExists = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='t_help_token_usage'"
-    ).get();
+    const actualAdapter = adapter ?? getAdapter();
+    const knex = actualAdapter.getKnex();
+
+    const tableExists = await knex.schema.hasTable('t_help_token_usage');
 
     if (!tableExists) {
       return stats;
     }
 
-    const results = db.prepare(`
-      SELECT
-        query_type,
-        COUNT(*) as total_queries,
-        AVG(estimated_tokens) as avg_tokens,
-        MIN(estimated_tokens) as min_tokens,
-        MAX(estimated_tokens) as max_tokens,
-        SUM(estimated_tokens) as total_tokens
-      FROM t_help_token_usage
-      GROUP BY query_type
-      ORDER BY query_type
-    `).all() as Array<{
-      query_type: string;
-      total_queries: number;
-      avg_tokens: number;
-      min_tokens: number;
-      max_tokens: number;
-      total_tokens: number;
-    }>;
+    const results = await knex('t_help_token_usage')
+      .select('query_type')
+      .count('* as total_queries')
+      .avg('estimated_tokens as avg_tokens')
+      .min('estimated_tokens as min_tokens')
+      .max('estimated_tokens as max_tokens')
+      .sum('estimated_tokens as total_tokens')
+      .groupBy('query_type')
+      .orderBy('query_type') as Array<{
+        query_type: string;
+        total_queries: number;
+        avg_tokens: number;
+        min_tokens: number;
+        max_tokens: number;
+        total_tokens: number;
+      }>;
 
     for (const row of results) {
       stats.set(row.query_type, {

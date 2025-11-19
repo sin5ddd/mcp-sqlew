@@ -9,6 +9,8 @@ import { getProjectContext } from '../../../utils/project-context.js';
 import { debugLog } from '../../../utils/debug-logger.js';
 import { STRING_TO_STATUS } from '../../../constants.js';
 import { validateActionParams } from '../internal/validation.js';
+import { getTaggedDecisions } from '../../../utils/view-queries.js';
+import { UniversalKnex } from '../../../utils/universal-knex.js';
 import type { SearchByLayerParams, SearchByLayerResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -80,13 +82,23 @@ export async function searchByLayer(
     let rows: TaggedDecision[];
 
     if (includeTagsValue) {
-      // Use v_tagged_decisions view for full metadata
-      rows = await knex('v_tagged_decisions')
-        .where({ layer: params.layer, status: statusValue, project_id: projectId })
-        .orderBy('updated', 'desc')
-        .select('*') as TaggedDecision[];
+      // Get all decisions then filter in JavaScript
+      rows = await getTaggedDecisions(knex) as TaggedDecision[];
+      rows = rows.filter(r =>
+        r.layer === params.layer &&
+        r.status === statusValue &&
+        r.project_id === projectId
+      );
+
+      // Sort by most recent
+      rows.sort((a, b) => {
+        const dateA = new Date(a.updated).getTime();
+        const dateB = new Date(b.updated).getTime();
+        return dateB - dateA; // desc
+      });
     } else {
       // Use base t_decisions table with minimal joins
+      const db = new UniversalKnex(knex);
       const statusInt = STRING_TO_STATUS[statusValue];
 
       const stringDecisions = knex('t_decisions as d')
@@ -105,7 +117,7 @@ export async function searchByLayer(
           knex.raw('NULL as tags'),
           knex.raw('NULL as scopes'),
           'a.name as decided_by',
-          knex.raw(`datetime(d.ts, 'unixepoch') as updated`)
+          knex.raw(`${db.dateFunction('d.ts')} as updated`)
         );
 
       const numericDecisions = knex('t_decisions_numeric as dn')
@@ -124,7 +136,7 @@ export async function searchByLayer(
           knex.raw('NULL as tags'),
           knex.raw('NULL as scopes'),
           'a.name as decided_by',
-          knex.raw(`datetime(dn.ts, 'unixepoch') as updated`)
+          knex.raw(`${db.dateFunction('dn.ts')} as updated`)
         );
 
       // Union both queries

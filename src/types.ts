@@ -222,6 +222,7 @@ export interface TaggedDecision {
   readonly scopes: string | null;  // Comma-separated
   readonly decided_by: string | null;
   readonly updated: string;  // ISO 8601 datetime
+  readonly project_id: number;  // Multi-project support (v3.7.0)
 }
 
 export interface ActiveContext {
@@ -276,9 +277,15 @@ export interface SetDecisionParams {
   agent?: string;
   layer?: string;
   version?: string;
+  auto_increment?: 'major' | 'minor' | 'patch';
   status?: 'active' | 'deprecated' | 'draft';
   tags?: string[];
   scopes?: string[];
+  // Policy validation context (v3.9.0)
+  rationale?: string;
+  alternatives?: any[];
+  tradeoffs?: any;
+  policy_name?: string;  // Explicit policy to validate against
 }
 
 export interface QuickSetDecisionParams {
@@ -519,7 +526,34 @@ export interface SetDecisionResponse {
   key: string;
   key_id: number;
   version: string;
+  version_action?: 'initial' | 'explicit' | 'auto_increment_major' | 'auto_increment_minor' | 'auto_increment_patch';
   message?: string;
+  value?: string | number; // Added for auto-update responses
+  policy_validation?: {
+    matched_policy?: string;
+    violations?: string[];
+  };
+  suggestions?: {
+    triggered_by: string;
+    reason: string;
+    suggestions: Array<{
+      key: string;
+      value: string;
+      score: number;
+      reason: string;
+    }>;
+  };
+  // Auto-update metadata (v3.9.1 Tier 3)
+  auto_updated?: boolean;
+  requested_key?: string;
+  actual_key?: string;
+  similarity_score?: number;
+  duplicate_reason?: {
+    similarity: string;
+    matched_tags: string[];
+    layer?: string;
+    key_pattern?: string;
+  };
 }
 
 export interface QuickSetDecisionResponse {
@@ -850,7 +884,10 @@ export type DecisionAction =
   | 'versions' | 'quick_set' | 'search_advanced' | 'set_batch'
   | 'has_updates' | 'set_from_template' | 'create_template'
   | 'list_templates' | 'hard_delete' | 'add_decision_context'
-  | 'list_decision_contexts' | 'help' | 'example' | 'use_case';
+  | 'list_decision_contexts'
+  | 'create_policy' | 'list_policies' | 'set_from_policy'  // v3.9.0 policy actions
+  | 'analytics'  // v3.9.0 analytics action
+  | 'help' | 'example' | 'use_case';
 
 /**
  * Task tool actions

@@ -10,19 +10,8 @@
  * 6. queryHelpNextActions - Query common next actions after given action (~30-50 tokens)
  */
 
-import { DatabaseAdapter, SQLiteAdapter } from '../adapters/index.js';
+import { DatabaseAdapter } from '../adapters/index.js';
 import { getAdapter } from '../database.js';
-
-/**
- * Helper to get raw better-sqlite3 Database instance from adapter
- * For legacy code that uses db.prepare() directly
- */
-function getRawDb(adapter: DatabaseAdapter): any {
-  if (adapter instanceof SQLiteAdapter) {
-    return adapter.getRawDatabase();
-  }
-  throw new Error('Help queries only supported for SQLite adapter');
-}
 
 interface HelpParameter {
   name: string;
@@ -104,50 +93,56 @@ interface HelpNextActionsResult {
  * Query single action with parameters and examples
  * Target: ~50-100 tokens (vs ~2,000 legacy)
  */
-export function queryHelpAction(adapter: DatabaseAdapter, targetTool: string, targetAction: string): HelpActionResult | { error: string; available_actions?: string[] } {
-  const db = getRawDb(adapter);
+export async function queryHelpAction(adapter: DatabaseAdapter, targetTool: string, targetAction: string): Promise<HelpActionResult | { error: string; available_actions?: string[] }> {
+  const knex = adapter.getKnex();
   try {
     // First, check if tool exists
-    const toolExists = db.prepare('SELECT tool_name FROM m_help_tools WHERE tool_name = ?').get(targetTool);
+    const toolExists = await knex('m_help_tools')
+      .where({ tool_name: targetTool })
+      .select('tool_name')
+      .first();
+
     if (!toolExists) {
-      const availableTools = db.prepare('SELECT tool_name FROM m_help_tools ORDER BY tool_name').all()
-        .map((row: any) => row.tool_name);
+      const availableTools = await knex('m_help_tools')
+        .orderBy('tool_name')
+        .select('tool_name');
       return {
         error: `Tool "${targetTool}" not found`,
-        available_actions: availableTools
+        available_actions: availableTools.map((row: any) => row.tool_name)
       };
     }
 
     // Get action info
-    const actionRow = db.prepare(`
-      SELECT action_id, action_name, description
-      FROM m_help_actions
-      WHERE tool_name = ? AND action_name = ?
-    `).get(targetTool, targetAction) as { action_id: number; action_name: string; description: string } | undefined;
+    const actionRow = await knex('m_help_actions')
+      .where({ tool_name: targetTool, action_name: targetAction })
+      .select('action_id', 'action_name', 'description')
+      .first() as { action_id: number; action_name: string; description: string } | undefined;
 
     if (!actionRow) {
-      const availableActions = db.prepare(`
-        SELECT action_name FROM m_help_actions WHERE tool_name = ? ORDER BY action_name
-      `).all(targetTool).map((row: any) => row.action_name);
+      const availableActions = await knex('m_help_actions')
+        .where({ tool_name: targetTool })
+        .orderBy('action_name')
+        .select('action_name');
       return {
         error: `Action "${targetAction}" not found for tool "${targetTool}"`,
-        available_actions: availableActions
+        available_actions: availableActions.map((row: any) => row.action_name)
       };
     }
 
     // Get parameters
-    const paramRows = db.prepare(`
-      SELECT param_name, param_type, required, description, default_value
-      FROM t_help_action_params
-      WHERE action_id = ?
-      ORDER BY required DESC, param_name
-    `).all(actionRow.action_id) as Array<{
-      param_name: string;
-      param_type: string;
-      required: number;
-      description: string;
-      default_value: string | null;
-    }>;
+    const paramRows = await knex('t_help_action_params')
+      .where({ action_id: actionRow.action_id })
+      .orderBy([
+        { column: 'required', order: 'desc' },
+        { column: 'param_name', order: 'asc' }
+      ])
+      .select('param_name', 'param_type', 'required', 'description', 'default_value') as Array<{
+        param_name: string;
+        param_type: string;
+        required: number;
+        description: string;
+        default_value: string | null;
+      }>;
 
     const parameters: HelpParameter[] = paramRows.map(row => {
       const marker = row.required === 1 ? '🔴 REQUIRED' : '⚪ OPTIONAL';
@@ -161,16 +156,14 @@ export function queryHelpAction(adapter: DatabaseAdapter, targetTool: string, ta
     });
 
     // Get examples
-    const exampleRows = db.prepare(`
-      SELECT example_title, example_code, explanation
-      FROM t_help_action_examples
-      WHERE action_id = ?
-      ORDER BY example_id
-    `).all(actionRow.action_id) as Array<{
-      example_title: string;
-      example_code: string;
-      explanation: string;
-    }>;
+    const exampleRows = await knex('t_help_action_examples')
+      .where({ action_id: actionRow.action_id })
+      .orderBy('example_id')
+      .select('example_title', 'example_code', 'explanation') as Array<{
+        example_title: string;
+        example_code: string;
+        explanation: string;
+      }>;
 
     const examples: HelpExample[] = exampleRows.map(row => ({
       title: row.example_title,
@@ -196,50 +189,56 @@ export function queryHelpAction(adapter: DatabaseAdapter, targetTool: string, ta
  * Query just parameter list for an action
  * Target: ~30-80 tokens (vs ~1,500 legacy)
  */
-export function queryHelpParams(adapter: DatabaseAdapter, targetTool: string, targetAction: string): HelpParamsResult | { error: string; available_actions?: string[] } {
-  const db = getRawDb(adapter);
+export async function queryHelpParams(adapter: DatabaseAdapter, targetTool: string, targetAction: string): Promise<HelpParamsResult | { error: string; available_actions?: string[] }> {
+  const knex = adapter.getKnex();
   try {
     // First, check if tool exists
-    const toolExists = db.prepare('SELECT tool_name FROM m_help_tools WHERE tool_name = ?').get(targetTool);
+    const toolExists = await knex('m_help_tools')
+      .where({ tool_name: targetTool })
+      .select('tool_name')
+      .first();
+
     if (!toolExists) {
-      const availableTools = db.prepare('SELECT tool_name FROM m_help_tools ORDER BY tool_name').all()
-        .map((row: any) => row.tool_name);
+      const availableTools = await knex('m_help_tools')
+        .orderBy('tool_name')
+        .select('tool_name');
       return {
         error: `Tool "${targetTool}" not found`,
-        available_actions: availableTools
+        available_actions: availableTools.map((row: any) => row.tool_name)
       };
     }
 
     // Get action info
-    const actionRow = db.prepare(`
-      SELECT action_id
-      FROM m_help_actions
-      WHERE tool_name = ? AND action_name = ?
-    `).get(targetTool, targetAction) as { action_id: number } | undefined;
+    const actionRow = await knex('m_help_actions')
+      .where({ tool_name: targetTool, action_name: targetAction })
+      .select('action_id')
+      .first() as { action_id: number } | undefined;
 
     if (!actionRow) {
-      const availableActions = db.prepare(`
-        SELECT action_name FROM m_help_actions WHERE tool_name = ? ORDER BY action_name
-      `).all(targetTool).map((row: any) => row.action_name);
+      const availableActions = await knex('m_help_actions')
+        .where({ tool_name: targetTool })
+        .orderBy('action_name')
+        .select('action_name');
       return {
         error: `Action "${targetAction}" not found for tool "${targetTool}"`,
-        available_actions: availableActions
+        available_actions: availableActions.map((row: any) => row.action_name)
       };
     }
 
     // Get parameters
-    const paramRows = db.prepare(`
-      SELECT param_name, param_type, required, description, default_value
-      FROM t_help_action_params
-      WHERE action_id = ?
-      ORDER BY required DESC, param_name
-    `).all(actionRow.action_id) as Array<{
-      param_name: string;
-      param_type: string;
-      required: number;
-      description: string;
-      default_value: string | null;
-    }>;
+    const paramRows = await knex('t_help_action_params')
+      .where({ action_id: actionRow.action_id })
+      .orderBy([
+        { column: 'required', order: 'desc' },
+        { column: 'param_name', order: 'asc' }
+      ])
+      .select('param_name', 'param_type', 'required', 'description', 'default_value') as Array<{
+        param_name: string;
+        param_type: string;
+        required: number;
+        description: string;
+        default_value: string | null;
+      }>;
 
     const parameters: HelpParameter[] = paramRows.map(row => {
       const marker = row.required === 1 ? '🔴 REQUIRED' : '⚪ OPTIONAL';
@@ -268,35 +267,33 @@ export function queryHelpParams(adapter: DatabaseAdapter, targetTool: string, ta
  * Query tool overview + all actions
  * Target: ~100-200 tokens (vs ~5,000 legacy)
  */
-export function queryHelpTool(adapter: DatabaseAdapter, tool: string): HelpToolResult | { error: string; available_tools?: string[] } {
-  const db = getRawDb(adapter);
+export async function queryHelpTool(adapter: DatabaseAdapter, tool: string): Promise<HelpToolResult | { error: string; available_tools?: string[] }> {
+  const knex = adapter.getKnex();
   try {
     // Get tool info
-    const toolRow = db.prepare(`
-      SELECT tool_name, description
-      FROM m_help_tools
-      WHERE tool_name = ?
-    `).get(tool) as { tool_name: string; description: string } | undefined;
+    const toolRow = await knex('m_help_tools')
+      .where({ tool_name: tool })
+      .select('tool_name', 'description')
+      .first() as { tool_name: string; description: string } | undefined;
 
     if (!toolRow) {
-      const availableTools = db.prepare('SELECT tool_name FROM m_help_tools ORDER BY tool_name').all()
-        .map((row: any) => row.tool_name);
+      const availableTools = await knex('m_help_tools')
+        .orderBy('tool_name')
+        .select('tool_name');
       return {
         error: `Tool "${tool}" not found`,
-        available_tools: availableTools
+        available_tools: availableTools.map((row: any) => row.tool_name)
       };
     }
 
     // Get all actions for this tool
-    const actionRows = db.prepare(`
-      SELECT action_name, description
-      FROM m_help_actions
-      WHERE tool_name = ?
-      ORDER BY action_name
-    `).all(tool) as Array<{
-      action_name: string;
-      description: string;
-    }>;
+    const actionRows = await knex('m_help_actions')
+      .where({ tool_name: tool })
+      .orderBy('action_name')
+      .select('action_name', 'description') as Array<{
+        action_name: string;
+        description: string;
+      }>;
 
     const actions: HelpActionSummary[] = actionRows.map(row => ({
       name: row.action_name,
@@ -319,22 +316,22 @@ export function queryHelpTool(adapter: DatabaseAdapter, tool: string): HelpToolR
  * Query single use-case with full workflow
  * Target: ~150-200 tokens per use-case
  */
-export function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: number): HelpUseCaseResult | { error: string } {
-  const db = getRawDb(adapter);
+export async function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: number): Promise<HelpUseCaseResult | { error: string }> {
+  const knex = adapter.getKnex();
   try {
-    const row = db.prepare(`
-      SELECT
-        uc.use_case_id,
-        cat.category_name as category,
-        uc.title,
-        uc.complexity,
-        uc.description,
-        uc.full_example,
-        uc.action_sequence
-      FROM t_help_use_cases uc
-      JOIN m_help_use_case_categories cat ON uc.category_id = cat.category_id
-      WHERE uc.use_case_id = ?
-    `).get(use_case_id) as {
+    const row = await knex('t_help_use_cases as uc')
+      .join('m_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id')
+      .where({ 'uc.use_case_id': use_case_id })
+      .select(
+        'uc.use_case_id',
+        'cat.category_name as category',
+        'uc.title',
+        'uc.complexity',
+        'uc.description',
+        'uc.full_example',
+        'uc.action_sequence'
+      )
+      .first() as {
       use_case_id: number;
       category: string;
       title: string;
@@ -368,7 +365,7 @@ export function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: number):
  * List use-cases by category/complexity with pagination
  * Target: ~100-300 tokens depending on result count
  */
-export function queryHelpListUseCases(
+export async function queryHelpListUseCases(
   adapter: DatabaseAdapter,
   options: {
     category?: string;
@@ -376,76 +373,71 @@ export function queryHelpListUseCases(
     limit?: number;
     offset?: number;
   } = {}
-): HelpListUseCasesResult | { error: string; available_categories?: string[] } {
-  const db = getRawDb(adapter);
+): Promise<HelpListUseCasesResult | { error: string; available_categories?: string[] }> {
+  const knex = adapter.getKnex();
   try {
     const { category, complexity, limit = 20, offset = 0 } = options;
 
-    // Build WHERE clause
-    const conditions: string[] = [];
-    const params: any[] = [];
-
     if (category) {
       // Verify category exists
-      const categoryExists = db.prepare(
-        'SELECT category_name FROM m_help_use_case_categories WHERE category_name = ?'
-      ).get(category);
+      const categoryExists = await knex('m_help_use_case_categories')
+        .where({ category_name: category })
+        .select('category_name')
+        .first();
 
       if (!categoryExists) {
-        const availableCategories = db.prepare(
-          'SELECT category_name FROM m_help_use_case_categories ORDER BY category_name'
-        ).all().map((row: any) => row.category_name);
+        const availableCategories = await knex('m_help_use_case_categories')
+          .select('category_name')
+          .orderBy('category_name')
+          .then(rows => rows.map((row: any) => row.category_name));
         return {
           error: `Category "${category}" not found`,
           available_categories: availableCategories
         };
       }
-      conditions.push('cat.category_name = ?');
-      params.push(category);
     }
 
-    if (complexity) {
-      if (!['basic', 'intermediate', 'advanced'].includes(complexity)) {
-        return { error: 'Complexity must be one of: basic, intermediate, advanced' };
-      }
-      conditions.push('uc.complexity = ?');
-      params.push(complexity);
+    if (complexity && !['basic', 'intermediate', 'advanced'].includes(complexity)) {
+      return { error: 'Complexity must be one of: basic, intermediate, advanced' };
     }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Get total count (all use-cases)
-    const totalRow = db.prepare('SELECT COUNT(*) as count FROM t_help_use_cases').get() as { count: number };
+    const totalRow = await knex('t_help_use_cases').count('* as count').first() as { count: number };
     const total = totalRow.count;
 
+    // Build filtered query
+    let filteredQuery = knex('t_help_use_cases as uc')
+      .join('m_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id');
+
+    if (category) {
+      filteredQuery = filteredQuery.where({ 'cat.category_name': category });
+    }
+    if (complexity) {
+      filteredQuery = filteredQuery.where({ 'uc.complexity': complexity });
+    }
+
     // Get filtered count
-    const filteredRow = db.prepare(`
-      SELECT COUNT(*) as count
-      FROM t_help_use_cases uc
-      JOIN m_help_use_case_categories cat ON uc.category_id = cat.category_id
-      ${whereClause}
-    `).get(...params) as { count: number };
+    const filteredRow = await filteredQuery.clone().count('* as count').first() as { count: number };
     const filtered = filteredRow.count;
 
     // Get use-cases
-    const rows = db.prepare(`
-      SELECT
-        uc.use_case_id,
-        uc.title,
-        uc.complexity,
-        cat.category_name as category
-      FROM t_help_use_cases uc
-      JOIN m_help_use_case_categories cat ON uc.category_id = cat.category_id
-      ${whereClause}
-      ORDER BY
+    const rows = await filteredQuery
+      .select(
+        'uc.use_case_id',
+        'uc.title',
+        'uc.complexity',
+        'cat.category_name as category'
+      )
+      .orderByRaw(`
         CASE uc.complexity
           WHEN 'basic' THEN 1
           WHEN 'intermediate' THEN 2
           WHEN 'advanced' THEN 3
-        END,
-        uc.use_case_id
-      LIMIT ? OFFSET ?
-    `).all(...params, limit, offset) as Array<{
+        END
+      `)
+      .orderBy('uc.use_case_id')
+      .limit(limit)
+      .offset(offset) as Array<{
       use_case_id: number;
       title: string;
       complexity: string;
@@ -467,9 +459,10 @@ export function queryHelpListUseCases(
 
     // Add available categories if no category filter
     if (!category) {
-      const categories = db.prepare(
-        'SELECT category_name FROM m_help_use_case_categories ORDER BY category_name'
-      ).all().map((row: any) => row.category_name);
+      const categories = await knex('m_help_use_case_categories')
+        .select('category_name')
+        .orderBy('category_name')
+        .then(rows => rows.map((row: any) => row.category_name));
       result.categories = categories;
     }
 
@@ -486,26 +479,23 @@ export function queryHelpListUseCases(
  * Analyzes action sequences from use-cases to suggest next steps
  * Target: ~30-50 tokens
  */
-export function queryHelpNextActions(adapter: DatabaseAdapter, targetTool: string, targetAction: string): HelpNextActionsResult | { error: string } {
-  const db = getRawDb(adapter);
+export async function queryHelpNextActions(adapter: DatabaseAdapter, targetTool: string, targetAction: string): Promise<HelpNextActionsResult | { error: string }> {
+  const knex = adapter.getKnex();
   try {
     // Verify tool and action exist
-    const actionRow = db.prepare(`
-      SELECT action_id
-      FROM m_help_actions
-      WHERE tool_name = ? AND action_name = ?
-    `).get(targetTool, targetAction);
+    const actionRow = await knex('m_help_actions')
+      .where({ tool_name: targetTool, action_name: targetAction })
+      .select('action_id')
+      .first();
 
     if (!actionRow) {
       return { error: `Action "${targetTool}.${targetAction}" not found in help system` };
     }
 
     // Find use-cases containing this action in their sequence
-    const useCases = db.prepare(`
-      SELECT action_sequence, title, complexity
-      FROM t_help_use_cases
-      WHERE action_sequence LIKE ?
-    `).all(`%"${targetAction}"%`) as Array<{
+    const useCases = await knex('t_help_use_cases')
+      .where('action_sequence', 'like', `%"${targetAction}"%`)
+      .select('action_sequence', 'title', 'complexity') as Array<{
       action_sequence: string;
       title: string;
       complexity: string;

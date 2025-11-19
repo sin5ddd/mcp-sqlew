@@ -13,7 +13,6 @@
 
 import chokidar, { FSWatcher } from 'chokidar';
 import { getAdapter, getConfigInt, getConfigBool } from '../database.js';
-import { SQLiteAdapter } from '../adapters/index.js';
 import { basename, dirname, join } from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
@@ -26,17 +25,6 @@ import { detectAndCompleteReviewedTasks, detectAndCompleteOnStaging, detectAndAr
 import { detectVCS } from '../utils/vcs-adapter.js';
 import { debugLog } from '../utils/debug-logger.js';
 
-/**
- * Helper to get raw better-sqlite3 Database instance from adapter
- * For legacy code that uses db.prepare() directly
- */
-function getRawDb(): any {
-  const adapter = getAdapter();
-  if (adapter instanceof SQLiteAdapter) {
-    return adapter.getRawDatabase();
-  }
-  throw new Error('File watcher only supported for SQLite adapter');
-}
 
 /**
  * File-to-task mapping for efficient lookup
@@ -407,7 +395,7 @@ export class FileWatcher {
     debugLog('INFO', `File changed: ${basename(normalizedPath)}`);
 
     const adapter = getAdapter();
-    const db = getRawDb();
+    const knex = adapter.getKnex();
 
     // Process each task linked to this file
     for (const mapping of mappings) {
@@ -424,8 +412,14 @@ export class FileWatcher {
       if (currentStatus === 'todo') {
         try {
           // Get status IDs
-          const todoStatusId = db.prepare('SELECT id FROM m_task_statuses WHERE name = ?').get('todo') as { id: number } | undefined;
-          const inProgressStatusId = db.prepare('SELECT id FROM m_task_statuses WHERE name = ?').get('in_progress') as { id: number } | undefined;
+          const todoStatusId = await knex('m_task_statuses')
+            .where({ name: 'todo' })
+            .select('id')
+            .first() as { id: number } | undefined;
+          const inProgressStatusId = await knex('m_task_statuses')
+            .where({ name: 'in_progress' })
+            .select('id')
+            .first() as { id: number } | undefined;
 
           if (!todoStatusId || !inProgressStatusId) {
             debugLog('ERROR', 'Cannot find task status IDs');
@@ -433,11 +427,12 @@ export class FileWatcher {
           }
 
           // Update task status: todo → in_progress
-          db.prepare(`
-            UPDATE t_tasks
-            SET status_id = ?, updated_ts = unixepoch()
-            WHERE id = ? AND status_id = ?
-          `).run(inProgressStatusId.id, taskId, todoStatusId.id);
+          await knex('t_tasks')
+            .where({ id: taskId, status_id: todoStatusId.id })
+            .update({
+              status_id: inProgressStatusId.id,
+              updated_ts: knex.raw('unixepoch()')
+            });
 
           // Update in-memory status
           mapping.currentStatus = 'in_progress';
@@ -445,22 +440,22 @@ export class FileWatcher {
           debugLog('INFO', `Task #${taskId} "${taskTitle}": todo → in_progress`);
 
           // Log to activity log
-          const agentId = db.prepare('SELECT assigned_agent_id FROM t_tasks WHERE id = ?').get(taskId) as { assigned_agent_id: number | null } | undefined;
-          if (agentId?.assigned_agent_id) {
-            db.prepare(`
-              INSERT INTO t_activity_log (agent_id, action_type, target, details)
-              VALUES (?, ?, ?, ?)
-            `).run(
-              agentId.assigned_agent_id,
-              'task_auto_transition',
-              `task_id:${taskId}`,
-              JSON.stringify({
+          const agentIdRow = await knex('t_tasks')
+            .where({ id: taskId })
+            .select('assigned_agent_id')
+            .first() as { assigned_agent_id: number | null } | undefined;
+          if (agentIdRow?.assigned_agent_id) {
+            await knex('t_activity_log').insert({
+              agent_id: agentIdRow.assigned_agent_id,
+              action_type: 'task_auto_transition',
+              target: `task_id:${taskId}`,
+              details: JSON.stringify({
                 from_status: 'todo',
                 to_status: 'in_progress',
                 trigger: 'file_change',
                 file_path: normalizedPath
               })
-            );
+            });
           }
         } catch (error) {
           debugLog('ERROR', `Error auto-transitioning task #${taskId}`, { error });
@@ -556,15 +551,15 @@ export class FileWatcher {
     taskTitle: string,
     mapping: FileTaskMapping
   ): Promise<void> {
-    const db = getRawDb();
+    const adapter = getAdapter();
+    const knex = adapter.getKnex();
 
     try {
       // Get acceptance criteria JSON
-      const taskDetails = db.prepare(`
-        SELECT acceptance_criteria_json
-        FROM t_task_details
-        WHERE task_id = ?
-      `).get(taskId) as { acceptance_criteria_json: string | null } | undefined;
+      const taskDetails = await knex('t_task_details')
+        .where({ task_id: taskId })
+        .select('acceptance_criteria_json')
+        .first() as { acceptance_criteria_json: string | null } | undefined;
 
       if (!taskDetails || !taskDetails.acceptance_criteria_json) {
         // No acceptance criteria defined, skip auto-completion
@@ -591,19 +586,27 @@ export class FileWatcher {
 
       if (allPassed) {
         // All checks passed - auto-complete task: in_progress → done
-        const inProgressStatusId = db.prepare('SELECT id FROM m_task_statuses WHERE name = ?').get('in_progress') as { id: number } | undefined;
-        const doneStatusId = db.prepare('SELECT id FROM m_task_statuses WHERE name = ?').get('done') as { id: number } | undefined;
+        const inProgressStatusId = await knex('m_task_statuses')
+          .where({ name: 'in_progress' })
+          .select('id')
+          .first() as { id: number } | undefined;
+        const doneStatusId = await knex('m_task_statuses')
+          .where({ name: 'done' })
+          .select('id')
+          .first() as { id: number } | undefined;
 
         if (!inProgressStatusId || !doneStatusId) {
           debugLog('ERROR', 'Cannot find task status IDs');
           return;
         }
 
-        db.prepare(`
-          UPDATE t_tasks
-          SET status_id = ?, completed_ts = unixepoch(), updated_ts = unixepoch()
-          WHERE id = ? AND status_id = ?
-        `).run(doneStatusId.id, taskId, inProgressStatusId.id);
+        await knex('t_tasks')
+          .where({ id: taskId, status_id: inProgressStatusId.id })
+          .update({
+            status_id: doneStatusId.id,
+            completed_ts: knex.raw('unixepoch()'),
+            updated_ts: knex.raw('unixepoch()')
+          });
 
         // Update in-memory status
         mapping.currentStatus = 'done';
@@ -614,22 +617,22 @@ export class FileWatcher {
         this.unregisterTask(taskId);
 
         // Log to activity log
-        const agentId = db.prepare('SELECT assigned_agent_id FROM t_tasks WHERE id = ?').get(taskId) as { assigned_agent_id: number | null } | undefined;
-        if (agentId?.assigned_agent_id) {
-          db.prepare(`
-            INSERT INTO t_activity_log (agent_id, action_type, target, details)
-            VALUES (?, ?, ?, ?)
-          `).run(
-            agentId.assigned_agent_id,
-            'task_auto_complete',
-            `task_id:${taskId}`,
-            JSON.stringify({
+        const agentIdRow = await knex('t_tasks')
+          .where({ id: taskId })
+          .select('assigned_agent_id')
+          .first() as { assigned_agent_id: number | null } | undefined;
+        if (agentIdRow?.assigned_agent_id) {
+          await knex('t_activity_log').insert({
+            agent_id: agentIdRow.assigned_agent_id,
+            action_type: 'task_auto_complete',
+            target: `task_id:${taskId}`,
+            details: JSON.stringify({
               from_status: 'in_progress',
               to_status: 'done',
               trigger: 'acceptance_criteria_passed',
               checks_passed: results.length
             })
-          );
+          });
         }
       } else {
         const failedCount = results.filter(r => !r.success).length;
@@ -644,24 +647,22 @@ export class FileWatcher {
    * Load existing task-file links from database
    */
   private async loadTaskFileLinks(): Promise<void> {
-    const db = getRawDb();
+    const adapter = getAdapter();
+    const knex = adapter.getKnex();
 
     try {
       // Query all active tasks with file links
-      const query = `
-        SELECT
-          t.id as task_id,
-          t.title as task_title,
-          s.name as status,
-          f.path as file_path
-        FROM t_tasks t
-        JOIN m_task_statuses s ON t.status_id = s.id
-        JOIN t_task_file_links tfl ON t.id = tfl.task_id
-        JOIN m_files f ON tfl.file_id = f.id
-        WHERE s.name IN ('todo', 'in_progress', 'waiting_review', 'blocked')
-      `;
-
-      const links = db.prepare(query).all() as Array<{
+      const links = await knex('t_tasks as t')
+        .join('m_task_statuses as s', 't.status_id', 's.id')
+        .join('t_task_file_links as tfl', 't.id', 'tfl.task_id')
+        .join('m_files as f', 'tfl.file_id', 'f.id')
+        .whereIn('s.name', ['todo', 'in_progress', 'waiting_review', 'blocked'])
+        .select(
+          't.id as task_id',
+          't.title as task_title',
+          's.name as status',
+          'f.path as file_path'
+        ) as Array<{
         task_id: number;
         task_title: string;
         status: string;
@@ -724,17 +725,20 @@ export class FileWatcher {
    */
   private async checkAndTransitionToReview(taskId: number): Promise<void> {
     const adapter = getAdapter();
-    const db = getRawDb();
+    const knex = adapter.getKnex();
 
     try {
       // Get current task status
-      const task = db.prepare(`
-        SELECT t.status_id, s.name as status_name, td.acceptance_criteria_json
-        FROM t_tasks t
-        JOIN m_task_statuses s ON s.id = t.status_id
-        LEFT JOIN t_task_details td ON td.task_id = t.id
-        WHERE t.id = ?
-      `).get(taskId) as { status_id: number; status_name: string; acceptance_criteria_json: string | null } | undefined;
+      const task = await knex('t_tasks as t')
+        .join('m_task_statuses as s', 's.id', 't.status_id')
+        .leftJoin('t_task_details as td', 'td.task_id', 't.id')
+        .where({ 't.id': taskId })
+        .select(
+          't.status_id',
+          's.name as status_name',
+          'td.acceptance_criteria_json'
+        )
+        .first() as { status_id: number; status_name: string; acceptance_criteria_json: string | null } | undefined;
 
       if (!task) {
         return; // Task not found
@@ -781,7 +785,7 @@ export class FileWatcher {
 
       // Run quality checks
       const { ready, results } = await checkReadyForReview(
-        db,
+        adapter,
         taskId,
         filePaths,
         modifiedFiles,
@@ -801,13 +805,24 @@ export class FileWatcher {
           debugLog('INFO', `${check}: ${result.message}`);
         });
 
+        // Get waiting_review status ID
+        const waitingReviewStatus = await knex('m_task_statuses')
+          .where({ name: 'waiting_review' })
+          .select('id')
+          .first() as { id: number } | undefined;
+
+        if (!waitingReviewStatus) {
+          debugLog('ERROR', 'Cannot find waiting_review status');
+          return;
+        }
+
         // Update task status
-        db.prepare(`
-          UPDATE t_tasks
-          SET status_id = (SELECT id FROM m_task_statuses WHERE name = 'waiting_review'),
-              updated_ts = unixepoch()
-          WHERE id = ?
-        `).run(taskId);
+        await knex('t_tasks')
+          .where({ id: taskId })
+          .update({
+            status_id: waitingReviewStatus.id,
+            updated_ts: knex.raw('unixepoch()')
+          });
 
         debugLog('INFO', `Task #${taskId} auto-transitioned to waiting_review`);
 

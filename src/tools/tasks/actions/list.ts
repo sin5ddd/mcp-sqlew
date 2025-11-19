@@ -9,6 +9,7 @@ import { validateActionParams } from '../../../utils/parameter-validator.js';
 import { validateRange } from '../../../utils/validators.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks, detectAndCompleteReviewedTasks, detectAndArchiveOnCommit } from '../../../utils/task-stale-detection.js';
+import { getTaskBoard } from '../../../utils/view-queries.js';
 import { STATUS_TO_ID } from '../types.js';
 
 /**
@@ -38,67 +39,67 @@ export async function listTasks(params: {
     const gitArchivedCount = await detectAndArchiveOnCommit(actualAdapter);
     const archiveCount = await autoArchiveOldDoneTasks(actualAdapter);
 
-    // Build query with optional dependency counts
-    let query;
-    if (params.include_dependency_counts) {
-      // Include dependency counts with LEFT JOINs
-      const blockersCTE = knex('t_task_dependencies')
-        .select('blocked_task_id')
-        .count('* as blocked_by_count')
-        .groupBy('blocked_task_id')
-        .as('blockers');
-
-      const blockingCTE = knex('t_task_dependencies')
-        .select('blocker_task_id')
-        .count('* as blocking_count')
-        .groupBy('blocker_task_id')
-        .as('blocking');
-
-      query = knex('v_task_board as vt')
-        .leftJoin(blockersCTE, 'vt.id', 'blockers.blocked_task_id')
-        .leftJoin(blockingCTE, 'vt.id', 'blocking.blocker_task_id')
-        .select(
-          'vt.*',
-          knex.raw('COALESCE(blockers.blocked_by_count, 0) as blocked_by_count'),
-          knex.raw('COALESCE(blocking.blocking_count, 0) as blocking_count')
-        );
-    } else {
-      // Standard query without dependency counts
-      query = knex('v_task_board');
-    }
+    // Get all tasks then filter in JavaScript
+    let rows = await getTaskBoard(knex);
 
     // Filter by project_id (Constraint #22: Multi-project isolation)
-    query = query.where(params.include_dependency_counts ? 'vt.project_id' : 'project_id', projectId);
+    rows = rows.filter(r => r.project_id === projectId);
 
     // Filter by status
     if (params.status) {
       if (!STATUS_TO_ID[params.status]) {
         throw new Error(`Invalid status: ${params.status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
       }
-      query = query.where(params.include_dependency_counts ? 'vt.status' : 'status', params.status);
+      rows = rows.filter(r => r.status === params.status);
     }
 
     // Filter by assigned agent
     if (params.assigned_agent) {
-      query = query.where(params.include_dependency_counts ? 'vt.assigned_to' : 'assigned_to', params.assigned_agent);
+      rows = rows.filter(r => r.assigned_to === params.assigned_agent);
     }
 
     // Filter by layer
     if (params.layer) {
-      query = query.where(params.include_dependency_counts ? 'vt.layer' : 'layer', params.layer);
+      rows = rows.filter(r => r.layer === params.layer);
     }
 
     // Filter by tags
     if (params.tags && params.tags.length > 0) {
       // Parse tags (handles both arrays and JSON strings from MCP)
       const tags = parseStringArray(params.tags);
-      for (const tag of tags) {
-        query = query.where(params.include_dependency_counts ? 'vt.tags' : 'tags', 'like', `%${tag}%`);
-      }
+      rows = rows.filter(r => {
+        if (!r.tags) return false;
+        return tags.every(tag => r.tags!.includes(tag));
+      });
     }
 
-    // Order by updated timestamp (most recent first)
-    query = query.orderBy(params.include_dependency_counts ? 'vt.updated_ts' : 'updated_ts', 'desc');
+    // Add dependency counts if requested
+    if (params.include_dependency_counts) {
+      const blockerCounts = await knex('t_task_dependencies')
+        .select('blocked_task_id')
+        .count('* as count')
+        .groupBy('blocked_task_id')
+        .then(results => new Map(results.map((r: any) => [r.blocked_task_id, Number(r.count)])));
+
+      const blockingCounts = await knex('t_task_dependencies')
+        .select('blocker_task_id')
+        .count('* as count')
+        .groupBy('blocker_task_id')
+        .then(results => new Map(results.map((r: any) => [r.blocker_task_id, Number(r.count)])));
+
+      rows = rows.map(row => ({
+        ...row,
+        blocked_by_count: blockerCounts.get(row.task_id) || 0,
+        blocking_count: blockingCounts.get(row.task_id) || 0
+      }));
+    }
+
+    // Sort by updated timestamp (most recent first)
+    rows.sort((a, b) => {
+      const dateA = new Date(a.updated).getTime();
+      const dateB = new Date(b.updated).getTime();
+      return dateB - dateA; // desc
+    });
 
     // Pagination
     const limit = params.limit !== undefined ? params.limit : 50;
@@ -107,10 +108,7 @@ export async function listTasks(params: {
     validateRange(limit, 'Parameter "limit"', 0, 100);
     validateRange(offset, 'Parameter "offset"', 0, Number.MAX_SAFE_INTEGER);
 
-    query = query.limit(limit).offset(offset);
-
-    // Execute query
-    const rows = await query;
+    rows = rows.slice(offset, offset + limit);
 
     return {
       tasks: rows,

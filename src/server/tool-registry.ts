@@ -20,7 +20,7 @@ export function getToolRegistry(): Tool[] {
           action: {
             type: 'string',
             description: 'Action',
-            enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'add_decision_context', 'list_decision_contexts', 'help', 'example', 'use_case']
+            enum: ['set', 'get', 'list', 'search_tags', 'search_layer', 'versions', 'quick_set', 'search_advanced', 'set_batch', 'has_updates', 'set_from_template', 'create_template', 'list_templates', 'hard_delete', 'add_decision_context', 'list_decision_contexts', 'analytics', 'create_policy', 'list_policies', 'set_from_policy', 'help', 'example', 'use_case']
           }
         },
         required: ['action'],
@@ -221,6 +221,47 @@ Use this tool to learn end-to-end workflows and multi-step operations. Returns w
           }
         },
         required: ['action'],
+      },
+    },
+    {
+      name: 'suggest',
+      description: 'Intelligent decision/constraint suggestion system. Find related decisions by key pattern, tags, or full context. Prevents duplicates and ensures consistency.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'Suggestion action to perform',
+            enum: ['by_key', 'by_tags', 'by_context', 'check_duplicate', 'help']
+          },
+          key: {
+            type: 'string',
+            description: 'Decision key (for by_key, by_context, check_duplicate)'
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags array (for by_tags, by_context)'
+          },
+          layer: {
+            type: 'string',
+            description: 'Layer filter (optional)'
+          },
+          priority: {
+            type: 'number',
+            description: 'Priority level (optional)'
+          },
+          limit: {
+            type: 'number',
+            description: 'Max suggestions (default: 5)'
+          },
+          min_score: {
+            type: 'number',
+            description: 'Minimum relevance score (default: 30)'
+          }
+        },
+        required: ['action'],
+        additionalProperties: false,
       },
     },
   ];
