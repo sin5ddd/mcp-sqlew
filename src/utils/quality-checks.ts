@@ -5,7 +5,7 @@
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import type { Database } from 'better-sqlite3';
+import type { DatabaseAdapter } from '../adapters/index.js';
 
 const execAsync = promisify(exec);
 
@@ -21,26 +21,24 @@ export interface QualityCheckResult {
 /**
  * Check if all watched files for a task have been modified at least once
  *
- * @param db - Database connection
+ * @param adapter - Database adapter
  * @param taskId - Task ID to check
  * @param modifiedFiles - Set of files that have been modified
  * @returns True if all watched files have been modified, false otherwise
  */
-export function checkAllFilesModified(
-  db: Database,
+export async function checkAllFilesModified(
+  adapter: DatabaseAdapter,
   taskId: number,
   modifiedFiles: Set<string>
-): QualityCheckResult {
+): Promise<QualityCheckResult> {
   try {
-    // Get all watched files for this task
-    const stmt = db.prepare(`
-      SELECT f.path
-      FROM t_task_file_links tfl
-      JOIN m_files f ON f.id = tfl.file_id
-      WHERE tfl.task_id = ?
-    `);
+    const knex = adapter.getKnex();
 
-    const watchedFiles = stmt.all(taskId) as Array<{ path: string }>;
+    // Get all watched files for this task
+    const watchedFiles = await knex('t_task_file_links as tfl')
+      .join('m_files as f', 'f.id', 'tfl.file_id')
+      .where('tfl.task_id', taskId)
+      .select('f.path') as Array<{ path: string }>;
 
     if (watchedFiles.length === 0) {
       // No files to watch - consider this check passed
@@ -135,17 +133,19 @@ export async function checkTypeScriptCompiles(filePaths: string[]): Promise<Qual
 /**
  * Check if tests pass for the task
  *
- * @param db - Database connection
+ * @param adapter - Database adapter
  * @param taskId - Task ID to check
  * @param filePaths - Array of file paths being watched
  * @returns Promise resolving to true if tests pass, false otherwise
  */
 export async function checkTestsPass(
-  db: Database,
+  adapter: DatabaseAdapter,
   taskId: number,
   filePaths: string[]
 ): Promise<QualityCheckResult> {
   try {
+    const knex = adapter.getKnex();
+
     // Check if any files match test patterns
     const testPatterns = [/\.test\.(ts|tsx|js|jsx)$/, /\.spec\.(ts|tsx|js|jsx)$/];
     const testFiles = filePaths.filter(path =>
@@ -160,13 +160,10 @@ export async function checkTestsPass(
     }
 
     // Look for acceptance_criteria with tests_pass type
-    const stmt = db.prepare(`
-      SELECT acceptance_criteria
-      FROM t_task_details
-      WHERE task_id = ?
-    `);
-
-    const row = stmt.get(taskId) as { acceptance_criteria: string | null } | undefined;
+    const row = await knex('t_task_details')
+      .where({ task_id: taskId })
+      .select('acceptance_criteria')
+      .first() as { acceptance_criteria: string | null } | undefined;
 
     if (!row?.acceptance_criteria) {
       // No acceptance criteria - run default test command if package.json has test script
@@ -241,7 +238,7 @@ export async function checkTestsPass(
 /**
  * Check if task is ready for review based on all quality gates
  *
- * @param db - Database connection
+ * @param adapter - Database adapter
  * @param taskId - Task ID to check
  * @param filePaths - Array of file paths being watched
  * @param modifiedFiles - Set of files that have been modified
@@ -249,7 +246,7 @@ export async function checkTestsPass(
  * @returns Promise resolving to object with overall result and individual check results
  */
 export async function checkReadyForReview(
-  db: Database,
+  adapter: DatabaseAdapter,
   taskId: number,
   filePaths: string[],
   modifiedFiles: Set<string>,
@@ -266,7 +263,7 @@ export async function checkReadyForReview(
 
   // Run all enabled checks
   if (config.requireAllFilesModified) {
-    const result = checkAllFilesModified(db, taskId, modifiedFiles);
+    const result = await checkAllFilesModified(adapter, taskId, modifiedFiles);
     results.push({ check: 'all_files_modified', result });
   }
 
@@ -276,7 +273,7 @@ export async function checkReadyForReview(
   }
 
   if (config.requireTestsPass) {
-    const result = await checkTestsPass(db, taskId, filePaths);
+    const result = await checkTestsPass(adapter, taskId, filePaths);
     results.push({ check: 'tests_pass', result });
   }
 

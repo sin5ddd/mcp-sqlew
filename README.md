@@ -4,27 +4,26 @@
 [![npm version](https://img.shields.io/npm/v/sqlew.svg)](https://www.npmjs.com/package/sqlew)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-> **SQL Efficient Workflow** - MCP server for efficient context sharing between Claude Code sub-agents
+> **SQL Efficient Workflow** - MCP server Provides consistency and token savings for AI coding 
 
 ## What is sqlew?
 
 **sqlew** is a Model Context Protocol (MCP) server that gives AI agents organizational memory across sessions.
 
-### The Problem
-Without sqlew, every Claude session starts with zero context. You must re-explain decisions, agents can reintroduce bugs, and there's no way to track WHY decisions were made.
+### Concerns About AI Coding
+Every Claude session starts with zero context. You must re-explain decisions, agents can reintroduce bugs, and there's no way to track WHY decisions were made.
 
-It has been possible to keep records using Markdown files. However, large-scale projects or long-term maintenance records tend to generate massive amounts of documentation. This has become a problem, as it causes context rot in AI systems, leading to declining performance.
+It is possible to keep records using Markdown files.
+However, maintaining records for large-scale projects and long-term maintenance generates an enormous volume of documentation.
 
-### The Solution
+This has become problematic because it causes context rotting in AI systems, leading to performance deterioration.
+
+### *sqlew* provides the solution for this problem
 sqlew builds efficient external memory for AI by using relational databases.
 - Records the reasoning behind decisions
 - Enables querying past context
 - Prevents anti-patterns through constraints
 - Eliminates duplicate work via task management
-
-**Example:**
-- Session 1 records "API v1 deprecated".
-- Session 2 (days later) queries and automatically uses v2.
 
 > *This software does not send any data to external networks. We NEVER collect any data or usage statistics. Please use it with complete security.*
 
@@ -39,23 +38,43 @@ Traditional code analysis like git tells you **WHAT** is done, sqlew adds **WHY*
 ### ⚡ Token Efficiency
 **60-75% token reduction** in multi-session projects through structured data storage and selective querying.
 
-### 🎯 Key Features
-- **5 Specialized Tools**: decisions, tasks, files, constraints, stats
-- **Runtime Reconnection**: Automatic database connection recovery with exponential backoff
-- **Parameter Validation**: Typo detection, required/optional markers, 70-85% more concise error messages
-- **Metadata-Driven**: Tag, layer, scope, and version everything
-- **Decision Context**: Document WHY with rationale, alternatives, and trade-offs
-- **Task Dependencies**: Blocking relationships with circular detection
-- **Auto-File Tracking**: Zero-token task management via file watching
-- **Smart Review Detection**: Quality-based auto-transition to `waiting_review`
-- **Auto-Stale Detection**: Tasks auto-transition when idle
-- **Weekend-Aware Cleanup**: Smart retention during weekends
-- **Batch Operations**: Process up to 50 items atomically
+### 🎯 Key Benefits for Your Development Workflow
+
+#### 🧠 **Context Persistence Across Sessions**
+- **No More Re-Explaining**: AI remembers decisions from weeks ago - no need to re-explain "why we chose PostgreSQL over MongoDB"
+- **Session Continuity**: Pick up exactly where you left off, even after days or weeks
+- **Team Knowledge Sharing**: New team members (or new AI sessions) instantly understand past decisions
+
+#### 🛡️ **Prevents Context Rotting & Inconsistency**
+- **Architectural Constraints**: Define rules once ("always use async/await, never callbacks"), AI follows them forever
+- **Version History**: Track how decisions evolved - see what changed and when
+
+#### 🎯 **Enables Consistent, High-Quality Code**
+- **Bug Prevention**: AI won't reintroduce bugs you already fixed (decisions document "what didn't work")
+- **Pattern Enforcement**: Constraints ensure AI writes code matching your team's style
+- **Context-Aware Suggestions**: AI sees related decisions before creating new ones ("Did you know we already solved this?")
+- **Rationale Documentation**: Every decision includes WHY it was made, preventing cargo-cult programming
+
+#### 📊 **Transparent AI Work Tracking**
+- **Task Dependencies**: AI knows Task B needs Task A completed first
+- **Auto File Watching**: Tasks auto-update when AI edits tracked files (zero manual updates)
+- **Progress Visibility**: See exactly what AI is working on, what's blocked, what's done
+
+#### ⚡ **Efficiency & Reliability**
+- **60-75% Token Reduction**: Structured data beats dumping entire context into prompts
+- **Reduce Context Rot**: No more "this README is 50 pages and AI ignores half of it"
+- **Production-Ready**: 495/495 tests passing (100%), battle-tested on real projects
+
+---
+
+**Technical Features**: 6 specialized MCP tools (decisions, tasks, files, constraints, stats, suggest), smart similarity scoring (0-100 point algorithm), runtime reconnection, parameter validation, metadata-driven organization
 
 See [docs/TASK_OVERVIEW.md](docs/TASK_OVERVIEW.md) and [docs/DECISION_CONTEXT.md](docs/DECISION_CONTEXT.md) for details.
 
 ### 🔖Kanban-style AI Scrum
 ![kanban-style task management](assets/kanban-visualizer.png)
+
+(This visualizer is not included in this package)
 
 ## Installation
 
@@ -79,16 +98,38 @@ on `.mcp.json` in your project's root, add these lines:
 ```
 **Recommend to restart claude after initialize**
 
-The first time, sqlew install custom agents and initialize database. Custom agents are not loaded in this time. Please exit claude once, and restart claude again.
+The first time, sqlew initializes database, installs custom agents and slash commands. But agents and commands are not loaded in this time. So, please exit claude once, and restart claude again.
 
 It's Ready!
+
+## 🚀 Quick Start: Slash Commands (Recommended)
+
+**Slash commands are the easiest way to use sqlew!** Just type `/sqw-` in Claude Code to see available commands.
+
+### Most Common Commands
+
+```bash
+# Plan a new feature (architecture + tasks)
+/sqw-plan "Implement user authentication"
+
+# Record a decision (like meeting minutes)
+/sqw-secretary "Use PostgreSQL 15 for production database"
+
+# Implement a feature (creates tasks AND coordinates agents to build it!)
+/sqw-scrum implement JWT authentication
+
+# Search past decisions
+/sqw-research "Why did we choose Knex for migrations?"
+```
+
+**All 6 commands** are installed automatically on first run. See [Slash Commands](#slash-commands) section below for complete guide.
+
+---
 
 **⚠️Note**: Global install (`npm install -g`) is **not recommended** because sqlew requires an independent settings per project. Each project should maintain its own context database in `.sqlew/sqlew.db`.
 
 **Custom database path:** Add path as argument: `"args": ["sqlew", "/path/to/db.db"]`
 **Default location:** `.sqlew/sqlew.db`
-
-### Jetbrains Junie AI
 
 **⚠️ Not Supported:** Junie AI cannot use relative paths in MCP server configurations, which makes it incompatible with sqlew's project-based database model. Each project requires its own isolated database at `.sqlew/sqlew.db`, but Junie AI's global MCP configuration cannot handle per-project database paths.
 
@@ -98,11 +139,13 @@ It's Ready!
 
 sqlew supports multiple database backends for different deployment scenarios:
 
-| Database | Use Case | Status |
-|----------|----------|--------|
-| **SQLite** | Development, small projects | ✅ Default |
-| **MySQL 8.0 / MariaDB 10+** | Production, shared environments | ✅ Supported |
-| **PostgreSQL 12+** | Production, enterprise | ✅ v3.8.0+ |
+| Database | Use Case                                     | Status      |
+|----------|----------------------------------------------|-------------|
+| **SQLite** | Personal or small projects                   | ✅ Default   |
+| **MySQL 8.0 / MariaDB 10+** | Production, shared environments, remote work | ✅ Supported |
+| **PostgreSQL 12+** | Production, shared environments, remote work | ✅ Supported |
+
+Of course, it also works with Docker RDB instances.
 
 ### Optional Config File
 
@@ -197,7 +240,7 @@ read sqlew usecases, and plan implementation of feature X using sqlew.
 or invoke Specialized Agent
 
 ```
-plan implementation of feature X with @agent-scrum-master.
+/sqw-plan implementation of feature X .
 ```
 
 Specialized Agents use sqlew more efficiently.
@@ -236,6 +279,71 @@ Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
 
 **See [docs/SPECIALIZED_AGENTS.md](docs/SPECIALIZED_AGENTS.md) for complete installation guide, usage examples, and customization.**
 
+## Slash Commands
+
+**🎯 Recommended for Human Users** - Slash commands provide guided workflows that are easier than raw MCP tool calls.
+
+Installed automatically to `.claude/commands/` on server startup. Just type `/sqw-` in Claude Code to get started!
+
+### Available Commands
+
+| Command | What It Does | Perfect For |
+|---------|--------------|-------------|
+| **`/sqw-plan`** | Complete feature planning (architecture + tasks) | Starting new features, planning sprints |
+| **`/sqw-secretary`** | Record decisions like meeting minutes | Documenting team decisions, capturing context |
+| **`/sqw-scrum`** | Create tasks AND coordinate agents to implement them | Actually building features end-to-end |
+| **`/sqw-documentor`** | Document architectural decisions with full context | Design reviews, architecture documentation |
+| **`/sqw-research`** | Search past decisions and analyze patterns | Onboarding, understanding past choices |
+| **`/sqw-review`** | Validate code/design against decisions & constraints | Code reviews, ensuring consistency |
+
+### Why Use Slash Commands?
+
+✅ **Guided workflows** - Commands prompt you through the process
+✅ **Agent coordination** - Automatically invokes the right agents
+✅ **Error handling** - Built-in validation and helpful error messages
+✅ **Mode detection** - `/sqw-scrum plan` manages tasks, `/sqw-scrum implement` builds code
+✅ **No MCP knowledge needed** - Just describe what you want in plain English
+
+### Quick Examples
+
+```bash
+# Starting a new feature
+/sqw-plan Add OAuth2 social login with Google and GitHub
+# → Architect documents decisions, Scrum creates tasks
+
+# Recording a decision from today's meeting
+/sqw-secretary Team decided to use PostgreSQL 15 for production
+# → Saves with context, checks for duplicates
+
+# Actually implementing a feature (game changer!)
+/sqw-scrum implement JWT authentication
+# → Creates tasks, coordinates agents, writes code, runs tests
+
+# Finding out why something was done
+/sqw-research Why did we choose Knex over Prisma?
+# → Searches decisions, shows rationale and tradeoffs
+```
+
+### Configuration
+
+All commands install by default. Customize in `.sqlew/config.toml`:
+
+```toml
+[commands]
+plan = true        # Feature planning
+secretary = true   # Record decisions
+scrum = true       # Task management + execution
+documentor = true  # Architecture docs
+research = true    # Search history
+review = true      # Code/design validation
+```
+
+**📚 Complete Guide**: [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) - Usage patterns, customization, examples
+
+### Advanced: Direct MCP Tool Access
+
+Power users can still call MCP tools directly. See [Available Tools](#available-tools) section below.
+
 ### Available Tools
 
 | Tool | Purpose | Example Use |
@@ -245,6 +353,7 @@ Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
 | **task** | Track work | "Implement feature X" |
 | **file** | Track changes | "Modified auth.ts" |
 | **stats** | Database metrics | Get layer summary |
+| **suggest** | Find similar decisions (v3.9.0) | Duplicate detection, pattern search |
 
 
 ## Documentation
@@ -276,6 +385,7 @@ All tools support:
 - [Task Migration](docs/TASK_MIGRATION.md) - Migrate from decision-based tracking
 
 **Advanced Features:**
+- [Decision Intelligence](docs/DECISION_INTELLIGENCE.md) - Three-tier duplicate detection (v3.9.0)
 - [Decision Context](docs/DECISION_CONTEXT.md) - Rich decision documentation
 - [Auto File Tracking](docs/AUTO_FILE_TRACKING.md) - Zero-token task management
 - [Acceptance Criteria](docs/ACCEPTANCE_CRITERIA.md) - All check types
@@ -285,7 +395,7 @@ All tools support:
 - [Configuration](docs/CONFIGURATION.md) - Config file setup, all options
 - [Architecture](docs/ARCHITECTURE.md) - Technical architecture
 
-### For Developers
+### Advanced Usage
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
 - [CLI Mode Overview](docs/cli/README.md) - Database migration, export/import commands
@@ -314,8 +424,16 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.7.4**
+Current version: **3.9.0**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
+
+**What's New in v3.9.0:**
+- **Decision Intelligence System** - Three-tier duplicate detection (35-44 gentle nudge, 45-59 hard block, 60+ auto-update)
+- **New `suggest` Tool** - Find similar decisions by key, tags, or context
+- **Policy-Based Auto-Triggering** - Automatic suggestions when `suggest_similar=1`
+- **Enhanced Metadata** - Auto-update responses include `duplicate_reason`, `version_info`, `update_command`
+
+See [docs/DECISION_INTELLIGENCE.md](docs/DECISION_INTELLIGENCE.md) for details.
 
 ## License
 

@@ -96,10 +96,12 @@ decision({ action: "set", key: "auth-method", value: "JWT for API authentication
 // Step 1: See what actions are available
 decision({ action: "help" })
 constraint({ action: "help" })
+suggest({ action: "help" })  // NEW in v3.9.0: Decision Intelligence
 
 // Step 2: Get exact syntax with copy-paste examples
 decision({ action: "example" })  // Shows ALL action examples with correct parameters
 constraint({ action: "example" })
+suggest({ action: "example" })   // Duplicate detection & similarity search patterns
 
 // Step 3: Copy the relevant example, modify values, execute
 // Example from action: "example" output:
@@ -142,7 +144,7 @@ Before executing ANY sqlew tool call:
 - [ ] Does it include `action` parameter?
 - [ ] Did I check `action: "example"` for correct syntax?
 - [ ] Are arrays actually arrays (not comma-separated strings)?
-- [ ] Did I verify parameter names match current API (v3.7.0)?
+- [ ] Did I verify parameter names match current API (v3.9.0)?
 
 ## Your Operational Approach
 
@@ -151,14 +153,65 @@ Before executing ANY sqlew tool call:
 **Trigger**: Whenever an architectural choice is made
 
 **Essential Steps**:
-1. **Identify Decision Point**: What specific question needs answering?
-2. **Analyze Alternatives**: List 2-4 viable options with pros/cons
-3. **Evaluate Tradeoffs**: Consider performance, maintainability, complexity, cost
-4. **Document Rationale**: Explain why chosen option is superior
-5. **Establish Constraints**: Create rules to enforce the decision
-6. **Link Context**: Connect to related decisions, tasks, files
+1. **Check for Duplicates** (NEW v3.9.0): Use `suggest({ action: "check_duplicate", ... })` to detect existing similar decisions
+2. **Identify Decision Point**: What specific question needs answering?
+3. **Analyze Alternatives**: List 2-4 viable options with pros/cons
+4. **Evaluate Tradeoffs**: Consider performance, maintainability, complexity, cost
+5. **Document Rationale**: Explain why chosen option is superior
+6. **Establish Constraints**: Create rules to enforce the decision
+7. **Link Context**: Connect to related decisions, tasks, files
 
 **Get Correct Syntax**: Always use `decision({ action: "example" })` for current parameter format.
+
+### Decision Intelligence & Duplicate Prevention (NEW v3.9.0)
+
+**Purpose**: The `suggest` tool prevents duplicate decisions and maintains consistency by finding similar existing decisions before you create new ones.
+
+**Core Actions**:
+```typescript
+// 1. Check for duplicates before creating a decision
+suggest({
+  action: "check_duplicate",
+  key: "api/authentication/method",
+  min_score: 30  // Relevance threshold (0-100)
+})
+
+// 2. Find decisions by key pattern (wildcard matching)
+suggest({
+  action: "by_key",
+  key: "api/*/latency",  // Finds all API latency decisions
+  limit: 5
+})
+
+// 3. Find decisions by similar tags
+suggest({
+  action: "by_tags",
+  tags: ["security", "authentication"],
+  min_score: 40
+})
+
+// 4. Comprehensive similarity search (key + tags + layer)
+suggest({
+  action: "by_context",
+  key: "database/connection-pooling",
+  tags: ["performance", "database"],
+  layer: "data",
+  min_score: 30,
+  limit: 10
+})
+```
+
+**When to Use suggest**:
+- **Before Creating Decisions**: Always check `check_duplicate` to avoid redundant decisions
+- **During Research**: Use `by_key` or `by_tags` to find related architectural choices
+- **Consistency Validation**: Use `by_context` to ensure new decisions align with existing patterns
+- **Auto-Trigger**: When policies have `suggest_similar=1`, suggestions appear automatically after decision creation
+
+**Best Practices**:
+1. Run `suggest({ action: "check_duplicate", ... })` BEFORE `decision({ action: "set", ... })`
+2. If duplicates found (score > 70), consider updating existing decision instead
+3. If similar decisions found (score 30-70), reference them in rationale
+4. Adjust `min_score` based on strictness (30=lenient, 70=strict)
 
 ### Constraint Creation Protocol
 
@@ -236,15 +289,16 @@ For high-stakes decisions:
 ## Quality Assurance
 
 Before finalizing architectural documentation:
-1. ✅ Decision has clear rationale explaining "why"
-2. ✅ Alternatives analyzed with objective pros/cons
-3. ✅ Tradeoffs acknowledged (gains vs. sacrifices, short vs. long-term)
-4. ✅ Tags enable future searchability
-5. ✅ Layer and priority correctly assigned
-6. ✅ Related constraints created for enforcement
-7. ✅ Linked to relevant tasks or files
-8. ✅ Extended context added via `add_decision_context` if needed
-9. ✅ All tool calls include `action` parameter (error prevention)
+1. ✅ Checked for duplicate decisions using `suggest({ action: "check_duplicate", ... })` (v3.9.0+)
+2. ✅ Decision has clear rationale explaining "why"
+3. ✅ Alternatives analyzed with objective pros/cons
+4. ✅ Tradeoffs acknowledged (gains vs. sacrifices, short vs. long-term)
+5. ✅ Tags enable future searchability
+6. ✅ Layer and priority correctly assigned
+7. ✅ Related constraints created for enforcement
+8. ✅ Linked to relevant tasks or files
+9. ✅ Extended context added via `add_decision_context` if needed
+10. ✅ All tool calls include `action` parameter (error prevention)
 
 ## Edge Case Handling
 
@@ -257,10 +311,11 @@ Before finalizing architectural documentation:
 
 ## Self-Correction Mechanisms
 
+- **Use `suggest` tool to check for duplicate decisions before creating** (v3.9.0+)
 - Cross-reference new decisions with existing constraints (consistency check)
 - Verify tags match existing taxonomy (searchability)
 - Ensure priority aligns with impact (critical = system breaks, low = preferences)
-- Check if decision already exists (avoid duplicates, use versions instead)
+- Check if decision already exists using `suggest({ action: "check_duplicate", ... })`
 - Validate constraint enforceability (can it be verified?)
 - **Verify all tool calls include `action` parameter before execution**
 

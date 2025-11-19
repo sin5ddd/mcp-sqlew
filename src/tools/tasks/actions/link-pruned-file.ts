@@ -1,9 +1,11 @@
 /**
  * Task link pruned file action (v3.5.0)
+ * Updated for v3.7.0 multi-project support
  */
 
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter } from '../../../database.js';
+import { getProjectContext } from '../../../utils/project-context.js';
 
 /**
  * Link a pruned file to a decision (v3.5.0 Auto-Pruning)
@@ -27,12 +29,16 @@ export async function linkPrunedFile(params: {
       throw new Error('decision_key is required and must be a string');
     }
 
-    // Get decision key_id
+    // Get project context (v3.7.0 multi-project support)
+    const projectId = getProjectContext().getProjectId();
+
+    // Get decision key_id (with project_id filter)
     const decision = await knex('m_context_keys as k')
       .whereExists(function() {
         this.select('*')
           .from('t_decisions as d')
-          .whereRaw('d.key_id = k.id');
+          .whereRaw('d.key_id = k.id')
+          .where('d.project_id', projectId);
       })
       .where('k.key', params.decision_key)
       .select('k.id as key_id')

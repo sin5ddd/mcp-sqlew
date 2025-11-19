@@ -9,7 +9,7 @@ import {
   setDecision, getContext, getDecision, searchByTags, getVersions, searchByLayer,
   quickSetDecision, searchAdvanced, setDecisionBatch, hasUpdates, setFromTemplate,
   createTemplate, listTemplates, hardDeleteDecision, addDecisionContextAction,
-  listDecisionContextsAction, decisionHelp, decisionExample
+  listDecisionContextsAction, handleAnalytics, decisionHelp, decisionExample
 } from '../tools/context/index.js';
 import {
   recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch, sqliteFlush, fileHelp, fileExample
@@ -40,6 +40,7 @@ import {
 import { debugLogToolCall, debugLogToolResponse } from '../utils/debug-logger.js';
 import { handleToolError } from '../utils/error-handler.js';
 import { DecisionAction, TaskAction, FileAction, ConstraintAction, ExampleAction } from '../types.js';
+import { handleSuggestAction } from '../tools/suggest/index.js';
 
 /**
  * Handle CallToolRequest - dispatch to appropriate tool action
@@ -96,12 +97,21 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
             break;
           }
           case 'has_updates': result = await hasUpdates({ agent_name: params.agent_name, since_timestamp: params.since_timestamp }); break;
+
+          // Policy actions (v3.9.0 - renamed from template actions)
+          case 'create_policy': result = await createTemplate(params); break;
+          case 'list_policies': result = await listTemplates(params); break;
+          case 'set_from_policy': result = await setFromTemplate(params); break;
+
+          // Template actions (backward compatibility - delegate to policy actions)
           case 'set_from_template': result = await setFromTemplate(params); break;
           case 'create_template': result = await createTemplate(params); break;
           case 'list_templates': result = await listTemplates(params); break;
+
           case 'hard_delete': result = await hardDeleteDecision(params); break;
           case 'add_decision_context': result = await addDecisionContextAction(params); break;
           case 'list_decision_contexts': result = await listDecisionContextsAction(params); break;
+          case 'analytics': result = await handleAnalytics(params); break;
           case 'help':
             const helpContent = decisionHelp();
             trackAndReturnHelp('decision', 'help', JSON.stringify(helpContent));
@@ -402,6 +412,11 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
             break;
           default: throw new Error(`Unknown action: ${action}`);
         }
+        break;
+      }
+
+      case 'suggest': {
+        result = await handleSuggestAction(params);
         break;
       }
 

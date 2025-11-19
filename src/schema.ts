@@ -1,64 +1,21 @@
 /**
- * Schema initialization module
- * Loads and executes SQL schema from docs/schema.sql
+ * Schema verification module
+ * Provides schema verification utilities using async Knex queries
  */
 
-import { Database } from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-/**
- * Initialize database schema
- * Reads schema.sql and executes all CREATE and INSERT statements
- *
- * @param db - SQLite database connection
- * @throws Error if schema initialization fails
- */
-export function initializeSchema(db: Database): void {
-  try {
-    // Read schema file
-    const schemaPath = join(__dirname, '..', 'assets', 'schema.sql');
-    const schemaSql = readFileSync(schemaPath, 'utf-8');
-
-    // Execute schema in a transaction for atomicity
-    db.exec('BEGIN TRANSACTION');
-
-    try {
-      // Execute the entire schema
-      // SQLite's exec() can handle multiple statements separated by semicolons
-      db.exec(schemaSql);
-
-      db.exec('COMMIT');
-
-      console.log('✓ Database schema initialized successfully');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to initialize schema: ${message}`);
-  }
-}
+import { DatabaseAdapter } from './adapters/index.js';
 
 /**
  * Check if schema is already initialized
  * Checks for existence of the m_agents table
  *
- * @param db - SQLite database connection
+ * @param adapter - Database adapter instance
  * @returns true if schema exists, false otherwise
  */
-export function isSchemaInitialized(db: Database): boolean {
+export async function isSchemaInitialized(adapter: DatabaseAdapter): Promise<boolean> {
   try {
-    const result = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND (name='m_agents' OR name='agents')"
-    ).get();
-
-    return result !== undefined;
+    const knex = adapter.getKnex();
+    return await knex.schema.hasTable('m_agents');
   } catch (error) {
     return false;
   }
@@ -68,10 +25,10 @@ export function isSchemaInitialized(db: Database): boolean {
  * Get schema version information
  * Returns counts of all master tables to verify schema integrity
  *
- * @param db - SQLite database connection
+ * @param adapter - Database adapter instance
  * @returns Object with table counts
  */
-export function getSchemaInfo(db: Database): {
+export async function getSchemaInfo(adapter: DatabaseAdapter): Promise<{
   agents: number;
   files: number;
   context_keys: number;
@@ -79,7 +36,7 @@ export function getSchemaInfo(db: Database): {
   tags: number;
   scopes: number;
   constraint_categories: number;
-} {
+}> {
   const counts = {
     agents: 0,
     files: 0,
@@ -91,13 +48,28 @@ export function getSchemaInfo(db: Database): {
   };
 
   try {
-    counts.agents = (db.prepare('SELECT COUNT(*) as count FROM m_agents').get() as { count: number }).count;
-    counts.files = (db.prepare('SELECT COUNT(*) as count FROM m_files').get() as { count: number }).count;
-    counts.context_keys = (db.prepare('SELECT COUNT(*) as count FROM m_context_keys').get() as { count: number }).count;
-    counts.layers = (db.prepare('SELECT COUNT(*) as count FROM m_layers').get() as { count: number }).count;
-    counts.tags = (db.prepare('SELECT COUNT(*) as count FROM m_tags').get() as { count: number }).count;
-    counts.scopes = (db.prepare('SELECT COUNT(*) as count FROM m_scopes').get() as { count: number }).count;
-    counts.constraint_categories = (db.prepare('SELECT COUNT(*) as count FROM m_constraint_categories').get() as { count: number }).count;
+    const knex = adapter.getKnex();
+
+    const agentsResult = await knex('m_agents').count('* as count').first() as { count: number } | undefined;
+    counts.agents = agentsResult?.count || 0;
+
+    const filesResult = await knex('m_files').count('* as count').first() as { count: number } | undefined;
+    counts.files = filesResult?.count || 0;
+
+    const contextKeysResult = await knex('m_context_keys').count('* as count').first() as { count: number } | undefined;
+    counts.context_keys = contextKeysResult?.count || 0;
+
+    const layersResult = await knex('m_layers').count('* as count').first() as { count: number } | undefined;
+    counts.layers = layersResult?.count || 0;
+
+    const tagsResult = await knex('m_tags').count('* as count').first() as { count: number } | undefined;
+    counts.tags = tagsResult?.count || 0;
+
+    const scopesResult = await knex('m_scopes').count('* as count').first() as { count: number } | undefined;
+    counts.scopes = scopesResult?.count || 0;
+
+    const categoriesResult = await knex('m_constraint_categories').count('* as count').first() as { count: number } | undefined;
+    counts.constraint_categories = categoriesResult?.count || 0;
   } catch (error) {
     // If tables don't exist yet, return zeros
   }
@@ -109,14 +81,14 @@ export function getSchemaInfo(db: Database): {
  * Verify schema integrity
  * Checks that all required tables, indexes, views, and triggers exist
  *
- * @param db - SQLite database connection
+ * @param adapter - Database adapter instance
  * @returns Object with integrity check results
  */
-export function verifySchemaIntegrity(db: Database): {
+export async function verifySchemaIntegrity(adapter: DatabaseAdapter): Promise<{
   valid: boolean;
   missing: string[];
   errors: string[];
-} {
+}> {
   const result = {
     valid: true,
     missing: [] as string[],
@@ -154,23 +126,31 @@ export function verifySchemaIntegrity(db: Database): {
   ];
 
   try {
+    const knex = adapter.getKnex();
+
     // Check tables
     for (const table of requiredTables) {
-      const exists = db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
-      ).get(table);
-
+      const exists = await knex.schema.hasTable(table);
       if (!exists) {
         result.valid = false;
         result.missing.push(`table:${table}`);
       }
     }
 
-    // Check views
+    // Check views - use raw query for SQLite, hasTable for others
     for (const view of requiredViews) {
-      const exists = db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='view' AND name=?"
-      ).get(view);
+      let exists = false;
+      try {
+        // Try hasTable first (works for some databases with views)
+        exists = await knex.schema.hasTable(view);
+      } catch {
+        // Fall back to raw query for SQLite
+        const viewResult = await knex.raw(
+          "SELECT name FROM sqlite_master WHERE type='view' AND name=?",
+          [view]
+        ) as any;
+        exists = viewResult && viewResult.length > 0 && viewResult[0];
+      }
 
       if (!exists) {
         result.valid = false;
@@ -178,11 +158,13 @@ export function verifySchemaIntegrity(db: Database): {
       }
     }
 
-    // Check triggers
+    // Check triggers - SQLite-specific
     for (const trigger of requiredTriggers) {
-      const exists = db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='trigger' AND name=?"
-      ).get(trigger);
+      const triggerResult = await knex.raw(
+        "SELECT name FROM sqlite_master WHERE type='trigger' AND name=?",
+        [trigger]
+      ) as any;
+      const exists = triggerResult && triggerResult.length > 0 && triggerResult[0];
 
       if (!exists) {
         result.valid = false;
@@ -191,31 +173,36 @@ export function verifySchemaIntegrity(db: Database): {
     }
 
     // Verify standard data exists
-    const layerCount = (db.prepare('SELECT COUNT(*) as count FROM m_layers').get() as { count: number }).count;
+    const layerResult = await knex('m_layers').count('* as count').first() as { count: number } | undefined;
+    const layerCount = layerResult?.count || 0;
     if (layerCount < 5) {
       result.errors.push(`Expected 5 standard layers, found ${layerCount}`);
       result.valid = false;
     }
 
-    const categoryCount = (db.prepare('SELECT COUNT(*) as count FROM m_constraint_categories').get() as { count: number }).count;
+    const categoryResult = await knex('m_constraint_categories').count('* as count').first() as { count: number } | undefined;
+    const categoryCount = categoryResult?.count || 0;
     if (categoryCount < 3) {
       result.errors.push(`Expected 3 standard categories, found ${categoryCount}`);
       result.valid = false;
     }
 
-    const tagCount = (db.prepare('SELECT COUNT(*) as count FROM m_tags').get() as { count: number }).count;
+    const tagResult = await knex('m_tags').count('* as count').first() as { count: number } | undefined;
+    const tagCount = tagResult?.count || 0;
     if (tagCount < 10) {
       result.errors.push(`Expected 10 standard tags, found ${tagCount}`);
       result.valid = false;
     }
 
-    const configCount = (db.prepare('SELECT COUNT(*) as count FROM m_config').get() as { count: number }).count;
+    const configResult = await knex('m_config').count('* as count').first() as { count: number } | undefined;
+    const configCount = configResult?.count || 0;
     if (configCount < 6) {
       result.errors.push(`Expected 6 m_config entries, found ${configCount}`);
       result.valid = false;
     }
 
-    const taskStatusCount = (db.prepare('SELECT COUNT(*) as count FROM m_task_statuses').get() as { count: number }).count;
+    const taskStatusResult = await knex('m_task_statuses').count('* as count').first() as { count: number } | undefined;
+    const taskStatusCount = taskStatusResult?.count || 0;
     if (taskStatusCount < 6) {
       result.errors.push(`Expected 6 task statuses, found ${taskStatusCount}`);
       result.valid = false;

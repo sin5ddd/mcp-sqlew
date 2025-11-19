@@ -47,6 +47,22 @@ export type ConstraintAction =
   | 'help' | 'example' | 'use_case';
 
 /**
+ * Suggest tool actions (v3.9.0)
+ * Provides compile-time type checking for suggestion actions
+ */
+export type SuggestAction =
+  | 'by_key' | 'by_tags' | 'by_context' | 'check_duplicate'
+  | 'help';
+
+/**
+ * Example tool actions
+ * Provides compile-time type checking for example actions
+ */
+export type ExampleAction =
+  | 'get' | 'search' | 'list_all'
+  | 'help' | 'example';
+
+/**
  * Stats tool actions
  * @deprecated Stats tool removed in v3.8.0. Stats functionality migrated to file tool (sqlite_flush).
  * This type is kept only for backward compatibility with existing code references.

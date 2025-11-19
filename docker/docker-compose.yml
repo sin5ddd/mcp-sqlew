@@ -12,8 +12,9 @@ services:
             TZ: UTC
         ports:
             - "3307:3306"
-        volumes:
-            - ./data/mysql:/var/lib/mysql
+        # Volumes commented out for ephemeral test databases (fresh on each run)
+        # volumes:
+        #     - ./data/mysql:/var/lib/mysql
         command: >
             --character-set-server=utf8mb4
             --collation-server=utf8mb4_unicode_ci
@@ -48,8 +49,9 @@ services:
             TZ: UTC
         ports:
             - "3308:3306"
-        volumes:
-            - ./data/mariadb:/var/lib/mysql
+        # Volumes commented out for ephemeral test databases (fresh on each run)
+        # volumes:
+        #     - ./data/mariadb:/var/lib/mysql
         command: >
             --character-set-server=utf8mb4
             --collation-server=utf8mb4_unicode_ci
@@ -85,9 +87,10 @@ services:
             PGTZ: UTC
             PGDATA: /var/lib/postgresql/data/pgdata
         ports:
-            - "5432:5432"
-        volumes:
-            - ./data/postgres:/var/lib/postgresql/data
+            - "15432:5432"
+        # Volumes commented out for ephemeral test databases (fresh on each run)
+        # volumes:
+        #     - ./data/postgres:/var/lib/postgresql/data
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U mcp_user -d mcp_test"]
             interval: 5s

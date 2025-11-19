@@ -1,6 +1,6 @@
 /**
  * Get context decisions with advanced filtering
- * Uses v_tagged_decisions view for token efficiency
+ * Uses cross-database query functions for portability
  * Supports filtering by status, layer, tags, and scope
  */
 
@@ -10,6 +10,7 @@ import { getProjectContext } from '../../../utils/project-context.js';
 import { debugLog } from '../../../utils/debug-logger.js';
 import { STRING_TO_STATUS } from '../../../constants.js';
 import { validateActionParams } from '../internal/validation.js';
+import { getTaggedDecisions } from '../../../utils/view-queries.js';
 import type { GetContextParams, GetContextResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -58,26 +59,28 @@ export async function getContext(
   }
 
   try {
-    // Build query dynamically based on filters
-    let query = knex('v_tagged_decisions').where('project_id', projectId);
+    // Get all decisions then filter in JavaScript
+    let rows = await getTaggedDecisions(knex) as TaggedDecision[];
+
+    // Filter by project_id
+    rows = rows.filter(r => r.project_id === projectId);
 
     // Filter by status
     if (params.status) {
       if (!STRING_TO_STATUS[params.status]) {
         throw new Error(`Invalid status: ${params.status}`);
       }
-      query = query.where('status', params.status);
+      rows = rows.filter(r => r.status === params.status);
     }
 
     // Filter by layer
     if (params.layer) {
-      query = query.where('layer', params.layer);
+      rows = rows.filter(r => r.layer === params.layer);
     }
 
     // Filter by scope
     if (params.scope) {
-      // Use LIKE for comma-separated scopes
-      query = query.where('scopes', 'like', `%${params.scope}%`);
+      rows = rows.filter(r => r.scopes && r.scopes.includes(params.scope!));
     }
 
     // Filter by tags
@@ -86,24 +89,25 @@ export async function getContext(
 
       if (tagMatch === 'AND') {
         // All tags must be present
-        for (const tag of params.tags) {
-          query = query.where('tags', 'like', `%${tag}%`);
-        }
+        rows = rows.filter(r => {
+          if (!r.tags) return false;
+          return params.tags!.every(tag => r.tags!.includes(tag));
+        });
       } else {
         // Any tag must be present (OR)
-        query = query.where((builder) => {
-          for (const tag of params.tags!) {
-            builder.orWhere('tags', 'like', `%${tag}%`);
-          }
+        rows = rows.filter(r => {
+          if (!r.tags) return false;
+          return params.tags!.some(tag => r.tags!.includes(tag));
         });
       }
     }
 
-    // Order by most recent
-    query = query.orderBy('updated', 'desc');
-
-    // Execute query
-    const rows = await query.select('*') as TaggedDecision[];
+    // Sort by most recent (updated field is already a datetime string)
+    rows.sort((a, b) => {
+      const dateA = new Date(a.updated).getTime();
+      const dateB = new Date(b.updated).getTime();
+      return dateB - dateA; // desc
+    });
 
     return {
       decisions: rows,

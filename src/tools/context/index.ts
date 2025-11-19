@@ -21,6 +21,11 @@ export { listTemplates } from './actions/list-templates.js';
 export { hardDeleteDecision } from './actions/hard-delete.js';
 export { addDecisionContextAction } from './actions/add-context.js';
 export { listDecisionContextsAction } from './actions/list-contexts.js';
+export { handleAnalytics } from './actions/analytics.js';
+// Policy actions (v3.9.0)
+export { createPolicy } from './actions/create-policy.js';
+export { listPolicies } from './actions/list-policies.js';
+export { setFromPolicy } from './actions/set-from-policy.js';
 
 // Help exports
 export { decisionHelp } from './help/help.js';
@@ -60,3 +65,6 @@ export type {
   HardDeleteDecisionResponse,
   DecisionAction
 } from './types.js';
+
+// Analytics type exports
+export type { AnalyticsParams, AnalyticsResponse } from './actions/analytics.js';

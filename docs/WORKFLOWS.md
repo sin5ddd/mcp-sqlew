@@ -616,9 +616,172 @@ if (stats.total_messages > 1000) {
 
 ---
 
+## Workflow 5: Decision Intelligence & Duplicate Prevention (v3.9.0)
+
+**Scenario**: Agent maintains decision consistency using the three-tier duplicate detection system.
+
+### Step 1: Check for Existing Decisions Before Creating
+
+```javascript
+// 1. Search for related decisions by key pattern
+{
+  action: "by_key",
+  key: "api/*/authentication",
+  limit: 5,
+  min_score: 30
+}
+
+// 2. Check for duplicates by tags
+{
+  action: "by_tags",
+  tags: ["api", "security", "authentication"],
+  limit: 5
+}
+
+// 3. Pre-creation duplicate check
+{
+  action: "check_duplicate",
+  key: "api-authentication-jwt",
+  tags: ["api", "security", "jwt"]
+}
+```
+
+### Step 2: Handle Three-Tier Responses
+
+```javascript
+// Tier 1: Gentle Nudge (35-44 score)
+// Decision is created but with warnings
+{
+  action: "set",
+  key: "api-rate-limiting-v2",
+  value: "100 requests/minute for free tier",
+  layer: "infrastructure",
+  tags: ["api", "rate-limiting", "performance"]
+}
+
+// Response includes duplicate_risk:
+// {
+//   "success": true,
+//   "key": "api-rate-limiting-v2",
+//   "duplicate_risk": {
+//     "severity": "MODERATE",
+//     "max_score": 42,
+//     "suggestions": [{
+//       "key": "api-rate-limiting",
+//       "score": 42,
+//       "reasoning": "2 matching tags, same layer"
+//     }]
+//   }
+// }
+
+// Tier 2: Hard Block (45-59 score)
+// Must update existing or bypass
+{
+  action: "set",
+  key: "api-throttling",
+  value: "100 requests/minute for free tier",  // Nearly identical
+  layer: "infrastructure",
+  tags: ["api", "rate-limiting", "performance"],
+  // Option A: Update existing decision
+  // Option B: Bypass with reason
+  ignore_suggest: true,
+  ignore_reason: "Different use case - async queue vs real-time API"
+}
+
+// Tier 3: Auto-Update (60+ score)
+// Transparently updates existing decision
+{
+  action: "set",
+  key: "api-rate-limit-config",
+  value: "Updated: 150 requests/minute for free tier",
+  layer: "infrastructure",
+  tags: ["api", "rate-limiting", "performance"]
+}
+
+// Response shows auto-update:
+// {
+//   "success": true,
+//   "auto_updated": true,
+//   "requested_key": "api-rate-limit-config",
+//   "actual_key": "api-rate-limiting",
+//   "similarity_score": 85,
+//   "version": "1.0.1"
+// }
+```
+
+### Step 3: Policy-Based Auto-Triggering
+
+```javascript
+// 1. Create policy with suggestion enabled
+{
+  action: "create_policy",
+  name: "security-decisions",
+  defaults: {
+    layer: "cross-cutting",
+    tags: ["security"]
+  },
+  suggest_similar: 1,  // Enable auto-trigger
+  validation_rules: {
+    patterns: { key: "^security/" }
+  }
+}
+
+// 2. All security/* decisions now auto-check for duplicates
+{
+  action: "set",
+  key: "security/jwt-expiration",
+  value: "15 minute token expiration",
+  tags: ["security", "jwt", "authentication"]
+  // Auto-triggers duplicate detection!
+}
+
+// Response includes suggestions:
+// {
+//   "success": true,
+//   "key": "security/jwt-expiration",
+//   "suggestions": {
+//     "triggered_by": "security-decisions",
+//     "reason": "Policy has suggest_similar enabled",
+//     "suggestions": [...]
+//   }
+// }
+```
+
+### Step 4: Context-Aware Search
+
+```javascript
+// Hybrid search combining multiple factors
+{
+  action: "by_context",
+  key: "api/*",
+  tags: ["security", "performance"],
+  layer: "infrastructure",
+  priority: 3,
+  limit: 5
+}
+
+// Returns decisions matching:
+// - Key pattern: api/*
+// - Tags: security, performance
+// - Layer: infrastructure
+// - Priority: high (3)
+```
+
+### Token Efficiency
+
+**Suggest Tool Savings:**
+- Pattern search: ~50-100 tokens vs manual scanning
+- Duplicate detection: ~100 tokens vs creating duplicates
+- Auto-update: Eliminates error handling overhead
+
+**Best Practice**: Always use `check_duplicate` before `set` for high-value decisions.
+
+---
+
 ## Related Documentation
 
 - **[TOOL_SELECTION.md](TOOL_SELECTION.md)** - Choosing the right tool for your task
 - **[TOOL_REFERENCE.md](TOOL_REFERENCE.md)** - Complete parameter reference
 - **[BEST_PRACTICES.md](BEST_PRACTICES.md)** - Common errors and best practices
+- **[DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md)** - Three-tier system details (v3.9.0)
 - **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Complete guide (original comprehensive version)

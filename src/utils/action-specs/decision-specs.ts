@@ -10,7 +10,7 @@ import { ActionSpec } from './types.js';
 export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
   set: {
     required: ['key', 'value'],
-    optional: ['agent', 'layer', 'tags', 'status', 'version', 'scopes'],
+    optional: ['agent', 'layer', 'tags', 'status', 'version', 'scopes', 'ignore_suggest', 'ignore_reason'],
     example: {
       action: 'set',
       key: 'database/postgresql-choice',
@@ -36,7 +36,7 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
 
   list: {
     required: [],
-    optional: ['status', 'layer', 'tags', 'scope', 'tag_match', 'limit', 'offset'],
+    optional: ['status', 'layer', 'tags', 'scope', 'tag_match', 'limit', 'offset', '_reference_project'],
     example: {
       action: 'list',
       status: 'active',
@@ -59,7 +59,7 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
 
   search_layer: {
     required: ['layer'],
-    optional: ['status', 'include_tags'],
+    optional: ['status', 'include_tags', '_reference_project'],
     example: {
       action: 'search_layer',
       layer: 'business',

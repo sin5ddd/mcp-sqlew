@@ -17,5 +17,5 @@ export async function queryAction(
   adapter?: DatabaseAdapter
 ): Promise<HelpActionResult | { error: string; available_actions?: string[] }> {
   const actualAdapter = adapter ?? getAdapter();
-  return queryHelpAction(actualAdapter, params.tool, params.target_action);
+  return await queryHelpAction(actualAdapter, params.tool, params.target_action);
 }

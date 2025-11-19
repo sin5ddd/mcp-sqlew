@@ -12,6 +12,7 @@ export interface TaggedDecision {
   readonly scopes: string | null;  // Comma-separated
   readonly decided_by: string | null;
   readonly updated: string;  // ISO 8601 datetime
+  readonly project_id: number;  // Multi-project support (v3.7.0)
 }
 
 export interface ActiveContext {

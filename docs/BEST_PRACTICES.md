@@ -127,6 +127,15 @@ Error messages provide structured guidance:
 9. **Constraints for requirements** - Use `constraint` for rules, `decision` for choices
 10. **Clean up regularly** - Use `clear` action or auto-cleanup config
 
+### Decision Intelligence Best Practices (v3.9.0)
+
+11. **Use `check_duplicate` before `set`** - Prevent redundant decisions
+12. **Enable policy auto-triggering** - Set `suggest_similar: 1` for consistent checks
+13. **Handle three-tier responses** - Review gentle nudges, resolve hard blocks, trust auto-updates
+14. **Provide `ignore_reason`** - Always document why bypassing duplicate detection
+15. **Use consistent tag taxonomy** - Better similarity scoring with consistent tags
+16. **Use descriptive keys** - Pattern-based keys (`api/users/auth`) enable better matching
+
 ---
 
 ## Performance Tips
@@ -154,5 +163,6 @@ Error messages provide structured guidance:
 - [TOOL_REFERENCE.md](TOOL_REFERENCE.md) - Parameter reference
 - [WORKFLOWS.md](WORKFLOWS.md) - Multi-step workflows
 - [SHARED_CONCEPTS.md](SHARED_CONCEPTS.md) - Layers, enums, concepts
+- [DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md) - Three-tier duplicate detection (v3.9.0)
 
 **Tip**: Use `{action: "help"}` for any tool's detailed documentation.

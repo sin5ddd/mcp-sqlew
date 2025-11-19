@@ -9,7 +9,7 @@ import { DatabaseAdapter } from '../adapters/index.js';
 import { getConfigBool, getConfigInt, getAdapter } from '../database.js';
 import { calculateTaskArchiveCutoff } from './retention.js';
 import { checkReadyForReview } from './quality-checks.js';
-import { pruneNonExistentFiles } from './file-pruning.js';
+import { pruneNonExistentFiles, pruneNonExistentFilesKnex } from './file-pruning.js';
 import { statSync, existsSync } from 'fs';
 import { join } from 'path';
 import { detectVCS } from './vcs-adapter.js';
@@ -537,8 +537,47 @@ export async function detectAndTransitionToReview(adapter?: DatabaseAdapter): Pr
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
-  // TODO: Convert this function to use Knex.js
-  // For now, return 0 as this function is not used by tasks.ts
-  console.warn('detectAndTransitionToReview not yet fully converted to Knex.js');
-  return 0;
+  // 1. Get idle threshold config (default 15 minutes, matches system default)
+  const idleMinutes = await getConfigInt(actualAdapter, 'review_idle_minutes', 15);
+  const idleSeconds = idleMinutes * 60;
+  const currentTs = Math.floor(Date.now() / 1000);
+  const cutoffTs = currentTs - idleSeconds;
+
+  // 2. Find idle in_progress tasks
+  const idleTasks = await knex('t_tasks')
+    .where('status_id', TASK_STATUS.IN_PROGRESS)
+    .where('updated_ts', '<', cutoffTs)
+    .select('id');
+
+  let transitioned = 0;
+  const projectRoot = process.cwd();
+
+  // 3. For each task, attempt pruning + transition
+  for (const task of idleTasks) {
+    try {
+      await knex.transaction(async (trx) => {
+        // Prune non-existent files (will throw if ALL pruned)
+        await pruneNonExistentFilesKnex(trx, task.id, projectRoot);
+
+        // Transition to waiting_review
+        await trx('t_tasks')
+          .where('id', task.id)
+          .update({
+            status_id: TASK_STATUS.WAITING_REVIEW,
+            updated_ts: currentTs,
+          });
+
+        transitioned++;
+      });
+    } catch (error) {
+      // Safety check caught - skip this task
+      if (error instanceof Error && error.message.includes('ALL') && error.message.includes('non-existent')) {
+        console.error(`⚠️  Task #${task.id}: Skipped (all files non-existent)`);
+      } else {
+        throw error; // Re-throw unexpected errors
+      }
+    }
+  }
+
+  return transitioned;
 }

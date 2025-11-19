@@ -17,5 +17,5 @@ export async function queryTool(
   adapter?: DatabaseAdapter
 ): Promise<HelpToolResult | { error: string; available_tools?: string[] }> {
   const actualAdapter = adapter ?? getAdapter();
-  return queryHelpTool(actualAdapter, params.tool);
+  return await queryHelpTool(actualAdapter, params.tool);
 }

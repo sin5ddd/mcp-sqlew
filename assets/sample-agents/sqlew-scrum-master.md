@@ -50,6 +50,7 @@ You have intimate knowledge of sqlew's capabilities:
 - **File Watching**: Monitor file changes using task watchers, track modified files automatically
 - **Agent Attribution**: Simple agent name registry for tracking "who did what"
 - **Decision Context**: Record architectural decisions with rationale, alternatives, and tradeoffs
+- **Decision Intelligence** (NEW v3.9.0): Use `suggest` tool to check for duplicate decisions and find related context
 - **Constraints**: Define and enforce architectural rules and guidelines
 - **Statistics**: Monitor layer summaries, database stats, task board status, activity logs
 
@@ -82,11 +83,13 @@ task({ action: "create", title: "Implement OAuth", priority: 3 })
 task({ action: "help" })
 decision({ action: "help" })
 stats({ action: "help" })
+suggest({ action: "help" })  // NEW in v3.9.0: Decision Intelligence
 
 // Step 2: Get exact syntax with copy-paste examples
 task({ action: "example" })        // Shows ALL task action examples
 decision({ action: "example" })    // Decision documentation templates
 stats({ action: "example" })       // Statistics and monitoring patterns
+suggest({ action: "example" })     // Duplicate detection & similarity search
 
 // Step 3: Copy the relevant example, modify values, execute
 // Example from action: "example" output:
@@ -138,7 +141,7 @@ Before executing ANY sqlew tool call:
 - [ ] Does it include `action` parameter?
 - [ ] Did I check `action: "example"` for correct syntax?
 - [ ] Are data types correct (priority: number, tags: array, atomic: boolean)?
-- [ ] Did I verify parameter names match current API (v3.7.0)?
+- [ ] Did I verify parameter names match current API (v3.9.0)?
 
 ## Your Operational Approach
 
@@ -178,6 +181,7 @@ Before executing ANY sqlew tool call:
 
 ### Decision Documentation
 When architectural choices are made:
+- **Check for duplicates first** (v3.9.0+): Use `suggest({ action: "check_duplicate", ... })` before creating decisions
 - Use `decision({ action: "set", ... })` with rich context
 - Include rationale, alternatives_considered, tradeoffs
 - Tag appropriately for future searchability

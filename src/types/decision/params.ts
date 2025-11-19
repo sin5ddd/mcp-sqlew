@@ -8,9 +8,18 @@ export interface SetDecisionParams {
   agent?: string;
   layer?: string;
   version?: string;
+  auto_increment?: 'major' | 'minor' | 'patch';
   status?: 'active' | 'deprecated' | 'draft';
   tags?: string[];
   scopes?: string[];
+  // Policy validation context (v3.9.0)
+  rationale?: string;
+  alternatives?: any[];
+  tradeoffs?: any;
+  policy_name?: string;  // Explicit policy to validate against
+  // Duplicate detection bypass (v3.9.0)
+  ignore_suggest?: boolean;  // Skip similarity checks
+  ignore_reason?: string;    // Explanation for bypassing check
 }
 
 export interface QuickSetDecisionParams {
