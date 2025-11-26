@@ -29,10 +29,9 @@ export async function getTask(params: {
 
   try {
     // Get task with details (with project_id isolation)
+    // Note: Agent tracking removed in v4.0 - assigned_to and created_by fields removed
     const task = await knex('v4_tasks as t')
       .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
-      .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
-      .leftJoin('v4_agents as ca', 't.created_by_agent_id', 'ca.id')
       .leftJoin('v4_layers as l', 't.layer_id', 'l.id')
       .leftJoin('v4_task_details as td', function() {
         this.on('t.id', '=', 'td.task_id')
@@ -44,8 +43,6 @@ export async function getTask(params: {
         't.title',
         's.name as status',
         't.priority',
-        'aa.name as assigned_to',
-        'ca.name as created_by',
         'l.name as layer',
         't.created_ts',
         't.updated_ts',

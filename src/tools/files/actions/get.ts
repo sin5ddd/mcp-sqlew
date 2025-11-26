@@ -98,14 +98,13 @@ export async function getFileChanges(
       const { whereClause, params: queryParams } = buildWhereClause(filterConditions);
 
       // Build query dynamically with filters
+      // Note: Agent tracking removed in v4.0 - changed_by field removed
       let query = knex('v4_file_changes as fc')
         .join('v4_files as f', 'fc.file_id', 'f.id')
-        .join('v4_agents as a', 'fc.agent_id', 'a.id')
         .leftJoin('v4_layers as l', 'fc.layer_id', 'l.id')
         .where('fc.project_id', projectId)
         .select(
           'f.path',
-          'a.name as changed_by',
           'l.name as layer',
           knex.raw(`CASE fc.change_type
             WHEN 1 THEN 'created'
@@ -123,9 +122,7 @@ export async function getFileChanges(
         query = query.where('f.path', params.file_path);
       }
 
-      if (params.agent_name) {
-        query = query.where('a.name', params.agent_name);
-      }
+      // Note: agent_name filter removed in v4.0 (agent tracking removed)
 
       if (params.layer) {
         query = query.where('l.name', params.layer);

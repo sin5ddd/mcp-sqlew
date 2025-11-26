@@ -118,18 +118,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       // Step 1: Create policy for security vulnerabilities
       console.log('  Step 1: Creating security vulnerability policy...');
 
-      // Get system agent ID
-      let systemAgentId: number;
-      const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-      if (systemAgent) {
-        systemAgentId = systemAgent.id;
-      } else {
-        const [agentId] = await knex('v4_agents').insert({
-          name: 'system',
-          last_active_ts: Math.floor(Date.now() / 1000)
-        });
-        systemAgentId = agentId;
-      }
+      // Note: Agent tracking removed in v4.0 - no created_by field needed
 
       await knex('v4_decision_policies').insert({
         project_id: projectId,
@@ -147,7 +136,6 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
         quality_gates: JSON.stringify({
           required_fields: ['severity', 'affected_versions']
         }),
-        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 
@@ -375,18 +363,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       // Step 1: Create policy for feature flag naming
       console.log('  Step 1: Creating feature flag naming policy...');
 
-      // Get system agent ID
-      let systemAgentId: number;
-      const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-      if (systemAgent) {
-        systemAgentId = systemAgent.id;
-      } else {
-        const [agentId] = await knex('v4_agents').insert({
-          name: 'system',
-          last_active_ts: Math.floor(Date.now() / 1000)
-        });
-        systemAgentId = agentId;
-      }
+      // Note: Agent tracking removed in v4.0 - no created_by field needed
 
       await knex('v4_decision_policies').insert({
         project_id: projectId,
@@ -404,7 +381,6 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
         quality_gates: JSON.stringify({
           required_fields: ['rollout_percentage', 'target_audience']
         }),
-        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 
@@ -530,18 +506,7 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       // Phase 1: Policy Setup
       console.log('    Phase 1: Setting up decision policy...');
 
-      // Get system agent ID
-      let systemAgentId: number;
-      const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-      if (systemAgent) {
-        systemAgentId = systemAgent.id;
-      } else {
-        const [agentId] = await knex('v4_agents').insert({
-          name: 'system',
-          last_active_ts: Math.floor(Date.now() / 1000)
-        });
-        systemAgentId = agentId;
-      }
+      // Note: Agent tracking removed in v4.0 - no created_by field needed
 
       await knex('v4_decision_policies').insert({
         project_id: projectId,
@@ -560,7 +525,6 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
           required_fields: ['rationale']
         }),
         suggest_similar: 1,  // Auto-suggest enabled
-        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 

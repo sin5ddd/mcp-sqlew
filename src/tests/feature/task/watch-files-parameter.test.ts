@@ -8,7 +8,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeDatabase } from '../../../database.js';
-import { getOrCreateAgent, getOrCreateFile } from '../../../database.js';
+import { getOrCreateFile } from '../../../database.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
 import { createTestTask, addWatchedFiles } from '../../utils/test-helpers.js';
 
@@ -42,7 +42,7 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   acceptance_criteria?: string;
 }): Promise<any> {
   const knex = adapter.getKnex();
-  const agentId = await getOrCreateAgent(adapter, params.created_by_agent || 'system');
+  // Note: Agent tracking removed in v4.0 - created_by_agent param ignored
   const statusId = 1; // todo
   const currentTs = Math.floor(Date.now() / 1000);
   const projectId = 1; // Default project for tests
@@ -52,8 +52,6 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
     status_id: statusId,
     priority: params.priority || 2,
     project_id: projectId,        // Required v3.7.0+
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
     created_ts: currentTs,          // Required v3.8.0+
     updated_ts: currentTs           // Required v3.8.0+
   });

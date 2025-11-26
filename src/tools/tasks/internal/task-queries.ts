@@ -17,13 +17,13 @@ export async function queryTaskDependencies(
   const projectId = getProjectContext().getProjectId();
 
   // Build query based on include_details flag
+  // Note: Agent tracking removed in v4.0 - assigned_to field removed
   const selectFields = includeDetails
     ? [
         't.id',
         't.title',
         's.name as status',
         't.priority',
-        'aa.name as assigned_to',
         't.created_ts',
         't.updated_ts',
         'td.description'
@@ -39,7 +39,6 @@ export async function queryTaskDependencies(
   let blockersQuery = knex('v4_tasks as t')
     .join('v4_task_dependencies as d', 't.id', 'd.blocker_task_id')
     .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where({ 'd.blocked_task_id': taskId, 'd.project_id': projectId, 't.project_id': projectId })
     .select(selectFields);
 
@@ -57,7 +56,6 @@ export async function queryTaskDependencies(
   let blockingQuery = knex('v4_tasks as t')
     .join('v4_task_dependencies as d', 't.id', 'd.blocked_task_id')
     .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where({ 'd.blocker_task_id': taskId, 'd.project_id': projectId, 't.project_id': projectId })
     .select(selectFields);
 

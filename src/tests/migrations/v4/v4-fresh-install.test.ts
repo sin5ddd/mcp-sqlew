@@ -26,12 +26,7 @@ describe('v4.0 Fresh Install Migration', () => {
       },
       useNullAsDefault: true,
       migrations: {
-        directory: [
-          path.join(__dirname, '../../../config/knex/bootstrap'),
-          path.join(__dirname, '../../../config/knex/upgrades'),
-          path.join(__dirname, '../../../config/knex/enhancements'),
-          path.join(__dirname, '../../../database/migrations/v4'),
-        ],
+        directory: path.join(__dirname, '../../../database/migrations/v4'),
         extension: 'ts',
         loadExtensions: ['.ts'],
       },
@@ -53,10 +48,7 @@ describe('v4.0 Fresh Install Migration', () => {
       assert.strictEqual(hasTable, true, 'v4_projects table should exist');
     });
 
-    it('should create v4_agents table', async () => {
-      const hasTable = await db.schema.hasTable('v4_agents');
-      assert.strictEqual(hasTable, true, 'v4_agents table should exist');
-    });
+    // v4_agents table removed in v4.0 - agent tracking no longer needed
 
     it('should create v4_decisions table', async () => {
       const hasTable = await db.schema.hasTable('v4_decisions');
@@ -140,10 +132,7 @@ describe('v4.0 Fresh Install Migration', () => {
       assert.strictEqual(projects[0].display_name, 'Default Project');
     });
 
-    it('should seed system agent', async () => {
-      const agents = await db('v4_agents').where({ name: 'system' });
-      assert.strictEqual(agents.length, 1, 'Should have system agent');
-    });
+    // System agent seed removed in v4.0 - agent tracking no longer needed
 
     it('should seed 8 common tags', async () => {
       const tags = await db('v4_tags').select('*');
@@ -188,7 +177,6 @@ describe('v4.0 Fresh Install Migration', () => {
           version: '1.0.0',
           status: 'active',
           ts: Math.floor(Date.now() / 1000),
-          agent_id: 1,
           layer_id: 1,
         });
         assert.fail('Should have thrown FK constraint error');
@@ -219,25 +207,4 @@ describe('v4.0 Fresh Install Migration', () => {
     });
   });
 
-  describe('v4_ Both Schemas Coexist', () => {
-    it('should have both v3 (m_/t_) and v4 tables', async () => {
-      // v3 tables should exist from bootstrap migrations
-      const hasV3Agents = await db.schema.hasTable('v4_agents');
-      const hasV3Decisions = await db.schema.hasTable('v4_decisions');
-      const hasV3Tasks = await db.schema.hasTable('v4_tasks');
-
-      // v4 tables should exist from v4 migrations
-      const hasV4Agents = await db.schema.hasTable('v4_agents');
-      const hasV4Decisions = await db.schema.hasTable('v4_decisions');
-      const hasV4Tasks = await db.schema.hasTable('v4_tasks');
-
-      assert.strictEqual(hasV3Agents, true, 'v3 m_agents should exist');
-      assert.strictEqual(hasV3Decisions, true, 'v3 t_decisions should exist');
-      assert.strictEqual(hasV3Tasks, true, 'v3 t_tasks should exist');
-
-      assert.strictEqual(hasV4Agents, true, 'v4_agents should exist');
-      assert.strictEqual(hasV4Decisions, true, 'v4_decisions should exist');
-      assert.strictEqual(hasV4Tasks, true, 'v4_tasks should exist');
-    });
-  });
 });

@@ -76,23 +76,7 @@ export async function createPolicy(
       };
     }
 
-    // Get or create agent
-    const agentName = params.created_by || 'system';
-    const agentResult = await knex('v4_agents')
-      .where({ name: agentName })
-      .select('id')
-      .first();
-
-    let agentId: number;
-    if (agentResult) {
-      agentId = agentResult.id;
-    } else {
-      const [insertedId] = await knex('v4_agents').insert({
-        name: agentName,
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      agentId = insertedId;
-    }
+    // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 
     // Prepare policy data
     const policyData = {
@@ -103,7 +87,6 @@ export async function createPolicy(
       required_fields: params.required_fields ? JSON.stringify(params.required_fields) : null,
       suggest_similar: params.suggest_similar ? 1 : 0,
       category: params.category || null,
-      created_by: agentId,
       project_id: projectId,
       ts: Math.floor(Date.now() / 1000)
     };

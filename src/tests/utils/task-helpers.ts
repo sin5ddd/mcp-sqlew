@@ -40,34 +40,16 @@ export async function createTestTask(
 ): Promise<number> {
   const currentTs = Math.floor(Date.now() / 1000);
 
-  // Get or create agent
-  let agentId: number;
-  const agentName = options.agentName || 'test-agent';
-
-  // Try to get existing agent
-  const existingAgent = await db('v4_agents')
-    .where({ name: agentName })
-    .first('id');
-
-  if (existingAgent) {
-    agentId = existingAgent.id;
-  } else {
-    // Create new agent
-    const [newAgentId] = await db('v4_agents')
-      .insert({ name: agentName })
-      .returning('id');
-    agentId = newAgentId?.id || newAgentId;
-  }
+  // Note: Agent tracking removed in v4.0 - no agent lookup needed
 
   // Create task with all required fields
+  // Note: assigned_agent_id and created_by_agent_id removed in v4.0
   const [taskId] = await db('v4_tasks')
     .insert({
       title: options.title,
       status_id: options.status_id || 1, // Default to 'todo' (status_id=1)
       priority: options.priority || 2,
       project_id: options.projectId || 1, // Default to project 1 if not specified
-      created_by_agent_id: agentId,
-      assigned_agent_id: agentId,
       created_ts: currentTs,  // Required NOT NULL field (v4)
       updated_ts: currentTs   // Required NOT NULL field (v4)
     })

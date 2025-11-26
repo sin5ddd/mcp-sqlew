@@ -7,7 +7,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Knex } from 'knex';
-import { initializeDatabase, getOrCreateAgent, closeDatabase } from '../../../database.js';
+import { initializeDatabase, closeDatabase } from '../../../database.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
 import { ProjectContext } from '../../../utils/project-context.js';
 import fs from 'fs';
@@ -23,9 +23,9 @@ let tempDbPath: string;
 
 /**
  * Helper: Create a test task
+ * Note: Agent tracking removed in v4.0
  */
 async function createTestTask(db: DatabaseAdapter, title: string, status: string = 'todo'): Promise<number> {
-  const agentId = await getOrCreateAgent(db, 'test-agent');
   const projectId = ProjectContext.getInstance().getProjectId();
   const statusIdMap: Record<string, number> = {
     'todo': 1,
@@ -44,8 +44,6 @@ async function createTestTask(db: DatabaseAdapter, title: string, status: string
     title,
     status_id: statusId,
     priority: 2,
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
     project_id: projectId,
     created_ts: now,
     updated_ts: now
@@ -240,6 +238,7 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
   }
 
   // Build query based on include_details flag
+  // Note: Agent tracking removed in v4.0
   let selectFields: string[];
   if (includeDetails) {
     selectFields = [
@@ -247,7 +246,6 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
       't.title',
       's.name as status',
       't.priority',
-      'aa.name as assigned_to',
       't.created_ts',
       't.updated_ts',
       'td.description'
@@ -265,7 +263,6 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
   let blockersQuery = knex('v4_tasks as t')
     .join('v4_task_dependencies as d', 't.id', 'd.blocker_task_id')
     .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where('d.blocked_task_id', params.task_id)
     .select(selectFields);
 
@@ -279,7 +276,6 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
   let blockingQuery = knex('v4_tasks as t')
     .join('v4_task_dependencies as d', 't.id', 'd.blocked_task_id')
     .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where('d.blocker_task_id', params.task_id)
     .select(selectFields);
 

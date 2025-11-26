@@ -51,62 +51,23 @@ function validateTradeoffsJson(tradeoffs: string | null): void {
 }
 
 /**
- * Get or create agent by name (simplified registry pattern)
+ * Get or create agent by name (DEPRECATED - v4.0)
  *
- * Creates a simple registry of agent names for attribution purposes.
- * No pooling, no reuse logic - each unique name gets exactly one record.
+ * Agent tracking has been removed in v4.0 as the messaging system was removed
+ * in v3.6.5 and agent attribution is no longer needed.
  *
- * - Empty/whitespace names: Generate unique generic-N name
- * - Named agents: Use exact name provided
+ * This function is kept for backward compatibility but always returns null.
+ * Callers should be updated to not rely on agent IDs.
+ *
+ * @deprecated Agent tracking removed in v4.0
  */
 export async function getOrCreateAgent(
-  adapter: DatabaseAdapter,
-  name: string,
-  trx?: Knex.Transaction
-): Promise<number> {
-  const knex = trx || adapter.getKnex();
-  const now = Math.floor(Date.now() / 1000);
-
-  // Handle empty names by generating unique generic-N identifier
-  let agentName = name;
-  if (!name || name.trim().length === 0) {
-    // Find highest generic-N number and increment
-    const maxGeneric = await knex('v4_agents')
-      .where('name', 'like', 'generic-%')
-      .orderBy('name', 'desc')
-      .first('name');
-
-    let nextNumber = 1;
-    if (maxGeneric && maxGeneric.name) {
-      const match = maxGeneric.name.match(/^generic-(\d+)$/);
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1;
-      }
-    }
-
-    agentName = `generic-${nextNumber}`;
-  }
-
-  // Insert or update agent with upsert pattern
-  // This handles both new agents and existing agents
-  await knex('v4_agents')
-    .insert({
-      name: agentName,
-      last_active_ts: now
-    })
-    .onConflict('name')
-    .merge({ last_active_ts: now });
-
-  // Get the agent ID
-  const result = await knex('v4_agents')
-    .where({ name: agentName })
-    .first('id');
-
-  if (!result) {
-    throw new Error(`Failed to get or create agent: ${agentName}`);
-  }
-
-  return result.id;
+  _adapter: DatabaseAdapter,
+  _name: string,
+  _trx?: Knex.Transaction
+): Promise<number | null> {
+  // Agent tracking removed in v4.0 - return null
+  return null;
 }
 
 /**
@@ -237,6 +198,8 @@ export async function getOrCreateCategoryId(
 
 /**
  * Add decision context to a decision
+ *
+ * @param decidedBy - @deprecated Agent tracking removed in v4.0. Parameter kept for backward compatibility but ignored.
  */
 export async function addDecisionContext(
   adapter: DatabaseAdapter,
@@ -244,7 +207,7 @@ export async function addDecisionContext(
   rationale: string,
   alternatives: string | null = null,
   tradeoffs: string | null = null,
-  decidedBy: string | null = null,
+  decidedBy: string | null = null,  // @deprecated - ignored in v4.0
   relatedTaskId: number | null = null,
   relatedConstraintId: number | null = null
 ): Promise<number> {
@@ -257,11 +220,7 @@ export async function addDecisionContext(
   // Get decision key ID
   const keyId = await getOrCreateContextKey(adapter, decisionKey);
 
-  // Get agent ID if provided
-  let agentId: number | null = null;
-  if (decidedBy) {
-    agentId = await getOrCreateAgent(adapter, decidedBy);
-  }
+  // Note: decidedBy/agent_id removed in v4.0 - agent tracking no longer used
 
   // Get project ID (v4 multi-project support)
   const projectId = getProjectContext().getProjectId();
@@ -273,7 +232,6 @@ export async function addDecisionContext(
     rationale,
     alternatives_considered: alternatives,
     tradeoffs,
-    agent_id: agentId,
     related_task_id: relatedTaskId,
     related_constraint_id: relatedConstraintId,
     decision_date: Math.floor(Date.now() / 1000),

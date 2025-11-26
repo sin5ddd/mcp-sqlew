@@ -6,7 +6,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
-import { initializeDatabase, getOrCreateAgent, getOrCreateFile, closeDatabase } from '../../../database.js';
+import { initializeDatabase, getOrCreateFile, closeDatabase } from '../../../database.js';
 import { ProjectContext } from '../../../utils/project-context.js';
 import fs from 'fs';
 import path from 'path';
@@ -21,9 +21,9 @@ let tempDbPath: string;
 
 /**
  * Helper: Create a test task
+ * Note: Agent tracking removed in v4.0
  */
 async function createTestTask(db: DatabaseAdapter, title: string): Promise<number> {
-  const agentId = await getOrCreateAgent(db, 'test-agent');
   const projectId = ProjectContext.getInstance().getProjectId();
   const statusId = 1; // todo
 
@@ -33,8 +33,6 @@ async function createTestTask(db: DatabaseAdapter, title: string): Promise<numbe
     title,
     status_id: statusId,
     priority: 2,
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
     project_id: projectId,
     created_ts: now,
     updated_ts: now,

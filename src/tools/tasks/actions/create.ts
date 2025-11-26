@@ -3,7 +3,7 @@
  */
 
 import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter, getOrCreateAgent, getOrCreateTag, getLayerId, getOrCreateFile } from '../../../database.js';
+import { getAdapter, getOrCreateTag, getLayerId, getOrCreateFile } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import { FileWatcher } from '../../../watcher/index.js';
 import { Knex } from 'knex';
@@ -89,15 +89,7 @@ export async function createTaskInternal(
     }
   }
 
-  // Get or create agents
-  let assignedAgentId: number | null = null;
-  if (params.assigned_agent) {
-    assignedAgentId = await getOrCreateAgent(adapter, params.assigned_agent, trx);
-  }
-
-  // Default to generic agent pool if no created_by_agent provided
-  const createdBy = params.created_by_agent || '';
-  const createdByAgentId = await getOrCreateAgent(adapter, createdBy, trx);
+  // Note: Agent tracking removed in v4.0 (assigned_agent and created_by_agent params kept for API compatibility but not stored)
 
   // Insert task
   const now = Math.floor(Date.now() / 1000);
@@ -106,8 +98,6 @@ export async function createTaskInternal(
     title: params.title,
     status_id: statusId,
     priority: priority,
-    assigned_agent_id: assignedAgentId,
-    created_by_agent_id: createdByAgentId,
     layer_id: layerId,
     created_ts: now,
     updated_ts: now

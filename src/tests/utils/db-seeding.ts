@@ -22,7 +22,6 @@ export async function seedTestData(db: Knex): Promise<void> {
   // Clear existing test data (use test IDs 10, 20, 100, 101 to avoid conflicts with migration-created data)
   await db('v4_decisions').where('key_id', '>=', 100).andWhere('key_id', '<=', 101).del();
   await db('v4_context_keys').where('id', '>=', 100).andWhere('id', '<=', 101).del();
-  await db('v4_agents').where('name', 'test-agent').del();
   await db('v4_projects').where('name', 'like', 'test-project-%').del();
 
   // Seed v4_projects (use IDs 10, 20 to avoid conflicts)
@@ -31,10 +30,7 @@ export async function seedTestData(db: Knex): Promise<void> {
     { id: 20, name: 'test-project-2', display_name: 'Test Project 2', detection_source: 'test', created_ts: now, last_active_ts: now },
   ]);
 
-  // Seed v4_agents (use ID 100 to avoid conflicts)
-  await db('v4_agents').insert([
-    { id: 100, name: 'test-agent' },
-  ]);
+  // Note: v4_agents removed in v4.0 (agent tracking eliminated)
 
   // Seed v4_context_keys (use IDs 100, 101 to avoid conflicts)
   await db('v4_context_keys').insert([
@@ -42,10 +38,11 @@ export async function seedTestData(db: Knex): Promise<void> {
     { id: 101, key_name: 'test/key2' },
   ]);
 
-  // Seed v4_decisions (has FK to v4_projects, v4_agents, v4_context_keys)
+  // Seed v4_decisions (has FK to v4_projects, v4_context_keys)
+  // Note: agent_id removed in v4.0
   await db('v4_decisions').insert([
-    { key_id: 100, project_id: 10, value: 'test-value-1', ts: now, agent_id: 100 },
-    { key_id: 101, project_id: 20, value: 'test-value-2', ts: now, agent_id: 100 },
+    { key_id: 100, project_id: 10, value: 'test-value-1', ts: now },
+    { key_id: 101, project_id: 20, value: 'test-value-2', ts: now },
   ]);
 }
 

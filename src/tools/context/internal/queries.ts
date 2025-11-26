@@ -5,7 +5,6 @@
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import { Knex } from 'knex';
 import {
-  getOrCreateAgent,
   getOrCreateContextKey,
   getOrCreateTag,
   getOrCreateScope,
@@ -411,7 +410,7 @@ export async function setDecisionInternal(
 
   // Set defaults
   const status = params.status ? STRING_TO_STATUS[params.status] : DEFAULT_STATUS;
-  const agentName = params.agent || 'system';
+  // Note: Agent tracking removed in v4.0 (agent param kept for API compatibility but not stored)
 
   // Scope validation warning (v3.8.0)
   // if (!params.scopes || params.scopes.length === 0) {
@@ -424,7 +423,6 @@ export async function setDecisionInternal(
   // }
 
   // Get or create master records
-  const agentId = await getOrCreateAgent(adapter, agentName, trx);
   const keyId = await getOrCreateContextKey(adapter, params.key, trx);
 
   // Current timestamp
@@ -620,11 +618,11 @@ export async function setDecisionInternal(
   // Insert or update decision
   // For ALL decisions (text and numeric), create a row in t_decisions
   // For numeric decisions, ALSO create a row in t_decisions_numeric
+  // Note: agent_id removed in v4.0
   const textDecisionData = {
     key_id: keyId,
     project_id: projectId,
     value: isNumeric ? '' : String(value),  // Empty string for numeric decisions (value column is NOT NULL)
-    agent_id: agentId,
     layer_id: layerId,
     version: version,
     status: status,
@@ -647,12 +645,12 @@ export async function setDecisionInternal(
     .merge(updateData);
 
   // For numeric decisions, ALSO insert into t_decisions_numeric
+  // Note: agent_id removed in v4.0
   if (isNumeric) {
     const numericDecisionData = {
       key_id: keyId,
       project_id: projectId,
       value: value as number,
-      agent_id: agentId,
       layer_id: layerId,
       version: version,
       status: status,

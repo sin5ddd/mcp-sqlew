@@ -3,7 +3,7 @@
  */
 
 import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter, getOrCreateAgent, getLayerId, getOrCreateFile } from '../../../database.js';
+import { getAdapter, getLayerId, getOrCreateFile } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import { FileWatcher } from '../../../watcher/index.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
@@ -50,10 +50,7 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
           updateData.priority = params.priority;
         }
 
-        if (params.assigned_agent !== undefined) {
-          const agentId = await getOrCreateAgent(actualAdapter, params.assigned_agent, trx);
-          updateData.assigned_agent_id = agentId;
-        }
+        // Note: Agent tracking removed in v4.0 (assigned_agent param kept for API compatibility but not stored)
 
         if (params.layer !== undefined) {
           const layerId = await getLayerId(actualAdapter, params.layer, trx);

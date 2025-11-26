@@ -7,7 +7,6 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeDatabase } from '../../../database/index.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
-import { getOrCreateAgent } from '../../../database/index.js';
 import { setDecision } from '../../../tools/context/index.js';
 import { getPrunedFiles, linkPrunedFile } from '../../../tools/tasks/index.js';
 import { ProjectContext } from '../../../utils/project-context.js';
@@ -41,9 +40,9 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
 
 /**
  * Helper: Create a test task
+ * Note: Agent tracking removed in v4.0
  */
 async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<number> {
-  const agentId = await getOrCreateAgent(adapter, 'test-agent');
   const statusId = 2; // in_progress
   const knex = adapter.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
@@ -54,8 +53,6 @@ async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<
     status_id: statusId,
     priority: 2,
     project_id: projectId,  // Required after v3.7.0
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
     created_ts: now,  // Required NOT NULL field
     updated_ts: now   // Required NOT NULL field
   });

@@ -54,13 +54,13 @@ export async function detectSchemaVersion(knex: Knex): Promise<SchemaVersionInfo
   const hasV4Tasks = await knex.schema.hasTable('v4_tasks');
 
   // Check for v3 tables (primary indicator of v3.x schema)
-  const hasAgents = await knex.schema.hasTable('v4_agents');
-  const hasDecisions = await knex.schema.hasTable('v4_decisions');
-  const hasTasks = await knex.schema.hasTable('v4_tasks');
+  const hasAgents = await knex.schema.hasTable('m_agents');
+  const hasV3Decisions = await knex.schema.hasTable('t_decisions');
+  const hasV3Tasks = await knex.schema.hasTable('t_tasks');
 
   // Determine schema version
   const hasV4Tables = hasV4Projects && hasV4Decisions && hasV4Tasks;
-  const hasV3Tables = hasAgents && hasDecisions && hasTasks;
+  const hasV3Tables = hasAgents && hasV3Decisions && hasV3Tasks;
 
   let version: SchemaVersion;
   let majorVersion: number;
@@ -178,8 +178,7 @@ export function getTableName(
  * Get table names for common tables
  */
 export const TableNames = {
-  // Master tables
-  agents: () => getTableName('agents', 'master'),
+  // Master tables (agents removed in v4.0)
   projects: () => getTableName('projects', 'master'),
   layers: () => getTableName('layers', 'master'),
   tags: () => getTableName('tags', 'master'),

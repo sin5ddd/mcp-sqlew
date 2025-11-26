@@ -605,7 +605,7 @@ export interface GetVersionsResponse {
   history: Array<{
     version: string;
     value: string;
-    agent: string | null;
+    // Note: agent field removed in v4.0 (agent tracking eliminated)
     timestamp: string;
   }>;
   count: number;
@@ -831,7 +831,7 @@ export interface ListTemplatesResponse {
     name: string;
     defaults: any;  // Parsed JSON
     required_fields: string[] | null;  // Parsed JSON array
-    created_by: string | null;
+    // Note: created_by field removed in v4.0 (agent tracking eliminated)
     created_at: string;
   }>;
   count: number;

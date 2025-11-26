@@ -4,7 +4,7 @@
  */
 
 import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter, getOrCreateAgent, getLayerId } from '../../../database.js';
+import { getAdapter, getLayerId } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import { STRING_TO_STATUS } from '../../../constants.js';
 import connectionManager from '../../../utils/connection-manager.js';
@@ -47,11 +47,7 @@ export async function createTemplate(
           throw new Error(`Invalid status in defaults: ${params.defaults.status}. Must be 'active', 'deprecated', or 'draft'`);
         }
 
-        // Get or create agent if creator specified
-        let createdById: number | null = null;
-        if (params.created_by) {
-          createdById = await getOrCreateAgent(actualAdapter, params.created_by, trx);
-        }
+        // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 
         // Serialize defaults and required fields
         const defaultsJson = JSON.stringify(params.defaults);
@@ -63,7 +59,7 @@ export async function createTemplate(
           project_id: projectId,
           defaults: defaultsJson,
           required_fields: requiredFieldsJson,
-          created_by: createdById
+          ts: Math.floor(Date.now() / 1000)
         });
 
         return {

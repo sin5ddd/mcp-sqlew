@@ -3,13 +3,15 @@
  * Provides schema verification utilities using async Knex queries
  *
  * v4.0 Update: All tables now use v4_ prefix instead of m_/t_ prefixes
+ * v4.0 Update: v4_agents table removed (agent tracking eliminated)
  */
 
 import { DatabaseAdapter } from './adapters/index.js';
 
 /**
  * Check if schema is already initialized
- * Checks for existence of the v4_agents table (v4 schema)
+ * Checks for existence of the v4_projects table (v4 schema)
+ * Note: v4_agents removed in v4.0 - now checks v4_projects
  *
  * @param adapter - Database adapter instance
  * @returns true if schema exists, false otherwise
@@ -17,7 +19,7 @@ import { DatabaseAdapter } from './adapters/index.js';
 export async function isSchemaInitialized(adapter: DatabaseAdapter): Promise<boolean> {
   try {
     const knex = adapter.getKnex();
-    return await knex.schema.hasTable('v4_agents');
+    return await knex.schema.hasTable('v4_projects');
   } catch (error) {
     return false;
   }
@@ -26,12 +28,12 @@ export async function isSchemaInitialized(adapter: DatabaseAdapter): Promise<boo
 /**
  * Get schema version information
  * Returns counts of all master tables to verify schema integrity
+ * Note: agents count removed in v4.0 (agent tracking eliminated)
  *
  * @param adapter - Database adapter instance
  * @returns Object with table counts
  */
 export async function getSchemaInfo(adapter: DatabaseAdapter): Promise<{
-  agents: number;
   files: number;
   context_keys: number;
   layers: number;
@@ -40,7 +42,6 @@ export async function getSchemaInfo(adapter: DatabaseAdapter): Promise<{
   constraint_categories: number;
 }> {
   const counts = {
-    agents: 0,
     files: 0,
     context_keys: 0,
     layers: 0,
@@ -51,9 +52,6 @@ export async function getSchemaInfo(adapter: DatabaseAdapter): Promise<{
 
   try {
     const knex = adapter.getKnex();
-
-    const agentsResult = await knex('v4_agents').count('* as count').first() as { count: number } | undefined;
-    counts.agents = agentsResult?.count || 0;
 
     const filesResult = await knex('v4_files').count('* as count').first() as { count: number } | undefined;
     counts.files = filesResult?.count || 0;
@@ -98,9 +96,10 @@ export async function verifySchemaIntegrity(adapter: DatabaseAdapter): Promise<{
   };
 
   // v4.0: All tables use v4_ prefix, views and triggers removed for cross-DB compatibility
+  // Note: v4_agents removed in v4.0 (agent tracking eliminated)
   const requiredTables = [
     // Master tables
-    'v4_agents', 'v4_files', 'v4_context_keys', 'v4_constraint_categories',
+    'v4_files', 'v4_context_keys', 'v4_constraint_categories',
     'v4_layers', 'v4_tags', 'v4_scopes', 'v4_config', 'v4_task_statuses',
     'v4_projects',
     // Transaction tables

@@ -7,16 +7,12 @@ import type { DatabaseAdapter } from '../../adapters/index.js';
 
 /**
  * Update agent activity timestamp
+ * @deprecated Agent tracking removed in v4.0
  */
 export async function updateAgentActivity(
-  adapter: DatabaseAdapter,
-  agentId: number,
-  trx?: Knex.Transaction
+  _adapter: DatabaseAdapter,
+  _agentId: number,
+  _trx?: Knex.Transaction
 ): Promise<void> {
-  const knex = trx || adapter.getKnex();
-  const now = Math.floor(Date.now() / 1000);
-
-  await knex('v4_agents')
-    .where({ id: agentId })
-    .update({ last_active_ts: now });
+  // Agent tracking removed in v4.0 - no-op
 }

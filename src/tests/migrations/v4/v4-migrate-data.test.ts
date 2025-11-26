@@ -23,13 +23,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // シンプルな v4 スキーマ (必要なテーブルのみ) を定義
+// Note: Agent tracking removed in v4.0 - no v4_agents table or agent_id columns
 async function createV4Schema(db: Knex) {
-  await db.schema.createTable('v4_agents', table => {
-    table.integer('id').primary();
-    table.string('name');
-    table.integer('last_active_ts').nullable();
-  });
-
   await db.schema.createTable('v4_projects', table => {
     table.integer('id').primary();
     table.string('name');
@@ -61,7 +56,6 @@ async function createV4Schema(db: Knex) {
     table.string('key_id');
     table.integer('project_id');
     table.text('value');
-    table.integer('agent_id').nullable();
     table.integer('layer_id').nullable();
     table.integer('version').nullable();
     table.string('status').nullable();
@@ -74,7 +68,6 @@ async function createV4Schema(db: Knex) {
     table.integer('project_id');
     table.integer('version');
     table.text('value');
-    table.integer('agent_id').nullable();
     table.integer('ts').nullable();
   });
 
@@ -84,8 +77,6 @@ async function createV4Schema(db: Knex) {
     table.integer('project_id');
     table.integer('status_id');
     table.integer('priority').nullable();
-    table.integer('assigned_agent_id').nullable();
-    table.integer('created_by_agent_id').nullable();
     table.integer('layer_id').nullable();
     table.integer('created_ts').nullable();
     table.integer('updated_ts').nullable();
@@ -195,13 +186,14 @@ describe('v4.0 Data Migration from v3.x', () => {
     });
 
     it('should skip data migration when no v3 tables exist', async () => {
-      const agentsBefore = await db('v4_agents').count<{ count: number }[]>('* as count');
-      assert.strictEqual(Number(agentsBefore[0].count), 0);
+      // Note: v4_agents removed in v4.0 - check v4_projects instead
+      const projectsBefore = await db('v4_projects').count<{ count: number }[]>('* as count');
+      assert.strictEqual(Number(projectsBefore[0].count), 0);
 
       await migrateV4Data(db as any);
 
-      const agentsAfter = await db('v4_agents').count<{ count: number }[]>('* as count');
-      assert.strictEqual(Number(agentsAfter[0].count), 0, 'v4_agents should remain empty');
+      const projectsAfter = await db('v4_projects').count<{ count: number }[]>('* as count');
+      assert.strictEqual(Number(projectsAfter[0].count), 0, 'v4_projects should remain empty');
     });
   });
 
@@ -259,9 +251,7 @@ describe('v4.0 Data Migration from v3.x', () => {
     it('should migrate master and transaction data correctly', async () => {
       await migrateV4Data(db as any);
 
-      const v4Agents = await db('v4_agents').orderBy('id');
-      assert.strictEqual(v4Agents.length, 2);
-      assert.deepStrictEqual(v4Agents.map((a: any) => a.id), [1, 2]);
+      // Note: v4_agents removed in v4.0 - m_agents data is NOT migrated
 
       const v4Projects = await db('v4_projects');
       assert.strictEqual(v4Projects.length, 1);
@@ -297,9 +287,9 @@ describe('v4.0 Data Migration from v3.x', () => {
     });
 
     it('should be idempotent when running up() twice', async () => {
+      // Note: v4_agents removed in v4.0
       await migrateV4Data(db as any);
       const counts1 = {
-        agents: await db('v4_agents').count<{ count: number }[]>('* as count'),
         projects: await db('v4_projects').count<{ count: number }[]>('* as count'),
         decisions: await db('v4_decisions').count<{ count: number }[]>('* as count'),
       };
@@ -307,12 +297,10 @@ describe('v4.0 Data Migration from v3.x', () => {
       await migrateV4Data(db as any);
 
       const counts2 = {
-        agents: await db('v4_agents').count<{ count: number }[]>('* as count'),
         projects: await db('v4_projects').count<{ count: number }[]>('* as count'),
         decisions: await db('v4_decisions').count<{ count: number }[]>('* as count'),
       };
 
-      assert.strictEqual(Number(counts1.agents[0].count), Number(counts2.agents[0].count));
       assert.strictEqual(Number(counts1.projects[0].count), Number(counts2.projects[0].count));
       assert.strictEqual(Number(counts1.decisions[0].count), Number(counts2.decisions[0].count));
     });
@@ -328,9 +316,9 @@ describe('v4.0 Data Migration from v3.x', () => {
       const afterDecisions = await db('v4_decisions').count<{ count: number }[]>('* as count');
       assert.strictEqual(Number(afterDecisions[0].count), 0);
 
-      // マスタテーブルは残っている
-      const agents = await db('v4_agents').count<{ count: number }[]>('* as count');
-      assert.ok(Number(agents[0].count) > 0);
+      // マスタテーブルは残っている (v4_agents removed in v4.0 - check v4_projects instead)
+      const projects = await db('v4_projects').count<{ count: number }[]>('* as count');
+      assert.ok(Number(projects[0].count) > 0);
     });
   });
 });

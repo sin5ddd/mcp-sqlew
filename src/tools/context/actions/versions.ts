@@ -55,20 +55,18 @@ export async function getVersions(
 
     const keyId = keyResult.id;
 
-    // Query v4_decision_history with agent join
+    // Query v4_decision_history
+    // Note: Agent tracking removed in v4.0 - agent field removed
     const rows = await knex('v4_decision_history as dh')
-      .leftJoin('v4_agents as a', 'dh.agent_id', 'a.id')
       .where({ 'dh.key_id': keyId, 'dh.project_id': projectId })
       .select(
         'dh.version',
         'dh.value',
-        'a.name as agent_name',
         knex.raw(`datetime(dh.ts, 'unixepoch') as timestamp`)
       )
       .orderBy('dh.ts', 'desc') as Array<{
         version: string;
         value: string;
-        agent_name: string | null;
         timestamp: string;
       }>;
 
@@ -76,7 +74,6 @@ export async function getVersions(
     const history = rows.map(row => ({
       version: row.version,
       value: row.value,
-      agent: row.agent_name,
       timestamp: row.timestamp
     }));
 

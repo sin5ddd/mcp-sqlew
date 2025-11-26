@@ -44,8 +44,8 @@ export async function listPolicies(
 
   try {
     // Build query
+    // Note: Agent tracking removed in v4.0 - created_by field removed
     let query = knex('v4_decision_policies as p')
-      .leftJoin('v4_agents as a', 'p.created_by', 'a.id')
       .where('p.project_id', projectId);
 
     // Apply filters
@@ -67,7 +67,6 @@ export async function listPolicies(
       'p.validation_rules',
       'p.quality_gates',
       'p.required_fields',
-      'a.name as created_by',
       'p.ts'
     ).orderBy('p.name');
 

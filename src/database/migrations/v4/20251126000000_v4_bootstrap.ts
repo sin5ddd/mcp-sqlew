@@ -6,14 +6,15 @@
  *
  * Key Changes from v3.x:
  * - All tables use v4_ prefix
+ * - Removed: m_agents (agent tracking no longer needed after messaging system removal)
  * - Removed: t_agent_messages (unused messaging system)
  * - Removed: t_activity_log (low usage)
  * - Removed: t_decision_templates (merged into v4_decision_policies)
  * - No Views (replaced by application-level queries)
  * - No Triggers (replaced by application-level logic)
  *
- * Tables Created (35 total):
- * - Master Tables (15): v4_agents, v4_files, v4_context_keys, v4_layers,
+ * Tables Created (34 total):
+ * - Master Tables (14): v4_files, v4_context_keys, v4_layers,
  *   v4_tags, v4_scopes, v4_config, v4_task_statuses, v4_projects,
  *   v4_constraint_categories, v4_help_tools, v4_help_actions,
  *   v4_help_use_case_cats, v4_tag_index, v4_builtin_policies
@@ -26,8 +27,8 @@
  *   v4_task_pruned_files, v4_help_action_params, v4_help_action_examples,
  *   v4_help_use_cases, v4_help_action_sequences, v4_token_usage
  *
- * Indexes Created: 34 performance indexes
- * Seed Data: layers, task_statuses, constraint_categories, default project, tags, config, system agent
+ * Indexes Created: 30 performance indexes
+ * Seed Data: layers, task_statuses, constraint_categories, default project, tags, config
  */
 
 import type { Knex } from 'knex';
@@ -42,16 +43,10 @@ export async function up(knex: Knex): Promise<void> {
   // PART 1: CREATE TABLES (35 tables)
   // ============================================================================
 
-  // ---- MASTER TABLES (15 tables) ----
+  // ---- MASTER TABLES (14 tables) ----
+  // Note: v4_agents removed in v4.0 - agent tracking no longer needed after messaging system removal
 
-  // 1. v4_agents - Agent registry
-  await db.createTableSafe('v4_agents', (table) => {
-    table.increments('id').primary();
-    table.string('name', 100).unique().notNullable();
-    table.integer('last_active_ts').nullable();
-  });
-
-  // 2. v4_projects - Multi-project support
+  // 1. v4_projects - Multi-project support
   await db.createTableSafe('v4_projects', (table, helpers) => {
     table.increments('id').primary();
     table.string('name', 64).notNullable().unique();
@@ -169,16 +164,15 @@ export async function up(knex: Knex): Promise<void> {
     table.string('category', 64).nullable();
   });
 
-  console.log('✅ Master tables created (15 tables)');
+  console.log('✅ Master tables created (14 tables)');
 
   // ---- TRANSACTION TABLES - Decisions (8 tables) ----
 
-  // 16. v4_decisions - String value decisions
+  // 15. v4_decisions - String value decisions
   await db.createTableSafe('v4_decisions', (table, helpers) => {
     table.integer('key_id').unsigned().notNullable();
     table.integer('project_id').unsigned().notNullable();
     table.text('value').notNullable();
-    table.integer('agent_id').unsigned().nullable();
     table.integer('layer_id').unsigned().nullable();
     table.string('version', 20).defaultTo('1.0.0');
     table.integer('status').defaultTo(1);
@@ -186,16 +180,14 @@ export async function up(knex: Knex): Promise<void> {
     table.primary(['key_id', 'project_id']);
     table.foreign('key_id').references('v4_context_keys.id');
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
-    table.foreign('agent_id').references('v4_agents.id');
     table.foreign('layer_id').references('v4_layers.id');
   });
 
-  // 17. v4_decisions_numeric - Numeric value decisions
+  // 16. v4_decisions_numeric - Numeric value decisions
   await db.createTableSafe('v4_decisions_numeric', (table, helpers) => {
     table.integer('key_id').unsigned().notNullable();
     table.integer('project_id').unsigned().notNullable();
     table.double('value').notNullable();
-    table.integer('agent_id').unsigned().nullable();
     table.integer('layer_id').unsigned().nullable();
     table.string('version', 20).defaultTo('1.0.0');
     table.integer('status').defaultTo(1);
@@ -203,22 +195,19 @@ export async function up(knex: Knex): Promise<void> {
     table.primary(['key_id', 'project_id']);
     table.foreign('key_id').references('v4_context_keys.id');
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
-    table.foreign('agent_id').references('v4_agents.id');
     table.foreign('layer_id').references('v4_layers.id');
   });
 
-  // 18. v4_decision_history - Version history
+  // 17. v4_decision_history - Version history
   await db.createTableSafe('v4_decision_history', (table, helpers) => {
     table.increments('id').primary();
     table.integer('key_id').unsigned().notNullable();
     table.integer('project_id').unsigned().notNullable();
     table.string('version', 20).notNullable();
     table.text('value').notNullable();
-    table.integer('agent_id').unsigned().nullable();
     helpers.timestampColumn('ts');
     table.foreign('key_id').references('v4_context_keys.id');
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
-    table.foreign('agent_id').references('v4_agents.id');
   });
 
   // 19. v4_decision_tags - Decision-tag many-to-many
@@ -243,7 +232,7 @@ export async function up(knex: Knex): Promise<void> {
     table.foreign('scope_id').references('v4_scopes.id');
   });
 
-  // 21. v4_decision_context - Rich decision context
+  // 20. v4_decision_context - Rich decision context
   await db.createTableSafe('v4_decision_context', (table, helpers) => {
     table.increments('id').primary();
     table.integer('decision_key_id').unsigned().notNullable();
@@ -251,14 +240,12 @@ export async function up(knex: Knex): Promise<void> {
     table.text('rationale').notNullable();
     table.text('alternatives_considered').nullable();
     table.text('tradeoffs').nullable();
-    table.integer('agent_id').unsigned().nullable();
     table.integer('decision_date').nullable();
     table.integer('related_task_id').nullable();
     table.integer('related_constraint_id').nullable();
     helpers.timestampColumn('ts');
     table.foreign('decision_key_id').references('v4_context_keys.id');
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
-    table.foreign('agent_id').references('v4_agents.id');
   });
 
   // 22. v4_decision_policies - Decision policies
@@ -273,11 +260,9 @@ export async function up(knex: Knex): Promise<void> {
     table.text('quality_gates').nullable();
     table.integer('suggest_similar').defaultTo(1);
     table.string('category', 64).nullable();
-    table.integer('created_by').unsigned().nullable();
     helpers.timestampColumn('ts');
     table.unique(['name', 'project_id']);
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
-    table.foreign('created_by').references('v4_agents.id');
   });
 
   // 23. v4_decision_pruning_log - Pruning audit log
@@ -298,14 +283,12 @@ export async function up(knex: Knex): Promise<void> {
     table.increments('id').primary();
     table.integer('file_id').unsigned().notNullable();
     table.integer('project_id').unsigned().notNullable();
-    table.integer('agent_id').unsigned().notNullable();
     table.integer('layer_id').unsigned().nullable();
     table.integer('change_type').notNullable();
     table.text('description').nullable();
     helpers.timestampColumn('ts');
     table.foreign('file_id').references('v4_files.id');
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
-    table.foreign('agent_id').references('v4_agents.id');
     table.foreign('layer_id').references('v4_layers.id');
   });
 
@@ -318,12 +301,10 @@ export async function up(knex: Knex): Promise<void> {
     table.text('constraint_text').notNullable();
     table.integer('priority').defaultTo(2);
     table.integer('active').defaultTo(1);
-    table.integer('agent_id').unsigned().nullable();
     helpers.timestampColumn('ts');
     table.foreign('category_id').references('v4_constraint_categories.id');
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
     table.foreign('layer_id').references('v4_layers.id');
-    table.foreign('agent_id').references('v4_agents.id');
   });
 
   // 26. v4_constraint_tags - Constraint-tag many-to-many
@@ -346,16 +327,12 @@ export async function up(knex: Knex): Promise<void> {
     table.integer('project_id').unsigned().notNullable();
     table.integer('status_id').unsigned().defaultTo(1);
     table.integer('priority').defaultTo(2);
-    table.integer('assigned_agent_id').unsigned().nullable();
-    table.integer('created_by_agent_id').unsigned().nullable();
     table.integer('layer_id').unsigned().nullable();
     helpers.timestampColumn('created_ts');
     helpers.timestampColumn('updated_ts');
     table.integer('completed_ts').nullable();
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
     table.foreign('status_id').references('v4_task_statuses.id');
-    table.foreign('assigned_agent_id').references('v4_agents.id');
-    table.foreign('created_by_agent_id').references('v4_agents.id');
     table.foreign('layer_id').references('v4_layers.id');
   });
 
@@ -504,10 +481,10 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   console.log('✅ Utility tables created (1 table)');
-  console.log('🎉 Schema creation completed! (35 tables total)');
+  console.log('🎉 Schema creation completed! (34 tables total)');
 
   // ============================================================================
-  // PART 2: CREATE INDEXES (34 indexes)
+  // PART 2: CREATE INDEXES (30 indexes)
   // ============================================================================
 
   console.log('📇 Creating performance indexes...');
@@ -523,23 +500,21 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('v4_decision_policies', ['project_id', 'category'], 'idx_v4_decision_policies_category');
   console.log('  ✓ Decision indexes (8)');
 
-  // Task Indexes (8)
+  // Task Indexes (7)
   await db.createIndexSafe('v4_tasks', ['project_id', 'status_id'], 'idx_v4_tasks_status');
   await db.createIndexSafe('v4_tasks', ['project_id', 'updated_ts'], 'idx_v4_tasks_updated', { desc: true });
   await db.createIndexSafe('v4_tasks', ['project_id', 'created_ts'], 'idx_v4_tasks_created', { desc: true });
-  await db.createIndexSafe('v4_tasks', ['project_id', 'assigned_agent_id'], 'idx_v4_tasks_assignee');
   await db.createIndexSafe('v4_tasks', ['project_id', 'layer_id'], 'idx_v4_tasks_layer');
   await db.createIndexSafe('v4_tasks', ['project_id', 'priority'], 'idx_v4_tasks_priority', { desc: true });
   await db.createIndexSafe('v4_task_dependencies', ['project_id', 'blocked_task_id'], 'idx_v4_task_deps_blocked');
   await db.createIndexSafe('v4_task_dependencies', ['project_id', 'blocker_task_id'], 'idx_v4_task_deps_blocker');
-  console.log('  ✓ Task indexes (8)');
+  console.log('  ✓ Task indexes (7)');
 
-  // File Change Indexes (4)
+  // File Change Indexes (3)
   await db.createIndexSafe('v4_file_changes', ['project_id', 'ts'], 'idx_v4_file_changes_ts', { desc: true });
   await db.createIndexSafe('v4_file_changes', ['project_id', 'file_id'], 'idx_v4_file_changes_file');
   await db.createIndexSafe('v4_file_changes', ['project_id', 'layer_id'], 'idx_v4_file_changes_layer');
-  await db.createIndexSafe('v4_file_changes', ['project_id', 'agent_id'], 'idx_v4_file_changes_agent');
-  console.log('  ✓ File change indexes (4)');
+  console.log('  ✓ File change indexes (3)');
 
   // Constraint Indexes (3)
   await db.createIndexSafe('v4_constraints', ['project_id', 'active', 'category_id'], 'idx_v4_constraints_active');
@@ -565,12 +540,11 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('v4_help_use_cases', ['complexity'], 'idx_v4_help_use_cases_complexity');
   console.log('  ✓ Help system indexes (5)');
 
-  // Agent & Project Indexes (2)
-  await db.createIndexSafe('v4_agents', ['last_active_ts'], 'idx_v4_agents_last_active', { desc: true });
+  // Project Indexes (1)
   await db.createIndexSafe('v4_projects', ['last_active_ts'], 'idx_v4_projects_last_active', { desc: true });
-  console.log('  ✓ Agent & Project indexes (2)');
+  console.log('  ✓ Project indexes (1)');
 
-  console.log('🎉 Index creation completed! (34 indexes total)');
+  console.log('🎉 Index creation completed! (30 indexes total)');
 
   // ============================================================================
   // PART 3: SEED MASTER DATA
@@ -691,14 +665,6 @@ export async function up(knex: Knex): Promise<void> {
     console.log('  ✓ Configuration seeded (4)');
   }
 
-  // 7. Seed v4_agents (system agent)
-  const existingAgents = await knex('v4_agents').count('* as count').first();
-  if (!existingAgents || Number(existingAgents.count) === 0) {
-    const now = Math.floor(Date.now() / 1000);
-    await knex('v4_agents').insert({ id: 1, name: 'system', last_active_ts: now });
-    console.log('  ✓ System agent created');
-  }
-
   console.log('🎉 v4.0 bootstrap migration completed!');
 }
 
@@ -716,7 +682,7 @@ export async function down(knex: Knex): Promise<void> {
     'v4_decision_tags', 'v4_decision_history', 'v4_decisions_numeric', 'v4_decisions',
     'v4_builtin_policies', 'v4_tag_index', 'v4_help_use_case_cats', 'v4_help_actions', 'v4_help_tools',
     'v4_constraint_categories', 'v4_task_statuses', 'v4_config', 'v4_scopes', 'v4_tags', 'v4_layers',
-    'v4_context_keys', 'v4_files', 'v4_projects', 'v4_agents',
+    'v4_context_keys', 'v4_files', 'v4_projects',
   ];
 
   for (const table of tables) {

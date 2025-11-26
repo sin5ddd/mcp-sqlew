@@ -208,29 +208,11 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
 
 /**
  * Helper: Create a test task in 'in_progress' status
+ * Note: Agent tracking removed in v4.0
  */
 async function createTestTask(db: DatabaseAdapter): Promise<number> {
   const knex = db.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
-
-  // Create test agent
-  const [agentId] = await knex('v4_agents')
-    .insert({ name: 'test-agent' })
-    .onConflict('name')
-    .ignore()
-    .returning('id');
-
-  // If insert was ignored, get the existing agent
-  let actualAgentId: number;
-  if (agentId) {
-    actualAgentId = agentId.id || agentId;
-  } else {
-    const agent = await knex('v4_agents')
-      .where({ name: 'test-agent' })
-      .select('id')
-      .first() as { id: number };
-    actualAgentId = agent.id;
-  }
 
   // Get 'in_progress' status ID
   const statusRow = await knex('v4_task_statuses')
@@ -246,8 +228,6 @@ async function createTestTask(db: DatabaseAdapter): Promise<number> {
       status_id: statusRow.id,
       priority: 2,
       project_id: projectId,  // Required after v3.7.0
-      assigned_agent_id: actualAgentId,
-      created_by_agent_id: actualAgentId,
       created_ts: currentTs,
       updated_ts: currentTs
     })

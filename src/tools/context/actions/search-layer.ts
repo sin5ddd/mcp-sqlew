@@ -101,10 +101,10 @@ export async function searchByLayer(
       const db = new UniversalKnex(knex);
       const statusInt = STRING_TO_STATUS[statusValue];
 
+      // Note: Agent tracking removed in v4.0 - decided_by field removed
       const stringDecisions = knex('v4_decisions as d')
         .innerJoin('v4_context_keys as ck', 'd.key_id', 'ck.id')
         .leftJoin('v4_layers as l', 'd.layer_id', 'l.id')
-        .leftJoin('v4_agents as a', 'd.agent_id', 'a.id')
         .where('l.name', params.layer)
         .where('d.status', statusInt)
         .where('d.project_id', projectId)
@@ -116,14 +116,12 @@ export async function searchByLayer(
           'l.name as layer',
           knex.raw('NULL as tags'),
           knex.raw('NULL as scopes'),
-          'a.name as decided_by',
           knex.raw(`${db.dateFunction('d.ts')} as updated`)
         );
 
       const numericDecisions = knex('v4_decisions_numeric as dn')
         .innerJoin('v4_context_keys as ck', 'dn.key_id', 'ck.id')
         .leftJoin('v4_layers as l', 'dn.layer_id', 'l.id')
-        .leftJoin('v4_agents as a', 'dn.agent_id', 'a.id')
         .where('l.name', params.layer)
         .where('dn.status', statusInt)
         .where('dn.project_id', projectId)
@@ -135,7 +133,6 @@ export async function searchByLayer(
           'l.name as layer',
           knex.raw('NULL as tags'),
           knex.raw('NULL as scopes'),
-          'a.name as decided_by',
           knex.raw(`${db.dateFunction('dn.ts')} as updated`)
         );
 

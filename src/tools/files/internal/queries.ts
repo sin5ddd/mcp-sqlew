@@ -6,7 +6,6 @@ import { DatabaseAdapter } from '../../../adapters/index.js';
 import { Knex } from 'knex';
 import {
   getOrCreateFile,
-  getOrCreateAgent,
   getLayerId
 } from '../../../database.js';
 import {
@@ -52,17 +51,16 @@ export async function recordFileChangeInternal(
     }
   }
 
-  // Auto-register file and agent (v3.7.3: pass projectId)
+  // Auto-register file (v3.7.3: pass projectId)
+  // Note: Agent tracking removed in v4.0
   const fileId = await getOrCreateFile(adapter, projectId, params.file_path, trx);
-  const agentId = await getOrCreateAgent(adapter, params.agent_name, trx);
 
   // Current timestamp
   const ts = Math.floor(Date.now() / 1000);
 
-  // Insert file change record with project_id
+  // Insert file change record with project_id (agent_id removed in v4.0)
   const [changeId] = await knex('v4_file_changes').insert({
     file_id: fileId,
-    agent_id: agentId,
     layer_id: layerId,
     change_type: changeTypeInt,
     description: params.description || null,

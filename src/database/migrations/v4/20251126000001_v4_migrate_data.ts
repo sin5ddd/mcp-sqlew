@@ -8,13 +8,14 @@
  * 1. Check if v3.x tables exist (detect upgrade vs fresh install)
  * 2. For each table, check if v4_ version is empty
  * 3. Copy data preserving IDs and foreign key relationships
- * 4. Skip deprecated tables: t_agent_messages, t_activity_log, t_decision_templates
+ * 4. Skip deprecated tables: t_agent_messages, t_activity_log, t_decision_templates, m_agents
  *
- * Tables Migrated (32 total):
- * - Master Tables: m_agents → v4_agents, m_projects → v4_projects, etc.
+ * Tables Migrated (31 total):
+ * - Master Tables: m_projects → v4_projects, etc. (m_agents removed in v4.0)
  * - Transaction Tables: t_decisions → v4_decisions, t_tasks → v4_tasks, etc.
  *
  * Tables NOT Migrated (deprecated in v4.0):
+ * - m_agents - agent tracking removed (v3.6.5 simplified system, now fully removed)
  * - t_agent_messages - messaging system removed
  * - t_activity_log - activity logging removed
  * - t_decision_templates - merged into v4_decision_policies
@@ -135,7 +136,7 @@ export async function up(knex: Knex): Promise<void> {
 
   console.log('\n📋 Migrating master tables...');
 
-  totalMigrated += await migrateTable('m_agents', 'v4_agents', ['id', 'name', 'last_active_ts'], { upsertKey: 'id' });
+  // m_agents migration removed - agent tracking no longer used in v4.0
 
   const hasProjectsTable = await knex.schema.hasTable('m_projects');
   if (hasProjectsTable) {
@@ -146,12 +147,12 @@ export async function up(knex: Knex): Promise<void> {
     if (await knex.schema.hasColumn('m_projects', 'created_ts')) projectCols.push('created_ts');
     if (await knex.schema.hasColumn('m_projects', 'last_active_ts')) projectCols.push('last_active_ts');
     if (await knex.schema.hasColumn('m_projects', 'metadata')) projectCols.push('metadata');
-    totalMigrated += await migrateTable('m_projects', 'v4_projects', projectCols, { upsertKey: 'id' });
+    totalMigrated += await migrateTable('m_projects', 'v4_projects', projectCols, { upsertKey: 'name' });
   }
 
-  totalMigrated += await migrateTable('m_layers', 'v4_layers', ['id', 'name'], { upsertKey: 'id' });
-  totalMigrated += await migrateTable('m_constraint_categories', 'v4_constraint_categories', ['id', 'name'], { upsertKey: 'id' });
-  totalMigrated += await migrateTable('m_task_statuses', 'v4_task_statuses', ['id', 'name'], { upsertKey: 'id' });
+  totalMigrated += await migrateTable('m_layers', 'v4_layers', ['id', 'name'], { upsertKey: 'name' });
+  totalMigrated += await migrateTable('m_constraint_categories', 'v4_constraint_categories', ['id', 'name'], { upsertKey: 'name' });
+  totalMigrated += await migrateTable('m_task_statuses', 'v4_task_statuses', ['id', 'name'], { upsertKey: 'name' });
 
   // v4_context_keys - 'key' is MySQL reserved word
   const contextKeysExists = await knex.schema.hasTable('m_context_keys');
@@ -207,8 +208,8 @@ export async function up(knex: Knex): Promise<void> {
     }
   }
 
-  totalMigrated += await migrateTable('m_tags', 'v4_tags', ['id', 'project_id', 'name'], { upsertKey: 'id' });
-  totalMigrated += await migrateTable('m_scopes', 'v4_scopes', ['id', 'project_id', 'name'], { upsertKey: 'id' });
+  totalMigrated += await migrateTable('m_tags', 'v4_tags', ['id', 'project_id', 'name'], { upsertKey: 'name' });
+  totalMigrated += await migrateTable('m_scopes', 'v4_scopes', ['id', 'project_id', 'name'], { upsertKey: 'name' });
 
   // v4_config - column mapping
   const configExists = await knex.schema.hasTable('m_config');
@@ -289,9 +290,9 @@ export async function up(knex: Knex): Promise<void> {
 
   const hasProjectIdInDecisions = await knex.schema.hasColumn('t_decisions', 'project_id');
   if (hasProjectIdInDecisions) {
-    // Newer v3 schemas: simply copy project_id from source table
+    // Newer v3 schemas: simply copy project_id from source table (agent_id removed in v4.0)
     transactionMigrated += await migrateTable('t_decisions', 'v4_decisions', [
-      'key_id', 'project_id', 'value', 'agent_id', 'layer_id', 'version', 'status', 'ts'
+      'key_id', 'project_id', 'value', 'layer_id', 'version', 'status', 'ts'
     ]);
   } else {
     // Legacy v3 schemas: t_decisions に project_id が存在しないため、固定値 1 を付与して移行する
@@ -308,7 +309,6 @@ export async function up(knex: Knex): Promise<void> {
         const sourceRows = await knex('t_decisions').select(
           'key_id',
           'value',
-          'agent_id',
           'layer_id',
           'version',
           'status',
@@ -322,7 +322,6 @@ export async function up(knex: Knex): Promise<void> {
             key_id: row.key_id,
             project_id: 1,
             value: row.value,
-            agent_id: row.agent_id,
             layer_id: row.layer_id,
             version: row.version,
             status: row.status,
@@ -344,12 +343,12 @@ export async function up(knex: Knex): Promise<void> {
 
   if (hasProjectIdInDecisions) {
     transactionMigrated += await migrateTable('t_decisions_numeric', 'v4_decisions_numeric', [
-      'key_id', 'project_id', 'value', 'agent_id', 'layer_id', 'version', 'status', 'ts'
+      'key_id', 'project_id', 'value', 'layer_id', 'version', 'status', 'ts'
     ]);
   }
 
   transactionMigrated += await migrateTable('t_decision_history', 'v4_decision_history', [
-    'id', 'key_id', 'project_id', 'version', 'value', 'agent_id', 'ts'
+    'id', 'key_id', 'project_id', 'version', 'value', 'ts'
   ]);
 
   transactionMigrated += await migrateTable('t_decision_tags', 'v4_decision_tags', [
@@ -362,14 +361,14 @@ export async function up(knex: Knex): Promise<void> {
 
   transactionMigrated += await migrateTable('t_decision_context', 'v4_decision_context', [
     'id', 'decision_key_id', 'project_id', 'rationale', 'alternatives_considered',
-    'tradeoffs', 'agent_id', 'decision_date', 'related_task_id', 'related_constraint_id', 'ts'
+    'tradeoffs', 'decision_date', 'related_task_id', 'related_constraint_id', 'ts'
   ]);
 
   const hasDecisionPolicies = await knex.schema.hasTable('t_decision_policies');
   if (hasDecisionPolicies) {
     transactionMigrated += await migrateTable('t_decision_policies', 'v4_decision_policies', [
       'id', 'name', 'project_id', 'description', 'defaults', 'required_fields',
-      'validation_rules', 'quality_gates', 'suggest_similar', 'category', 'created_by', 'ts'
+      'validation_rules', 'quality_gates', 'suggest_similar', 'category', 'ts'
     ]);
   }
 
@@ -381,11 +380,11 @@ export async function up(knex: Knex): Promise<void> {
   }
 
   transactionMigrated += await migrateTable('t_file_changes', 'v4_file_changes', [
-    'id', 'file_id', 'project_id', 'agent_id', 'layer_id', 'change_type', 'description', 'ts'
+    'id', 'file_id', 'project_id', 'layer_id', 'change_type', 'description', 'ts'
   ]);
 
   transactionMigrated += await migrateTable('t_constraints', 'v4_constraints', [
-    'id', 'category_id', 'project_id', 'layer_id', 'constraint_text', 'priority', 'active', 'agent_id', 'ts'
+    'id', 'category_id', 'project_id', 'layer_id', 'constraint_text', 'priority', 'active', 'ts'
   ]);
 
   transactionMigrated += await migrateTable('t_constraint_tags', 'v4_constraint_tags', [
@@ -393,8 +392,8 @@ export async function up(knex: Knex): Promise<void> {
   ]);
 
   transactionMigrated += await migrateTable('t_tasks', 'v4_tasks', [
-    'id', 'title', 'project_id', 'status_id', 'priority', 'assigned_agent_id',
-    'created_by_agent_id', 'layer_id', 'created_ts', 'updated_ts', 'completed_ts'
+    'id', 'title', 'project_id', 'status_id', 'priority',
+    'layer_id', 'created_ts', 'updated_ts', 'completed_ts'
   ]);
 
   transactionMigrated += await migrateTable('t_task_details', 'v4_task_details', [
@@ -454,6 +453,7 @@ export async function up(knex: Knex): Promise<void> {
   console.log('\n🎉 v4.0 data migration completed!');
   console.log(`   Total rows migrated: ${totalMigrated + transactionMigrated}`);
   console.log('   ⚠️ Deprecated tables NOT migrated:');
+  console.log('      - m_agents (agent tracking removed in v4.0)');
   console.log('      - t_agent_messages (messaging removed)');
   console.log('      - t_activity_log (activity logging removed)');
   console.log('      - t_decision_templates (merged into v4_decision_policies)');

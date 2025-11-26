@@ -332,9 +332,9 @@ describe('Auto-pruning: Partial file existence', () => {
 
 /**
  * Create a test task in in_progress status
+ * Note: Agent tracking removed in v4.0
  */
 async function createTestTask(db: DatabaseAdapter): Promise<number> {
-  const agentId = await getOrCreateAgent(db, 'test-agent');
   const knex = db.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
   const now = Math.floor(Date.now() / 1000);
@@ -344,8 +344,6 @@ async function createTestTask(db: DatabaseAdapter): Promise<number> {
     status_id: 2,
     priority: 2,
     project_id: projectId,  // Required after v3.7.0
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
     created_ts: now,  // Required NOT NULL field
     updated_ts: now   // Required NOT NULL field
   });

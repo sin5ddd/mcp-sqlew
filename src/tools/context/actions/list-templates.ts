@@ -31,15 +31,14 @@ export async function listTemplates(
 
   try {
     // v3.9.0: t_decision_templates → v4_decision_policies
+    // Note: Agent tracking removed in v4.0 - created_by field removed
     const rows = await knex('v4_decision_policies as t')
-      .leftJoin('v4_agents as a', 't.created_by', 'a.id')
       .where('t.project_id', projectId)
       .select(
         't.id',
         't.name',
         't.defaults',
         't.required_fields',
-        'a.name as created_by',
         knex.raw(`datetime(t.ts, 'unixepoch') as created_at`)
       )
       .orderBy('t.name', 'asc') as Array<{
@@ -47,7 +46,6 @@ export async function listTemplates(
         name: string;
         defaults: string;
         required_fields: string | null;
-        created_by: string | null;
         created_at: string;
       }>;
 
@@ -57,7 +55,6 @@ export async function listTemplates(
       name: row.name,
       defaults: JSON.parse(row.defaults),
       required_fields: row.required_fields ? JSON.parse(row.required_fields) : null,
-      created_by: row.created_by,
       created_at: row.created_at
     }));
 

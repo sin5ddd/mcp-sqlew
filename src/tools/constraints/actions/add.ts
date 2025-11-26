@@ -6,7 +6,6 @@
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import {
   getAdapter,
-  getOrCreateAgent,
   getLayerId,
   getOrCreateTag,
   getOrCreateCategoryId
@@ -73,21 +72,18 @@ export async function addConstraint(
         // Get or create category
         const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
 
-        // Get or create created_by agent (default to generic pool)
-        const createdBy = params.created_by || '';
-        const agentId = await getOrCreateAgent(actualAdapter, createdBy, trx);
+        // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 
         // Calculate timestamp
         const ts = Math.floor(Date.now() / 1000);
 
-        // Insert constraint with project_id
+        // Insert constraint with project_id (agent_id removed in v4.0)
         const [constraintId] = await trx('v4_constraints').insert({
           category_id: categoryId,
           layer_id: layerId,
           constraint_text: params.constraint_text,
           priority: priority,
           active: SQLITE_TRUE,
-          agent_id: agentId,
           ts: ts,
           project_id: projectId
         });
