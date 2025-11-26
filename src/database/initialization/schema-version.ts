@@ -1,0 +1,212 @@
+/**
+ * Schema Version Detection Module (v4.0)
+ *
+ * Detects the current database schema version based on table presence.
+ * Used by the query layer to determine which tables to use.
+ *
+ * Version Detection Logic:
+ * - v4.x: v4_projects table exists → use v4_ tables
+ * - v3.x: m_agents table exists but no v4_ tables → use m_/t_ tables
+ * - v2.x: Legacy tables without m_ prefix (unlikely to exist now)
+ *
+ * This module is critical for backward compatibility during the v3→v4 transition.
+ */
+
+import type { Knex } from 'knex';
+import { debugLog } from '../../utils/debug-logger.js';
+
+/**
+ * Schema version enum
+ */
+export type SchemaVersion = 'v4' | 'v3' | 'unknown';
+
+/**
+ * Detailed schema version info
+ */
+export interface SchemaVersionInfo {
+  version: SchemaVersion;
+  majorVersion: number;
+  minorVersion: number;
+  hasV4Tables: boolean;
+  hasV3Tables: boolean;
+  tablePrefix: 'v4_' | 'm_' | '';
+  transactionPrefix: 'v4_' | 't_' | '';
+  detectedAt: number;
+}
+
+// Singleton instance
+let cachedVersionInfo: SchemaVersionInfo | null = null;
+
+/**
+ * Detect schema version by checking table existence
+ */
+export async function detectSchemaVersion(knex: Knex): Promise<SchemaVersionInfo> {
+  // Return cached version if already detected in this session
+  if (cachedVersionInfo) {
+    return cachedVersionInfo;
+  }
+
+  debugLog('INFO', 'Detecting database schema version...');
+
+  // Check for v4 tables (primary indicator of v4.x schema)
+  const hasV4Projects = await knex.schema.hasTable('v4_projects');
+  const hasV4Decisions = await knex.schema.hasTable('v4_decisions');
+  const hasV4Tasks = await knex.schema.hasTable('v4_tasks');
+
+  // Check for v3 tables (primary indicator of v3.x schema)
+  const hasAgents = await knex.schema.hasTable('v4_agents');
+  const hasDecisions = await knex.schema.hasTable('v4_decisions');
+  const hasTasks = await knex.schema.hasTable('v4_tasks');
+
+  // Determine schema version
+  const hasV4Tables = hasV4Projects && hasV4Decisions && hasV4Tasks;
+  const hasV3Tables = hasAgents && hasDecisions && hasTasks;
+
+  let version: SchemaVersion;
+  let majorVersion: number;
+  let minorVersion: number;
+  let tablePrefix: 'v4_' | 'm_' | '';
+  let transactionPrefix: 'v4_' | 't_' | '';
+
+  if (hasV4Tables) {
+    // v4.x schema detected - use new tables
+    version = 'v4';
+    majorVersion = 4;
+    minorVersion = 0;
+    tablePrefix = 'v4_';
+    transactionPrefix = 'v4_';
+
+    debugLog('INFO', 'Schema version detected: v4.x (using v4_ tables)');
+  } else if (hasV3Tables) {
+    // v3.x schema detected - use old tables
+    version = 'v3';
+    majorVersion = 3;
+    minorVersion = 0;
+    tablePrefix = 'm_';
+    transactionPrefix = 't_';
+
+    debugLog('INFO', 'Schema version detected: v3.x (using m_/t_ tables)');
+  } else {
+    // Unknown schema - this shouldn't happen after migrations
+    version = 'unknown';
+    majorVersion = 0;
+    minorVersion = 0;
+    tablePrefix = '';
+    transactionPrefix = '';
+
+    debugLog('WARN', 'Unknown schema version detected - no expected tables found');
+  }
+
+  cachedVersionInfo = {
+    version,
+    majorVersion,
+    minorVersion,
+    hasV4Tables,
+    hasV3Tables,
+    tablePrefix,
+    transactionPrefix,
+    detectedAt: Date.now(),
+  };
+
+  return cachedVersionInfo;
+}
+
+/**
+ * Get cached schema version info (throws if not yet detected)
+ */
+export function getSchemaVersion(): SchemaVersionInfo {
+  if (!cachedVersionInfo) {
+    throw new Error('Schema version not yet detected. Call detectSchemaVersion() first.');
+  }
+  return cachedVersionInfo;
+}
+
+/**
+ * Check if schema version has been detected
+ */
+export function isSchemaVersionDetected(): boolean {
+  return cachedVersionInfo !== null;
+}
+
+/**
+ * Clear cached schema version (for testing)
+ */
+export function clearSchemaVersionCache(): void {
+  cachedVersionInfo = null;
+}
+
+/**
+ * Check if using v4 schema
+ */
+export function isV4Schema(): boolean {
+  return cachedVersionInfo?.version === 'v4';
+}
+
+/**
+ * Check if using v3 schema
+ */
+export function isV3Schema(): boolean {
+  return cachedVersionInfo?.version === 'v3';
+}
+
+/**
+ * Get table name with correct prefix
+ *
+ * @param baseName - Base table name without prefix (e.g., 'agents', 'decisions')
+ * @param type - 'master' for reference tables, 'transaction' for data tables
+ * @returns Prefixed table name (e.g., 'v4_agents' or 'v4_agents')
+ */
+export function getTableName(
+  baseName: string,
+  type: 'master' | 'transaction' = 'transaction'
+): string {
+  if (!cachedVersionInfo) {
+    // Fallback to v3 naming if version not detected
+    return type === 'master' ? `m_${baseName}` : `t_${baseName}`;
+  }
+
+  if (cachedVersionInfo.version === 'v4') {
+    // v4 uses unified v4_ prefix for all tables
+    return `v4_${baseName}`;
+  }
+
+  // v3 uses m_ for master tables, t_ for transaction tables
+  return type === 'master' ? `m_${baseName}` : `t_${baseName}`;
+}
+
+/**
+ * Get table names for common tables
+ */
+export const TableNames = {
+  // Master tables
+  agents: () => getTableName('agents', 'master'),
+  projects: () => getTableName('projects', 'master'),
+  layers: () => getTableName('layers', 'master'),
+  tags: () => getTableName('tags', 'master'),
+  files: () => getTableName('files', 'master'),
+  contextKeys: () => getTableName('context_keys', 'master'),
+  constraintCategories: () => getTableName('constraint_categories', 'master'),
+  taskStatuses: () => getTableName('task_statuses', 'master'),
+  config: () => getTableName('config', 'master'),
+
+  // Transaction tables
+  decisions: () => getTableName('decisions', 'transaction'),
+  decisionHistory: () => getTableName('decision_history', 'transaction'),
+  decisionContext: () => getTableName('decision_context', 'transaction'),
+  decisionPolicies: () => getTableName('decision_policies', 'transaction'),
+  tasks: () => getTableName('tasks', 'transaction'),
+  taskDependencies: () => getTableName('task_dependencies', 'transaction'),
+  taskFileLinks: () => getTableName('task_file_links', 'transaction'),
+  taskDecisionLinks: () => getTableName('task_decision_links', 'transaction'),
+  fileChanges: () => getTableName('file_changes', 'transaction'),
+  constraints: () => getTableName('constraints', 'transaction'),
+  tagIndex: () => getTableName('tag_index', 'transaction'),
+
+  // Help system tables (v4 only has these with v4_ prefix)
+  helpTools: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_tools' : 'v4_help_tools',
+  helpActions: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_actions' : 'v4_help_actions',
+  helpActionParams: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_action_params' : 'm_help_action_params',
+  helpActionExamples: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_action_examples' : 'm_help_action_examples',
+  helpUseCases: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_use_cases' : 'm_help_use_cases',
+  helpUseCaseCategories: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_use_case_categories' : 'v4_help_use_case_categories',
+};

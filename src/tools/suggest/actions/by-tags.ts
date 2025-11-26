@@ -1,7 +1,7 @@
 /**
  * Suggest by Tag Overlap
  *
- * Fast query using m_tag_index denormalized table
+ * Fast query using v4_tag_index denormalized table
  * for efficient tag matching.
  */
 
@@ -21,7 +21,7 @@ export interface ByTagsParams {
 /**
  * Suggest decisions by tag overlap
  *
- * Uses m_tag_index for fast tag lookups.
+ * Uses v4_tag_index for fast tag lookups.
  *
  * @param params - Parameters with tags to match
  * @returns Suggestions ranked by tag overlap and similarity

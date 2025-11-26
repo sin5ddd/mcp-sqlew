@@ -181,7 +181,7 @@ export async function releaseInactiveAgents(
   const now = Math.floor(Date.now() / 1000);
   const cutoffTs = now - (inactivityHours * 3600);
 
-  const result = await knex('m_agents')
+  const result = await knex('v4_agents')
     .where('is_reusable', true)
     .where('in_use', true)
     .where('last_active_ts', '<', cutoffTs)

@@ -13,8 +13,8 @@ import type { DecisionCandidate } from '../types.js';
 /**
  * Build base decision query with all necessary JOINs
  *
- * Returns a query builder for t_decisions with:
- * - m_context_keys (for key names)
+ * Returns a query builder for v4_decisions with:
+ * - v4_context_keys (for key names)
  * - m_layers (for layer names)
  * - t_decision_tags + m_tags (for tags with GROUP_CONCAT)
  * - t_decisions_numeric (for numeric values with COALESCE)
@@ -37,7 +37,7 @@ export function buildDecisionQuery(
 
   const selectFields = [
     'd.key_id',
-    'ck.key',
+    'ck.key_name as key',  // Alias to match DecisionCandidate.key
     knex.raw('COALESCE(NULLIF(d.value, \'\'), dn.value) as value'),  // NULLIF converts empty string to NULL
     'l.name as layer',
     'd.ts',
@@ -49,16 +49,16 @@ export function buildDecisionQuery(
   }
 
   // Use LEFT JOIN for m_layers to include decisions without layer
-  return knex('t_decisions as d')
+  return knex('v4_decisions as d')
     .select(...selectFields)
-    .join('m_context_keys as ck', 'd.key_id', 'ck.id')
-    .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
-    .leftJoin('t_decision_tags as dt', function() {
+    .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
+    .leftJoin('v4_layers as l', 'd.layer_id', 'l.id')
+    .leftJoin('v4_decision_tags as dt', function() {
       this.on('dt.decision_key_id', '=', 'd.key_id')
           .andOn('dt.project_id', '=', knex.raw('?', [projectId]));
     })
-    .leftJoin('m_tags as t', 'dt.tag_id', 't.id')
-    .leftJoin('t_decisions_numeric as dn', function() {
+    .leftJoin('v4_tags as t', 'dt.tag_id', 't.id')
+    .leftJoin('v4_decisions_numeric as dn', function() {
       this.on('dn.key_id', '=', 'd.key_id')
           .andOn('dn.project_id', '=', knex.raw('?', [projectId]));
     })
@@ -68,9 +68,9 @@ export function buildDecisionQuery(
 }
 
 /**
- * Build decision query for tag-based suggestions (optimized with m_tag_index)
+ * Build decision query for tag-based suggestions (optimized with v4_tag_index)
  *
- * Uses denormalized m_tag_index table for faster tag lookups.
+ * Uses denormalized v4_tag_index table for faster tag lookups.
  *
  * @param knex - Knex instance (or transaction context)
  * @param tags - Array of tag names to match
@@ -84,23 +84,27 @@ export function buildTagIndexQuery(
 ): Knex.QueryBuilder {
   const projectId = getProjectContext().getProjectId();
 
-  let query = knex('m_tag_index as ti')
+  let query = knex('v4_tag_index as ti')
     .select(
       'd.key_id',
-      'ck.key',
+      'ck.key_name as key',  // Alias to match DecisionCandidate.key
       knex.raw('COALESCE(d.value, dn.value) as value'),
       'l.name as layer',
       'd.ts',
-      formatGroupConcatTags(knex, true),  // DISTINCT for m_tag_index queries
-      knex.raw('COUNT(DISTINCT ti.tag_name) as tag_count')
+      formatGroupConcatTags(knex, true),  // DISTINCT for v4_tag_index queries
+      knex.raw('COUNT(DISTINCT ti.tag) as tag_count')
     )
-    .join('t_decisions as d', 'ti.decision_id', 'd.key_id')
-    .join('m_context_keys as ck', 'd.key_id', 'ck.id')
-    .join('m_layers as l', 'd.layer_id', 'l.id')
-    .leftJoin('t_decision_tags as dt', 'd.key_id', 'dt.decision_key_id')
-    .leftJoin('m_tags as t', 'dt.tag_id', 't.id')
-    .leftJoin('t_decisions_numeric as dn', 'd.key_id', 'dn.key_id')
-    .whereIn('ti.tag_name', tags)
+    .join('v4_decisions as d', function() {
+      this.on('ti.source_id', '=', 'd.key_id')
+          .andOn('ti.source_type', '=', knex.raw('?', ['decision']));
+    })
+    .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
+    .join('v4_layers as l', 'd.layer_id', 'l.id')
+    .leftJoin('v4_decision_tags as dt', 'd.key_id', 'dt.decision_key_id')
+    .leftJoin('v4_tags as t', 'dt.tag_id', 't.id')
+    .leftJoin('v4_decisions_numeric as dn', 'd.key_id', 'dn.key_id')
+    .whereIn('ti.tag', tags)
+    .where('ti.project_id', projectId)
     .where('d.status', 1);
 
   if (layer) {
@@ -130,19 +134,21 @@ export function buildContextQuery(
 
   let query = buildDecisionQuery(knex, { distinct: true });
 
-  // If tags provided, filter to only tag matches using m_tag_index
+  // If tags provided, filter to only tag matches using v4_tag_index
   if (tags && tags.length > 0) {
     query = query.whereExists(function(this: any) {
       this.select(knex.raw('1'))
-        .from('m_tag_index as ti')
-        .whereRaw('ti.decision_id = d.key_id')
-        .whereIn('ti.tag_name', tags);
+        .from('v4_tag_index as ti')
+        .whereRaw('ti.source_id = d.key_id')
+        .where('ti.source_type', 'decision')
+        .where('ti.project_id', projectId)
+        .whereIn('ti.tag', tags);
     });
   }
 
   // Exclude specific key (v3.9.0: prevent suggesting decision to itself)
   if (excludeKey) {
-    query = query.whereNot('ck.key', excludeKey);
+    query = query.whereNot('ck.key_name', excludeKey);
   }
 
   return query;
@@ -161,45 +167,45 @@ export async function checkExactMatch(
 ): Promise<{ key: string; value: string | number; version: string } | null> {
   const projectId = getProjectContext().getProjectId();
 
-  // Check string decisions (t_decisions)
-  const stringDecision = await knex('t_decisions as d')
+  // Check string decisions (v4_decisions)
+  const stringDecision = await knex('v4_decisions as d')
     .select(
       'd.key_id',
-      'ck.key',
+      'ck.key_name',
       'd.value',
       'd.version'
     )
-    .join('m_context_keys as ck', 'd.key_id', 'ck.id')
-    .where('ck.key', key)
+    .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
+    .where('ck.key_name', key)
     .where('d.project_id', projectId)
     .where('d.status', 1)
     .first();
 
   if (stringDecision) {
     return {
-      key: stringDecision.key,
+      key: stringDecision.key_name,
       value: stringDecision.value,
       version: stringDecision.version,
     };
   }
 
   // Check numeric decisions (t_decisions_numeric)
-  const numericDecision = await knex('t_decisions_numeric as dn')
+  const numericDecision = await knex('v4_decisions_numeric as dn')
     .select(
       'dn.key_id',
-      'ck.key',
+      'ck.key_name',
       'dn.value',
       'dn.version'
     )
-    .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
-    .where('ck.key', key)
+    .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+    .where('ck.key_name', key)
     .where('dn.project_id', projectId)
     .where('dn.status', 1)
     .first();
 
   if (numericDecision) {
     return {
-      key: numericDecision.key,
+      key: numericDecision.key_name,
       value: numericDecision.value,
       version: numericDecision.version,
     };

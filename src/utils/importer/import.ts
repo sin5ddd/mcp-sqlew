@@ -54,7 +54,7 @@ export async function importJsonData(
   console.error(`\nImporting project: ${projectName}`);
 
   // Step 2: Check for project name conflict
-  const existingProject = await knex('m_projects')
+  const existingProject = await knex('v4_projects')
     .where({ name: projectName })
     .first();
 
@@ -106,7 +106,7 @@ async function performImport(
 ): Promise<JsonImportResult> {
   // Step 1: Create new project
   const projectData = jsonData.project || jsonData.projects?.[0];
-  const [projectId] = await trx('m_projects').insert({
+  const [projectId] = await trx('v4_projects').insert({
     name: projectName,
     display_name: projectData?.display_name || projectName,
     detection_source: projectData?.detection_source || 'import',
@@ -183,7 +183,7 @@ async function importTransactionTables(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_decisions with remapped context_key IDs
+ * Import v4_decisions with remapped context_key IDs
  */
 async function importDecisions(ctx: ImportContext): Promise<void> {
   const decisions = ctx.jsonData.transaction_tables.decisions || [];
@@ -192,7 +192,7 @@ async function importDecisions(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(decision.key_id);
     if (!newKeyId) continue;
 
-    await ctx.knex('t_decisions').insert({
+    await ctx.knex('v4_decisions').insert({
       key_id: newKeyId,
       value: decision.value,
       agent_id: ctx.mappings.agents.get(decision.agent_id) || null,
@@ -208,7 +208,7 @@ async function importDecisions(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_decisions_numeric with remapped context_key IDs
+ * Import v4_decisions_numeric with remapped context_key IDs
  */
 async function importDecisionsNumeric(ctx: ImportContext): Promise<void> {
   const decisions = ctx.jsonData.transaction_tables.decisions_numeric || [];
@@ -217,7 +217,7 @@ async function importDecisionsNumeric(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(decision.key_id);
     if (!newKeyId) continue;
 
-    await ctx.knex('t_decisions_numeric').insert({
+    await ctx.knex('v4_decisions_numeric').insert({
       key_id: newKeyId,
       value: decision.value,
       agent_id: ctx.mappings.agents.get(decision.agent_id) || null,
@@ -233,7 +233,7 @@ async function importDecisionsNumeric(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_decision_history with remapped context_key IDs
+ * Import v4_decision_history with remapped context_key IDs
  */
 async function importDecisionHistory(ctx: ImportContext): Promise<void> {
   const history = ctx.jsonData.transaction_tables.decision_history || [];
@@ -242,7 +242,7 @@ async function importDecisionHistory(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(entry.key_id);
     if (!newKeyId) continue;
 
-    await ctx.knex('t_decision_history').insert({
+    await ctx.knex('v4_decision_history').insert({
       key_id: newKeyId,
       version: entry.version,
       value: entry.value,
@@ -256,7 +256,7 @@ async function importDecisionHistory(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_decision_context with remapped IDs
+ * Import v4_decision_context with remapped IDs
  */
 async function importDecisionContext(ctx: ImportContext): Promise<void> {
   const contexts = ctx.jsonData.transaction_tables.decision_context || [];
@@ -265,7 +265,7 @@ async function importDecisionContext(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(context.decision_key_id);
     if (!newKeyId) continue;
 
-    await ctx.knex('t_decision_context').insert({
+    await ctx.knex('v4_decision_context').insert({
       decision_key_id: newKeyId,
       rationale: context.rationale,
       alternatives_considered: context.alternatives_considered,
@@ -282,7 +282,7 @@ async function importDecisionContext(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_file_changes with remapped IDs
+ * Import v4_file_changes with remapped IDs
  */
 async function importFileChanges(ctx: ImportContext): Promise<void> {
   const changes = ctx.jsonData.transaction_tables.file_changes || [];
@@ -291,7 +291,7 @@ async function importFileChanges(ctx: ImportContext): Promise<void> {
     const newFileId = ctx.mappings.files.get(change.file_id);
     if (!newFileId) continue;
 
-    await ctx.knex('t_file_changes').insert({
+    await ctx.knex('v4_file_changes').insert({
       file_id: newFileId,
       change_type: change.change_type,
       agent_id: ctx.mappings.agents.get(change.agent_id) || null,
@@ -306,13 +306,13 @@ async function importFileChanges(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_constraints with remapped IDs
+ * Import v4_constraints with remapped IDs
  */
 async function importConstraints(ctx: ImportContext): Promise<void> {
   const constraints = ctx.jsonData.transaction_tables.constraints || [];
 
   for (const constraint of constraints) {
-    await ctx.knex('t_constraints').insert({
+    await ctx.knex('v4_constraints').insert({
       category_id: ctx.mappings.constraint_categories.get(constraint.category_id) || constraint.category_id,
       constraint_text: constraint.constraint_text,
       priority: constraint.priority,
@@ -328,7 +328,7 @@ async function importConstraints(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_tasks with topological sort for dependencies
+ * Import v4_tasks with topological sort for dependencies
  */
 async function importTasks(ctx: ImportContext): Promise<void> {
   const tasks: any[] = ctx.jsonData.transaction_tables.tasks || [];
@@ -338,7 +338,7 @@ async function importTasks(ctx: ImportContext): Promise<void> {
   const sortedTasks = sortTasksByDependencies(tasks, dependencies);
 
   for (const task of sortedTasks) {
-    const [newTaskId] = await ctx.knex('t_tasks').insert({
+    const [newTaskId] = await ctx.knex('v4_tasks').insert({
       title: task.title,
       status_id: ctx.mappings.task_statuses.get(task.status_id) || task.status_id,
       assigned_agent_id: ctx.mappings.agents.get(task.assigned_agent_id) || null,
@@ -358,7 +358,7 @@ async function importTasks(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_task_details with remapped task IDs
+ * Import v4_task_details with remapped task IDs
  */
 async function importTaskDetails(ctx: ImportContext): Promise<void> {
   const details = ctx.jsonData.transaction_tables.task_details || [];
@@ -367,7 +367,7 @@ async function importTaskDetails(ctx: ImportContext): Promise<void> {
     const newTaskId = ctx.mappings.tasks.get(detail.task_id);
     if (!newTaskId) continue;
 
-    await ctx.knex('t_task_details').insert({
+    await ctx.knex('v4_task_details').insert({
       task_id: newTaskId,
       description: detail.description,
       acceptance_criteria: detail.acceptance_criteria,
@@ -380,13 +380,13 @@ async function importTaskDetails(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_activity_log with remapped IDs
+ * Import v4_activity_log with remapped IDs
  */
 async function importActivityLog(ctx: ImportContext): Promise<void> {
   const activities = ctx.jsonData.transaction_tables.activity_log || [];
 
   for (const activity of activities) {
-    await ctx.knex('t_activity_log').insert({
+    await ctx.knex('v4_activity_log').insert({
       ts: activity.ts,
       agent_id: ctx.mappings.agents.get(activity.agent_id) || null,
       action_type: activity.action_type,
@@ -418,7 +418,7 @@ async function importJunctionTables(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_decision_tags with remapped IDs
+ * Import v4_decision_tags with remapped IDs
  */
 async function importDecisionTags(ctx: ImportContext): Promise<void> {
   const tags = ctx.jsonData.transaction_tables.decision_tags || [];
@@ -428,7 +428,7 @@ async function importDecisionTags(ctx: ImportContext): Promise<void> {
     const newTagId = ctx.mappings.tags.get(tag.tag_id);
     if (!newKeyId || !newTagId) continue;
 
-    await ctx.knex('t_decision_tags').insert({
+    await ctx.knex('v4_decision_tags').insert({
       decision_key_id: newKeyId,
       tag_id: newTagId,
       project_id: ctx.projectId
@@ -439,7 +439,7 @@ async function importDecisionTags(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_decision_scopes with remapped IDs
+ * Import v4_decision_scopes with remapped IDs
  */
 async function importDecisionScopes(ctx: ImportContext): Promise<void> {
   const scopes = ctx.jsonData.transaction_tables.decision_scopes || [];
@@ -449,7 +449,7 @@ async function importDecisionScopes(ctx: ImportContext): Promise<void> {
     const newScopeId = ctx.mappings.scopes.get(scope.scope_id);
     if (!newKeyId || !newScopeId) continue;
 
-    await ctx.knex('t_decision_scopes').insert({
+    await ctx.knex('v4_decision_scopes').insert({
       decision_key_id: newKeyId,
       scope_id: newScopeId,
       project_id: ctx.projectId
@@ -460,7 +460,7 @@ async function importDecisionScopes(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_constraint_tags with remapped IDs
+ * Import v4_constraint_tags with remapped IDs
  */
 async function importConstraintTags(ctx: ImportContext): Promise<void> {
   const tags = ctx.jsonData.transaction_tables.constraint_tags || [];
@@ -478,7 +478,7 @@ async function importConstraintTags(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_task_tags with remapped IDs
+ * Import v4_task_tags with remapped IDs
  */
 async function importTaskTags(ctx: ImportContext): Promise<void> {
   const tags = ctx.jsonData.transaction_tables.task_tags || [];
@@ -488,7 +488,7 @@ async function importTaskTags(ctx: ImportContext): Promise<void> {
     const newTagId = ctx.mappings.tags.get(tag.tag_id);
     if (!newTaskId || !newTagId) continue;
 
-    await ctx.knex('t_task_tags').insert({
+    await ctx.knex('v4_task_tags').insert({
       task_id: newTaskId,
       tag_id: newTagId,
       project_id: ctx.projectId
@@ -499,7 +499,7 @@ async function importTaskTags(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_task_file_links with remapped IDs
+ * Import v4_task_file_links with remapped IDs
  */
 async function importTaskFileLinks(ctx: ImportContext): Promise<void> {
   const links = ctx.jsonData.transaction_tables.task_file_links || [];
@@ -509,7 +509,7 @@ async function importTaskFileLinks(ctx: ImportContext): Promise<void> {
     const newFileId = ctx.mappings.files.get(link.file_id);
     if (!newTaskId || !newFileId) continue;
 
-    await ctx.knex('t_task_file_links').insert({
+    await ctx.knex('v4_task_file_links').insert({
       task_id: newTaskId,
       file_id: newFileId,
       project_id: ctx.projectId
@@ -520,7 +520,7 @@ async function importTaskFileLinks(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_task_decision_links with remapped IDs
+ * Import v4_task_decision_links with remapped IDs
  */
 async function importTaskDecisionLinks(ctx: ImportContext): Promise<void> {
   const links = ctx.jsonData.transaction_tables.task_decision_links || [];
@@ -530,7 +530,7 @@ async function importTaskDecisionLinks(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(link.decision_key_id);
     if (!newTaskId || !newKeyId) continue;
 
-    await ctx.knex('t_task_decision_links').insert({
+    await ctx.knex('v4_task_decision_links').insert({
       task_id: newTaskId,
       decision_key_id: newKeyId,
       project_id: ctx.projectId,
@@ -542,7 +542,7 @@ async function importTaskDecisionLinks(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import t_task_dependencies with remapped task IDs
+ * Import v4_task_dependencies with remapped task IDs
  */
 async function importTaskDependencies(ctx: ImportContext): Promise<void> {
   const dependencies: TaskDependency[] = ctx.jsonData.transaction_tables.task_dependencies || [];
@@ -552,7 +552,7 @@ async function importTaskDependencies(ctx: ImportContext): Promise<void> {
     const newBlockedId = ctx.mappings.tasks.get(dep.blocked_task_id);
     if (!newBlockerId || !newBlockedId) continue;
 
-    await ctx.knex('t_task_dependencies').insert({
+    await ctx.knex('v4_task_dependencies').insert({
       blocker_task_id: newBlockerId,
       blocked_task_id: newBlockedId,
       created_ts: dep.created_ts,

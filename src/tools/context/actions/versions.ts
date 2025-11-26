@@ -40,8 +40,8 @@ export async function getVersions(
 
   try {
     // Get key_id for the decision
-    const keyResult = await knex('m_context_keys')
-      .where({ key: params.key })
+    const keyResult = await knex('v4_context_keys')
+      .where({ key_name: params.key })
       .first('id') as { id: number } | undefined;
 
     if (!keyResult) {
@@ -55,9 +55,9 @@ export async function getVersions(
 
     const keyId = keyResult.id;
 
-    // Query t_decision_history with agent join
-    const rows = await knex('t_decision_history as dh')
-      .leftJoin('m_agents as a', 'dh.agent_id', 'a.id')
+    // Query v4_decision_history with agent join
+    const rows = await knex('v4_decision_history as dh')
+      .leftJoin('v4_agents as a', 'dh.agent_id', 'a.id')
       .where({ 'dh.key_id': keyId, 'dh.project_id': projectId })
       .select(
         'dh.version',

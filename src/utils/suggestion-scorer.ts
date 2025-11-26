@@ -43,6 +43,9 @@ export interface ScoredSuggestion {
  * Used for key pattern similarity scoring
  */
 function levenshteinDistance(a: string, b: string): number {
+  // Guard against undefined/null values
+  if (!a || !b) return Math.max(a?.length || 0, b?.length || 0);
+
   const matrix: number[][] = [];
 
   for (let i = 0; i <= b.length; i++) {
@@ -74,6 +77,8 @@ function levenshteinDistance(a: string, b: string): number {
  * Find common prefix between two strings
  */
 function commonPrefix(a: string, b: string): string {
+  // Guard against undefined/null values
+  if (!a || !b) return '';
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) {
     i++;
@@ -86,6 +91,9 @@ function commonPrefix(a: string, b: string): string {
  * Based on Levenshtein distance and common prefix/suffix
  */
 function calculateKeySimilarity(key1: string, key2: string): number {
+  // Guard against undefined/null values
+  if (!key1 || !key2) return 0;
+
   // Exact match
   if (key1 === key2) return 20;
 

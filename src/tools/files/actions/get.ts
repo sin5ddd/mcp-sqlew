@@ -98,10 +98,10 @@ export async function getFileChanges(
       const { whereClause, params: queryParams } = buildWhereClause(filterConditions);
 
       // Build query dynamically with filters
-      let query = knex('t_file_changes as fc')
-        .join('m_files as f', 'fc.file_id', 'f.id')
-        .join('m_agents as a', 'fc.agent_id', 'a.id')
-        .leftJoin('m_layers as l', 'fc.layer_id', 'l.id')
+      let query = knex('v4_file_changes as fc')
+        .join('v4_files as f', 'fc.file_id', 'f.id')
+        .join('v4_agents as a', 'fc.agent_id', 'a.id')
+        .leftJoin('v4_layers as l', 'fc.layer_id', 'l.id')
         .where('fc.project_id', projectId)
         .select(
           'f.path',

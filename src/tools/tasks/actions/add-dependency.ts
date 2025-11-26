@@ -37,12 +37,12 @@ export async function addDependency(params: {
         }
 
         // Validation 2: Both tasks must exist and check if archived
-        const blockerTask = await trx('t_tasks')
+        const blockerTask = await trx('v4_tasks')
           .where({ id: params.blocker_task_id })
           .select('id', 'status_id')
           .first() as { id: number; status_id: number } | undefined;
 
-        const blockedTask = await trx('t_tasks')
+        const blockedTask = await trx('v4_tasks')
           .where({ id: params.blocked_task_id })
           .select('id', 'status_id')
           .first() as { id: number; status_id: number } | undefined;
@@ -65,7 +65,7 @@ export async function addDependency(params: {
         }
 
         // Validation 4: No direct circular (reverse relationship)
-        const reverseExists = await trx('t_task_dependencies')
+        const reverseExists = await trx('v4_task_dependencies')
           .where({
             blocker_task_id: params.blocked_task_id,
             blocked_task_id: params.blocker_task_id
@@ -81,14 +81,14 @@ export async function addDependency(params: {
           WITH RECURSIVE dependency_chain AS (
             -- Start from the task that would be blocked
             SELECT blocked_task_id as task_id, 1 as depth
-            FROM t_task_dependencies
+            FROM v4_task_dependencies
             WHERE blocker_task_id = ?
 
             UNION ALL
 
             -- Follow the chain of dependencies
             SELECT d.blocked_task_id, dc.depth + 1
-            FROM t_task_dependencies d
+            FROM v4_task_dependencies d
             JOIN dependency_chain dc ON d.blocker_task_id = dc.task_id
             WHERE dc.depth < 100
           )
@@ -102,14 +102,14 @@ export async function addDependency(params: {
             WITH RECURSIVE dependency_chain AS (
               SELECT blocked_task_id as task_id, 1 as depth,
                      CAST(blocked_task_id AS TEXT) as path
-              FROM t_task_dependencies
+              FROM v4_task_dependencies
               WHERE blocker_task_id = ?
 
               UNION ALL
 
               SELECT d.blocked_task_id, dc.depth + 1,
                      dc.path || ' → ' || d.blocked_task_id
-              FROM t_task_dependencies d
+              FROM v4_task_dependencies d
               JOIN dependency_chain dc ON d.blocker_task_id = dc.task_id
               WHERE dc.depth < 100
             )
@@ -122,7 +122,7 @@ export async function addDependency(params: {
         }
 
         // All validations passed - insert dependency
-        await trx('t_task_dependencies').insert({
+        await trx('v4_task_dependencies').insert({
           blocker_task_id: params.blocker_task_id,
           blocked_task_id: params.blocked_task_id,
           created_ts: Math.floor(Date.now() / 1000)

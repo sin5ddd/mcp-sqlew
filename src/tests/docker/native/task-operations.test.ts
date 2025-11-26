@@ -38,7 +38,7 @@ function hashConstraintText(text: string): string {
  * Get task status ID by status name
  */
 async function getStatusId(db: Knex, statusName: string): Promise<number> {
-  const status = await db('m_task_statuses').where({ name: statusName }).first();
+  const status = await db('v4_task_statuses').where({ name: statusName }).first();
   assert.ok(status, `Status "${statusName}" should exist`);
   return status.id;
 }
@@ -75,7 +75,7 @@ async function insertTask(
     updated_ts: timestamp,
   };
 
-  const result = await db('t_tasks').insert(insertData);
+  const result = await db('v4_tasks').insert(insertData);
 
   // Get the inserted ID (different return format across databases)
   let taskId: number;
@@ -85,7 +85,7 @@ async function insertTask(
     taskId = result;
   } else {
     // Fallback: query the last inserted task
-    const task = await db('t_tasks')
+    const task = await db('v4_tasks')
       .where({ title: data.title, project_id: 1 })
       .orderBy('id', 'desc')
       .first();
@@ -94,7 +94,7 @@ async function insertTask(
 
   // Insert task details if description provided
   if (data.description) {
-    await db('t_task_details').insert({
+    await db('v4_task_details').insert({
       task_id: taskId,
       description: data.description,
     });
@@ -107,8 +107,8 @@ async function insertTask(
  * Assert task has expected status
  */
 async function assertTaskHasStatus(db: Knex, taskId: number, expectedStatus: string): Promise<void> {
-  const task = await db('t_tasks')
-    .join('m_task_statuses', 't_tasks.status_id', 'm_task_statuses.id')
+  const task = await db('v4_tasks')
+    .join('v4_task_statuses', 't_tasks.status_id', 'm_task_statuses.id')
     .where({ 't_tasks.id': taskId })
     .select('m_task_statuses.name as status')
     .first();
@@ -139,7 +139,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       assert.ok(taskId, 'Should return task ID');
 
       // Verify task exists
-      const task = await db('t_tasks').where({ id: taskId, project_id: 1 }).first();
+      const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
       assert.strictEqual(task.title, 'Implement authentication');
       assert.strictEqual(task.priority, 3);
 
@@ -158,7 +158,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Verify core task data
-      const task = await db('t_tasks').where({ id: taskId, project_id: 1 }).first();
+      const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
       assert.strictEqual(task.title, 'Complex task with all fields');
       assert.strictEqual(task.priority, 4);
 
@@ -166,7 +166,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       assert.strictEqual(task.layer_id, layerId);
 
       // Verify task details
-      const details = await db('t_task_details').where({ task_id: taskId }).first();
+      const details = await db('v4_task_details').where({ task_id: taskId }).first();
       assert.ok(details, 'Task details should exist');
       assert.strictEqual(details.description, 'This is a detailed description');
     });
@@ -180,7 +180,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Update title and priority
-      await db('t_tasks')
+      await db('v4_tasks')
         .where({ id: taskId, project_id: 1 })
         .update({
           title: 'Updated title',
@@ -189,7 +189,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         });
 
       // Verify update
-      const task = await db('t_tasks').where({ id: taskId, project_id: 1 }).first();
+      const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
       assert.strictEqual(task.title, 'Updated title');
       assert.strictEqual(task.priority, 4);
     });
@@ -202,10 +202,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Delete task
-      await db('t_tasks').where({ id: taskId, project_id: 1 }).delete();
+      await db('v4_tasks').where({ id: taskId, project_id: 1 }).delete();
 
       // Verify deletion
-      const task = await db('t_tasks').where({ id: taskId, project_id: 1 }).first();
+      const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
       assert.strictEqual(task, undefined, 'Task should be deleted');
     });
   });
@@ -218,7 +218,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
     it('should enforce FK constraint on status_id', async () => {
       const db = getDb();
 
-      const insertPromise = db('t_tasks').insert({
+      const insertPromise = db('v4_tasks').insert({
         title: 'Invalid status task',
         status_id: 99999, // Non-existent status
         priority: 2,
@@ -240,7 +240,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
 
       const statusId = await getStatusId(db, 'todo');
 
-      const insertPromise = db('t_tasks').insert({
+      const insertPromise = db('v4_tasks').insert({
         title: 'Invalid layer task',
         status_id: statusId,
         priority: 2,
@@ -263,7 +263,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const statusId = await getStatusId(db, 'todo');
       const layerId = await getLayerId(db, 'business');
 
-      const insertPromise = db('t_tasks').insert({
+      const insertPromise = db('v4_tasks').insert({
         title: 'Invalid agent task',
         status_id: statusId,
         priority: 2,
@@ -294,7 +294,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
 
       // Move to in_progress
       const inProgressId = await getStatusId(db, 'in_progress');
-      await db('t_tasks')
+      await db('v4_tasks')
         .where({ id: taskId })
         .update({
           status_id: inProgressId,
@@ -313,7 +313,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       // Move to done
       const doneId = await getStatusId(db, 'done');
       const completedTs = Math.floor(Date.now() / 1000);
-      await db('t_tasks')
+      await db('v4_tasks')
         .where({ id: taskId })
         .update({
           status_id: doneId,
@@ -324,7 +324,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       await assertTaskHasStatus(db, taskId, 'done');
 
       // Verify completed_ts was set
-      const task = await db('t_tasks').where({ id: taskId }).first();
+      const task = await db('v4_tasks').where({ id: taskId }).first();
       assert.ok(task.completed_ts, 'completed_ts should be set');
     });
 
@@ -334,7 +334,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const taskId = await insertTask(db, { title: 'Blocked task' });
 
       const blockedId = await getStatusId(db, 'blocked');
-      await db('t_tasks')
+      await db('v4_tasks')
         .where({ id: taskId })
         .update({
           status_id: blockedId,
@@ -350,7 +350,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const taskId = await insertTask(db, { title: 'Archive task' });
 
       const archivedId = await getStatusId(db, 'archived');
-      await db('t_tasks')
+      await db('v4_tasks')
         .where({ id: taskId })
         .update({
           status_id: archivedId,
@@ -373,25 +373,25 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const timestamp = Math.floor(Date.now() / 1000);
 
       // First, create file records in m_files
-      const file1Result = await db('m_files').insert({ project_id: 1, path: 'src/auth/login.ts' });
-      const file2Result = await db('m_files').insert({ project_id: 1, path: 'src/auth/types.ts' });
-      const file3Result = await db('m_files').insert({ project_id: 1, path: 'src/auth/old.ts' });
+      const file1Result = await db('v4_files').insert({ project_id: 1, path: 'src/auth/login.ts' });
+      const file2Result = await db('v4_files').insert({ project_id: 1, path: 'src/auth/types.ts' });
+      const file3Result = await db('v4_files').insert({ project_id: 1, path: 'src/auth/old.ts' });
 
       // Get file IDs
-      const file1 = await db('m_files').where({ path: 'src/auth/login.ts', project_id: 1 }).first();
-      const file2 = await db('m_files').where({ path: 'src/auth/types.ts', project_id: 1 }).first();
-      const file3 = await db('m_files').where({ path: 'src/auth/old.ts', project_id: 1 }).first();
+      const file1 = await db('v4_files').where({ path: 'src/auth/login.ts', project_id: 1 }).first();
+      const file2 = await db('v4_files').where({ path: 'src/auth/types.ts', project_id: 1 }).first();
+      const file3 = await db('v4_files').where({ path: 'src/auth/old.ts', project_id: 1 }).first();
 
       // Insert file links
-      await db('t_task_file_links').insert([
+      await db('v4_task_file_links').insert([
         { task_id: taskId, file_id: file1.id, project_id: 1, linked_ts: timestamp },
         { task_id: taskId, file_id: file2.id, project_id: 1, linked_ts: timestamp },
         { task_id: taskId, file_id: file3.id, project_id: 1, linked_ts: timestamp },
       ]);
 
       // Verify file links
-      const fileLinks = await db('t_task_file_links')
-        .join('m_files', 't_task_file_links.file_id', 'm_files.id')
+      const fileLinks = await db('v4_task_file_links')
+        .join('v4_files', 't_task_file_links.file_id', 'm_files.id')
         .where({ 't_task_file_links.task_id': taskId })
         .select('t_task_file_links.*', 'm_files.path')
         .orderBy('m_files.path');
@@ -409,10 +409,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const timestamp = Math.floor(Date.now() / 1000);
 
       // Create a file record
-      await db('m_files').insert({ project_id: 1, path: 'src/unique-test.ts' });
-      const file = await db('m_files').where({ path: 'src/unique-test.ts', project_id: 1 }).first();
+      await db('v4_files').insert({ project_id: 1, path: 'src/unique-test.ts' });
+      const file = await db('v4_files').where({ path: 'src/unique-test.ts', project_id: 1 }).first();
 
-      await db('t_task_file_links').insert({
+      await db('v4_task_file_links').insert({
         task_id: taskId,
         file_id: file.id,
         project_id: 1,
@@ -420,7 +420,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Try to insert duplicate
-      const duplicatePromise = db('t_task_file_links').insert({
+      const duplicatePromise = db('v4_task_file_links').insert({
         task_id: taskId,
         file_id: file.id,
         project_id: 1,
@@ -439,10 +439,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const timestamp = Math.floor(Date.now() / 1000);
 
       // Create a file record
-      await db('m_files').insert({ project_id: 1, path: 'src/cascade-test.ts' });
-      const file = await db('m_files').where({ path: 'src/cascade-test.ts', project_id: 1 }).first();
+      await db('v4_files').insert({ project_id: 1, path: 'src/cascade-test.ts' });
+      const file = await db('v4_files').where({ path: 'src/cascade-test.ts', project_id: 1 }).first();
 
-      await db('t_task_file_links').insert({
+      await db('v4_task_file_links').insert({
         task_id: taskId,
         file_id: file.id,
         project_id: 1,
@@ -450,10 +450,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Delete task
-      await db('t_tasks').where({ id: taskId }).delete();
+      await db('v4_tasks').where({ id: taskId }).delete();
 
       // Verify file links were cascade deleted
-      const fileLinks = await db('t_task_file_links').where({ task_id: taskId });
+      const fileLinks = await db('v4_task_file_links').where({ task_id: taskId });
       assert.strictEqual(fileLinks.length, 0, 'File links should be cascade deleted');
     });
   });
@@ -473,18 +473,18 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const securityTagId = await getTagId(db, 'security');
       const perfTagId = await getTagId(db, 'performance');
 
-      // Insert tag associations (t_task_tags has no project_id)
-      await db('t_task_tags').insert([
-        { task_id: taskId, tag_id: apiTagId },
-        { task_id: taskId, tag_id: securityTagId },
-        { task_id: taskId, tag_id: perfTagId },
+      // Insert tag associations (v4_task_tags requires project_id)
+      await db('v4_task_tags').insert([
+        { task_id: taskId, tag_id: apiTagId, project_id: 1 },
+        { task_id: taskId, tag_id: securityTagId, project_id: 1 },
+        { task_id: taskId, tag_id: perfTagId, project_id: 1 },
       ]);
 
       // Verify tags
-      const tags = await db('t_task_tags')
-        .join('m_tags', 't_task_tags.tag_id', 'm_tags.id')
-        .where({ 't_task_tags.task_id': taskId })
-        .select('m_tags.name as tag_name');
+      const tags = await db('v4_task_tags as tt')
+        .join('v4_tags as t', 'tt.tag_id', 't.id')
+        .where({ 'tt.task_id': taskId })
+        .select('t.name as tag_name');
 
       assert.strictEqual(tags.length, 3);
       const tagNames = tags.map(t => t.tag_name);
@@ -499,16 +499,17 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const taskId = await insertTask(db, { title: 'Task with tags for cascade' });
       const tagId = await getTagId(db, 'test');
 
-      await db('t_task_tags').insert({
+      await db('v4_task_tags').insert({
         task_id: taskId,
         tag_id: tagId,
+        project_id: 1,
       });
 
       // Delete task
-      await db('t_tasks').where({ id: taskId }).delete();
+      await db('v4_tasks').where({ id: taskId }).delete();
 
       // Verify tags were cascade deleted
-      const tags = await db('t_task_tags').where({ task_id: taskId });
+      const tags = await db('v4_task_tags').where({ task_id: taskId });
       assert.strictEqual(tags.length, 0, 'Tags should be cascade deleted');
     });
   });
@@ -525,14 +526,15 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const blockedTaskId = await insertTask(db, { title: 'Blocked task' });
 
       // Add dependency: blocker blocks blocked
-      await db('t_task_dependencies').insert({
+      await db('v4_task_dependencies').insert({
         blocker_task_id: blockerTaskId,
         blocked_task_id: blockedTaskId,
+        project_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
       });
 
       // Verify dependency exists
-      const dependency = await db('t_task_dependencies')
+      const dependency = await db('v4_task_dependencies')
         .where({ blocker_task_id: blockerTaskId, blocked_task_id: blockedTaskId })
         .first();
 
@@ -545,9 +547,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const taskId = await insertTask(db, { title: 'Self-blocking task' });
 
       // Try to create self-dependency
-      const selfDepPromise = db('t_task_dependencies').insert({
+      const selfDepPromise = db('v4_task_dependencies').insert({
         blocker_task_id: taskId,
         blocked_task_id: taskId, // Same task
+        project_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
       });
 
@@ -559,7 +562,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
           await selfDepPromise;
           // If insert succeeds, check if there's a trigger that prevents it
           // This is database-specific behavior
-          const dep = await db('t_task_dependencies')
+          const dep = await db('v4_task_dependencies')
             .where({ blocker_task_id: taskId, blocked_task_id: taskId })
             .first();
 
@@ -601,9 +604,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const taskB = await insertTask(db, { title: 'Task B' });
 
       // Create A blocks B
-      await db('t_task_dependencies').insert({
+      await db('v4_task_dependencies').insert({
         blocker_task_id: taskA,
         blocked_task_id: taskB,
+        project_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
       });
 
@@ -613,9 +617,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       // The schema may allow this at database level.
       // This test documents expected behavior.
 
-      const circularPromise = db('t_task_dependencies').insert({
+      const circularPromise = db('v4_task_dependencies').insert({
         blocker_task_id: taskB,
         blocked_task_id: taskA,
+        project_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
       });
 
@@ -625,7 +630,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         await circularPromise;
 
         // If it succeeds, verify both dependencies exist
-        const deps = await db('t_task_dependencies')
+        const deps = await db('v4_task_dependencies')
           .whereIn('blocker_task_id', [taskA, taskB])
           .whereIn('blocked_task_id', [taskA, taskB]);
 
@@ -650,19 +655,20 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const blockerTaskId = await insertTask(db, { title: 'Blocker for removal' });
       const blockedTaskId = await insertTask(db, { title: 'Blocked for removal' });
 
-      await db('t_task_dependencies').insert({
+      await db('v4_task_dependencies').insert({
         blocker_task_id: blockerTaskId,
         blocked_task_id: blockedTaskId,
+        project_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
       });
 
       // Remove dependency
-      await db('t_task_dependencies')
+      await db('v4_task_dependencies')
         .where({ blocker_task_id: blockerTaskId, blocked_task_id: blockedTaskId })
         .delete();
 
       // Verify removal
-      const dependency = await db('t_task_dependencies')
+      const dependency = await db('v4_task_dependencies')
         .where({ blocker_task_id: blockerTaskId, blocked_task_id: blockedTaskId })
         .first();
 
@@ -675,17 +681,18 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const blockerTaskId = await insertTask(db, { title: 'Blocker for cascade' });
       const blockedTaskId = await insertTask(db, { title: 'Blocked for cascade' });
 
-      await db('t_task_dependencies').insert({
+      await db('v4_task_dependencies').insert({
         blocker_task_id: blockerTaskId,
         blocked_task_id: blockedTaskId,
+        project_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
       });
 
       // Delete blocker task
-      await db('t_tasks').where({ id: blockerTaskId }).delete();
+      await db('v4_tasks').where({ id: blockerTaskId }).delete();
 
       // Verify dependencies were cascade deleted
-      const dependencies = await db('t_task_dependencies')
+      const dependencies = await db('v4_task_dependencies')
         .where({ blocker_task_id: blockerTaskId })
         .orWhere({ blocked_task_id: blockerTaskId });
 
@@ -700,21 +707,23 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const blocked2Id = await insertTask(db, { title: 'Blocked 2' });
 
       // Blocker blocks both blocked tasks
-      await db('t_task_dependencies').insert([
+      await db('v4_task_dependencies').insert([
         {
           blocker_task_id: blockerTaskId,
           blocked_task_id: blocked1Id,
+          project_id: 1,
           created_ts: Math.floor(Date.now() / 1000),
         },
         {
           blocker_task_id: blockerTaskId,
           blocked_task_id: blocked2Id,
+          project_id: 1,
           created_ts: Math.floor(Date.now() / 1000),
         },
       ]);
 
       // Query what blocker is blocking
-      const blocking = await db('t_task_dependencies')
+      const blocking = await db('v4_task_dependencies')
         .where({ blocker_task_id: blockerTaskId })
         .select('blocked_task_id');
 
@@ -732,21 +741,23 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const blocker2Id = await insertTask(db, { title: 'Blocker 2' });
 
       // Blocked is blocked by both blockers
-      await db('t_task_dependencies').insert([
+      await db('v4_task_dependencies').insert([
         {
           blocker_task_id: blocker1Id,
           blocked_task_id: blockedTaskId,
+          project_id: 1,
           created_ts: Math.floor(Date.now() / 1000),
         },
         {
           blocker_task_id: blocker2Id,
           blocked_task_id: blockedTaskId,
+          project_id: 1,
           created_ts: Math.floor(Date.now() / 1000),
         },
       ]);
 
       // Query what is blocking this task
-      const blockers = await db('t_task_dependencies')
+      const blockers = await db('v4_task_dependencies')
         .where({ blocked_task_id: blockedTaskId })
         .select('blocker_task_id');
 
@@ -773,15 +784,15 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const layerId = await getLayerId(db, 'business');
 
       // m_context_keys has no project_id column
-      await db('m_context_keys').insert({
+      await db('v4_context_keys').insert({
         key: 'test/link-decision',
       });
 
-      const contextKey = await db('m_context_keys')
+      const contextKey = await db('v4_context_keys')
         .where({ key: 'test/link-decision' })
         .first();
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: contextKey.id,
         project_id: 1,
         value: 'test value',
@@ -793,7 +804,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Link task to decision (using decision_key_id, not decision_id)
-      await db('t_task_decision_links').insert({
+      await db('v4_task_decision_links').insert({
         task_id: taskId,
         decision_key_id: contextKey.id,
         project_id: 1,
@@ -802,7 +813,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Verify link
-      const link = await db('t_task_decision_links')
+      const link = await db('v4_task_decision_links')
         .where({ task_id: taskId, decision_key_id: contextKey.id })
         .first();
 
@@ -821,12 +832,12 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const layerId = await getLayerId(db, 'business');
 
       // m_context_keys has no project_id column
-      await db('m_context_keys').insert({ key: 'test/cascade-link' });
-      const contextKey = await db('m_context_keys')
+      await db('v4_context_keys').insert({ key: 'test/cascade-link' });
+      const contextKey = await db('v4_context_keys')
         .where({ key: 'test/cascade-link' })
         .first();
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: contextKey.id,
         project_id: 1,
         value: 'test',
@@ -837,7 +848,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         status: 1, // 1=active (integer enum)
       });
 
-      await db('t_task_decision_links').insert({
+      await db('v4_task_decision_links').insert({
         task_id: taskId,
         decision_key_id: contextKey.id,
         project_id: 1,
@@ -846,10 +857,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Delete task
-      await db('t_tasks').where({ id: taskId }).delete();
+      await db('v4_tasks').where({ id: taskId }).delete();
 
       // Verify links were cascade deleted
-      const links = await db('t_task_decision_links').where({ task_id: taskId });
+      const links = await db('v4_task_decision_links').where({ task_id: taskId });
       assert.strictEqual(links.length, 0, 'Task-decision links should be cascade deleted');
     });
   });
@@ -869,12 +880,12 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const layerId = await getLayerId(db, 'business');
 
       // Get constraint category
-      const category = await db('m_constraint_categories')
+      const category = await db('v4_constraint_categories')
         .where({ name: 'architecture' })
         .first();
 
       const constraintText = 'Test constraint for linking';
-      await db('t_constraints').insert({
+      await db('v4_constraints').insert({
         constraint_text: constraintText,
         constraint_text_hash: hashConstraintText(constraintText),
         category_id: category.id,
@@ -886,7 +897,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         active: 1,
       });
 
-      const constraint = await db('t_constraints')
+      const constraint = await db('v4_constraints')
         .where({ constraint_text: constraintText, project_id: 1 })
         .first();
 
@@ -912,12 +923,12 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       // Create constraint and link (simplified)
       const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
-      const category = await db('m_constraint_categories')
+      const category = await db('v4_constraint_categories')
         .where({ name: 'architecture' })
         .first();
 
       const constraintText = 'Cascade test constraint';
-      await db('t_constraints').insert({
+      await db('v4_constraints').insert({
         constraint_text: constraintText,
         constraint_text_hash: hashConstraintText(constraintText),
         category_id: category.id,
@@ -929,7 +940,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         active: 1,
       });
 
-      const constraint = await db('t_constraints')
+      const constraint = await db('v4_constraints')
         .where({ constraint_text: constraintText, project_id: 1 })
         .first();
 
@@ -939,7 +950,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       });
 
       // Delete task
-      await db('t_tasks').where({ id: taskId }).delete();
+      await db('v4_tasks').where({ id: taskId }).delete();
 
       // Verify links were cascade deleted
       const links = await db('t_task_constraint_links').where({ task_id: taskId });
@@ -961,7 +972,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         priority: 2,
       });
 
-      const task = await db('t_tasks').where({ id: taskId, project_id: 1 }).first();
+      const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
       assert.strictEqual(task.title, longTitle);
     });
 
@@ -974,7 +985,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         description: specialDesc,
       });
 
-      const details = await db('t_task_details').where({ task_id: taskId }).first();
+      const details = await db('v4_task_details').where({ task_id: taskId }).first();
       assert.strictEqual(details.description, specialDesc);
     });
 
@@ -986,7 +997,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         title: unicodeTitle,
       });
 
-      const task = await db('t_tasks').where({ id: taskId, project_id: 1 }).first();
+      const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
       assert.strictEqual(task.title, unicodeTitle);
     });
 
@@ -999,7 +1010,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
 
       // Insert with NULL assigned_agent_id
       const timestamp = Math.floor(Date.now() / 1000);
-      const result = await db('t_tasks').insert({
+      const result = await db('v4_tasks').insert({
         title: 'Task with NULL agent',
         status_id: statusId,
         priority: 2,
@@ -1015,13 +1026,13 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       if (Array.isArray(result) && result.length > 0) {
         taskId = result[0];
       } else {
-        const task = await db('t_tasks')
+        const task = await db('v4_tasks')
           .where({ title: 'Task with NULL agent', project_id: 1 })
           .first();
         taskId = task.id;
       }
 
-      const task = await db('t_tasks').where({ id: taskId, project_id: 1 }).first();
+      const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
       assert.strictEqual(task.assigned_agent_id, null);
     });
   });

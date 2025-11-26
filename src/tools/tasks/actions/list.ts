@@ -75,13 +75,13 @@ export async function listTasks(params: {
 
     // Add dependency counts if requested
     if (params.include_dependency_counts) {
-      const blockerCounts = await knex('t_task_dependencies')
+      const blockerCounts = await knex('v4_task_dependencies')
         .select('blocked_task_id')
         .count('* as count')
         .groupBy('blocked_task_id')
         .then(results => new Map(results.map((r: any) => [r.blocked_task_id, Number(r.count)])));
 
-      const blockingCounts = await knex('t_task_dependencies')
+      const blockingCounts = await knex('v4_task_dependencies')
         .select('blocker_task_id')
         .count('* as count')
         .groupBy('blocker_task_id')

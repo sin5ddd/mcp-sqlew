@@ -33,8 +33,8 @@ export async function setFromTemplate(
 
   try {
     // Get template (templates are project-scoped)
-    // v3.9.0: t_decision_templates → t_decision_policies
-    const templateRow = await knex('t_decision_policies')
+    // v3.9.0: t_decision_templates → v4_decision_policies
+    const templateRow = await knex('v4_decision_policies')
       .where({ name: params.template, project_id: projectId })
       .first() as {
         id: number;

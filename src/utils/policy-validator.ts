@@ -77,7 +77,7 @@ export async function validateAgainstPolicies(
   try {
     // Fetch all active policies for current project
     // Use transaction context if provided to avoid connection pool exhaustion
-    const policies = await (trx || knex)('t_decision_policies')
+    const policies = await (trx || knex)('v4_decision_policies')
       .where('project_id', projectId)
       .select('id', 'name', 'validation_rules', 'quality_gates', 'category', 'required_fields', 'suggest_similar') as PolicyRow[];
 
@@ -214,6 +214,8 @@ function findMatchingPolicy(policies: PolicyRow[], key: string, metadata: Record
   // keyword-matching list match any decision. This enables similarity detection policies
   // (like test policies) while preserving keyword matching for built-in policies.
   // Requiring suggest_similar=1 prevents unintended catch-all matching.
+  // Additionally, policies with required_fields or quality_gates are excluded as they are
+  // clearly intended for specific validation purposes, not catch-all similarity detection.
   const predefinedPolicyNames = [
     'security_vulnerability',
     'breaking_change',
@@ -226,6 +228,8 @@ function findMatchingPolicy(policies: PolicyRow[], key: string, metadata: Record
     try {
       return (
         p.validation_rules === null &&
+        p.required_fields === null &&
+        p.quality_gates === null &&
         p.suggest_similar === 1 &&
         !predefinedPolicyNames.includes(p.name)
       );

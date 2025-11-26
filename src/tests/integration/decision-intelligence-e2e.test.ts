@@ -42,66 +42,66 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
 
     // Delete child records first (foreign key constraints)
     // 1. Delete decision tags
-    await knex('t_decision_tags')
+    await knex('v4_decision_tags')
       .whereIn('decision_key_id', function() {
         this.select('id')
-          .from('m_context_keys')
-          .where('key', 'like', 'e2e/%');
+          .from('v4_context_keys')
+          .where('key_name', 'like', 'e2e/%');
       })
       .del();
 
     // 2. Delete decision scopes
-    await knex('t_decision_scopes')
+    await knex('v4_decision_scopes')
       .whereIn('decision_key_id', function() {
         this.select('id')
-          .from('m_context_keys')
-          .where('key', 'like', 'e2e/%');
+          .from('v4_context_keys')
+          .where('key_name', 'like', 'e2e/%');
       })
       .del();
 
     // 3. Delete decision context
-    await knex('t_decision_context')
+    await knex('v4_decision_context')
       .whereIn('decision_key_id', function() {
         this.select('id')
-          .from('m_context_keys')
-          .where('key', 'like', 'e2e/%');
+          .from('v4_context_keys')
+          .where('key_name', 'like', 'e2e/%');
       })
       .del();
 
     // 4. Delete decision history
-    await knex('t_decision_history')
+    await knex('v4_decision_history')
       .whereIn('key_id', function() {
         this.select('id')
-          .from('m_context_keys')
-          .where('key', 'like', 'e2e/%');
+          .from('v4_context_keys')
+          .where('key_name', 'like', 'e2e/%');
       })
       .del();
 
     // 5. Delete numeric decisions for e2e keys
-    await knex('t_decisions_numeric')
+    await knex('v4_decisions_numeric')
       .whereIn('key_id', function() {
         this.select('id')
-          .from('m_context_keys')
-          .where('key', 'like', 'e2e/%');
+          .from('v4_context_keys')
+          .where('key_name', 'like', 'e2e/%');
       })
       .del();
 
     // 6. Delete text decisions for e2e keys
-    await knex('t_decisions')
+    await knex('v4_decisions')
       .whereIn('key_id', function() {
         this.select('id')
-          .from('m_context_keys')
-          .where('key', 'like', 'e2e/%');
+          .from('v4_context_keys')
+          .where('key_name', 'like', 'e2e/%');
       })
       .del();
 
     // 7. Delete e2e context keys
-    await knex('m_context_keys')
-      .where('key', 'like', 'e2e/%')
+    await knex('v4_context_keys')
+      .where('key_name', 'like', 'e2e/%')
       .del();
 
     // 8. Delete e2e policies
-    await knex('t_decision_policies')
+    await knex('v4_decision_policies')
       .where('name', 'like', 'e2e-%')
       .del();
 
@@ -120,18 +120,18 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
 
       // Get system agent ID
       let systemAgentId: number;
-      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+      const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
       if (systemAgent) {
         systemAgentId = systemAgent.id;
       } else {
-        const [agentId] = await knex('m_agents').insert({
+        const [agentId] = await knex('v4_agents').insert({
           name: 'system',
           last_active_ts: Math.floor(Date.now() / 1000)
         });
         systemAgentId = agentId;
       }
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         project_id: projectId,
         name: 'e2e-security-vulnerability-policy',
         category: 'security',
@@ -377,18 +377,18 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
 
       // Get system agent ID
       let systemAgentId: number;
-      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+      const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
       if (systemAgent) {
         systemAgentId = systemAgent.id;
       } else {
-        const [agentId] = await knex('m_agents').insert({
+        const [agentId] = await knex('v4_agents').insert({
           name: 'system',
           last_active_ts: Math.floor(Date.now() / 1000)
         });
         systemAgentId = agentId;
       }
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         project_id: projectId,
         name: 'e2e-feature-flag-policy',
         category: 'feature-management',
@@ -445,13 +445,13 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       console.log('  Step 5: Finding similar feature flags...');
 
       // DIAGNOSTIC: Check dark-mode decision exists
-      // const darkModeDecision = await knex('t_decisions as d')
-      //   .join('m_context_keys as ck', 'd.key_id', 'ck.id')
-      //   .where('ck.key', 'e2e/feature/dark-mode/enabled')
+      // const darkModeDecision = await knex('v4_decisions as d')
+      //   .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
+      //   .where('ck.key_name', 'e2e/feature/dark-mode/enabled')
       //   .where('d.project_id', projectId)
-      //   .select('d.*', 'ck.key')
+      //   .select('d.*', 'ck.key_name')
       //   .first();
-      // console.log(`  [DIAGNOSTIC] Dark mode decision in t_decisions:`, JSON.stringify(darkModeDecision, null, 2));
+      // console.log(`  [DIAGNOSTIC] Dark mode decision in v4_decisions:`, JSON.stringify(darkModeDecision, null, 2));
 
       const keySuggestions = await handleSuggestAction({
         action: 'by_key',
@@ -532,18 +532,18 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
 
       // Get system agent ID
       let systemAgentId: number;
-      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
+      const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
       if (systemAgent) {
         systemAgentId = systemAgent.id;
       } else {
-        const [agentId] = await knex('m_agents').insert({
+        const [agentId] = await knex('v4_agents').insert({
           name: 'system',
           last_active_ts: Math.floor(Date.now() / 1000)
         });
         systemAgentId = agentId;
       }
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         project_id: projectId,
         name: 'e2e-lifecycle-policy',
         category: 'general',

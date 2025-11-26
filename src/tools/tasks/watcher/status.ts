@@ -60,13 +60,13 @@ export async function watcherStatus(args: any, adapter?: DatabaseAdapter): Promi
   }
 
   if (subaction === 'list_files') {
-    const fileLinks = await knex('t_task_file_links as tfl')
-      .join('t_tasks as t', function() {
+    const fileLinks = await knex('v4_task_file_links as tfl')
+      .join('v4_tasks as t', function() {
         this.on('tfl.task_id', '=', 't.id')
             .andOn('tfl.project_id', '=', 't.project_id');
       })
-      .join('m_task_statuses as ts', 't.status_id', 'ts.id')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .join('v4_task_statuses as ts', 't.status_id', 'ts.id')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('t.project_id', projectId)
       .whereNot('t.status_id', STATUS_TO_ID['archived'])  // Exclude archived tasks
       .select('f.path as file_path', 't.id', 't.title', 'ts.name as status_name')
@@ -101,13 +101,13 @@ export async function watcherStatus(args: any, adapter?: DatabaseAdapter): Promi
   }
 
   if (subaction === 'list_tasks') {
-    const taskLinks = await knex('t_tasks as t')
-      .join('m_task_statuses as ts', 't.status_id', 'ts.id')
-      .join('t_task_file_links as tfl', function() {
+    const taskLinks = await knex('v4_tasks as t')
+      .join('v4_task_statuses as ts', 't.status_id', 'ts.id')
+      .join('v4_task_file_links as tfl', function() {
         this.on('t.id', '=', 'tfl.task_id')
             .andOn('t.project_id', '=', 'tfl.project_id');
       })
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('t.project_id', projectId)
       .whereNot('t.status_id', STATUS_TO_ID['archived'])  // Exclude archived tasks
       .groupBy('t.id', 't.title', 'ts.name')

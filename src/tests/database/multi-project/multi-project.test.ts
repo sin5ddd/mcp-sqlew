@@ -115,7 +115,7 @@ describe('Multi-Project Data Isolation', () => {
       description: 'Updated imports'
     }, testDb);
 
-    const changesA = await knex('t_file_changes')
+    const changesA = await knex('v4_file_changes')
       .where({ project_id: projectContextA.getProjectId() })
       .select('*');
     assert.strictEqual(changesA.length, 1);
@@ -133,7 +133,7 @@ describe('Multi-Project Data Isolation', () => {
       description: 'Added endpoint'
     }, testDb);
 
-    const changesB = await knex('t_file_changes')
+    const changesB = await knex('v4_file_changes')
       .where({ project_id: projectContextB.getProjectId() })
       .select('*');
     assert.strictEqual(changesB.length, 1);
@@ -238,7 +238,7 @@ describe('Project Detection', () => {
     const projectContext = ProjectContext.getInstance();
     await projectContext.ensureProject(knex, 'test-project', 'cli');
 
-    const dbProject = await knex('m_projects')
+    const dbProject = await knex('v4_projects')
       .where({ name: 'test-project' })
       .first();
 
@@ -259,7 +259,7 @@ describe('Project Detection', () => {
     assert.strictEqual(id1, id2);
 
     // Verify only one project in database
-    const projects = await knex('m_projects')
+    const projects = await knex('v4_projects')
       .where({ name: 'reusable' })
       .select('*');
 
@@ -268,15 +268,15 @@ describe('Project Detection', () => {
 });
 
 describe('Migration Verification', () => {
-  it('should have m_projects table with correct schema', async () => {
+  it('should have v4_projects table with correct schema', async () => {
     const knex = testDb.getKnex();
 
-    const hasTable = await knex.schema.hasTable('m_projects');
+    const hasTable = await knex.schema.hasTable('v4_projects');
     assert.ok(hasTable);
 
-    const hasId = await knex.schema.hasColumn('m_projects', 'id');
-    const hasName = await knex.schema.hasColumn('m_projects', 'name');
-    const hasDetectionSource = await knex.schema.hasColumn('m_projects', 'detection_source');
+    const hasId = await knex.schema.hasColumn('v4_projects', 'id');
+    const hasName = await knex.schema.hasColumn('v4_projects', 'name');
+    const hasDetectionSource = await knex.schema.hasColumn('v4_projects', 'detection_source');
 
     assert.ok(hasId);
     assert.ok(hasName);
@@ -287,10 +287,10 @@ describe('Migration Verification', () => {
     const knex = testDb.getKnex();
 
     const tables = [
-      't_decisions',
-      't_file_changes',
-      't_constraints',
-      't_tasks'
+      'v4_decisions',
+      'v4_file_changes',
+      'v4_constraints',
+      'v4_tasks'
     ];
 
     for (const table of tables) {

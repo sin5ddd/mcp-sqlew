@@ -35,8 +35,8 @@ export async function checkAllFilesModified(
     const knex = adapter.getKnex();
 
     // Get all watched files for this task
-    const watchedFiles = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'f.id', 'tfl.file_id')
+    const watchedFiles = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'f.id', 'tfl.file_id')
       .where('tfl.task_id', taskId)
       .select('f.path') as Array<{ path: string }>;
 
@@ -160,7 +160,7 @@ export async function checkTestsPass(
     }
 
     // Look for acceptance_criteria with tests_pass type
-    const row = await knex('t_task_details')
+    const row = await knex('v4_task_details')
       .where({ task_id: taskId })
       .select('acceptance_criteria')
       .first() as { acceptance_criteria: string | null } | undefined;

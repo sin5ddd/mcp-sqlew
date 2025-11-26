@@ -57,7 +57,7 @@ export async function cleanupMessages(
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
-  return await knex('t_agent_messages').where('ts', '<', cutoffTimestamp).delete();
+  return await knex('v4_agent_messages').where('ts', '<', cutoffTimestamp).delete();
 }
 
 /**
@@ -77,7 +77,7 @@ export async function cleanupFileChanges(
   const knex = trx || adapter.getKnex();
   const projectId = getProjectContext().getProjectId();
 
-  return await knex('t_file_changes')
+  return await knex('v4_file_changes')
     .where('project_id', projectId)
     .where('ts', '<', cutoffTimestamp)
     .delete();
@@ -101,7 +101,7 @@ export async function cleanupActivityLogs(
   const knex = trx || adapter.getKnex();
   const projectId = getProjectContext().getProjectId();
 
-  return await knex('t_activity_log')
+  return await knex('v4_activity_log')
     .where('project_id', projectId)
     .where('ts', '<', cutoffTimestamp)
     .delete();

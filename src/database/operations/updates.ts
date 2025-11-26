@@ -16,7 +16,7 @@ export async function updateAgentActivity(
   const knex = trx || adapter.getKnex();
   const now = Math.floor(Date.now() / 1000);
 
-  await knex('m_agents')
+  await knex('v4_agents')
     .where({ id: agentId })
     .update({ last_active_ts: now });
 }

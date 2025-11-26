@@ -40,9 +40,9 @@ export async function checkFileLock(
       const lockThreshold = currentTime - lockDuration;
 
       // Get the most recent change to this file within current project
-      const result = await knex('t_file_changes as fc')
-        .join('m_files as f', 'fc.file_id', 'f.id')
-        .join('m_agents as a', 'fc.agent_id', 'a.id')
+      const result = await knex('v4_file_changes as fc')
+        .join('v4_files as f', 'fc.file_id', 'f.id')
+        .join('v4_agents as a', 'fc.agent_id', 'a.id')
         .where('f.path', params.file_path)
         .where('fc.project_id', projectId)
         .select('a.name as agent', 'fc.change_type', 'fc.ts')

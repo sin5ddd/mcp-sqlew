@@ -125,37 +125,37 @@ async function createDecisionWithTags(
   const { key, value, layer, tags = [], priority = 2, version = '1.0.0', projectId } = params;
 
   // Get or create context key
-  let keyRecord = await db('m_context_keys').where({ key }).first();
+  let keyRecord = await db('v4_context_keys').where({ key }).first();
   if (!keyRecord) {
-    await db('m_context_keys').insert({ key });
-    keyRecord = await db('m_context_keys').where({ key }).first();
+    await db('v4_context_keys').insert({ key });
+    keyRecord = await db('v4_context_keys').where({ key }).first();
   }
   const keyId = keyRecord.id;
 
   // Get layer ID
-  const layerRecord = await db('m_layers').where({ name: layer }).first();
+  const layerRecord = await db('v4_layers').where({ name: layer }).first();
   if (!layerRecord) {
     throw new Error(`Layer "${layer}" not found`);
   }
   const layerId = layerRecord.id;
 
   // Get agent ID (system)
-  let agentRecord = await db('m_agents').where({ name: 'system' }).first();
+  let agentRecord = await db('v4_agents').where({ name: 'system' }).first();
   if (!agentRecord) {
-    await db('m_agents').insert({ name: 'system', last_active_ts: Math.floor(Date.now() / 1000) });
-    agentRecord = await db('m_agents').where({ name: 'system' }).first();
+    await db('v4_agents').insert({ name: 'system', last_active_ts: Math.floor(Date.now() / 1000) });
+    agentRecord = await db('v4_agents').where({ name: 'system' }).first();
   }
   const agentId = agentRecord.id;
 
   const ts = Math.floor(Date.now() / 1000);
 
   // Insert decision
-  const existingDecision = await db('t_decisions')
+  const existingDecision = await db('v4_decisions')
     .where({ key_id: keyId, project_id: projectId })
     .first();
 
   if (!existingDecision) {
-    await db('t_decisions').insert({
+    await db('v4_decisions').insert({
       key_id: keyId,
       project_id: projectId,
       value,
@@ -166,7 +166,7 @@ async function createDecisionWithTags(
       ts,
     });
   } else {
-    await db('t_decisions')
+    await db('v4_decisions')
       .where({ key_id: keyId, project_id: projectId })
       .update({ value, version, layer_id: layerId, ts });
   }
@@ -175,20 +175,20 @@ async function createDecisionWithTags(
   if (tags.length > 0) {
     for (const tagName of tags) {
       // Get or create tag
-      let tagRecord = await db('m_tags').where({ name: tagName }).first();
+      let tagRecord = await db('v4_tags').where({ name: tagName }).first();
       if (!tagRecord) {
-        await db('m_tags').insert({ name: tagName });
-        tagRecord = await db('m_tags').where({ name: tagName }).first();
+        await db('v4_tags').insert({ name: tagName });
+        tagRecord = await db('v4_tags').where({ name: tagName }).first();
       }
       const tagId = tagRecord.id;
 
       // Insert decision tag
-      const existingTag = await db('t_decision_tags')
+      const existingTag = await db('v4_decision_tags')
         .where({ decision_key_id: keyId, tag_id: tagId, project_id: projectId })
         .first();
 
       if (!existingTag) {
-        await db('t_decision_tags').insert({
+        await db('v4_decision_tags').insert({
           decision_key_id: keyId,
           tag_id: tagId,
           project_id: projectId,
@@ -219,9 +219,9 @@ async function queryTagIndex(
   db: Knex,
   tags: string[]
 ): Promise<Array<{ decision_id: number; tag_name: string; key: string }>> {
-  const results = await db('m_tag_index as ti')
+  const results = await db('v4_tag_index as ti')
     .select('ti.decision_id', 'ti.tag_name', 'ck.key')
-    .join('m_context_keys as ck', 'ti.decision_id', 'ck.id')
+    .join('v4_context_keys as ck', 'ti.decision_id', 'ck.id')
     .whereIn('ti.tag_name', tags);
 
   return results;
@@ -235,7 +235,7 @@ async function getDecisionByKeyId(
   keyId: number,
   projectId: number
 ): Promise<any> {
-  const decision = await db('t_decisions as d')
+  const decision = await db('v4_decisions as d')
     .select(
       'd.key_id',
       'ck.key',
@@ -244,8 +244,8 @@ async function getDecisionByKeyId(
       'd.version',
       'd.ts'
     )
-    .join('m_context_keys as ck', 'd.key_id', 'ck.id')
-    .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
+    .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
+    .leftJoin('v4_layers as l', 'd.layer_id', 'l.id')
     .where('d.key_id', keyId)
     .where('d.project_id', projectId)
     .where('d.status', 1)
@@ -254,9 +254,9 @@ async function getDecisionByKeyId(
   if (!decision) return null;
 
   // Get tags
-  const tags = await db('t_decision_tags as dt')
+  const tags = await db('v4_decision_tags as dt')
     .select('t.name as tag_name')
-    .join('m_tags as t', 'dt.tag_id', 't.id')
+    .join('v4_tags as t', 'dt.tag_id', 't.id')
     .where('dt.decision_key_id', keyId)
     .where('dt.project_id', projectId);
 
@@ -272,7 +272,7 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
   // Get project ID before running tests
   it('should get project ID', async () => {
     const db = getDb();
-    const project = await db('m_projects').first();
+    const project = await db('v4_projects').first();
     assert.ok(project, 'Project should exist');
     projectId = project.id;
   });
@@ -358,7 +358,7 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
 
       assert.ok(tagIndexEntry, 'Tag index entry should exist');
 
-      const contextKey = await db('m_context_keys')
+      const contextKey = await db('v4_context_keys')
         .where({ id: keyId })
         .first();
 
@@ -529,11 +529,11 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
       });
 
       // Query with layer filter
-      const businessResults = await db('m_tag_index as ti')
+      const businessResults = await db('v4_tag_index as ti')
         .select('ti.decision_id', 'ti.tag_name', 'l.name as layer')
-        .join('m_context_keys as ck', 'ti.decision_id', 'ck.id')
-        .join('t_decisions as d', 'ck.id', 'd.key_id')
-        .join('m_layers as l', 'd.layer_id', 'l.id')
+        .join('v4_context_keys as ck', 'ti.decision_id', 'ck.id')
+        .join('v4_decisions as d', 'ck.id', 'd.key_id')
+        .join('v4_layers as l', 'd.layer_id', 'l.id')
         .where('ti.tag_name', 'test')
         .where('l.name', 'business')
         .where('d.project_id', projectId);

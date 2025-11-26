@@ -7,7 +7,6 @@ import { getAdapter } from '../../../database.js';
 import { FileWatcher } from '../../../watcher/index.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
 import connectionManager from '../../../utils/connection-manager.js';
-import { logTaskStatusChange } from '../../../utils/activity-logging.js';
 import { detectAndTransitionStaleTasks, autoArchiveOldDoneTasks } from '../../../utils/task-stale-detection.js';
 import { TASK_STATUS } from '../types.js';
 import { validateStatusTransition, getStatusId, getStatusName } from '../internal/state-machine.js';
@@ -40,7 +39,7 @@ export async function moveTask(params: {
     return await connectionManager.executeWithRetry(async () => {
       return await actualAdapter.transaction(async (trx) => {
         // Get current status
-        const taskRow = await trx('t_tasks')
+        const taskRow = await trx('v4_tasks')
           .where({ id: params.task_id })
           .select('status_id')
           .first() as { status_id: number } | undefined;
@@ -65,18 +64,9 @@ export async function moveTask(params: {
           updateData.completed_ts = Math.floor(Date.now() / 1000);
         }
 
-        await trx('t_tasks')
+        await trx('v4_tasks')
           .where({ id: params.task_id })
           .update(updateData);
-
-        // Activity logging (replaces trigger)
-        const systemAgentId = 1;
-        await logTaskStatusChange(trx, {
-          task_id: params.task_id,
-          old_status: currentStatusId,
-          new_status: newStatusId,
-          agent_id: systemAgentId
-        });
 
         // Update watcher if moving to done or archived (stop watching)
         if (params.new_status === 'done' || params.new_status === 'archived') {

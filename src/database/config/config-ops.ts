@@ -5,46 +5,33 @@
 import type { DatabaseAdapter } from '../../adapters/index.js';
 
 /**
- * Get configuration value from m_config table with per-project inheritance
+ * Get configuration value from v4_config table
  *
- * Lookup priority:
- * 1. Project-specific config (project_id = provided projectId)
- * 2. Global config (project_id = NULL)
+ * v4_config is a simple key-value store without project_id
+ * (global configuration only)
  *
  * @param adapter - Database adapter
  * @param key - Config key
- * @param projectId - Optional project ID (if not provided, only checks global config)
+ * @param _projectId - Deprecated parameter (kept for backward compatibility, ignored)
  * @returns Config value or null if not found
  */
 export async function getConfigValue(
   adapter: DatabaseAdapter,
   key: string,
-  projectId?: number | null
+  _projectId?: number | null
 ): Promise<string | null> {
   const knex = adapter.getKnex();
 
-  // If projectId provided, try project-specific config first
-  if (projectId !== undefined && projectId !== null) {
-    const projectConfig = await knex('m_config')
-      .where({ key, project_id: projectId })
-      .first<{ value: string }>();
+  // v4_config is a simple key-value store (no project_id column)
+  const config = await knex('v4_config')
+    .where({ config_key: key })
+    .first<{ config_value: string }>();
 
-    if (projectConfig) {
-      return projectConfig.value;
-    }
-  }
-
-  // Fallback to global config (project_id = NULL)
-  const globalConfig = await knex('m_config')
-    .where({ key })
-    .whereNull('project_id')
-    .first<{ value: string }>();
-
-  return globalConfig ? globalConfig.value : null;
+  return config ? config.config_value : null;
 }
 
 /**
- * Set configuration value in m_config table
+ * Set configuration value in v4_config table
  */
 export async function setConfigValue(
   adapter: DatabaseAdapter,
@@ -53,10 +40,10 @@ export async function setConfigValue(
 ): Promise<void> {
   const knex = adapter.getKnex();
   const stringValue = String(value);
-  await knex('m_config')
-    .insert({ key, value: stringValue })
-    .onConflict('key')
-    .merge({ value: stringValue });
+  await knex('v4_config')
+    .insert({ config_key: key, config_value: stringValue })
+    .onConflict('config_key')
+    .merge({ config_value: stringValue });
 }
 
 /**
@@ -91,10 +78,10 @@ export async function getConfigInt(
  */
 export async function getAllConfig(adapter: DatabaseAdapter): Promise<Record<string, string>> {
   const knex = adapter.getKnex();
-  const rows = await knex('m_config').select('key', 'value');
+  const rows = await knex('v4_config').select('config_key', 'config_value');
   const config: Record<string, string> = {};
   for (const row of rows) {
-    config[row.key] = row.value;
+    config[row.config_key] = row.config_value;
   }
   return config;
 }

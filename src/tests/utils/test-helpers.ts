@@ -52,9 +52,7 @@ export interface DbConfig {
 // We need to go to the project root first
 const projectRoot = join(__dirname, '../../../'); // dist/tests/utils/ -> project root
 const migrationDirs = [
-  join(projectRoot, 'dist/config/knex/bootstrap'),
-  join(projectRoot, 'dist/config/knex/upgrades'),
-  join(projectRoot, 'dist/config/knex/enhancements'),
+  join(projectRoot, 'dist/database/migrations/v4'),
 ];
 
 /**
@@ -387,30 +385,30 @@ export async function seedTestData(db: Knex): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
 
   // Clear existing test data (use test IDs 10, 20, 100, 101 to avoid conflicts with migration-created data)
-  await db('t_decisions').where('key_id', '>=', 100).andWhere('key_id', '<=', 101).del();
-  await db('m_context_keys').where('id', '>=', 100).andWhere('id', '<=', 101).del();
-  await db('m_agents').where('name', 'test-agent').del();
-  await db('m_projects').where('name', 'like', 'test-project-%').del();
+  await db('v4_decisions').where('key_id', '>=', 100).andWhere('key_id', '<=', 101).del();
+  await db('v4_context_keys').where('id', '>=', 100).andWhere('id', '<=', 101).del();
+  await db('v4_agents').where('name', 'test-agent').del();
+  await db('v4_projects').where('name', 'like', 'test-project-%').del();
 
-  // Seed m_projects (use IDs 10, 20 to avoid conflicts)
-  await db('m_projects').insert([
+  // Seed v4_projects (use IDs 10, 20 to avoid conflicts)
+  await db('v4_projects').insert([
     { id: 10, name: 'test-project-1', display_name: 'Test Project 1', detection_source: 'test', created_ts: now, last_active_ts: now },
     { id: 20, name: 'test-project-2', display_name: 'Test Project 2', detection_source: 'test', created_ts: now, last_active_ts: now },
   ]);
 
-  // Seed m_agents (use ID 100 to avoid conflicts)
-  await db('m_agents').insert([
+  // Seed v4_agents (use ID 100 to avoid conflicts)
+  await db('v4_agents').insert([
     { id: 100, name: 'test-agent' },
   ]);
 
-  // Seed m_context_keys (use IDs 100, 101 to avoid conflicts)
-  await db('m_context_keys').insert([
-    { id: 100, key: 'test/key1' },
-    { id: 101, key: 'test/key2' },
+  // Seed v4_context_keys (use IDs 100, 101 to avoid conflicts)
+  await db('v4_context_keys').insert([
+    { id: 100, key_name: 'test/key1' },
+    { id: 101, key_name: 'test/key2' },
   ]);
 
-  // Seed t_decisions (has FK to m_projects, m_agents, m_context_keys)
-  await db('t_decisions').insert([
+  // Seed v4_decisions (has FK to v4_projects, v4_agents, v4_context_keys)
+  await db('v4_decisions').insert([
     { key_id: 100, project_id: 10, value: 'test-value-1', ts: now, agent_id: 100 },
     { key_id: 101, project_id: 20, value: 'test-value-2', ts: now, agent_id: 100 },
   ]);
@@ -422,11 +420,11 @@ export async function seedTestData(db: Knex): Promise<void> {
  */
 export async function assertSeededDataExists(db: Knex): Promise<void> {
   // Check for our specific test projects (IDs 10, 20)
-  const testProjects = await db('m_projects').whereIn('id', [10, 20]);
+  const testProjects = await db('v4_projects').whereIn('id', [10, 20]);
   assert.strictEqual(testProjects.length, 2, 'Should have 2 test projects (IDs 10, 20)');
 
   // Check for our test decisions
-  const testDecisions = await db('t_decisions').whereIn('key_id', [100, 101]);
+  const testDecisions = await db('v4_decisions').whereIn('key_id', [100, 101]);
   assert.strictEqual(testDecisions.length, 2, 'Should have 2 test decisions (key_ids 100, 101)');
 }
 
@@ -579,6 +577,7 @@ export interface CreateTestTaskOptions {
 /**
  * Create a test task with all required fields including timestamps
  *
+ * **v4.0.0+ Compatible**: Uses v4_tasks and v4_task_details tables
  * **v3.8.0+ Compatible**: Includes created_ts and updated_ts (NOT NULL fields)
  * **v3.7.0+ Compatible**: Uses provided projectId (required for multi-project support)
  *
@@ -597,7 +596,7 @@ export async function createTestTask(
   const agentName = options.agentName || 'test-agent';
 
   // Try to get existing agent
-  const existingAgent = await db('m_agents')
+  const existingAgent = await db('v4_agents')
     .where({ name: agentName })
     .first('id');
 
@@ -605,14 +604,14 @@ export async function createTestTask(
     agentId = existingAgent.id;
   } else {
     // Create new agent
-    const [newAgentId] = await db('m_agents')
+    const [newAgentId] = await db('v4_agents')
       .insert({ name: agentName })
       .returning('id');
     agentId = newAgentId?.id || newAgentId;
   }
 
   // Create task with all required fields
-  const [taskId] = await db('t_tasks')
+  const [taskId] = await db('v4_tasks')
     .insert({
       title: options.title,
       status_id: options.status_id || 1, // Default to 'todo' (status_id=1)
@@ -620,8 +619,8 @@ export async function createTestTask(
       project_id: options.projectId || 1, // Default to project 1 if not specified
       created_by_agent_id: agentId,
       assigned_agent_id: agentId,
-      created_ts: currentTs,  // Required NOT NULL field (v3.8.0+)
-      updated_ts: currentTs   // Required NOT NULL field (v3.8.0+)
+      created_ts: currentTs,  // Required NOT NULL field
+      updated_ts: currentTs   // Required NOT NULL field
     })
     .returning('id');
 
@@ -629,7 +628,7 @@ export async function createTestTask(
 
   // Add task details if description or acceptance_criteria provided
   if (options.description || options.acceptance_criteria) {
-    await db('t_task_details').insert({
+    await db('v4_task_details').insert({
       task_id: actualTaskId,
       description: options.description || null,
       acceptance_criteria: options.acceptance_criteria || null
@@ -640,17 +639,18 @@ export async function createTestTask(
 }
 
 /**
- * Add watched files to a task with v3.8.0+ schema compatibility
+ * Add watched files to a task with v4.0+ schema compatibility
  *
- * **v3.8.0+ Schema Requirements**:
- * - `project_id` (NOT NULL, part of UNIQUE constraint)
- * - `linked_ts` (NOT NULL, timestamp when file was linked)
- * - UNIQUE constraint: `(project_id, task_id, file_id)`
+ * **v4.0+ Schema Changes**:
+ * - Uses v4_files table (path_hash removed in v4, uses path directly)
+ * - Uses v4_task_file_links table with linked_ts
+ * - Added action field (default 'edit')
+ * - UNIQUE constraint: `(task_id, project_id, file_id)`
  *
  * @param db - Knex database connection
  * @param taskId - Task ID to link files to
  * @param filePaths - Array of file paths to watch
- * @param projectId - Project ID (required for v3.7.0+ multi-project support)
+ * @param projectId - Project ID (required for multi-project support)
  * @returns Array of successfully added file paths
  */
 export async function addWatchedFiles(
@@ -659,36 +659,38 @@ export async function addWatchedFiles(
   filePaths: string[],
   projectId: number = 1
 ): Promise<string[]> {
-  const currentTs = Math.floor(Date.now() / 1000);
   const addedFiles: string[] = [];
+  const currentTs = Math.floor(Date.now() / 1000);
 
   for (const filePath of filePaths) {
     try {
       // Get or create file
       let fileId: number;
 
-      const existingFile = await db('m_files')
-        .where({ path: filePath })
+      // v4 schema: no path_hash, use path directly with project_id
+      const existingFile = await db('v4_files')
+        .where({ project_id: projectId, path: filePath })
         .first('id');
 
       if (existingFile) {
         fileId = existingFile.id;
       } else {
-        const [newFileId] = await db('m_files')
-          .insert({ path: filePath })
+        const [newFileId] = await db('v4_files')
+          .insert({ project_id: projectId, path: filePath })
           .returning('id');
         fileId = newFileId?.id || newFileId;
       }
 
-      // Add file link with v3.8.0+ schema fields
-      await db('t_task_file_links')
+      // Add file link with v4.0 schema fields
+      await db('v4_task_file_links')
         .insert({
           task_id: taskId,
           file_id: fileId,
-          project_id: projectId,    // Required v3.7.0+
-          linked_ts: currentTs       // Required v3.8.0+
+          project_id: projectId,
+          action: 'edit',  // Default action
+          linked_ts: currentTs  // Required v4 field
         })
-        .onConflict(['project_id', 'task_id', 'file_id'])  // v3.8.0+ UNIQUE constraint
+        .onConflict(['task_id', 'project_id', 'file_id'])  // v4.0 UNIQUE constraint
         .ignore();
 
       addedFiles.push(filePath);
@@ -704,13 +706,14 @@ export async function addWatchedFiles(
 /**
  * Create a pruned file record in the audit table
  *
- * **v3.7.0+ Compatible**: Includes project_id (required for multi-project support)
+ * **v4.0+ Compatible**: Uses v4_task_pruned_files table with pruned_ts field
+ * **v4.0+ Compatible**: Includes project_id (required for multi-project support)
  * **v3.5.0+ Feature**: Auto-pruning audit trail
  *
  * @param db - Knex database connection
  * @param taskId - Task ID
  * @param filePath - File path that was pruned
- * @param projectId - Project ID (required for v3.7.0+)
+ * @param projectId - Project ID (required for multi-project support)
  * @returns Pruned file record ID
  */
 export async function createPrunedFileRecord(
@@ -721,12 +724,13 @@ export async function createPrunedFileRecord(
 ): Promise<number> {
   const currentTs = Math.floor(Date.now() / 1000);
 
-  const [id] = await db('t_task_pruned_files')
+  const [id] = await db('v4_task_pruned_files')
     .insert({
       task_id: taskId,
       file_path: filePath,
-      pruned_ts: currentTs,
-      project_id: projectId  // Required v3.7.0+
+      pruned_ts: currentTs,  // v4 uses pruned_ts
+      project_id: projectId,
+      action: 'edit'  // Default action
     })
     .returning('id');
 
@@ -736,6 +740,8 @@ export async function createPrunedFileRecord(
 /**
  * Get watched files for a task
  *
+ * **v4.0+ Compatible**: Uses v4_task_file_links and v4_files tables
+ *
  * @param db - Knex database connection
  * @param taskId - Task ID
  * @returns Array of file paths
@@ -744,8 +750,8 @@ export async function getWatchedFiles(
   db: Knex,
   taskId: number
 ): Promise<string[]> {
-  const files = await db('t_task_file_links as tfl')
-    .join('m_files as f', 'tfl.file_id', 'f.id')
+  const files = await db('v4_task_file_links as tfl')
+    .join('v4_files as f', 'tfl.file_id', 'f.id')
     .where('tfl.task_id', taskId)
     .select('f.path')
     .orderBy('f.path');

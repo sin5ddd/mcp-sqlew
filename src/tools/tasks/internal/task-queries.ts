@@ -36,16 +36,16 @@ export async function queryTaskDependencies(
       ];
 
   // Get blockers (tasks that block this task) - with project_id isolation
-  let blockersQuery = knex('t_tasks as t')
-    .join('t_task_dependencies as d', 't.id', 'd.blocker_task_id')
-    .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
+  let blockersQuery = knex('v4_tasks as t')
+    .join('v4_task_dependencies as d', 't.id', 'd.blocker_task_id')
+    .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
+    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where({ 'd.blocked_task_id': taskId, 'd.project_id': projectId, 't.project_id': projectId })
     .select(selectFields);
 
   if (includeDetails) {
     blockersQuery = blockersQuery
-      .leftJoin('t_task_details as td', function() {
+      .leftJoin('v4_task_details as td', function() {
         this.on('t.id', '=', 'td.task_id')
             .andOn('t.project_id', '=', 'td.project_id');
       });
@@ -54,16 +54,16 @@ export async function queryTaskDependencies(
   const blockers = await blockersQuery;
 
   // Get blocking (tasks this task blocks) - with project_id isolation
-  let blockingQuery = knex('t_tasks as t')
-    .join('t_task_dependencies as d', 't.id', 'd.blocked_task_id')
-    .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
+  let blockingQuery = knex('v4_tasks as t')
+    .join('v4_task_dependencies as d', 't.id', 'd.blocked_task_id')
+    .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
+    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where({ 'd.blocker_task_id': taskId, 'd.project_id': projectId, 't.project_id': projectId })
     .select(selectFields);
 
   if (includeDetails) {
     blockingQuery = blockingQuery
-      .leftJoin('t_task_details as td', function() {
+      .leftJoin('v4_task_details as td', function() {
         this.on('t.id', '=', 'td.task_id')
             .andOn('t.project_id', '=', 'td.project_id');
       });

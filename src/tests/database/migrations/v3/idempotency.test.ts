@@ -117,9 +117,9 @@ describe('Migration Idempotency Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_agents'), 'Should have m_agents table');
-    assert.ok(tableNames.includes('t_decisions'), 'Should have t_decisions table');
-    assert.ok(tableNames.includes('t_tasks'), 'Should have t_tasks table');
+    assert.ok(tableNames.includes('v4_agents'), 'Should have m_agents table');
+    assert.ok(tableNames.includes('v4_decisions'), 'Should have t_decisions table');
+    assert.ok(tableNames.includes('v4_tasks'), 'Should have t_tasks table');
 
     console.log(`    ✅ Bootstrap migrations are idempotent`);
   });
@@ -187,10 +187,10 @@ describe('Migration Idempotency Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_help_tools'), 'Should have help tables');
+    assert.ok(tableNames.includes('v4_help_tools'), 'Should have help tables');
 
     // Verify link_type column exists (user's "duplicate column name" error)
-    const hasLinkType = await db.schema.hasColumn('t_task_decision_links', 'link_type');
+    const hasLinkType = await db.schema.hasColumn('v4_task_decision_links', 'link_type');
     assert.ok(hasLinkType, 'Should have link_type column');
 
     console.log(`    ✅ Enhancement migrations are idempotent`);
@@ -245,10 +245,10 @@ describe('Migration Idempotency Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_projects'), 'Should have m_projects table');
+    assert.ok(tableNames.includes('v4_projects'), 'Should have m_projects table');
 
     // Verify project_id column exists
-    const hasProjectId = await db.schema.hasColumn('t_decisions', 'project_id');
+    const hasProjectId = await db.schema.hasColumn('v4_decisions', 'project_id');
     assert.ok(hasProjectId, 'Should have project_id column in t_decisions');
 
     console.log(`    ✅ Upgrade migrations are idempotent`);
@@ -264,14 +264,14 @@ describe('Migration Idempotency Tests', () => {
     console.log('    🔍 Validating m_config structure...');
 
     // Verify m_config structure (user's "nullable PRIMARY KEY" error should be fixed)
-    const configSchema = await db.raw(`SELECT sql FROM sqlite_master WHERE type='table' AND name='m_config'`);
+    const configSchema = await db.raw(`SELECT sql FROM sqlite_master WHERE type='table' AND name='v4_config'`);
     const configSql = configSchema[0]?.sql || '';
 
     assert.ok(configSql.includes('primary key (`key`)'), 'm_config should have single-column PRIMARY KEY');
     assert.ok(!configSql.includes('primary key (`key`, `project_id`)'), 'm_config should NOT have composite PRIMARY KEY');
 
     // Verify project_id column exists and is nullable
-    const hasProjectId = await db.schema.hasColumn('m_config', 'project_id');
+    const hasProjectId = await db.schema.hasColumn('v4_config', 'project_id');
     assert.ok(hasProjectId, 'm_config should have project_id column');
 
     console.log(`    ✅ m_config structure is correct (single-column PRIMARY KEY, nullable project_id)`);
@@ -338,9 +338,9 @@ describe('Migration Idempotency Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_projects'), 'Should still have m_projects');
-    assert.ok(tableNames.includes('m_help_tools'), 'Should still have help tables');
-    assert.ok(tableNames.includes('t_decisions'), 'Should still have t_decisions');
+    assert.ok(tableNames.includes('v4_projects'), 'Should still have m_projects');
+    assert.ok(tableNames.includes('v4_help_tools'), 'Should still have help tables');
+    assert.ok(tableNames.includes('v4_decisions'), 'Should still have t_decisions');
 
     console.log(`    ✅ Partial schema state recovery successful`);
   });
@@ -356,12 +356,12 @@ describe('Migration Idempotency Tests', () => {
     // Insert test data
     const now = Math.floor(Date.now() / 1000);
 
-    await db('m_context_keys').insert({
+    await db('v4_context_keys').insert({
       id: 888,
       key: 'test-idempotency-key',
     });
 
-    await db('t_decisions').insert({
+    await db('v4_decisions').insert({
       key_id: 888,
       project_id: 1,
       value: 'test value should not duplicate',
@@ -369,7 +369,7 @@ describe('Migration Idempotency Tests', () => {
     });
 
     // Count decisions before re-run
-    const countBefore = await db('t_decisions').where({ key_id: 888 }).count('* as count').first();
+    const countBefore = await db('v4_decisions').where({ key_id: 888 }).count('* as count').first();
     assert.strictEqual(countBefore?.count, 1, 'Should have 1 decision before re-run');
 
     // Re-run a few migrations
@@ -392,10 +392,10 @@ describe('Migration Idempotency Tests', () => {
     }
 
     // Verify data still exists and wasn't duplicated
-    const countAfter = await db('t_decisions').where({ key_id: 888 }).count('* as count').first();
+    const countAfter = await db('v4_decisions').where({ key_id: 888 }).count('* as count').first();
     assert.strictEqual(countAfter?.count, 1, 'Should still have 1 decision after re-run');
 
-    const decision = await db('t_decisions').where({ key_id: 888 }).first();
+    const decision = await db('v4_decisions').where({ key_id: 888 }).first();
     assert.strictEqual(decision?.value, 'test value should not duplicate', 'Data should be preserved');
 
     console.log(`    ✅ Data preservation verified`);

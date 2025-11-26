@@ -37,8 +37,8 @@ export async function watchFiles(params: {
     return await connectionManager.executeWithRetry(async () => {
       return await actualAdapter.transaction(async (trx) => {
         // Check if task exists (project-scoped)
-        const taskData = await trx('t_tasks as t')
-          .join('m_task_statuses as s', 't.status_id', 's.id')
+        const taskData = await trx('v4_tasks as t')
+          .join('v4_task_statuses as s', 't.status_id', 's.id')
           .where({ 't.id': params.task_id, 't.project_id': projectId })
           .select('t.id', 't.title', 's.name as status')
           .first() as { id: number; title: string; status: string } | undefined;
@@ -57,12 +57,12 @@ export async function watchFiles(params: {
             const fileId = await getOrCreateFile(actualAdapter, projectId, filePath, trx);
 
             // Check if already exists
-            const existing = await trx('t_task_file_links')
+            const existing = await trx('v4_task_file_links')
               .where({ task_id: params.task_id, file_id: fileId })
               .first();
 
             if (!existing) {
-              await trx('t_task_file_links').insert({
+              await trx('v4_task_file_links').insert({
                 task_id: params.task_id,
                 file_id: fileId
               });
@@ -97,10 +97,10 @@ export async function watchFiles(params: {
 
           const removedFiles: string[] = [];
           for (const filePath of params.file_paths) {
-            const deleted = await trx('t_task_file_links')
+            const deleted = await trx('v4_task_file_links')
               .where('task_id', params.task_id)
               .whereIn('file_id', function() {
-                this.select('id').from('m_files').where({ path: filePath });
+                this.select('id').from('v4_files').where({ path: filePath });
               })
               .delete();
 
@@ -119,8 +119,8 @@ export async function watchFiles(params: {
           };
 
         } else if (params.action === 'list') {
-          const files = await trx('t_task_file_links as tfl')
-            .join('m_files as f', 'tfl.file_id', 'f.id')
+          const files = await trx('v4_task_file_links as tfl')
+            .join('v4_files as f', 'tfl.file_id', 'f.id')
             .where('tfl.task_id', params.task_id)
             .select('f.path')
             .then(rows => rows.map((row: any) => row.path));

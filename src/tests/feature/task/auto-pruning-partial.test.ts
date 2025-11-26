@@ -81,7 +81,7 @@ describe('Auto-pruning: Partial file existence', () => {
     // for auto-transition (older than 15 minutes, which is the default review_idle_minutes)
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
     const knex = db.getKnex();
-    await knex('t_tasks')
+    await knex('v4_tasks')
       .where({ id: taskId })
       .update({
         status_id: 2,
@@ -114,7 +114,7 @@ describe('Auto-pruning: Partial file existence', () => {
       );
 
       // Check pruned files table - should have 2 records
-      const prunedFiles = await knex('t_task_pruned_files')
+      const prunedFiles = await knex('v4_task_pruned_files')
         .where({ task_id: taskId })
         .select('file_path');
 
@@ -132,7 +132,7 @@ describe('Auto-pruning: Partial file existence', () => {
       );
 
       // Check task status transitioned to waiting_review
-      const task = await knex('t_tasks')
+      const task = await knex('v4_tasks')
         .where({ id: taskId })
         .first('status_id');
       assert.equal(
@@ -161,7 +161,7 @@ describe('Auto-pruning: Partial file existence', () => {
     // Set task to in_progress status and update timestamp to be old enough
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
     const knex = db.getKnex();
-    await knex('t_tasks')
+    await knex('v4_tasks')
       .where({ id: taskId })
       .update({
         status_id: 2,
@@ -179,13 +179,13 @@ describe('Auto-pruning: Partial file existence', () => {
       assert.equal(transitioned, 0, 'Should not have transitioned any tasks');
 
       // 4. Verify task is still in in_progress
-      const task = await knex('t_tasks')
+      const task = await knex('v4_tasks')
         .where({ id: taskId })
         .first('status_id');
       assert.equal(task.status_id, 2, 'Task should still be in in_progress (2)');
 
       // 5. Verify no pruning occurred (safety check blocked it)
-      const prunedFiles = await knex('t_task_pruned_files')
+      const prunedFiles = await knex('v4_task_pruned_files')
         .where({ task_id: taskId })
         .count('* as count')
         .first();
@@ -223,7 +223,7 @@ describe('Auto-pruning: Partial file existence', () => {
     // Set task to in_progress status and update timestamp to be old enough
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
     const knex = db.getKnex();
-    await knex('t_tasks')
+    await knex('v4_tasks')
       .where({ id: taskId })
       .update({
         status_id: 2,
@@ -241,7 +241,7 @@ describe('Auto-pruning: Partial file existence', () => {
       assert.equal(transitioned, 1, 'Should have transitioned 1 task');
 
       // 4. Verify no pruning occurred
-      const prunedFiles = await knex('t_task_pruned_files')
+      const prunedFiles = await knex('v4_task_pruned_files')
         .where({ task_id: taskId })
         .count('* as count')
         .first();
@@ -253,7 +253,7 @@ describe('Auto-pruning: Partial file existence', () => {
       assert.equal(watchedFiles.length, 3, 'Should still have 3 files in watch list');
 
       // 6. Verify task transitioned to waiting_review
-      const task = await knex('t_tasks')
+      const task = await knex('v4_tasks')
         .where({ id: taskId })
         .first('status_id');
       assert.equal(
@@ -292,7 +292,7 @@ describe('Auto-pruning: Partial file existence', () => {
     // Set task to in_progress status and update timestamp to be old enough
     const fifteenMinutesAgo = Math.floor(Date.now() / 1000) - (15 * 60 + 10);
     const knex = db.getKnex();
-    await knex('t_tasks')
+    await knex('v4_tasks')
       .where({ id: taskId })
       .update({
         status_id: 2,
@@ -313,7 +313,7 @@ describe('Auto-pruning: Partial file existence', () => {
       const watchedFiles = await getWatchedFiles(db, taskId);
       assert.equal(watchedFiles.length, 3, 'Should have 3 files in watch list');
 
-      const prunedFiles = await knex('t_task_pruned_files')
+      const prunedFiles = await knex('v4_task_pruned_files')
         .where({ task_id: taskId })
         .select('file_path');
       assert.equal(prunedFiles.length, 1, 'Should have 1 pruned file record');
@@ -339,7 +339,7 @@ async function createTestTask(db: DatabaseAdapter): Promise<number> {
   const projectId = ProjectContext.getInstance().getProjectId();
   const now = Math.floor(Date.now() / 1000);
 
-  const [taskId] = await knex('t_tasks').insert({
+  const [taskId] = await knex('v4_tasks').insert({
     title: 'Test Task for Auto-Pruning',
     status_id: 2,
     priority: 2,
@@ -370,7 +370,7 @@ async function addWatchedFiles(
     const fileName = path.basename(filePath);
     const fileId = await getOrCreateFile(db, 1, fileName);
 
-    await knex('t_task_file_links')
+    await knex('v4_task_file_links')
       .insert({
         task_id: taskId,
         file_id: fileId,
@@ -388,8 +388,8 @@ async function addWatchedFiles(
 async function getWatchedFiles(db: DatabaseAdapter, taskId: number): Promise<string[]> {
   const knex = db.getKnex();
 
-  const files = await knex('t_task_file_links as tfl')
-    .join('m_files as mf', 'tfl.file_id', 'mf.id')
+  const files = await knex('v4_task_file_links as tfl')
+    .join('v4_files as mf', 'tfl.file_id', 'mf.id')
     .where('tfl.task_id', taskId)
     .select('mf.path');
 

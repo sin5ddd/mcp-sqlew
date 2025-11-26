@@ -1,7 +1,8 @@
 ---
 name: scrum-master
 description: Use this agent when you need to coordinate multi-agent development work, manage agile workflows, track tasks and dependencies using sqlew, or facilitate sprint planning and execution. This agent should proactively monitor project progress and ensure efficient collaboration between sub-agents.
-
+model: sonnet
+color: purple
 Examples:
 
 <example>

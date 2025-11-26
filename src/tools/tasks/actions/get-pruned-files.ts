@@ -23,21 +23,21 @@ export async function getPrunedFiles(params: {
     }
 
     // Validate task exists
-    const task = await knex('t_tasks').where({ id: params.task_id }).first();
+    const task = await knex('v4_tasks').where({ id: params.task_id }).first();
     if (!task) {
       throw new Error(`Task not found: ${params.task_id}`);
     }
 
     // Get pruned files
     const limit = params.limit || 100;
-    const rows = await knex('t_task_pruned_files as tpf')
-      .leftJoin('m_context_keys as k', 'tpf.linked_decision_key_id', 'k.id')
+    const rows = await knex('v4_task_pruned_files as tpf')
+      .leftJoin('v4_context_keys as k', 'tpf.linked_decision_id', 'k.id')
       .where('tpf.task_id', params.task_id)
       .select(
         'tpf.id',
         'tpf.file_path',
         knex.raw(`datetime(tpf.pruned_ts, 'unixepoch') as pruned_at`),
-        'k.key as linked_decision'
+        'k.key_name as linked_decision'
       )
       .orderBy('tpf.pruned_ts', 'desc')
       .limit(limit) as Array<{

@@ -412,11 +412,11 @@ export class FileWatcher {
       if (currentStatus === 'todo') {
         try {
           // Get status IDs
-          const todoStatusId = await knex('m_task_statuses')
+          const todoStatusId = await knex('v4_task_statuses')
             .where({ name: 'todo' })
             .select('id')
             .first() as { id: number } | undefined;
-          const inProgressStatusId = await knex('m_task_statuses')
+          const inProgressStatusId = await knex('v4_task_statuses')
             .where({ name: 'in_progress' })
             .select('id')
             .first() as { id: number } | undefined;
@@ -427,7 +427,7 @@ export class FileWatcher {
           }
 
           // Update task status: todo → in_progress
-          await knex('t_tasks')
+          await knex('v4_tasks')
             .where({ id: taskId, status_id: todoStatusId.id })
             .update({
               status_id: inProgressStatusId.id,
@@ -440,12 +440,12 @@ export class FileWatcher {
           debugLog('INFO', `Task #${taskId} "${taskTitle}": todo → in_progress`);
 
           // Log to activity log
-          const agentIdRow = await knex('t_tasks')
+          const agentIdRow = await knex('v4_tasks')
             .where({ id: taskId })
             .select('assigned_agent_id')
             .first() as { assigned_agent_id: number | null } | undefined;
           if (agentIdRow?.assigned_agent_id) {
-            await knex('t_activity_log').insert({
+            await knex('v4_activity_log').insert({
               agent_id: agentIdRow.assigned_agent_id,
               action_type: 'task_auto_transition',
               target: `task_id:${taskId}`,
@@ -556,7 +556,7 @@ export class FileWatcher {
 
     try {
       // Get acceptance criteria JSON
-      const taskDetails = await knex('t_task_details')
+      const taskDetails = await knex('v4_task_details')
         .where({ task_id: taskId })
         .select('acceptance_criteria_json')
         .first() as { acceptance_criteria_json: string | null } | undefined;
@@ -586,11 +586,11 @@ export class FileWatcher {
 
       if (allPassed) {
         // All checks passed - auto-complete task: in_progress → done
-        const inProgressStatusId = await knex('m_task_statuses')
+        const inProgressStatusId = await knex('v4_task_statuses')
           .where({ name: 'in_progress' })
           .select('id')
           .first() as { id: number } | undefined;
-        const doneStatusId = await knex('m_task_statuses')
+        const doneStatusId = await knex('v4_task_statuses')
           .where({ name: 'done' })
           .select('id')
           .first() as { id: number } | undefined;
@@ -600,7 +600,7 @@ export class FileWatcher {
           return;
         }
 
-        await knex('t_tasks')
+        await knex('v4_tasks')
           .where({ id: taskId, status_id: inProgressStatusId.id })
           .update({
             status_id: doneStatusId.id,
@@ -617,12 +617,12 @@ export class FileWatcher {
         this.unregisterTask(taskId);
 
         // Log to activity log
-        const agentIdRow = await knex('t_tasks')
+        const agentIdRow = await knex('v4_tasks')
           .where({ id: taskId })
           .select('assigned_agent_id')
           .first() as { assigned_agent_id: number | null } | undefined;
         if (agentIdRow?.assigned_agent_id) {
-          await knex('t_activity_log').insert({
+          await knex('v4_activity_log').insert({
             agent_id: agentIdRow.assigned_agent_id,
             action_type: 'task_auto_complete',
             target: `task_id:${taskId}`,
@@ -652,10 +652,10 @@ export class FileWatcher {
 
     try {
       // Query all active tasks with file links
-      const links = await knex('t_tasks as t')
-        .join('m_task_statuses as s', 't.status_id', 's.id')
-        .join('t_task_file_links as tfl', 't.id', 'tfl.task_id')
-        .join('m_files as f', 'tfl.file_id', 'f.id')
+      const links = await knex('v4_tasks as t')
+        .join('v4_task_statuses as s', 't.status_id', 's.id')
+        .join('v4_task_file_links as tfl', 't.id', 'tfl.task_id')
+        .join('v4_files as f', 'tfl.file_id', 'f.id')
         .whereIn('s.name', ['todo', 'in_progress', 'waiting_review', 'blocked'])
         .select(
           't.id as task_id',
@@ -729,9 +729,9 @@ export class FileWatcher {
 
     try {
       // Get current task status
-      const task = await knex('t_tasks as t')
-        .join('m_task_statuses as s', 's.id', 't.status_id')
-        .leftJoin('t_task_details as td', 'td.task_id', 't.id')
+      const task = await knex('v4_tasks as t')
+        .join('v4_task_statuses as s', 's.id', 't.status_id')
+        .leftJoin('v4_task_details as td', 'td.task_id', 't.id')
         .where({ 't.id': taskId })
         .select(
           't.status_id',
@@ -806,7 +806,7 @@ export class FileWatcher {
         });
 
         // Get waiting_review status ID
-        const waitingReviewStatus = await knex('m_task_statuses')
+        const waitingReviewStatus = await knex('v4_task_statuses')
           .where({ name: 'waiting_review' })
           .select('id')
           .first() as { id: number } | undefined;
@@ -817,7 +817,7 @@ export class FileWatcher {
         }
 
         // Update task status
-        await knex('t_tasks')
+        await knex('v4_tasks')
           .where({ id: taskId })
           .update({
             status_id: waitingReviewStatus.id,

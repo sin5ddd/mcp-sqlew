@@ -43,7 +43,7 @@ export async function linkTask(params: {
     return await connectionManager.executeWithRetry(async () => {
       return await actualAdapter.transaction(async (trx) => {
         // Check if task exists
-        const taskExists = await trx('t_tasks').where({ id: params.task_id }).first();
+        const taskExists = await trx('v4_tasks').where({ id: params.task_id }).first();
         if (!taskExists) {
           throw new Error(`Task with id ${params.task_id} not found`);
         }
@@ -53,7 +53,7 @@ export async function linkTask(params: {
           const keyId = await getOrCreateContextKey(actualAdapter, decisionKey, trx);
           const linkRelation = params.link_relation || 'implements';
 
-          await trx('t_task_decision_links').insert({
+          await trx('v4_task_decision_links').insert({
             task_id: params.task_id,
             decision_key_id: keyId,
             project_id: projectId,
@@ -74,12 +74,12 @@ export async function linkTask(params: {
           const constraintId = Number(params.target_id);
 
           // Check if constraint exists
-          const constraintExists = await trx('t_constraints').where({ id: constraintId }).first();
+          const constraintExists = await trx('v4_constraints').where({ id: constraintId }).first();
           if (!constraintExists) {
             throw new Error(`Constraint with id ${constraintId} not found`);
           }
 
-          await trx('t_task_constraint_links').insert({
+          await trx('v4_task_constraint_links').insert({
             task_id: params.task_id,
             constraint_id: constraintId
           }).onConflict(['task_id', 'constraint_id']).ignore();
@@ -99,15 +99,15 @@ export async function linkTask(params: {
           const filePath = String(params.target_id);
           const fileId = await getOrCreateFile(actualAdapter, projectId, filePath, trx);
 
-          await trx('t_task_file_links').insert({
+          await trx('v4_task_file_links').insert({
             task_id: params.task_id,
             file_id: fileId
           }).onConflict(['task_id', 'file_id']).ignore();
 
           // Register file with watcher for auto-tracking
           try {
-            const taskData = await trx('t_tasks as t')
-              .join('m_task_statuses as s', 't.status_id', 's.id')
+            const taskData = await trx('v4_tasks as t')
+              .join('v4_task_statuses as s', 't.status_id', 's.id')
               .where('t.id', params.task_id)
               .select('t.title', 's.name as status')
               .first() as { title: string; status: string } | undefined;

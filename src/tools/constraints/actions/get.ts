@@ -17,12 +17,12 @@ import type {
 } from '../types.js';
 
 /**
- * Retrieve t_constraints with advanced filtering
+ * Retrieve v4_constraints with advanced filtering
  * Uses v_tagged_constraints view for token efficiency
  *
  * @param params - Filter parameters
  * @param adapter - Optional database adapter (for testing)
- * @returns Array of t_constraints matching filters
+ * @returns Array of v4_constraints matching filters
  */
 export async function getConstraints(
   params: GetConstraintsParams,

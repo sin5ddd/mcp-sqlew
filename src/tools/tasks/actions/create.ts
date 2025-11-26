@@ -7,7 +7,6 @@ import { getAdapter, getOrCreateAgent, getOrCreateTag, getLayerId, getOrCreateFi
 import { getProjectContext } from '../../../utils/project-context.js';
 import { FileWatcher } from '../../../watcher/index.js';
 import { Knex } from 'knex';
-import { logTaskCreate } from '../../../utils/activity-logging.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
 import { debugLog } from '../../../utils/debug-logger.js';
 import connectionManager from '../../../utils/connection-manager.js';
@@ -102,7 +101,7 @@ export async function createTaskInternal(
 
   // Insert task
   const now = Math.floor(Date.now() / 1000);
-  const [taskId] = await knex('t_tasks').insert({
+  const [taskId] = await knex('v4_tasks').insert({
     project_id: projectId,
     title: params.title,
     status_id: statusId,
@@ -118,9 +117,9 @@ export async function createTaskInternal(
   const { acceptanceCriteriaString, acceptanceCriteriaJson } = processAcceptanceCriteria(params.acceptance_criteria);
 
   // Insert task details if provided
+  // Note: v4_task_details has no project_id - task_id is PK and FK to v4_tasks
   if (params.description || acceptanceCriteriaString || acceptanceCriteriaJson || params.notes) {
-    await knex('t_task_details').insert({
-      project_id: projectId,
+    await knex('v4_task_details').insert({
       task_id: Number(taskId),
       description: params.description || null,
       acceptance_criteria: acceptanceCriteriaString,
@@ -135,7 +134,7 @@ export async function createTaskInternal(
 
     for (const tagName of tagsParsed) {
       const tagId = await getOrCreateTag(adapter, projectId, tagName, trx);
-      await knex('t_task_tags').insert({
+      await knex('v4_task_tags').insert({
         project_id: projectId,
         task_id: Number(taskId),
         tag_id: tagId
@@ -143,20 +142,12 @@ export async function createTaskInternal(
     }
   }
 
-  // Activity logging (replaces triggers)
-  await logTaskCreate(knex, {
-    task_id: Number(taskId),
-    title: params.title,
-    agent_id: createdByAgentId,
-    layer_id: layerId || undefined
-  });
-
   // Link files and register with watcher if file_actions provided (v3.8.0)
   // Also supports legacy watch_files via auto-conversion above
   if (file_actions && file_actions.length > 0) {
     for (const fileAction of file_actions) {
       const fileId = await getOrCreateFile(adapter, projectId, fileAction.path, trx);
-      await knex('t_task_file_links').insert({
+      await knex('v4_task_file_links').insert({
         project_id: projectId,
         task_id: Number(taskId),
         file_id: fileId,

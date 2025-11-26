@@ -43,7 +43,7 @@ async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<
   const statusId = 5; // done (ready to archive)
   const now = Math.floor(Date.now() / 1000);
 
-  const [taskId] = await knex('t_tasks').insert({
+  const [taskId] = await knex('v4_tasks').insert({
     title,
     status_id: statusId,
     priority: 2,
@@ -68,7 +68,7 @@ async function createPrunedFileRecord(
   const knex = adapter.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
 
-  const [id] = await knex('t_task_pruned_files').insert({
+  const [id] = await knex('v4_task_pruned_files').insert({
     task_id: taskId,
     file_path: filePath,
     pruned_ts: knex.raw('unixepoch()'),
@@ -83,7 +83,7 @@ async function createPrunedFileRecord(
  */
 async function getTaskStatus(adapter: DatabaseAdapter, taskId: number): Promise<number> {
   const knex = adapter.getKnex();
-  const row = await knex('t_tasks')
+  const row = await knex('v4_tasks')
     .where({ id: taskId })
     .first('status_id');
 
@@ -98,7 +98,7 @@ async function getTaskStatus(adapter: DatabaseAdapter, taskId: number): Promise<
  */
 async function countPrunedFiles(adapter: DatabaseAdapter, taskId: number): Promise<number> {
   const knex = adapter.getKnex();
-  const row = await knex('t_task_pruned_files')
+  const row = await knex('v4_task_pruned_files')
     .where({ task_id: taskId })
     .count('* as count')
     .first();
@@ -117,7 +117,7 @@ async function archiveTask(adapter: DatabaseAdapter, taskId: number): Promise<{ 
 
   return await knex.transaction(async (trx) => {
     // Check if task is in 'done' status
-    const taskRow = await trx('t_tasks')
+    const taskRow = await trx('v4_tasks')
       .where({ id: taskId })
       .first('status_id');
 
@@ -130,7 +130,7 @@ async function archiveTask(adapter: DatabaseAdapter, taskId: number): Promise<{ 
     }
 
     // Update to archived
-    await trx('t_tasks')
+    await trx('v4_tasks')
       .where({ id: taskId })
       .update({ status_id: TASK_STATUS_ARCHIVED });
 
@@ -148,7 +148,7 @@ async function getPrunedFiles(adapter: DatabaseAdapter, taskId: number): Promise
 }> {
   const knex = adapter.getKnex();
 
-  const rows = await knex('t_task_pruned_files')
+  const rows = await knex('v4_task_pruned_files')
     .where({ task_id: taskId })
     .select('file_path', 'pruned_ts')
     .orderBy('pruned_ts', 'desc');
@@ -240,8 +240,8 @@ describe('Auto-pruning: Audit trail persistence after archival', () => {
 
     // Verify foreign key still valid (can JOIN successfully)
     const knex = testDb.getKnex();
-    const result = await knex('t_task_pruned_files as tpf')
-      .join('t_tasks as t', 'tpf.task_id', 't.id')
+    const result = await knex('v4_task_pruned_files as tpf')
+      .join('v4_tasks as t', 'tpf.task_id', 't.id')
       .where('tpf.task_id', taskId)
       .select('tpf.id', 'tpf.task_id', 't.status_id')
       .first();
@@ -336,7 +336,7 @@ describe('Auto-pruning: Audit trail persistence after archival', () => {
 
     // DELETE task (not archive) - should cascade delete pruned files
     const knex = testDb.getKnex();
-    await knex('t_tasks').where({ id: taskId }).delete();
+    await knex('v4_tasks').where({ id: taskId }).delete();
 
     // Verify pruned file was cascade deleted
     const afterCount = await countPrunedFiles(testDb, taskId);

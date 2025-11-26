@@ -22,13 +22,13 @@ export async function searchUseCases(
 
     if (category) {
       // Verify category exists
-      const categoryExists = await knex('m_help_use_case_categories')
+      const categoryExists = await knex('v4_help_use_case_categories')
         .where({ category_name: category })
         .select('category_name')
         .first();
 
       if (!categoryExists) {
-        const availableCategories = await knex('m_help_use_case_categories')
+        const availableCategories = await knex('v4_help_use_case_categories')
           .select('category_name')
           .orderBy('category_name')
           .then(rows => rows.map((row: any) => row.category_name));
@@ -46,8 +46,8 @@ export async function searchUseCases(
     }
 
     // Build query with JOIN
-    let query = knex('t_help_use_cases as uc')
-      .join('m_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id');
+    let query = knex('v4_help_use_cases as uc')
+      .join('v4_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id');
 
     // Apply WHERE conditions
     query = query.where((builder) => {

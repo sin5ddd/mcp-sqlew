@@ -19,6 +19,19 @@ export {
 
 export { closeDatabase } from './initialization/cleanup.js';
 
+// Schema version detection (v4.0)
+export {
+  detectSchemaVersion,
+  getSchemaVersion,
+  isSchemaVersionDetected,
+  clearSchemaVersionCache,
+  isV4Schema,
+  isV3Schema,
+  getTableName,
+  TableNames,
+} from './initialization/schema-version.js';
+export type { SchemaVersion, SchemaVersionInfo } from './initialization/schema-version.js';
+
 // Adapter factory
 export { getAdapter, getDatabase } from './config/adapter-factory.js';
 

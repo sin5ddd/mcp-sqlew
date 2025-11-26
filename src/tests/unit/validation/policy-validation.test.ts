@@ -57,7 +57,7 @@ describe('Policy Validation Tests', () => {
   after(async () => {
     // Cleanup test policies to prevent foreign key errors
     const knex = adapter.getKnex();
-    await knex('t_decision_policies')
+    await knex('v4_decision_policies')
       .where('project_id', projectId)
       .delete();
 
@@ -75,7 +75,7 @@ describe('Policy Validation Tests', () => {
       const knex = adapter.getKnex();
 
       // Insert security_vulnerability policy
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'security_vulnerability',
         project_id: projectId,
         defaults: JSON.stringify({ layer: 'security' }),
@@ -104,7 +104,7 @@ describe('Policy Validation Tests', () => {
       const knex = adapter.getKnex();
 
       // Insert breaking_change policy
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'breaking_change',
         project_id: projectId,
         defaults: JSON.stringify({ layer: 'business' }),
@@ -131,7 +131,7 @@ describe('Policy Validation Tests', () => {
     it('should match architecture_decision policy for ADR keys', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'architecture_decision',
         project_id: projectId,
         defaults: JSON.stringify({ layer: 'infrastructure' }),
@@ -157,7 +157,7 @@ describe('Policy Validation Tests', () => {
     it('should validate CVE ID pattern correctly', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_cve_pattern',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -193,7 +193,7 @@ describe('Policy Validation Tests', () => {
     it('should validate semver pattern correctly', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_semver_pattern',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -227,7 +227,7 @@ describe('Policy Validation Tests', () => {
     it('should handle multiple pattern validations', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_multi_pattern',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -266,7 +266,7 @@ describe('Policy Validation Tests', () => {
     it('should enforce legacy required_fields (template compatibility)', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_required_fields',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -299,7 +299,7 @@ describe('Policy Validation Tests', () => {
     it('should reject empty string values', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_empty_string',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -322,7 +322,7 @@ describe('Policy Validation Tests', () => {
     it('should enforce quality_gates.required_fields', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_quality_gates',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -356,7 +356,7 @@ describe('Policy Validation Tests', () => {
     it('should combine pattern validation and quality gates', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_combined_validation',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -448,7 +448,7 @@ describe('Policy Validation Tests', () => {
     it('should handle malformed JSON in validation_rules', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_malformed_validation',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -469,7 +469,7 @@ describe('Policy Validation Tests', () => {
     it('should handle malformed JSON in quality_gates', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_malformed_gates',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -489,7 +489,7 @@ describe('Policy Validation Tests', () => {
     it('should provide clear error messages', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'test_clear_errors',
         project_id: projectId,
         defaults: JSON.stringify({}),
@@ -522,7 +522,7 @@ describe('Policy Validation Tests', () => {
     it('should use metadata.policy_name for explicit policy selection', async () => {
       const knex = adapter.getKnex();
 
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         name: 'custom_policy',
         project_id: projectId,
         defaults: JSON.stringify({}),

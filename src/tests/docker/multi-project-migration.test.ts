@@ -117,20 +117,20 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       console.log(`      ✅ Migrations completed (batch ${batchNo}, ${log.length} migrations)`);
 
       // Verify multi-project tables exist
-      const hasMProjects = await sqliteDb.schema.hasTable('m_projects');
-      const hasTDecisions = await sqliteDb.schema.hasTable('t_decisions');
-      const hasTTasks = await sqliteDb.schema.hasTable('t_tasks');
+      const hasMProjects = await sqliteDb.schema.hasTable('v4_projects');
+      const hasTDecisions = await sqliteDb.schema.hasTable('v4_decisions');
+      const hasTTasks = await sqliteDb.schema.hasTable('v4_tasks');
 
-      assert.ok(hasMProjects, 'Should have m_projects table');
-      assert.ok(hasTDecisions, 'Should have t_decisions table');
-      assert.ok(hasTTasks, 'Should have t_tasks table');
+      assert.ok(hasMProjects, 'Should have v4_projects table');
+      assert.ok(hasTDecisions, 'Should have v4_decisions table');
+      assert.ok(hasTTasks, 'Should have v4_tasks table');
 
       // Verify project_id columns exist
-      const hasProjectIdInDecisions = await sqliteDb.schema.hasColumn('t_decisions', 'project_id');
-      const hasProjectIdInTasks = await sqliteDb.schema.hasColumn('t_tasks', 'project_id');
+      const hasProjectIdInDecisions = await sqliteDb.schema.hasColumn('v4_decisions', 'project_id');
+      const hasProjectIdInTasks = await sqliteDb.schema.hasColumn('v4_tasks', 'project_id');
 
-      assert.ok(hasProjectIdInDecisions, 't_decisions should have project_id');
-      assert.ok(hasProjectIdInTasks, 't_tasks should have project_id');
+      assert.ok(hasProjectIdInDecisions, 'v4_decisions should have project_id');
+      assert.ok(hasProjectIdInTasks, 'v4_tasks should have project_id');
 
       console.log('      ✅ Multi-project schema verified');
     });
@@ -149,10 +149,10 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
 
       // Verify multi-project isolation
       // Note: Migration creates 1 default project (mcp-sqlew), we add 2 test projects
-      const projects = await sqliteDb('m_projects').select();
+      const projects = await sqliteDb('v4_projects').select();
       assert.ok(projects.length >= 2, 'Should have at least 2 test projects');
 
-      const decisions = await sqliteDb('t_decisions').select();
+      const decisions = await sqliteDb('v4_decisions').select();
       assert.strictEqual(decisions.length, 2, 'Should have 2 decisions');
 
       // Verify decisions are in different projects
@@ -183,8 +183,8 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       // Verify dump contains schema and data
       assert.ok(dump.includes('CREATE TABLE'), 'Should contain CREATE TABLE statements');
       assert.ok(dump.includes('INSERT INTO') || dump.includes('insert into'), 'Should contain INSERT statements');
-      assert.ok(dump.includes('m_projects'), 'Should include m_projects table');
-      assert.ok(dump.includes('t_decisions'), 'Should include t_decisions table');
+      assert.ok(dump.includes('v4_projects'), 'Should include v4_projects table');
+      assert.ok(dump.includes('v4_decisions'), 'Should include v4_decisions table');
 
       console.log(`      ✅ MySQL dump generated (${dump.length} chars)`);
     });
@@ -270,15 +270,15 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       await assertTableCountsMatch(sqliteDb, 'sqlite', mysqlDb, 'mysql');
 
       // Verify multi-project tables
-      const hasProjects = await mysqlDb.schema.hasTable('m_projects');
-      const hasDecisions = await mysqlDb.schema.hasTable('t_decisions');
+      const hasProjects = await mysqlDb.schema.hasTable('v4_projects');
+      const hasDecisions = await mysqlDb.schema.hasTable('v4_decisions');
 
-      assert.ok(hasProjects, 'MySQL should have m_projects table');
-      assert.ok(hasDecisions, 'MySQL should have t_decisions table');
+      assert.ok(hasProjects, 'MySQL should have v4_projects table');
+      assert.ok(hasDecisions, 'MySQL should have v4_decisions table');
 
       // Verify data
-      await assertRowCountsMatch(sqliteDb, mysqlDb, 'm_projects');
-      await assertRowCountsMatch(sqliteDb, mysqlDb, 't_decisions');
+      await assertRowCountsMatch(sqliteDb, mysqlDb, 'v4_projects');
+      await assertRowCountsMatch(sqliteDb, mysqlDb, 'v4_decisions');
 
       console.log('      ✅ MySQL data verified');
     });
@@ -302,8 +302,8 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       await assertTableCountsMatch(sqliteDb, 'sqlite', mariadbDb, 'mariadb');
 
       // Verify data
-      await assertRowCountsMatch(sqliteDb, mariadbDb, 'm_projects');
-      await assertRowCountsMatch(sqliteDb, mariadbDb, 't_decisions');
+      await assertRowCountsMatch(sqliteDb, mariadbDb, 'v4_projects');
+      await assertRowCountsMatch(sqliteDb, mariadbDb, 'v4_decisions');
 
       console.log('      ✅ MariaDB data verified');
     });
@@ -327,8 +327,8 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       await assertTableCountsMatch(sqliteDb, 'sqlite', postgresDb, 'postgresql');
 
       // Verify data
-      await assertRowCountsMatch(sqliteDb, postgresDb, 'm_projects');
-      await assertRowCountsMatch(sqliteDb, postgresDb, 't_decisions');
+      await assertRowCountsMatch(sqliteDb, postgresDb, 'v4_projects');
+      await assertRowCountsMatch(sqliteDb, postgresDb, 'v4_decisions');
 
       console.log('      ✅ PostgreSQL data verified');
     });
@@ -346,7 +346,7 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
         SELECT COLUMN_NAME
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = 'mcp_test'
-          AND TABLE_NAME = 't_decisions'
+          AND TABLE_NAME = 'v4_decisions'
           AND COLUMN_KEY = 'PRI'
         ORDER BY ORDINAL_POSITION
       `);
@@ -364,7 +364,7 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
         SELECT a.attname
         FROM pg_index i
         JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-        WHERE i.indrelid = 't_decisions'::regclass AND i.indisprimary
+        WHERE i.indrelid = 'v4_decisions'::regclass AND i.indisprimary
         ORDER BY array_position(i.indkey, a.attnum)
       `);
 
@@ -377,11 +377,11 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
     it('should verify FK constraints preserved on MySQL', async () => {
       console.log('    🔍 Verifying MySQL FK constraints...');
 
-      // t_decisions should have FK to m_projects
-      await assertFKConstraintsExist(mysqlDb, 'mysql', 't_decisions', 1);
+      // v4_decisions should have FK to v4_projects
+      await assertFKConstraintsExist(mysqlDb, 'mysql', 'v4_decisions', 1);
 
-      // t_tasks should have FK to m_projects
-      await assertFKConstraintsExist(mysqlDb, 'mysql', 't_tasks', 1);
+      // v4_tasks should have FK to v4_projects
+      await assertFKConstraintsExist(mysqlDb, 'mysql', 'v4_tasks', 1);
 
       console.log('      ✅ MySQL FK constraints verified');
     });
@@ -389,11 +389,11 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
     it('should verify FK constraints preserved on PostgreSQL', async () => {
       console.log('    🔍 Verifying PostgreSQL FK constraints...');
 
-      // t_decisions should have FK to m_projects
-      await assertFKConstraintsExist(postgresDb, 'postgresql', 't_decisions', 1);
+      // v4_decisions should have FK to v4_projects
+      await assertFKConstraintsExist(postgresDb, 'postgresql', 'v4_decisions', 1);
 
-      // t_tasks should have FK to m_projects
-      await assertFKConstraintsExist(postgresDb, 'postgresql', 't_tasks', 1);
+      // v4_tasks should have FK to v4_projects
+      await assertFKConstraintsExist(postgresDb, 'postgresql', 'v4_tasks', 1);
 
       console.log('      ✅ PostgreSQL FK constraints verified');
     });
@@ -402,13 +402,13 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       console.log('    🔍 Verifying multi-project data isolation...');
 
       // MySQL: Verify data is properly isolated by project_id
-      const mysqlDecisions = await mysqlDb('t_decisions').select();
+      const mysqlDecisions = await mysqlDb('v4_decisions').select();
       const mysqlProjects = mysqlDecisions.map(d => d.project_id).sort((a, b) => a - b);
 
       assert.deepStrictEqual(mysqlProjects, [10, 20], 'MySQL should have decisions in projects 10 and 20');
 
       // PostgreSQL: Verify same isolation
-      const pgDecisions = await postgresDb('t_decisions').select();
+      const pgDecisions = await postgresDb('v4_decisions').select();
       const pgProjects = pgDecisions.map(d => d.project_id).sort((a, b) => a - b);
 
       assert.deepStrictEqual(pgProjects, [10, 20], 'PostgreSQL should have decisions in projects 10 and 20');
@@ -504,25 +504,25 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
         chunkSize: 100,
       });
 
-      // Find m_config CREATE TABLE statement
-      const configTableMatch = dump.match(/CREATE TABLE[^;]*m_config[^;]+;/i);
-      assert.ok(configTableMatch, 'Should find m_config table in dump');
+      // Find v4_config CREATE TABLE statement
+      const configTableMatch = dump.match(/CREATE TABLE[^;]*v4_config[^;]+;/i);
+      assert.ok(configTableMatch, 'Should find v4_config table in dump');
 
       const configStmt = configTableMatch[0];
 
-      // Check for composite PRIMARY KEY (key, project_id) - WRONG
-      const compositePkPattern = /PRIMARY\s+KEY\s*\(\s*[`"]?key[`"]?\s*,\s*[`"]?project_id[`"]?\s*\)/i;
-      assert.ok(!compositePkPattern.test(configStmt), 'm_config should NOT have composite PRIMARY KEY (key, project_id)');
+      // Check for composite PRIMARY KEY (config_key, project_id) - WRONG
+      const compositePkPattern = /PRIMARY\s+KEY\s*\(\s*[`"]?config_key[`"]?\s*,\s*[`"]?project_id[`"]?\s*\)/i;
+      assert.ok(!compositePkPattern.test(configStmt), 'v4_config should NOT have composite PRIMARY KEY (config_key, project_id)');
 
-      // Check for single-column PRIMARY KEY on 'key' - CORRECT
-      const singlePkPattern = /[`"]?key[`"]?[^,]*PRIMARY\s+KEY|PRIMARY\s+KEY\s*\(\s*[`"]?key[`"]?\s*\)/i;
-      assert.ok(singlePkPattern.test(configStmt), 'm_config should have single-column PRIMARY KEY on key');
+      // Check for single-column PRIMARY KEY on 'config_key' - CORRECT
+      const singlePkPattern = /[`"]?config_key[`"]?[^,]*PRIMARY\s+KEY|PRIMARY\s+KEY\s*\(\s*[`"]?config_key[`"]?\s*\)/i;
+      assert.ok(singlePkPattern.test(configStmt), 'v4_config should have single-column PRIMARY KEY on config_key');
 
-      console.log('      ✅ m_config correctly uses single-column PRIMARY KEY');
+      console.log('      ✅ v4_config correctly uses single-column PRIMARY KEY');
     });
 
-    it('should validate m_help_tools.tool_name is VARCHAR not TEXT', async () => {
-      console.log('    🔍 Validating m_help_tools.tool_name data type...');
+    it('should validate v4_help_tools.tool_name is VARCHAR not TEXT', async () => {
+      console.log('    🔍 Validating v4_help_tools.tool_name data type...');
 
       // Generate MySQL dump
       const dump = await generateSqlDump(sqliteDb, 'mysql', {
@@ -530,9 +530,9 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
         chunkSize: 100,
       });
 
-      // Find m_help_tools CREATE TABLE statement (multi-line safe)
-      const helpToolsMatch = dump.match(/CREATE TABLE[\s\S]*?m_help_tools[\s\S]*?;/i);
-      assert.ok(helpToolsMatch, 'Should find m_help_tools table in dump');
+      // Find v4_help_tools CREATE TABLE statement (multi-line safe)
+      const helpToolsMatch = dump.match(/CREATE TABLE[\s\S]*?v4_help_tools[\s\S]*?;/i);
+      assert.ok(helpToolsMatch, 'Should find v4_help_tools table in dump');
 
       const helpToolsStmt = helpToolsMatch[0];
 
@@ -542,7 +542,7 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       assert.ok(match, 'Should find tool_name column definition');
       assert.strictEqual(match[1].toUpperCase(), 'VARCHAR', 'tool_name should be VARCHAR not TEXT (MariaDB 10.5 compatibility)');
 
-      console.log('      ✅ m_help_tools.tool_name correctly uses VARCHAR');
+      console.log('      ✅ v4_help_tools.tool_name correctly uses VARCHAR');
     });
   });
 });

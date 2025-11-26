@@ -29,7 +29,7 @@ async function createTestTask(db: DatabaseAdapter, title: string): Promise<numbe
 
   const knex = db.getKnex();
   const now = Math.floor(Date.now() / 1000);
-  const [taskId] = await knex('t_tasks').insert({
+  const [taskId] = await knex('v4_tasks').insert({
     title,
     status_id: statusId,
     priority: 2,
@@ -60,7 +60,7 @@ async function linkTaskFile(db: DatabaseAdapter, params: {
 
   // Check if task exists
   const knex = db.getKnex();
-  const taskExists = await knex('t_tasks').where('id', params.task_id).first();
+  const taskExists = await knex('v4_tasks').where('id', params.task_id).first();
   if (!taskExists) {
     throw new Error(`Task with id ${params.task_id} not found`);
   }
@@ -73,7 +73,7 @@ async function linkTaskFile(db: DatabaseAdapter, params: {
   const fileId = await getOrCreateFile(db, projectId, filePath);
   const now = Math.floor(Date.now() / 1000);
 
-  await knex('t_task_file_links')
+  await knex('v4_task_file_links')
     .insert({
       task_id: params.task_id,
       file_id: fileId,
@@ -163,8 +163,8 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
 
     // Verify file link was created
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', taskId)
       .select('f.path');
 
@@ -192,8 +192,8 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
 
     // Verify all links exist
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', taskId)
       .orderBy('f.path')
       .select('f.path');
@@ -220,8 +220,8 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
 
     // Should only have one link
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', taskId)
       .select('f.path');
 
@@ -242,7 +242,7 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     const fileId = await getOrCreateFile(testDb, projectId, 'src/database.ts');
     const knex = testDb.getKnex();
     const now = Math.floor(Date.now() / 1000);
-    await knex('t_task_file_links')
+    await knex('v4_task_file_links')
       .insert({
         task_id: taskId,
         file_id: fileId,
@@ -253,8 +253,8 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
       .ignore();
 
     // Both files should be linked
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', taskId)
       .orderBy('f.path')
       .select('f.path');
@@ -295,8 +295,8 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     });
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', taskId)
       .select('f.path');
 
@@ -318,7 +318,7 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
     const fileId = await getOrCreateFile(testDb, projectId, 'src/index.ts');
     const knex = testDb.getKnex();
     const now = Math.floor(Date.now() / 1000);
-    await knex('t_task_file_links')
+    await knex('v4_task_file_links')
       .insert({
         task_id: taskId2,
         file_id: fileId,
@@ -329,11 +329,11 @@ describe('Backward compatibility: task.link(link_type="file")', () => {
       .ignore();
 
     // Both should create identical links
-    const links1 = await knex('t_task_file_links')
+    const links1 = await knex('v4_task_file_links')
       .where('task_id', taskId1)
       .select('task_id', 'file_id');
 
-    const links2 = await knex('t_task_file_links')
+    const links2 = await knex('v4_task_file_links')
       .where('task_id', taskId2)
       .select('task_id', 'file_id');
 

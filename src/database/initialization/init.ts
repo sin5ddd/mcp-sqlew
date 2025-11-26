@@ -8,6 +8,7 @@ import { syncAgentsWithConfig } from '../../sync-agents.js';
 import { syncCommandsWithConfig } from '../../sync-commands.js';
 import { debugLog } from '../../utils/debug-logger.js';
 import knexConfig from '../../knexfile.js';
+import { detectSchemaVersion, getSchemaVersion } from './schema-version.js';
 
 // Global adapter instance
 let adapterInstance: DatabaseAdapter | null = null;
@@ -84,6 +85,15 @@ export async function initializeDatabase(
   }
 
   debugLog('INFO', `Database initialized with Knex adapter (${environment})`);
+
+  // Detect schema version (v3 vs v4)
+  const schemaVersionInfo = await detectSchemaVersion(knex);
+  debugLog('INFO', 'Schema version detection complete', {
+    version: schemaVersionInfo.version,
+    hasV4Tables: schemaVersionInfo.hasV4Tables,
+    hasV3Tables: schemaVersionInfo.hasV3Tables,
+    tablePrefix: schemaVersionInfo.tablePrefix,
+  });
 
   // Sync agents with config.toml
   syncAgentsWithConfig();

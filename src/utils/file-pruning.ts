@@ -60,8 +60,8 @@ export async function pruneNonExistentFilesKnex(
   projectRoot: string = process.cwd()
 ): Promise<{ prunedCount: number; remainingCount: number; prunedPaths: string[] }> {
   // 1. Get all watched files for this task
-  const watchedFiles = await trx('t_task_file_links as tfl')
-    .join('m_files as f', 'tfl.file_id', 'f.id')
+  const watchedFiles = await trx('v4_task_file_links as tfl')
+    .join('v4_files as f', 'tfl.file_id', 'f.id')
     .where('tfl.task_id', taskId)
     .select('f.id as file_id', 'f.path');
 
@@ -108,7 +108,7 @@ export async function pruneNonExistentFilesKnex(
   // Record each pruned file to audit table and remove link
   for (const file of nonExistentFiles) {
     // Insert audit record
-    await trx('t_task_pruned_files').insert({
+    await trx('v4_task_pruned_files').insert({
       task_id: taskId,
       file_path: file.path,
       pruned_ts: currentTs,
@@ -116,7 +116,7 @@ export async function pruneNonExistentFilesKnex(
     });
 
     // Remove link
-    await trx('t_task_file_links')
+    await trx('v4_task_file_links')
       .where({ task_id: taskId, file_id: file.file_id })
       .delete();
   }
@@ -148,14 +148,14 @@ export async function getPrunedFiles(
 }>> {
   const knex = adapter.getKnex();
 
-  const rows = await knex('t_task_pruned_files as tpf')
-    .leftJoin('m_context_keys as k', 'tpf.linked_decision_key_id', 'k.id')
+  const rows = await knex('v4_task_pruned_files as tpf')
+    .leftJoin('v4_context_keys as k', 'tpf.linked_decision_key_id', 'k.id')
     .where('tpf.task_id', taskId)
     .select(
       'tpf.id',
       'tpf.file_path',
       knex.raw(`datetime(tpf.pruned_ts, 'unixepoch') as pruned_at`),
-      'k.key as linked_decision'
+      'k.key_name as linked_decision'
     )
     .orderBy('tpf.pruned_ts', 'desc')
     .limit(limit) as Array<{
@@ -184,13 +184,13 @@ export async function linkPrunedFileToDecision(
   const knex = adapter.getKnex();
 
   // 1. Get decision key_id
-  const decision = await knex('m_context_keys as k')
+  const decision = await knex('v4_context_keys as k')
     .whereExists(function() {
       this.select('*')
-        .from('t_decisions as d')
+        .from('v4_decisions as d')
         .whereRaw('d.key_id = k.id');
     })
-    .where('k.key', decisionKey)
+    .where('k.key_name', decisionKey)
     .select('k.id as key_id')
     .first() as { key_id: number } | undefined;
 
@@ -199,7 +199,7 @@ export async function linkPrunedFileToDecision(
   }
 
   // 2. Check if pruned file exists
-  const prunedFile = await knex('t_task_pruned_files')
+  const prunedFile = await knex('v4_task_pruned_files')
     .where({ id: prunedFileId })
     .select('id')
     .first() as { id: number } | undefined;
@@ -209,7 +209,7 @@ export async function linkPrunedFileToDecision(
   }
 
   // 3. Update the link
-  const result = await knex('t_task_pruned_files')
+  const result = await knex('v4_task_pruned_files')
     .where({ id: prunedFileId })
     .update({ linked_decision_key_id: decision.key_id });
 
@@ -244,16 +244,16 @@ export async function getAllPrunedFiles(
 }>> {
   const knex = adapter.getKnex();
 
-  let query = knex('t_task_pruned_files as tpf')
-    .join('t_tasks as t', 'tpf.task_id', 't.id')
-    .leftJoin('m_context_keys as k', 'tpf.linked_decision_key_id', 'k.id')
+  let query = knex('v4_task_pruned_files as tpf')
+    .join('v4_tasks as t', 'tpf.task_id', 't.id')
+    .leftJoin('v4_context_keys as k', 'tpf.linked_decision_key_id', 'k.id')
     .select(
       'tpf.id',
       'tpf.task_id',
       't.title as task_title',
       'tpf.file_path',
       knex.raw(`datetime(tpf.pruned_ts, 'unixepoch') as pruned_at`),
-      'k.key as linked_decision'
+      'k.key_name as linked_decision'
     );
 
   if (filters?.taskId !== undefined) {

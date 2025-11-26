@@ -129,11 +129,11 @@ describe('Migration Upgrade Path Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_agents'), 'Should have m_agents table');
-    assert.ok(tableNames.includes('t_decisions'), 'Should have t_decisions table');
-    assert.ok(tableNames.includes('t_tasks'), 'Should have t_tasks table');
-    assert.ok(!tableNames.includes('m_help_tools'), 'Should NOT have help tables in v3.5');
-    assert.ok(!tableNames.includes('m_projects'), 'Should NOT have m_projects in v3.5');
+    assert.ok(tableNames.includes('v4_agents'), 'Should have m_agents table');
+    assert.ok(tableNames.includes('v4_decisions'), 'Should have t_decisions table');
+    assert.ok(tableNames.includes('v4_tasks'), 'Should have t_tasks table');
+    assert.ok(!tableNames.includes('v4_help_tools'), 'Should NOT have help tables in v3.5');
+    assert.ok(!tableNames.includes('v4_projects'), 'Should NOT have m_projects in v3.5');
 
     console.log(`    ✅ v3.5 baseline created (${tableNames.length} tables)`);
   });
@@ -179,12 +179,12 @@ describe('Migration Upgrade Path Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_help_tools'), 'Should have m_help_tools after v3.6');
-    assert.ok(tableNames.includes('m_help_actions'), 'Should have m_help_actions after v3.6');
+    assert.ok(tableNames.includes('v4_help_tools'), 'Should have m_help_tools after v3.6');
+    assert.ok(tableNames.includes('v4_help_actions'), 'Should have m_help_actions after v3.6');
     assert.ok(!tableNames.includes('t_agent_messages'), 'Should NOT have t_agent_messages (dropped in v3.6.5)');
 
     // Check help metadata was seeded
-    const toolCount = await db('m_help_tools').count('* as count').first();
+    const toolCount = await db('v4_help_tools').count('* as count').first();
     assert.ok(toolCount && Number(toolCount.count) > 0, 'Should have seeded help tools');
 
     console.log(`    ✅ v3.6 upgrade successful (${tableNames.length} tables)`);
@@ -224,14 +224,14 @@ describe('Migration Upgrade Path Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_projects'), 'Should have m_projects after v3.7');
+    assert.ok(tableNames.includes('v4_projects'), 'Should have m_projects after v3.7');
 
     // Verify project_id was added to transaction tables
-    const hasProjectId = await db.schema.hasColumn('t_decisions', 'project_id');
+    const hasProjectId = await db.schema.hasColumn('v4_decisions', 'project_id');
     assert.ok(hasProjectId, 'Should have project_id column in t_decisions');
 
     // Verify m_config PRIMARY KEY structure (should be single-column, not composite)
-    const configSchema = await db.raw(`SELECT sql FROM sqlite_master WHERE type='table' AND name='m_config'`);
+    const configSchema = await db.raw(`SELECT sql FROM sqlite_master WHERE type='table' AND name='v4_config'`);
     const configSql = configSchema[0]?.sql || '';
     assert.ok(configSql.includes('primary key (`key`)'), 'm_config should have single-column PRIMARY KEY on key');
     assert.ok(!configSql.includes('primary key (`key`, `project_id`)'), 'm_config should NOT have composite PRIMARY KEY');
@@ -272,8 +272,8 @@ describe('Migration Upgrade Path Tests', () => {
     const tables = await db.raw(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`);
     const tableNames = tables.map((t: any) => t.name);
 
-    assert.ok(tableNames.includes('m_projects'), 'Should still have m_projects');
-    assert.ok(tableNames.includes('m_help_tools'), 'Should still have help tables');
+    assert.ok(tableNames.includes('v4_projects'), 'Should still have m_projects');
+    assert.ok(tableNames.includes('v4_help_tools'), 'Should still have help tables');
 
     console.log(`    ✅ Idempotency test passed - no duplicate errors`);
   });
@@ -290,12 +290,12 @@ describe('Migration Upgrade Path Tests', () => {
     const now = Math.floor(Date.now() / 1000);
 
     // Insert into v3.5 tables
-    await db('m_context_keys').insert({
+    await db('v4_context_keys').insert({
       id: 999,
       key: 'test-upgrade-key',
     });
 
-    await db('t_decisions').insert({
+    await db('v4_decisions').insert({
       key_id: 999,
       project_id: 1, // Default project from migration
       value: 'test value preserved across upgrade',
@@ -303,7 +303,7 @@ describe('Migration Upgrade Path Tests', () => {
     });
 
     // Verify data exists
-    const decision = await db('t_decisions').where({ key_id: 999 }).first();
+    const decision = await db('v4_decisions').where({ key_id: 999 }).first();
     assert.ok(decision, 'Test decision should exist');
     assert.strictEqual(decision.value, 'test value preserved across upgrade');
 

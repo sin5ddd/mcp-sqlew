@@ -28,7 +28,7 @@ describe('Agent Reuse System', () => {
     it('should create user-specified agents as non-reusable', async () => {
       const agentId = await getOrCreateAgent(adapter, 'rust-expert');
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -44,7 +44,7 @@ describe('Agent Reuse System', () => {
 
       assert.strictEqual(agentId1, agentId2);
 
-      const count = await adapter.getKnex()('m_agents')
+      const count = await adapter.getKnex()('v4_agents')
         .where({ name: 'typescript-expert' })
         .count('* as count')
         .first();
@@ -54,7 +54,7 @@ describe('Agent Reuse System', () => {
 
     it('should update activity timestamp on reuse', async () => {
       const agentId1 = await getOrCreateAgent(adapter, 'scrum-master');
-      const agent1 = await adapter.getKnex()('m_agents')
+      const agent1 = await adapter.getKnex()('v4_agents')
         .where({ id: agentId1 })
         .first();
 
@@ -62,7 +62,7 @@ describe('Agent Reuse System', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const agentId2 = await getOrCreateAgent(adapter, 'scrum-master');
-      const agent2 = await adapter.getKnex()('m_agents')
+      const agent2 = await adapter.getKnex()('v4_agents')
         .where({ id: agentId2 })
         .first();
 
@@ -75,7 +75,7 @@ describe('Agent Reuse System', () => {
     it('should create first generic agent as generic-1', async () => {
       const agentId = await getOrCreateAgent(adapter, '');
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -89,7 +89,7 @@ describe('Agent Reuse System', () => {
       const agentId2 = await getOrCreateAgent(adapter, '');
       const agentId3 = await getOrCreateAgent(adapter, '');
 
-      const agents = await adapter.getKnex()('m_agents')
+      const agents = await adapter.getKnex()('v4_agents')
         .whereIn('id', [agentId1, agentId2, agentId3])
         .orderBy('id');
 
@@ -114,7 +114,7 @@ describe('Agent Reuse System', () => {
 
       assert.strictEqual(agentId3, agentId1);
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId3 })
         .first();
 
@@ -125,7 +125,7 @@ describe('Agent Reuse System', () => {
     it('should recognize generic-N pattern as reusable', async () => {
       const agentId = await getOrCreateAgent(adapter, 'generic-5');
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -136,7 +136,7 @@ describe('Agent Reuse System', () => {
     it('should recognize agent-N pattern as reusable', async () => {
       const agentId = await getOrCreateAgent(adapter, 'agent-123');
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -147,7 +147,7 @@ describe('Agent Reuse System', () => {
     it('should recognize subagent-N pattern as reusable', async () => {
       const agentId = await getOrCreateAgent(adapter, 'subagent-42');
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -162,7 +162,7 @@ describe('Agent Reuse System', () => {
 
       await releaseAgent(adapter, agentId);
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -174,7 +174,7 @@ describe('Agent Reuse System', () => {
 
       await releaseAgent(adapter, agentId);
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -188,7 +188,7 @@ describe('Agent Reuse System', () => {
 
       // Set agent1 as inactive (old timestamp)
       const oldTimestamp = Math.floor(Date.now() / 1000) - (25 * 3600); // 25 hours ago
-      await adapter.getKnex()('m_agents')
+      await adapter.getKnex()('v4_agents')
         .where({ id: agentId1 })
         .update({ last_active_ts: oldTimestamp });
 
@@ -197,10 +197,10 @@ describe('Agent Reuse System', () => {
 
       assert.strictEqual(releasedCount, 1);
 
-      const agent1 = await adapter.getKnex()('m_agents')
+      const agent1 = await adapter.getKnex()('v4_agents')
         .where({ id: agentId1 })
         .first();
-      const agent2 = await adapter.getKnex()('m_agents')
+      const agent2 = await adapter.getKnex()('v4_agents')
         .where({ id: agentId2 })
         .first();
 
@@ -210,7 +210,7 @@ describe('Agent Reuse System', () => {
 
     it('should update agent activity timestamp', async () => {
       const agentId = await getOrCreateAgent(adapter, 'test-agent');
-      const initialAgent = await adapter.getKnex()('m_agents')
+      const initialAgent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -218,7 +218,7 @@ describe('Agent Reuse System', () => {
 
       await updateAgentActivity(adapter, agentId);
 
-      const updatedAgent = await adapter.getKnex()('m_agents')
+      const updatedAgent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -235,7 +235,7 @@ describe('Agent Reuse System', () => {
 
       // Set agent1 and agent2 as old
       const oldTimestamp = Math.floor(Date.now() / 1000) - (25 * 3600);
-      await adapter.getKnex()('m_agents')
+      await adapter.getKnex()('v4_agents')
         .whereIn('id', [agentId1, agentId2])
         .update({ last_active_ts: oldTimestamp });
 
@@ -245,7 +245,7 @@ describe('Agent Reuse System', () => {
       assert.strictEqual(result.agents_released, 2);
       assert.strictEqual(result.success, true);
 
-      const agents = await adapter.getKnex()('m_agents')
+      const agents = await adapter.getKnex()('v4_agents')
         .whereIn('id', [agentId1, agentId2, agentId3]);
 
       assert.strictEqual(agents[0].in_use, false);
@@ -260,7 +260,7 @@ describe('Agent Reuse System', () => {
       const genericAgent1 = await getOrCreateAgent(adapter, '');
       const genericAgent2 = await getOrCreateAgent(adapter, 'agent-5');
 
-      const agents = await adapter.getKnex()('m_agents')
+      const agents = await adapter.getKnex()('v4_agents')
         .orderBy('id');
 
       assert.strictEqual(agents.length, 3);
@@ -283,7 +283,7 @@ describe('Agent Reuse System', () => {
       assert.strictEqual(agentIds.length, 3);
       assert.strictEqual(new Set(agentIds).size, 3); // All unique
 
-      const agents = await adapter.getKnex()('m_agents')
+      const agents = await adapter.getKnex()('v4_agents')
         .whereIn('id', agentIds)
         .orderBy('name');
 
@@ -295,7 +295,7 @@ describe('Agent Reuse System', () => {
     it('should handle empty string as generic', async () => {
       const agentId = await getOrCreateAgent(adapter, '');
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 
@@ -306,7 +306,7 @@ describe('Agent Reuse System', () => {
     it('should preserve system agent as non-reusable', async () => {
       const agentId = await getOrCreateAgent(adapter, 'system');
 
-      const agent = await adapter.getKnex()('m_agents')
+      const agent = await adapter.getKnex()('v4_agents')
         .where({ id: agentId })
         .first();
 

@@ -27,7 +27,7 @@ export async function removeDependency(params: {
   }
 
   try {
-    await knex('t_task_dependencies')
+    await knex('v4_task_dependencies')
       .where({
         blocker_task_id: params.blocker_task_id,
         blocked_task_id: params.blocked_task_id

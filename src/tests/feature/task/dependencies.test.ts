@@ -40,7 +40,7 @@ async function createTestTask(db: DatabaseAdapter, title: string, status: string
   const knex = db.getKnex();
   const now = Math.floor(Date.now() / 1000);
 
-  const [taskId] = await knex('t_tasks').insert({
+  const [taskId] = await knex('v4_tasks').insert({
     title,
     status_id: statusId,
     priority: 2,
@@ -80,12 +80,12 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
     }
 
     // Validation 2: Both tasks must exist and check if archived
-    const dependsOnTask = await trx('t_tasks')
+    const dependsOnTask = await trx('v4_tasks')
       .where({ id: params.depends_on_task_id })
       .select('id', 'status_id')
       .first() as { id: number; status_id: number } | undefined;
 
-    const task = await trx('t_tasks')
+    const task = await trx('v4_tasks')
       .where({ id: params.task_id })
       .select('id', 'status_id')
       .first() as { id: number; status_id: number } | undefined;
@@ -109,7 +109,7 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
 
     // Validation 4: No direct circular (reverse relationship)
     const projectId = ProjectContext.getInstance().getProjectId();
-    const reverseExists = await trx('t_task_dependencies')
+    const reverseExists = await trx('v4_task_dependencies')
       .where({
         project_id: projectId,
         blocker_task_id: params.task_id,
@@ -126,14 +126,14 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
       WITH RECURSIVE dependency_chain AS (
         -- Start from the task that would have the dependency
         SELECT blocked_task_id, 1 as depth
-        FROM t_task_dependencies
+        FROM v4_task_dependencies
         WHERE blocker_task_id = ?
 
         UNION ALL
 
         -- Follow the chain of dependencies
         SELECT d.blocked_task_id, dc.depth + 1
-        FROM t_task_dependencies d
+        FROM v4_task_dependencies d
         JOIN dependency_chain dc ON d.blocker_task_id = dc.blocked_task_id
         WHERE dc.depth < 100
       )
@@ -148,14 +148,14 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
         WITH RECURSIVE dependency_chain AS (
           SELECT blocked_task_id, 1 as depth,
                  CAST(blocked_task_id AS TEXT) as path
-          FROM t_task_dependencies
+          FROM v4_task_dependencies
           WHERE blocker_task_id = ?
 
           UNION ALL
 
           SELECT d.blocked_task_id, dc.depth + 1,
                  dc.path || ' → ' || d.blocked_task_id
-          FROM t_task_dependencies d
+          FROM v4_task_dependencies d
           JOIN dependency_chain dc ON d.blocker_task_id = dc.blocked_task_id
           WHERE dc.depth < 100
         )
@@ -169,7 +169,7 @@ async function addDependencyTest(db: DatabaseAdapter, params: {
 
     // All validations passed - insert dependency
     const now = Math.floor(Date.now() / 1000);
-    await trx('t_task_dependencies').insert({
+    await trx('v4_task_dependencies').insert({
       project_id: projectId,
       blocker_task_id: params.depends_on_task_id,
       blocked_task_id: params.task_id,
@@ -201,7 +201,7 @@ async function removeDependencyTest(db: DatabaseAdapter, params: {
   const knex = db.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
 
-  await knex('t_task_dependencies')
+  await knex('v4_task_dependencies')
     .where({
       project_id: projectId,
       blocker_task_id: params.depends_on_task_id,
@@ -230,7 +230,7 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
   const knex = db.getKnex();
 
   // Check if task exists
-  const taskExists = await knex('t_tasks')
+  const taskExists = await knex('v4_tasks')
     .where({ id: params.task_id })
     .select('id')
     .first();
@@ -262,29 +262,29 @@ async function getDependenciesTest(db: DatabaseAdapter, params: {
   }
 
   // Get blockers (tasks that this task depends on)
-  let blockersQuery = knex('t_tasks as t')
-    .join('t_task_dependencies as d', 't.id', 'd.blocker_task_id')
-    .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
+  let blockersQuery = knex('v4_tasks as t')
+    .join('v4_task_dependencies as d', 't.id', 'd.blocker_task_id')
+    .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
+    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where('d.blocked_task_id', params.task_id)
     .select(selectFields);
 
   if (includeDetails) {
-    blockersQuery = blockersQuery.leftJoin('t_task_details as td', 't.id', 'td.task_id');
+    blockersQuery = blockersQuery.leftJoin('v4_task_details as td', 't.id', 'td.task_id');
   }
 
   const blockers = await blockersQuery;
 
   // Get blocking (tasks that depend on this task)
-  let blockingQuery = knex('t_tasks as t')
-    .join('t_task_dependencies as d', 't.id', 'd.blocked_task_id')
-    .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
-    .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
+  let blockingQuery = knex('v4_tasks as t')
+    .join('v4_task_dependencies as d', 't.id', 'd.blocked_task_id')
+    .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
+    .leftJoin('v4_agents as aa', 't.assigned_agent_id', 'aa.id')
     .where('d.blocker_task_id', params.task_id)
     .select(selectFields);
 
   if (includeDetails) {
-    blockingQuery = blockingQuery.leftJoin('t_task_details as td', 't.id', 'td.task_id');
+    blockingQuery = blockingQuery.leftJoin('v4_task_details as td', 't.id', 'td.task_id');
   }
 
   const blocking = await blockingQuery;
@@ -352,7 +352,7 @@ describe('add_dependency - Success Cases', () => {
 
     // Verify in database
     const knex = testDb.getKnex();
-    const deps = await knex('t_task_dependencies')
+    const deps = await knex('v4_task_dependencies')
       .where({
         blocker_task_id: task1,
         blocked_task_id: task2
@@ -690,7 +690,7 @@ describe('get_dependencies - With Details', () => {
 
     // Add description to task1
     const knex = testDb.getKnex();
-    await knex('t_task_details').insert({
+    await knex('v4_task_details').insert({
       task_id: task1,
       description: 'This is task 1 description'
     });
@@ -720,7 +720,7 @@ describe('get_dependencies - With Details', () => {
 
     // Add description
     const knex = testDb.getKnex();
-    await knex('t_task_details').insert({
+    await knex('v4_task_details').insert({
       task_id: task1,
       description: 'This is task 1 description'
     });
@@ -770,17 +770,17 @@ describe('CASCADE Deletion', () => {
 
     // Act - Delete task A
     const knex = testDb.getKnex();
-    await knex('t_tasks').where({ id: taskA }).delete();
+    await knex('v4_tasks').where({ id: taskA }).delete();
 
     // Assert - Dependency should be deleted
-    const depsInDb = await knex('t_task_dependencies')
+    const depsInDb = await knex('v4_task_dependencies')
       .where('blocker_task_id', taskA)
       .orWhere('blocked_task_id', taskA);
 
     assert.strictEqual(depsInDb.length, 0);
 
     // Verify B still exists
-    const taskBExists = await knex('t_tasks').where({ id: taskB }).first();
+    const taskBExists = await knex('v4_tasks').where({ id: taskB }).first();
     assert.ok(taskBExists);
 
     // Verify B has no dependencies anymore
@@ -800,10 +800,10 @@ describe('CASCADE Deletion', () => {
 
     // Act - Delete task B
     const knex = testDb.getKnex();
-    await knex('t_tasks').where({ id: taskB }).delete();
+    await knex('v4_tasks').where({ id: taskB }).delete();
 
     // Assert - Dependency should be deleted
-    const depsInDb = await knex('t_task_dependencies')
+    const depsInDb = await knex('v4_task_dependencies')
       .where('blocked_task_id', taskB);
 
     assert.strictEqual(depsInDb.length, 0);

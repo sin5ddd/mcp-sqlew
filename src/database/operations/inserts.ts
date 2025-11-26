@@ -4,6 +4,7 @@
 
 import { Knex } from 'knex';
 import type { DatabaseAdapter } from '../../adapters/index.js';
+import { getProjectContext } from '../../utils/project-context.js';
 
 /**
  * Validate JSON structure for alternatives array
@@ -70,7 +71,7 @@ export async function getOrCreateAgent(
   let agentName = name;
   if (!name || name.trim().length === 0) {
     // Find highest generic-N number and increment
-    const maxGeneric = await knex('m_agents')
+    const maxGeneric = await knex('v4_agents')
       .where('name', 'like', 'generic-%')
       .orderBy('name', 'desc')
       .first('name');
@@ -88,7 +89,7 @@ export async function getOrCreateAgent(
 
   // Insert or update agent with upsert pattern
   // This handles both new agents and existing agents
-  await knex('m_agents')
+  await knex('v4_agents')
     .insert({
       name: agentName,
       last_active_ts: now
@@ -97,7 +98,7 @@ export async function getOrCreateAgent(
     .merge({ last_active_ts: now });
 
   // Get the agent ID
-  const result = await knex('m_agents')
+  const result = await knex('v4_agents')
     .where({ name: agentName })
     .first('id');
 
@@ -118,9 +119,9 @@ export async function getOrCreateContextKey(
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
-  await knex('m_context_keys').insert({ key }).onConflict('key').ignore();
+  await knex('v4_context_keys').insert({ key_name: key }).onConflict('key_name').ignore();
 
-  const result = await knex('m_context_keys').where({ key }).first('id');
+  const result = await knex('v4_context_keys').where({ key_name: key }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create context key: ${key}`);
@@ -141,12 +142,12 @@ export async function getOrCreateFile(
   const knex = trx || adapter.getKnex();
 
   // Insert with composite key (project_id, path)
-  await knex('m_files')
+  await knex('v4_files')
     .insert({ project_id: projectId, path })
     .onConflict(['project_id', 'path'])  // Composite conflict resolution (v3.7.3)
     .ignore();
 
-  const result = await knex('m_files')
+  const result = await knex('v4_files')
     .where({ project_id: projectId, path })  // Filter by both columns (v3.7.3)
     .first('id');
 
@@ -169,12 +170,12 @@ export async function getOrCreateTag(
   const knex = trx || adapter.getKnex();
 
   // Insert with composite key (project_id, name)
-  await knex('m_tags')
+  await knex('v4_tags')
     .insert({ project_id: projectId, name })
     .onConflict(['project_id', 'name'])  // Composite conflict resolution (v3.7.3)
     .ignore();
 
-  const result = await knex('m_tags')
+  const result = await knex('v4_tags')
     .where({ project_id: projectId, name })  // Filter by both columns (v3.7.3)
     .first('id');
 
@@ -197,12 +198,12 @@ export async function getOrCreateScope(
   const knex = trx || adapter.getKnex();
 
   // Insert with composite key (project_id, name)
-  await knex('m_scopes')
+  await knex('v4_scopes')
     .insert({ project_id: projectId, name })
     .onConflict(['project_id', 'name'])  // Composite conflict resolution (v3.7.3)
     .ignore();
 
-  const result = await knex('m_scopes')
+  const result = await knex('v4_scopes')
     .where({ project_id: projectId, name })  // Filter by both columns (v3.7.3)
     .first('id');
 
@@ -223,9 +224,9 @@ export async function getOrCreateCategoryId(
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
-  await knex('m_constraint_categories').insert({ name: category }).onConflict('name').ignore();
+  await knex('v4_constraint_categories').insert({ name: category }).onConflict('name').ignore();
 
-  const result = await knex('m_constraint_categories').where({ name: category }).first('id');
+  const result = await knex('v4_constraint_categories').where({ name: category }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create category: ${category}`);
@@ -262,9 +263,13 @@ export async function addDecisionContext(
     agentId = await getOrCreateAgent(adapter, decidedBy);
   }
 
+  // Get project ID (v4 multi-project support)
+  const projectId = getProjectContext().getProjectId();
+
   // Insert context
-  const [id] = await knex('t_decision_context').insert({
+  const [id] = await knex('v4_decision_context').insert({
     decision_key_id: keyId,
+    project_id: projectId,  // Required v4 field
     rationale,
     alternatives_considered: alternatives,
     tradeoffs,

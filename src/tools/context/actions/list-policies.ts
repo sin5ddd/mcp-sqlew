@@ -44,8 +44,8 @@ export async function listPolicies(
 
   try {
     // Build query
-    let query = knex('t_decision_policies as p')
-      .leftJoin('m_agents as a', 'p.created_by', 'a.id')
+    let query = knex('v4_decision_policies as p')
+      .leftJoin('v4_agents as a', 'p.created_by', 'a.id')
       .where('p.project_id', projectId);
 
     // Apply filters

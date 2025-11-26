@@ -36,11 +36,7 @@ const config: { [key: string]: Knex.Config } = {
     },
     useNullAsDefault: true,
     migrations: {
-      directory: [
-        path.join(__dirname, 'config/knex/bootstrap'),
-        path.join(__dirname, 'config/knex/upgrades'),
-        path.join(__dirname, 'config/knex/enhancements'),
-      ],
+      directory: path.join(__dirname, 'database/migrations/v4'),
       extension: 'ts',
       tableName: 'knex_migrations',
       loadExtensions: ['.ts'],
@@ -69,11 +65,7 @@ const config: { [key: string]: Knex.Config } = {
     },
     useNullAsDefault: true,
     migrations: {
-      directory: [
-        path.join(__dirname, 'config/knex/bootstrap'),
-        path.join(__dirname, 'config/knex/upgrades'),
-        path.join(__dirname, 'config/knex/enhancements'),
-      ],
+      directory: path.join(__dirname, 'database/migrations/v4'),
       extension: 'ts',
       loadExtensions: ['.ts'],
     },
@@ -92,11 +84,7 @@ const config: { [key: string]: Knex.Config } = {
     },
     useNullAsDefault: true,
     migrations: {
-      directory: [
-        path.join(__dirname, 'config/knex/bootstrap'),
-        path.join(__dirname, 'config/knex/upgrades'),
-        path.join(__dirname, 'config/knex/enhancements'),
-      ],
+      directory: path.join(__dirname, 'database/migrations/v4'),
       extension: 'js',
       loadExtensions: ['.js'],
     },
@@ -128,11 +116,7 @@ const config: { [key: string]: Knex.Config } = {
       charset: 'utf8mb4',
     },
     migrations: {
-      directory: [
-        path.join(__dirname, 'config/knex/bootstrap'),
-        path.join(__dirname, 'config/knex/upgrades'),
-        path.join(__dirname, 'config/knex/enhancements'),
-      ],
+      directory: path.join(__dirname, 'database/migrations/v4'),
       extension: 'ts',
       tableName: 'knex_migrations',
       loadExtensions: ['.ts'],
@@ -159,11 +143,7 @@ const config: { [key: string]: Knex.Config } = {
       database: process.env.PG_DATABASE || 'mcp_context',
     },
     migrations: {
-      directory: [
-        path.join(__dirname, 'config/knex/bootstrap'),
-        path.join(__dirname, 'config/knex/upgrades'),
-        path.join(__dirname, 'config/knex/enhancements'),
-      ],
+      directory: path.join(__dirname, 'database/migrations/v4'),
       extension: 'ts',
       tableName: 'knex_migrations',
       loadExtensions: ['.ts'],

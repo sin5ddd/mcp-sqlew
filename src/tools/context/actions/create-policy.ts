@@ -65,7 +65,7 @@ export async function createPolicy(
     }
 
     // Check if policy already exists for this project
-    const existingPolicy = await knex('t_decision_policies')
+    const existingPolicy = await knex('v4_decision_policies')
       .where({ name: params.name, project_id: projectId })
       .first();
 
@@ -78,7 +78,7 @@ export async function createPolicy(
 
     // Get or create agent
     const agentName = params.created_by || 'system';
-    const agentResult = await knex('m_agents')
+    const agentResult = await knex('v4_agents')
       .where({ name: agentName })
       .select('id')
       .first();
@@ -87,7 +87,7 @@ export async function createPolicy(
     if (agentResult) {
       agentId = agentResult.id;
     } else {
-      const [insertedId] = await knex('m_agents').insert({
+      const [insertedId] = await knex('v4_agents').insert({
         name: agentName,
         last_active_ts: Math.floor(Date.now() / 1000)
       });
@@ -109,7 +109,7 @@ export async function createPolicy(
     };
 
     // Insert policy
-    const [policyId] = await knex('t_decision_policies').insert(policyData);
+    const [policyId] = await knex('v4_decision_policies').insert(policyData);
 
     return {
       success: true,

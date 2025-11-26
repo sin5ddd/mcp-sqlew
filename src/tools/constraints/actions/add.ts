@@ -18,7 +18,6 @@ import {
 } from '../../../constants.js';
 import { validateCategory, validatePriority } from '../../../utils/validators.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
-import { logConstraintAdd } from '../../../utils/activity-logging.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
@@ -82,7 +81,7 @@ export async function addConstraint(
         const ts = Math.floor(Date.now() / 1000);
 
         // Insert constraint with project_id
-        const [constraintId] = await trx('t_constraints').insert({
+        const [constraintId] = await trx('v4_constraints').insert({
           category_id: categoryId,
           layer_id: layerId,
           constraint_text: params.constraint_text,
@@ -99,23 +98,12 @@ export async function addConstraint(
           const tags = parseStringArray(params.tags);
           for (const tagName of tags) {
             const tagId = await getOrCreateTag(actualAdapter, projectId, tagName, trx);  // v3.7.3: pass projectId
-            await trx('t_constraint_tags').insert({
+            await trx('v4_constraint_tags').insert({
               constraint_id: Number(constraintId),
               tag_id: tagId
             });
           }
         }
-
-        // Activity logging (replaces trigger)
-        await logConstraintAdd(trx, {
-          constraint_id: Number(constraintId),
-          category: params.category,
-          constraint_text: params.constraint_text,
-          priority: priorityStr,
-          layer: params.layer || null,
-          created_by: createdBy,
-          agent_id: agentId
-        });
 
         return { constraintId: Number(constraintId) };
       });

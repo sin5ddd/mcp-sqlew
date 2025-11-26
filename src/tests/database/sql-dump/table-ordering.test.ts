@@ -209,31 +209,31 @@ describe('Topological Sort Unit Tests', () => {
       db = await connectDb(config);
 
       // Create test schema with FK relationships
-      await db.schema.createTable('m_projects', (table) => {
+      await db.schema.createTable('v4_projects', (table) => {
         table.increments('id').primary();
         table.string('name').notNullable();
       });
 
-      await db.schema.createTable('m_users', (table) => {
+      await db.schema.createTable('v4_users', (table) => {
         table.increments('id').primary();
         table.integer('project_id').unsigned().notNullable();
-        table.foreign('project_id').references('m_projects.id');
+        table.foreign('project_id').references('v4_projects.id');
       });
 
-      await db.schema.createTable('t_posts', (table) => {
+      await db.schema.createTable('v4_posts', (table) => {
         table.increments('id').primary();
         table.integer('user_id').unsigned().notNullable();
-        table.foreign('user_id').references('m_users.id');
+        table.foreign('user_id').references('v4_users.id');
       });
 
       // Extract dependencies
-      const tables = ['m_projects', 'm_users', 't_posts'];
+      const tables = ['v4_projects', 'v4_users', 'v4_posts'];
       const dependencies = await getTableDependencies(db, tables);
 
       // Verify dependencies
-      assert.deepStrictEqual(dependencies.get('m_projects'), []);
-      assert.deepStrictEqual(dependencies.get('m_users'), ['m_projects']);
-      assert.deepStrictEqual(dependencies.get('t_posts'), ['m_users']);
+      assert.deepStrictEqual(dependencies.get('v4_projects'), []);
+      assert.deepStrictEqual(dependencies.get('v4_users'), ['v4_projects']);
+      assert.deepStrictEqual(dependencies.get('v4_posts'), ['v4_users']);
 
       // Clean up
       await disconnectDb(db);
@@ -331,12 +331,12 @@ describe('Topological Sort Unit Tests', () => {
 
       // Verify master tables come before transaction tables
       // ⚠️ ADD NEW ASSERTIONS HERE when adding tables with FK dependencies
-      const projectsIndex = sorted.indexOf('m_projects');
-      const decisionsIndex = sorted.indexOf('t_decisions');
-      const tasksIndex = sorted.indexOf('t_tasks');
+      const projectsIndex = sorted.indexOf('v4_projects');
+      const decisionsIndex = sorted.indexOf('v4_decisions');
+      const tasksIndex = sorted.indexOf('v4_tasks');
 
-      assert.ok(projectsIndex < decisionsIndex, 'm_projects should come before t_decisions');
-      assert.ok(projectsIndex < tasksIndex, 'm_projects should come before t_tasks');
+      assert.ok(projectsIndex < decisionsIndex, 'v4_projects should come before v4_decisions');
+      assert.ok(projectsIndex < tasksIndex, 'v4_projects should come before v4_tasks');
 
       await disconnectDb(db);
     });
