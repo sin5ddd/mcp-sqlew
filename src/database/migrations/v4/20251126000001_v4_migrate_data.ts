@@ -289,14 +289,57 @@ export async function up(knex: Knex): Promise<void> {
 
   const hasProjectIdInDecisions = await knex.schema.hasColumn('t_decisions', 'project_id');
   if (hasProjectIdInDecisions) {
+    // Newer v3 schemas: simply copy project_id from source table
     transactionMigrated += await migrateTable('t_decisions', 'v4_decisions', [
       'key_id', 'project_id', 'value', 'agent_id', 'layer_id', 'version', 'status', 'ts'
     ]);
   } else {
-    transactionMigrated += await migrateTable('t_decisions', 'v4_decisions',
-      ['key_id', 'project_id', 'value', 'agent_id', 'layer_id', 'version', 'status', 'ts'],
-      { columnMapping: { 'project_id': '1' } }
-    );
+    // Legacy v3 schemas: t_decisions に project_id が存在しないため、固定値 1 を付与して移行する
+    const hasTDecisions = await knex.schema.hasTable('t_decisions');
+    if (!hasTDecisions) {
+      console.log('  ⚠️ t_decisions does not exist, skipping');
+    } else {
+      const targetCount = await knex('v4_decisions').count('* as count').first();
+      const hasTargetData = targetCount && Number(targetCount.count) > 0;
+
+      if (hasTargetData) {
+        console.log('  ✓ v4_decisions already has data, skipping');
+      } else {
+        const sourceRows = await knex('t_decisions').select(
+          'key_id',
+          'value',
+          'agent_id',
+          'layer_id',
+          'version',
+          'status',
+          'ts',
+        );
+
+        if (sourceRows.length === 0) {
+          console.log('  ℹ️ t_decisions is empty, nothing to migrate');
+        } else {
+          const rowsToInsert = sourceRows.map((row: any) => ({
+            key_id: row.key_id,
+            project_id: 1,
+            value: row.value,
+            agent_id: row.agent_id,
+            layer_id: row.layer_id,
+            version: row.version,
+            status: row.status,
+            ts: row.ts,
+          }));
+
+          const batchSize = 100;
+          for (let i = 0; i < rowsToInsert.length; i += batchSize) {
+            const batch = rowsToInsert.slice(i, i + batchSize);
+            await knex('v4_decisions').insert(batch);
+          }
+
+          console.log(`  ✓ Migrated ${rowsToInsert.length} rows: t_decisions → v4_decisions`);
+          transactionMigrated += rowsToInsert.length;
+        }
+      }
+    }
   }
 
   if (hasProjectIdInDecisions) {
