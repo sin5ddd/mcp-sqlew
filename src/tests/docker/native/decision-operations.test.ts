@@ -22,7 +22,6 @@ import {
   assertDecisionHasTags,
   assertTagIndexPopulated,
   cleanupTestData,
-  getAgentId,
   getLayerId,
   getTagId,
   getScopeId,
@@ -54,7 +53,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: 1,
         layer_id: 1,
       });
 
@@ -71,32 +69,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       );
     });
 
-    it('should enforce FK constraint on agent_id', async () => {
-      const db = getDb();
-
-      // Setup: Create valid key
-      await db('v4_context_keys').insert({ key: 'fk-test-agent' });
-      const keyRecord = await db('v4_context_keys')
-        .where({ key: 'fk-test-agent' })
-        .first();
-
-      // Try to insert with invalid agent_id
-      const insertPromise = db('v4_decisions').insert({
-        key_id: keyRecord.id,
-        project_id: projectId,
-        value: 'test',
-        version: '1.0.0',
-        ts: Math.floor(Date.now() / 1000),
-        agent_id: 999999, // Non-existent
-        layer_id: 1,
-      });
-
-      await assert.rejects(insertPromise, /foreign key|FOREIGN KEY|Cannot add or update a child row/i);
-
-      // Cleanup
-      await db('v4_context_keys').where({ id: keyRecord.id }).del();
-    });
-
     it('should enforce FK constraint on layer_id', async () => {
       const db = getDb();
 
@@ -106,8 +78,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'fk-test-layer' })
         .first();
 
-      const agentId = await getAgentId(db);
-
       // Try to insert with invalid layer_id
       const insertPromise = db('v4_decisions').insert({
         key_id: keyRecord.id,
@@ -115,7 +85,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: 999999, // Non-existent
       });
 
@@ -140,7 +109,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'unique-test-pk' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -149,7 +117,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'first value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -160,7 +127,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'second value',
         version: '2.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -182,7 +148,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'context-unique-test' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -191,7 +156,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -235,7 +199,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'cascade-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -244,7 +207,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -269,7 +231,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'cascade-test-tags' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
       const tagId = await getTagId(db, 'test');
 
@@ -279,7 +240,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -313,7 +273,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'cascade-test-context' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -322,7 +281,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -363,7 +321,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'crud-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'infrastructure');
 
       // Insert decision
@@ -373,7 +330,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'fastify',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -393,7 +349,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'update-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'data');
 
       await db('v4_decisions').insert({
@@ -402,7 +357,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'postgresql',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -431,7 +385,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'numeric-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'infrastructure');
 
       // Insert numeric decision
@@ -441,7 +394,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 100,
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -472,7 +424,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'context-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -481,7 +432,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'oauth2',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -518,7 +468,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'context-update-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -527,7 +476,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'v1',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -573,7 +521,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'tag-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -582,7 +529,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -621,7 +567,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'scope-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -630,7 +575,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -672,7 +616,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: longKey })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -681,7 +624,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: 'test',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -700,7 +642,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'special-chars-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -709,7 +650,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: specialValue,
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -728,7 +668,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         .where({ key: 'unicode-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       await db('v4_decisions').insert({
@@ -737,7 +676,6 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         value: unicodeValue,
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 

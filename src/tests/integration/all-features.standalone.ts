@@ -166,8 +166,7 @@ async function testConstraintTool() {
       category: 'architecture',
       constraint_text: 'Test constraint rule',
       priority: 'medium',
-      tags: ['test'],
-      created_by: 'test-agent'
+      tags: ['test']
     });
     constraintId = result.constraint_id;
     recordResult('constraint', 'add', 'PASS', undefined, Date.now() - start);
@@ -212,8 +211,7 @@ async function testTaskTool() {
       description: 'Test description',
       status: 'todo',
       priority: 2,
-      tags: ['test'],
-      created_by_agent: 'test-agent'
+      tags: ['test']
     });
     taskId1 = result.task_id;
     recordResult('task', 'create', 'PASS', undefined, Date.now() - start);

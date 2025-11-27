@@ -138,6 +138,9 @@ export async function up(knex: Knex): Promise<void> {
 
   // m_agents migration removed - agent tracking no longer used in v4.0
 
+  // Delete seeded default project to avoid ID conflict with v3 data
+  await knex('v4_projects').where('name', 'default').del();
+
   const hasProjectsTable = await knex.schema.hasTable('m_projects');
   if (hasProjectsTable) {
     const projectCols = ['id', 'name'];
@@ -359,10 +362,11 @@ export async function up(knex: Knex): Promise<void> {
     'decision_key_id', 'project_id', 'scope_id'
   ]);
 
+  // Filter orphaned decision_context records
   transactionMigrated += await migrateTable('t_decision_context', 'v4_decision_context', [
     'id', 'decision_key_id', 'project_id', 'rationale', 'alternatives_considered',
     'tradeoffs', 'decision_date', 'related_task_id', 'related_constraint_id', 'ts'
-  ]);
+  ], { filter: 'decision_key_id IN (SELECT key_id FROM t_decisions)' });
 
   const hasDecisionPolicies = await knex.schema.hasTable('t_decision_policies');
   if (hasDecisionPolicies) {
@@ -396,21 +400,22 @@ export async function up(knex: Knex): Promise<void> {
     'layer_id', 'created_ts', 'updated_ts', 'completed_ts'
   ]);
 
+  // Filter orphaned records: only migrate task_details where task exists
   transactionMigrated += await migrateTable('t_task_details', 'v4_task_details', [
     'task_id', 'description', 'acceptance_criteria', 'acceptance_criteria_json', 'notes'
-  ]);
+  ], { filter: 'task_id IN (SELECT id FROM t_tasks)' });
 
   transactionMigrated += await migrateTable('t_task_tags', 'v4_task_tags', [
     'task_id', 'project_id', 'tag_id'
-  ]);
+  ], { filter: 'task_id IN (SELECT id FROM t_tasks)' });
 
   transactionMigrated += await migrateTable('t_task_decision_links', 'v4_task_decision_links', [
     'task_id', 'project_id', 'decision_key_id', 'link_type'
-  ]);
+  ], { filter: 'task_id IN (SELECT id FROM t_tasks)' });
 
   transactionMigrated += await migrateTable('t_task_constraint_links', 'v4_task_constraint_links', [
     'task_id', 'constraint_id'
-  ]);
+  ], { filter: 'task_id IN (SELECT id FROM t_tasks)' });
 
   const hasTaskFileLinks = await knex.schema.hasTable('t_task_file_links');
   if (hasTaskFileLinks) {
@@ -418,17 +423,17 @@ export async function up(knex: Knex): Promise<void> {
     if (hasAction) {
       transactionMigrated += await migrateTable('t_task_file_links', 'v4_task_file_links', [
         'task_id', 'project_id', 'file_id', 'action'
-      ]);
+      ], { filter: 'task_id IN (SELECT id FROM t_tasks)' });
     } else {
       transactionMigrated += await migrateTable('t_task_file_links', 'v4_task_file_links', [
         'task_id', 'project_id', 'file_id'
-      ]);
+      ], { filter: 'task_id IN (SELECT id FROM t_tasks)' });
     }
   }
 
   transactionMigrated += await migrateTable('t_task_dependencies', 'v4_task_dependencies', [
     'blocker_task_id', 'blocked_task_id', 'project_id', 'created_ts'
-  ]);
+  ], { filter: 'blocker_task_id IN (SELECT id FROM t_tasks) AND blocked_task_id IN (SELECT id FROM t_tasks)' });
 
   const hasTaskPrunedFiles = await knex.schema.hasTable('t_task_pruned_files');
   if (hasTaskPrunedFiles) {

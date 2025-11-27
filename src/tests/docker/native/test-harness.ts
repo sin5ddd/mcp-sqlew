@@ -78,7 +78,6 @@ export function runTestsOnAllDatabases(
  * Seed minimal test data for operations testing
  *
  * Creates baseline master data required for decision/constraint/task operations:
- * - 1 agent (system)
  * - 9 layers (presentation, business, data, infrastructure, cross-cutting,
  *             documentation, planning, coordination, review)
  * - 5 tags (test, api, performance, security, architecture)
@@ -87,15 +86,6 @@ export function runTestsOnAllDatabases(
  * @param db - Knex database connection
  */
 export async function seedTestData(db: Knex): Promise<void> {
-  // Agent
-  const agentExists = await db('v4_agents').where({ name: 'system' }).first();
-  if (!agentExists) {
-    await db('v4_agents').insert({
-      name: 'system',
-      last_active_ts: Math.floor(Date.now() / 1000),
-    });
-  }
-
   // Layers (should already exist from migrations, but verify)
   const layerCount = await db('v4_layers').count('* as count').first();
   if (!layerCount || layerCount.count === 0) {
@@ -311,27 +301,6 @@ export async function assertTagIndexPopulated(
 // ============================================================================
 // Query Helpers
 // ============================================================================
-
-/**
- * Get agent ID by name (creates if not exists)
- *
- * @param db - Knex database connection
- * @param name - Agent name
- * @returns Agent ID
- */
-export async function getAgentId(db: Knex, name: string = 'system'): Promise<number> {
-  let agent = await db('v4_agents').where({ name }).first();
-
-  if (!agent) {
-    await db('v4_agents').insert({
-      name,
-      last_active_ts: Math.floor(Date.now() / 1000),
-    });
-    agent = await db('v4_agents').where({ name }).first();
-  }
-
-  return agent.id;
-}
 
 /**
  * Get tag ID by name (creates if not exists)

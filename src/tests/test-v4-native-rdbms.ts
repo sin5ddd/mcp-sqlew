@@ -153,7 +153,6 @@ async function testDatabase(config: DbConfig): Promise<{ success: boolean; error
     console.log('  📋 Verifying v4 tables...');
     const v4Tables = [
       'v4_projects',
-      'v4_agents',
       'v4_decisions',
       'v4_tasks',
       'v4_constraints',
@@ -177,13 +176,11 @@ async function testDatabase(config: DbConfig): Promise<{ success: boolean; error
     const layers = await db('v4_layers').count('* as count').first();
     const statuses = await db('v4_task_statuses').count('* as count').first();
     const projects = await db('v4_projects').count('* as count').first();
-    const agents = await db('v4_agents').count('* as count').first();
     const tags = await db('v4_tags').count('* as count').first();
 
     console.log(`    - v4_layers: ${layers?.count} rows`);
     console.log(`    - v4_task_statuses: ${statuses?.count} rows`);
     console.log(`    - v4_projects: ${projects?.count} rows`);
-    console.log(`    - v4_agents: ${agents?.count} rows`);
     console.log(`    - v4_tags: ${tags?.count} rows`);
 
     if (Number(layers?.count) !== 9) {
@@ -208,7 +205,6 @@ async function testDatabase(config: DbConfig): Promise<{ success: boolean; error
         version: '1.0.0',
         status: 1,
         ts: Math.floor(Date.now() / 1000),
-        agent_id: 1,
         layer_id: 1,
       });
       throw new Error('FK constraint should have prevented insert');

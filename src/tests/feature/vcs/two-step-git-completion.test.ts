@@ -84,10 +84,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       const knex = db.getKnex();
 
       // 1. Create task in waiting_review with watched file
-      const [agentId] = await knex('v4_agents').insert({ name: 'test-agent' });
       const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentId,
         status_id: statusRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),
@@ -120,10 +118,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       const knex = db.getKnex();
 
       // 1. Create task with 2 watched files
-      const agentRow = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
       const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentRow.id,
         status_id: statusRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),
@@ -170,10 +166,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       execSync('git commit -m "Test commit 1"');
 
       // 2. Create task in done status with watched file
-      const agentRow = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
       const doneStatusRow = await knex('v4_task_statuses').where({ name: 'done' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentRow.id,
         status_id: doneStatusRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),
@@ -206,10 +200,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       const knex = db.getKnex();
 
       // 1. Create task in done status
-      const agentRow = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
       const doneStatusRow = await knex('v4_task_statuses').where({ name: 'done' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentRow.id,
         status_id: doneStatusRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),
@@ -249,10 +241,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       const knex = db.getKnex();
 
       // 1. Create task in waiting_review
-      const agentRow = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
       const waitingReviewRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentRow.id,
         status_id: waitingReviewRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),
@@ -289,10 +279,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       const knex = db.getKnex();
 
       // 1. Create task
-      const agentRow = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
       const waitingReviewRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentRow.id,
         status_id: waitingReviewRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),
@@ -345,10 +333,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       await knex('v4_config').where({ config_key: 'require_all_files_staged' }).update({ config_value: '1' });
 
       // Create task with 2 files
-      const agentRow = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
       const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentRow.id,
         status_id: statusRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),
@@ -382,10 +368,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       await knex('v4_config').where({ config_key: 'git_auto_complete_on_stage' }).update({ config_value: '0' });
 
       // Create and stage task
-      const agentRow = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
       const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
       const [taskId] = await knex('v4_tasks').insert({
-        assigned_agent_id: agentRow.id,
         status_id: statusRow.id,
         priority: 2,
         created_ts: Math.floor(Date.now() / 1000),

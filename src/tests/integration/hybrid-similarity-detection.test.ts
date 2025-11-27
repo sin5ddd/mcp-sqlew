@@ -96,19 +96,6 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       })
       .delete();
 
-    // Get or create system agent
-    let systemAgentId: number;
-    const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-    if (systemAgent) {
-      systemAgentId = systemAgent.id;
-    } else {
-      const [agentId] = await knex('v4_agents').insert({
-        name: 'system',
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      systemAgentId = agentId;
-    }
-
     // Create test policy with suggest_similar=1 (no validation_rules to match all decisions)
     await knex('v4_decision_policies').insert({
       project_id: projectId,
@@ -118,7 +105,6 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       validation_rules: null,  // No validation rules - match all decisions for similarity detection
       quality_gates: null,
       suggest_similar: 1,
-      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
   });
@@ -496,10 +482,6 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       const adapter = getAdapter();
       const knex = adapter.getKnex();
 
-      // Get system agent
-      const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-      const systemAgentId = systemAgent!.id;
-
       await knex('v4_decision_policies').insert({
         project_id: projectId,
         name: 'no-suggest-policy',
@@ -512,7 +494,6 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
         }),
         quality_gates: null,
         suggest_similar: 0,
-        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 

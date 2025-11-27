@@ -72,11 +72,9 @@ describe('Git-Aware Auto-Complete', () => {
     const projectId = ProjectContext.getInstance().getProjectId();
 
     // 1. Create a task in waiting_review status with watched files
-    const [agentId] = await knex('v4_agents').insert({ name: 'test-agent' });
     const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('v4_tasks').insert({
       title: 'Test git-aware task',
-      assigned_agent_id: agentId,
       status_id: statusRow.id,
       priority: 2,
       project_id: projectId,
@@ -114,11 +112,9 @@ describe('Git-Aware Auto-Complete', () => {
     const projectId = ProjectContext.getInstance().getProjectId();
 
     // 1. Create a task in waiting_review
-    const agent = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
     const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('v4_tasks').insert({
       title: 'Partial commit task',
-      assigned_agent_id: agent.id,
       status_id: statusRow.id,
       priority: 2,
       project_id: projectId,
@@ -155,11 +151,9 @@ describe('Git-Aware Auto-Complete', () => {
     const projectId = ProjectContext.getInstance().getProjectId();
 
     // 1. Create a task in waiting_review with NO watched files
-    const agent = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
     const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('v4_tasks').insert({
       title: 'No watched files task',
-      assigned_agent_id: agent.id,
       status_id: statusRow.id,
       priority: 2,
       project_id: projectId,
@@ -187,11 +181,9 @@ describe('Git-Aware Auto-Complete', () => {
     await knex('v4_config').where({ config_key: 'git_auto_complete_enabled' }).update({ config_value: '0' });
 
     // 2. Create a task with all files committed
-    const agent = await knex('v4_agents').where({ name: 'test-agent' }).first('id');
     const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
     const [taskId] = await knex('v4_tasks').insert({
       title: 'Config disabled task',
-      assigned_agent_id: agent.id,
       status_id: statusRow.id,
       priority: 2,
       project_id: projectId,

@@ -144,19 +144,6 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       .where('project_id', projectId)
       .delete();
 
-    // Get system agent
-    let systemAgentId: number;
-    const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-    if (systemAgent) {
-      systemAgentId = systemAgent.id;
-    } else {
-      const [agentId] = await knex('v4_agents').insert({
-        name: 'system',
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      systemAgentId = agentId;
-    }
-
     // Create test policy with suggest_similar=1 (matches CVE-* keys)
     await knex('v4_decision_policies').insert({
       name: 'security_vulnerability',
@@ -169,7 +156,6 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
         }
       }),
       quality_gates: null,
-      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
 
@@ -269,19 +255,6 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       .where('project_id', projectId)
       .delete();
 
-    // Get system agent
-    let systemAgentId: number;
-    const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-    if (systemAgent) {
-      systemAgentId = systemAgent.id;
-    } else {
-      const [agentId] = await knex('v4_agents').insert({
-        name: 'system',
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      systemAgentId = agentId;
-    }
-
     // Create policy with suggest_similar=0 (auto-trigger disabled)
     await knex('v4_decision_policies').insert({
       name: 'security_vulnerability',
@@ -290,7 +263,6 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       suggest_similar: 0,  // Disabled
       validation_rules: null,
       quality_gates: null,
-      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
 
@@ -355,19 +327,6 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       .where('project_id', projectId)
       .delete();
 
-    // Get system agent
-    let systemAgentId: number;
-    const systemAgent = await knex('v4_agents').where('name', 'system').select('id').first();
-    if (systemAgent) {
-      systemAgentId = systemAgent.id;
-    } else {
-      const [agentId] = await knex('v4_agents').insert({
-        name: 'system',
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      systemAgentId = agentId;
-    }
-
     // Create policy with auto-trigger enabled
     await knex('v4_decision_policies').insert({
       name: 'security_vulnerability',
@@ -376,7 +335,6 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
       suggest_similar: 1,  // Enabled
       validation_rules: null,
       quality_gates: null,
-      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
 

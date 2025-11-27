@@ -139,14 +139,6 @@ async function createDecisionWithTags(
   }
   const layerId = layerRecord.id;
 
-  // Get agent ID (system)
-  let agentRecord = await db('v4_agents').where({ name: 'system' }).first();
-  if (!agentRecord) {
-    await db('v4_agents').insert({ name: 'system', last_active_ts: Math.floor(Date.now() / 1000) });
-    agentRecord = await db('v4_agents').where({ name: 'system' }).first();
-  }
-  const agentId = agentRecord.id;
-
   const ts = Math.floor(Date.now() / 1000);
 
   // Insert decision
@@ -161,7 +153,6 @@ async function createDecisionWithTags(
       value,
       version,
       layer_id: layerId,
-      agent_id: agentId,
       status: 1,
       ts,
     });

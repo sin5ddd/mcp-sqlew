@@ -114,7 +114,7 @@ export async function initDatabase(dbType: DatabaseType): Promise<Knex> {
  * Checks:
  * - knex_migrations table exists
  * - At least one migration ran
- * - Key tables exist (v4_agents, v4_decisions, v4_tasks)
+ * - Key tables exist (v4_decisions, v4_tasks)
  *
  * @param db - Knex database connection
  * @throws Error if verification fails
@@ -129,7 +129,7 @@ export async function verifyMigrations(db: Knex): Promise<void> {
   assert.ok(migrations.length > 0, 'At least one migration should have run');
 
   // Check key tables exist
-  const keyTables = ['v4_agents', 'v4_context_keys', 'v4_decisions', 'v4_tasks', 'v4_constraints'];
+  const keyTables = ['v4_context_keys', 'v4_decisions', 'v4_tasks', 'v4_constraints'];
   for (const table of keyTables) {
     const exists = await db.schema.hasTable(table);
     assert.ok(exists, `Table ${table} should exist after migrations`);

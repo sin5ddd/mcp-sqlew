@@ -8,7 +8,7 @@
  *
  * Key Tests:
  * - Basic constraint insertion with required fields
- * - Foreign key constraint enforcement (category_id, layer_id, agent_id)
+ * - Foreign key constraint enforcement (category_id, layer_id)
  * - UNIQUE constraint on (constraint_text, project_id)
  * - Priority levels (1-4)
  * - active flag (0/1)
@@ -33,7 +33,6 @@ function hashConstraintText(text: string): string {
 
 runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
   let projectId: number;
-  let systemAgentId: number;
   let businessLayerId: number;
   let dataLayerId: number;
   let presentationLayerId: number;
@@ -62,11 +61,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
     const project = await db('v4_projects').where({ id: 1 }).first();
     assert.ok(project, 'Project should exist');
     projectId = project.id;
-
-    // Get system agent
-    const systemAgent = await db('v4_agents').where({ name: 'system' }).first();
-    assert.ok(systemAgent, 'System agent should exist');
-    systemAgentId = systemAgent.id;
 
     // Get layer IDs
     const businessLayer = await db('v4_layers').where({ name: 'business' }).first();
@@ -201,7 +195,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -229,7 +222,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: dataLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -256,7 +248,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: presentationLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -270,7 +261,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -308,7 +298,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: crossCuttingLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -347,7 +336,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -360,7 +348,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: dataLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -385,7 +372,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -398,7 +384,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -423,7 +408,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -436,7 +420,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: presentationLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -462,7 +445,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -499,7 +481,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -536,7 +517,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -568,7 +548,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -603,36 +582,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
-        ts: Math.floor(Date.now() / 1000),
-      });
-
-      await assert.rejects(
-        insertPromise,
-        (error: any) => {
-          const msg = error.message.toLowerCase();
-          return msg.includes('foreign key') ||
-                 msg.includes('constraint') ||
-                 msg.includes('violates') ||
-                 msg.includes('cannot add');
-        },
-        'Should throw foreign key constraint error'
-      );
-    });
-
-    it('should enforce foreign key constraint on agent_id', async () => {
-      const db = getDb();
-
-      const constraintTextFkAgent = 'Test constraint with invalid agent';
-      const insertPromise = db('v4_constraints').insert({
-        constraint_text: constraintTextFkAgent,
-        constraint_text_hash: hashConstraintText(constraintTextFkAgent),
-        category_id: categoryTestingId,
-        priority: 2,
-        layer_id: businessLayerId,
-        project_id: projectId,
-        active: 1,
-        agent_id: 99999, // Non-existent agent
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -663,7 +612,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -676,7 +624,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId, // Same project_id
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -708,7 +655,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -733,7 +679,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -758,7 +703,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 
@@ -798,7 +742,6 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         layer_id: businessLayerId,
         project_id: projectId,
         active: 1,
-        agent_id: systemAgentId,
         ts: Math.floor(Date.now() / 1000),
       });
 

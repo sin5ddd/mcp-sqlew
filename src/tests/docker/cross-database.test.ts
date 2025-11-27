@@ -140,13 +140,6 @@ describe('Cross-Database SQL Dump Export/Import', () => {
     it('should not have TEXT in PRIMARY KEY/UNIQUE constraints (MySQL dump)', () => {
       console.log('    🔍 Checking for TEXT in constraints (MySQL dump)...');
 
-      // Check v4_agents.name TEXT UNIQUE → VARCHAR(191) UNIQUE
-      const agentsMatch = mysqlDump.match(/CREATE TABLE.*?v4_agents.*?\(.*?\)/s);
-      if (agentsMatch) {
-        assert.ok(!agentsMatch[0].includes('TEXT UNIQUE'), 'Should not have TEXT UNIQUE');
-        assert.ok(agentsMatch[0].includes('VARCHAR') || agentsMatch[0].includes('varchar'), 'Should have VARCHAR instead of TEXT');
-      }
-
       // Check v4_help_use_case_categories.category_name TEXT UNIQUE → VARCHAR(191) UNIQUE
       const categoriesMatch = mysqlDump.match(/CREATE TABLE.*?v4_help_use_case_categories.*?\(.*?\)/s);
       if (categoriesMatch) {
@@ -226,7 +219,7 @@ describe('Cross-Database SQL Dump Export/Import', () => {
           project_id: 1,
           value: 'test',
           ts: Math.floor(Date.now() / 1000),
-          agent_id: 1,
+          layer_id: 1,
         });
 
         assert.fail('MySQL should reject invalid FK reference');
@@ -395,11 +388,11 @@ describe('Cross-Database SQL Dump Export/Import', () => {
     it('should convert booleans to TRUE/FALSE (PostgreSQL)', async () => {
       console.log('    🔄 Verifying boolean conversion...');
 
-      const result = await postgresDb('v4_agents').select('is_reusable').first();
+      const result = await postgresDb('v4_constraints').select('active').first();
 
       if (result) {
         // PostgreSQL should return actual boolean, not 0/1
-        assert.strictEqual(typeof result.is_reusable, 'boolean', 'is_reusable should be boolean type');
+        assert.strictEqual(typeof result.active, 'boolean', 'active should be boolean type');
         console.log('      ✅ Boolean values converted correctly');
       } else {
         console.log('      ⚠️  No data to verify boolean conversion');

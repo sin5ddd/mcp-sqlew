@@ -17,7 +17,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import type { Knex } from 'knex';
 import { createHash } from 'crypto';
-import { runTestsOnAllDatabases, getLayerId, getAgentId, getTagId } from './test-harness.js';
+import { runTestsOnAllDatabases, getLayerId, getTagId } from './test-harness.js';
 
 // ============================================================================
 // Hash Helper
@@ -53,13 +53,11 @@ async function insertTask(
     status?: string;
     priority?: number;
     layer?: string;
-    assigned_agent?: string;
     description?: string;
   }
 ): Promise<number> {
   const statusId = await getStatusId(db, data.status || 'todo');
   const layerId = data.layer ? await getLayerId(db, data.layer) : await getLayerId(db, 'business');
-  const agentId = await getAgentId(db, data.assigned_agent || 'system');
 
   const timestamp = Math.floor(Date.now() / 1000);
 
@@ -68,8 +66,6 @@ async function insertTask(
     status_id: statusId,
     priority: data.priority || 2,
     layer_id: layerId,
-    assigned_agent_id: agentId,
-    created_by_agent_id: agentId,
     project_id: 1,
     created_ts: timestamp,
     updated_ts: timestamp,
@@ -154,7 +150,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         description: 'This is a detailed description',
         priority: 4,
         layer: 'infrastructure',
-        assigned_agent: 'backend-specialist',
       });
 
       // Verify core task data
@@ -224,8 +219,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         priority: 2,
         project_id: 1,
         layer_id: 1,
-        assigned_agent_id: 1,
-        created_by_agent_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
         updated_ts: Math.floor(Date.now() / 1000),
       });
@@ -246,31 +239,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         priority: 2,
         project_id: 1,
         layer_id: 99999, // Non-existent layer
-        assigned_agent_id: 1,
-        created_by_agent_id: 1,
-        created_ts: Math.floor(Date.now() / 1000),
-        updated_ts: Math.floor(Date.now() / 1000),
-      });
-
-      await assert.rejects(insertPromise, {
-        message: /foreign key constraint|violates foreign key|Cannot add or update a child row/i,
-      });
-    });
-
-    it('should enforce FK constraint on assigned_agent_id', async () => {
-      const db = getDb();
-
-      const statusId = await getStatusId(db, 'todo');
-      const layerId = await getLayerId(db, 'business');
-
-      const insertPromise = db('v4_tasks').insert({
-        title: 'Invalid agent task',
-        status_id: statusId,
-        priority: 2,
-        project_id: 1,
-        layer_id: layerId,
-        assigned_agent_id: 99999, // Non-existent agent
-        created_by_agent_id: 1,
         created_ts: Math.floor(Date.now() / 1000),
         updated_ts: Math.floor(Date.now() / 1000),
       });
@@ -780,7 +748,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const timestamp = Math.floor(Date.now() / 1000);
 
       // Create a decision
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       // m_context_keys has no project_id column
@@ -798,7 +765,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         value: 'test value',
         version: '1.0.0',
         ts: timestamp,
-        agent_id: agentId,
         layer_id: layerId,
         status: 1, // 1=active (integer enum, not string)
       });
@@ -828,7 +794,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const timestamp = Math.floor(Date.now() / 1000);
 
       // Create decision and link (simplified)
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       // m_context_keys has no project_id column
@@ -843,7 +808,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         value: 'test',
         version: '1.0.0',
         ts: timestamp,
-        agent_id: agentId,
         layer_id: layerId,
         status: 1, // 1=active (integer enum)
       });
@@ -876,7 +840,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const taskId = await insertTask(db, { title: 'Task with constraint' });
 
       // Create a constraint
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
       // Get constraint category
@@ -892,7 +855,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         priority: 2,
         project_id: 1,
         layer_id: layerId,
-        agent_id: agentId,
         ts: Math.floor(Date.now() / 1000),
         active: 1,
       });
@@ -921,7 +883,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const taskId = await insertTask(db, { title: 'Task for constraint cascade' });
 
       // Create constraint and link (simplified)
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
       const category = await db('v4_constraint_categories')
         .where({ name: 'architecture' })
@@ -935,7 +896,6 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         priority: 2,
         project_id: 1,
         layer_id: layerId,
-        agent_id: agentId,
         ts: Math.floor(Date.now() / 1000),
         active: 1,
       });
@@ -1006,18 +966,16 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
 
       const statusId = await getStatusId(db, 'todo');
       const layerId = await getLayerId(db, 'business');
-      const agentId = await getAgentId(db);
 
-      // Insert with NULL assigned_agent_id
+      // Insert with NULL optional fields (completed_ts is nullable)
       const timestamp = Math.floor(Date.now() / 1000);
       const result = await db('v4_tasks').insert({
-        title: 'Task with NULL agent',
+        title: 'Task with NULL completed_ts',
         status_id: statusId,
         priority: 2,
         project_id: 1,
         layer_id: layerId,
-        assigned_agent_id: null, // NULL is allowed
-        created_by_agent_id: agentId,
+        completed_ts: null, // NULL is allowed
         created_ts: timestamp,
         updated_ts: timestamp,
       });
@@ -1027,13 +985,13 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         taskId = result[0];
       } else {
         const task = await db('v4_tasks')
-          .where({ title: 'Task with NULL agent', project_id: 1 })
+          .where({ title: 'Task with NULL completed_ts', project_id: 1 })
           .first();
         taskId = task.id;
       }
 
       const task = await db('v4_tasks').where({ id: taskId, project_id: 1 }).first();
-      assert.strictEqual(task.assigned_agent_id, null);
+      assert.strictEqual(task.completed_ts, null);
     });
   });
 });
