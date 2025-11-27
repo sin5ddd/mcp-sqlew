@@ -352,11 +352,12 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   // 30. v4_task_decision_links - Task-decision links
-  await db.createTableSafe('v4_task_decision_links', (table) => {
+  await db.createTableSafe('v4_task_decision_links', (table, helpers) => {
     table.integer('task_id').unsigned().notNullable();
     table.integer('project_id').unsigned().notNullable();
     table.integer('decision_key_id').unsigned().notNullable();
     table.string('link_type', 32).defaultTo('implements');
+    helpers.timestampColumn('linked_ts');
     table.primary(['task_id', 'project_id', 'decision_key_id']);
     table.foreign('task_id').references('v4_tasks.id').onDelete('CASCADE');
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
