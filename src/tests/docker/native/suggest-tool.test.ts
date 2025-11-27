@@ -125,10 +125,10 @@ async function createDecisionWithTags(
   const { key, value, layer, tags = [], priority = 2, version = '1.0.0', projectId } = params;
 
   // Get or create context key
-  let keyRecord = await db('v4_context_keys').where({ key }).first();
+  let keyRecord = await db('v4_context_keys').where({ key_name: key }).first();
   if (!keyRecord) {
-    await db('v4_context_keys').insert({ key });
-    keyRecord = await db('v4_context_keys').where({ key }).first();
+    await db('v4_context_keys').insert({ key_name: key });
+    keyRecord = await db('v4_context_keys').where({ key_name: key }).first();
   }
   const keyId = keyRecord.id;
 

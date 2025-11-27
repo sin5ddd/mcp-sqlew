@@ -73,9 +73,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create valid key
-      await db('v4_context_keys').insert({ key: 'fk-test-layer' });
+      await db('v4_context_keys').insert({ key_name: 'fk-test-layer' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'fk-test-layer' })
+        .where({ key_name: 'fk-test-layer' })
         .first();
 
       // Try to insert with invalid layer_id
@@ -104,9 +104,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create key and decision
-      await db('v4_context_keys').insert({ key: 'unique-test-pk' });
+      await db('v4_context_keys').insert({ key_name: 'unique-test-pk' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'unique-test-pk' })
+        .where({ key_name: 'unique-test-pk' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -143,9 +143,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('v4_context_keys').insert({ key: 'context-unique-test' });
+      await db('v4_context_keys').insert({ key_name: 'context-unique-test' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'context-unique-test' })
+        .where({ key_name: 'context-unique-test' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -194,9 +194,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create key and decision
-      await db('v4_context_keys').insert({ key: 'cascade-test-key' });
+      await db('v4_context_keys').insert({ key_name: 'cascade-test-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'cascade-test-key' })
+        .where({ key_name: 'cascade-test-key' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -226,9 +226,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision with tags
-      await db('v4_context_keys').insert({ key: 'cascade-test-tags' });
+      await db('v4_context_keys').insert({ key_name: 'cascade-test-tags' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'cascade-test-tags' })
+        .where({ key_name: 'cascade-test-tags' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -268,9 +268,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision with context
-      await db('v4_context_keys').insert({ key: 'cascade-test-context' });
+      await db('v4_context_keys').insert({ key_name: 'cascade-test-context' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'cascade-test-context' })
+        .where({ key_name: 'cascade-test-context' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -316,9 +316,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Insert master data
-      await db('v4_context_keys').insert({ key: 'crud-test-key' });
+      await db('v4_context_keys').insert({ key_name: 'crud-test-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'crud-test-key' })
+        .where({ key_name: 'crud-test-key' })
         .first();
 
       const layerId = await getLayerId(db, 'infrastructure');
@@ -344,9 +344,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create initial decision
-      await db('v4_context_keys').insert({ key: 'update-test-key' });
+      await db('v4_context_keys').insert({ key_name: 'update-test-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'update-test-key' })
+        .where({ key_name: 'update-test-key' })
         .first();
 
       const layerId = await getLayerId(db, 'data');
@@ -380,9 +380,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create key
-      await db('v4_context_keys').insert({ key: 'numeric-test-key' });
+      await db('v4_context_keys').insert({ key_name: 'numeric-test-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'numeric-test-key' })
+        .where({ key_name: 'numeric-test-key' })
         .first();
 
       const layerId = await getLayerId(db, 'infrastructure');
@@ -419,9 +419,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('v4_context_keys').insert({ key: 'context-test-key' });
+      await db('v4_context_keys').insert({ key_name: 'context-test-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'context-test-key' })
+        .where({ key_name: 'context-test-key' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -463,9 +463,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision with context
-      await db('v4_context_keys').insert({ key: 'context-update-key' });
+      await db('v4_context_keys').insert({ key_name: 'context-update-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'context-update-key' })
+        .where({ key_name: 'context-update-key' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -516,9 +516,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('v4_context_keys').insert({ key: 'tag-test-key' });
+      await db('v4_context_keys').insert({ key_name: 'tag-test-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'tag-test-key' })
+        .where({ key_name: 'tag-test-key' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -562,9 +562,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('v4_context_keys').insert({ key: 'scope-test-key' });
+      await db('v4_context_keys').insert({ key_name: 'scope-test-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'scope-test-key' })
+        .where({ key_name: 'scope-test-key' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -611,9 +611,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
       const longKey = 'test/' + 'a'.repeat(100);
 
-      await db('v4_context_keys').insert({ key: longKey });
+      await db('v4_context_keys').insert({ key_name: longKey });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: longKey })
+        .where({ key_name: longKey })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -637,9 +637,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
       const specialValue = "Value with 'quotes', \"double quotes\", and \\backslashes";
 
-      await db('v4_context_keys').insert({ key: 'special-chars-key' });
+      await db('v4_context_keys').insert({ key_name: 'special-chars-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'special-chars-key' })
+        .where({ key_name: 'special-chars-key' })
         .first();
 
       const layerId = await getLayerId(db, 'business');
@@ -663,9 +663,9 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
       const unicodeValue = '日本語 中文 한국어 🚀 emoji';
 
-      await db('v4_context_keys').insert({ key: 'unicode-key' });
+      await db('v4_context_keys').insert({ key_name: 'unicode-key' });
       const keyRecord = await db('v4_context_keys')
-        .where({ key: 'unicode-key' })
+        .where({ key_name: 'unicode-key' })
         .first();
 
       const layerId = await getLayerId(db, 'business');

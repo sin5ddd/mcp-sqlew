@@ -104,9 +104,9 @@ async function insertTask(
  */
 async function assertTaskHasStatus(db: Knex, taskId: number, expectedStatus: string): Promise<void> {
   const task = await db('v4_tasks')
-    .join('v4_task_statuses', 't_tasks.status_id', 'm_task_statuses.id')
-    .where({ 't_tasks.id': taskId })
-    .select('m_task_statuses.name as status')
+    .join('v4_task_statuses', 'v4_tasks.status_id', 'v4_task_statuses.id')
+    .where({ 'v4_tasks.id': taskId })
+    .select('v4_task_statuses.name as status')
     .first();
 
   assert.ok(task, `Task ${taskId} should exist`);
@@ -359,10 +359,10 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
 
       // Verify file links
       const fileLinks = await db('v4_task_file_links')
-        .join('v4_files', 't_task_file_links.file_id', 'm_files.id')
-        .where({ 't_task_file_links.task_id': taskId })
-        .select('t_task_file_links.*', 'm_files.path')
-        .orderBy('m_files.path');
+        .join('v4_files', 'v4_task_file_links.file_id', 'v4_files.id')
+        .where({ 'v4_task_file_links.task_id': taskId })
+        .select('v4_task_file_links.*', 'v4_files.path')
+        .orderBy('v4_files.path');
 
       assert.strictEqual(fileLinks.length, 3);
       assert.strictEqual(fileLinks[0].path, 'src/auth/login.ts');
@@ -797,9 +797,9 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const layerId = await getLayerId(db, 'business');
 
       // m_context_keys has no project_id column
-      await db('v4_context_keys').insert({ key: 'test/cascade-link' });
+      await db('v4_context_keys').insert({ key_name: 'test/cascade-link' });
       const contextKey = await db('v4_context_keys')
-        .where({ key: 'test/cascade-link' })
+        .where({ key_name: 'test/cascade-link' })
         .first();
 
       await db('v4_decisions').insert({
