@@ -14,7 +14,7 @@ export function validateStatusTransition(
   const newStatusId = STATUS_TO_ID[newStatus];
 
   if (!newStatusId) {
-    throw new Error(`Invalid new_status: ${newStatus}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived, rejected`);
+    throw new Error(`Invalid status: ${newStatus}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived, rejected`);
   }
 
   // Check if transition is valid

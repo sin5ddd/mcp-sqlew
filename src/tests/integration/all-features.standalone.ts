@@ -283,7 +283,7 @@ async function testTaskTool() {
   try {
     const start = Date.now();
     if (taskId1) {
-      await moveTask({ task_id: taskId1, new_status: 'in_progress' });
+      await moveTask({ task_id: taskId1, status: 'in_progress' });
       recordResult('task', 'move', 'PASS', undefined, Date.now() - start);
     } else {
       recordResult('task', 'move', 'FAIL', 'No task ID available');
@@ -349,7 +349,7 @@ async function testTaskTool() {
     const start = Date.now();
     if (taskId1) {
       // First move task to 'done' status (required before archiving)
-      await moveTask({ task_id: taskId1, new_status: 'done' });
+      await moveTask({ task_id: taskId1, status: 'done' });
       // Now archive it
       await archiveTask({ task_id: taskId1 });
       recordResult('task', 'archive', 'PASS', undefined, Date.now() - start);

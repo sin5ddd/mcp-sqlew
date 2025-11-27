@@ -74,8 +74,8 @@ export function taskHelp(): any {
         }
       },
       move: {
-        description: 'Move task to different status with validation (v4.1: relaxed transitions)',
-        required_params: ['task_id', 'new_status'],
+        description: 'Move task to different status with validation (v4.0: relaxed transitions)',
+        required_params: ['task_id', 'status'],
         optional_params: ['rejection_reason'],
         valid_statuses: ['todo', 'in_progress', 'waiting_review', 'blocked', 'done', 'archived', 'rejected'],
         transitions: {
@@ -92,12 +92,12 @@ export function taskHelp(): any {
         example: {
           action: 'move',
           task_id: 5,
-          new_status: 'in_progress'
+          status: 'in_progress'
         },
         example_rejection: {
           action: 'move',
           task_id: 5,
-          new_status: 'rejected',
+          status: 'rejected',
           rejection_reason: 'Requirements changed - feature no longer needed'
         }
       },

@@ -42,19 +42,19 @@ export function taskExample(): any {
           {
             step: 2,
             status: 'in_progress',
-            action: '{ action: "move", task_id: 1, new_status: "in_progress" }',
+            action: '{ action: "move", task_id: 1, status: "in_progress" }',
             description: 'Agent starts working on task'
           },
           {
             step: 3,
             status: 'waiting_review',
-            action: '{ action: "move", task_id: 1, new_status: "waiting_review" }',
+            action: '{ action: "move", task_id: 1, status: "waiting_review" }',
             description: 'Work complete, awaiting review/approval'
           },
           {
             step: 4,
             status: 'done',
-            action: '{ action: "move", task_id: 1, new_status: "done" }',
+            action: '{ action: "move", task_id: 1, status: "done" }',
             description: 'Task reviewed and completed'
           },
           {
@@ -66,7 +66,7 @@ export function taskExample(): any {
         ],
         blocked_status: {
           description: 'Use "blocked" when task cannot proceed due to dependencies',
-          example: '{ action: "move", task_id: 1, new_status: "blocked" }'
+          example: '{ action: "move", task_id: 1, status: "blocked" }'
         }
       },
       auto_stale_detection: {

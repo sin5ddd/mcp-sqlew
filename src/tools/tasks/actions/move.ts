@@ -16,7 +16,7 @@ import { validateStatusTransition, getStatusId, getStatusName } from '../interna
  */
 export async function moveTask(params: {
   task_id: number;
-  new_status: string;
+  status: string;
   rejection_reason?: string;
 }, adapter?: DatabaseAdapter): Promise<any> {
   validateActionParams('task', 'move', params);
@@ -28,8 +28,8 @@ export async function moveTask(params: {
     throw new Error('Parameter "task_id" is required');
   }
 
-  if (!params.new_status) {
-    throw new Error('Parameter "new_status" is required');
+  if (!params.status) {
+    throw new Error('Parameter "status" is required');
   }
 
   try {
@@ -50,10 +50,10 @@ export async function moveTask(params: {
         }
 
         const currentStatusId = taskRow.status_id;
-        const newStatusId = getStatusId(params.new_status);
+        const newStatusId = getStatusId(params.status);
 
         // Validate transition
-        validateStatusTransition(currentStatusId, params.new_status);
+        validateStatusTransition(currentStatusId, params.status);
 
         // Update status
         const updateData: any = {
@@ -75,7 +75,7 @@ export async function moveTask(params: {
           .update(updateData);
 
         // Update watcher if moving to done, archived, or rejected (stop watching)
-        if (params.new_status === 'done' || params.new_status === 'archived' || params.new_status === 'rejected') {
+        if (params.status === 'done' || params.status === 'archived' || params.status === 'rejected') {
           try {
             const watcher = FileWatcher.getInstance();
             watcher.unregisterTask(params.task_id);
@@ -88,8 +88,8 @@ export async function moveTask(params: {
           success: true,
           task_id: params.task_id,
           old_status: getStatusName(currentStatusId),
-          new_status: params.new_status,
-          message: `Task ${params.task_id} moved from ${getStatusName(currentStatusId)} to ${params.new_status}`
+          new_status: params.status,
+          message: `Task ${params.task_id} moved from ${getStatusName(currentStatusId)} to ${params.status}`
         };
 
         // Include rejection_reason in response if provided

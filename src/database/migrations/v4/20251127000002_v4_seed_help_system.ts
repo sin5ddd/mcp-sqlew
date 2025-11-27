@@ -252,7 +252,7 @@ export async function up(knex: Knex): Promise<void> {
         // TASK:MOVE
         { action_id: actionMap['task:move'], param_name: 'action', param_type: 'string', required: 1, description: 'Must be "move"', default_value: null },
         { action_id: actionMap['task:move'], param_name: 'task_id', param_type: 'number', required: 1, description: 'Task ID to move', default_value: null },
-        { action_id: actionMap['task:move'], param_name: 'new_status', param_type: 'string', required: 1, description: 'Target status', default_value: null },
+        { action_id: actionMap['task:move'], param_name: 'status', param_type: 'string', required: 1, description: 'Target status', default_value: null },
         { action_id: actionMap['task:move'], param_name: 'rejection_reason', param_type: 'string', required: 0, description: 'Reason for rejection (when moving to rejected)', default_value: null },
         // TASK:LIST
         { action_id: actionMap['task:list'], param_name: 'action', param_type: 'string', required: 1, description: 'Must be "list"', default_value: null },

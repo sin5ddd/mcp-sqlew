@@ -1,5 +1,5 @@
 /**
- * Migration: Update task.move help data for v4.1 changes
+ * Migration: Update task.move help data for v4.0 changes
  *
  * Changes:
  * - Updates move action description to reflect relaxed transitions
@@ -11,7 +11,7 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('Updating task.move help data for v4.1 changes...');
+  console.log('Updating task.move help data for v4.0 changes...');
 
   // 1. Get action_id for task:move
   const moveAction = await knex('v4_help_actions')
@@ -30,7 +30,7 @@ export async function up(knex: Knex): Promise<void> {
   await knex('v4_help_actions')
     .where({ id: actionId })
     .update({
-      description: 'Move task to new status with validation. v4.1: Flexible transitions between non-terminal statuses (todo, in_progress, waiting_review, blocked, done). Terminal statuses (archived, rejected) are final. Use rejection_reason when moving to rejected.'
+      description: 'Move task to new status with validation. v4.0: Flexible transitions between non-terminal statuses (todo, in_progress, waiting_review, blocked, done). Terminal statuses (archived, rejected) are final. Use rejection_reason when moving to rejected.'
     });
   console.log('  ✓ Updated move action description');
 
@@ -46,7 +46,7 @@ export async function up(knex: Knex): Promise<void> {
       param_name: 'rejection_reason',
       param_type: 'string',
       required: 0,
-      description: 'Optional reason for rejection (stored in task notes). Only applicable when new_status is "rejected".',
+      description: 'Optional reason for rejection (stored in task notes). Only applicable when status is "rejected".',
       default_value: null
     });
     console.log('  ✓ Added rejection_reason parameter');

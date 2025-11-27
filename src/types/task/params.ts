@@ -96,7 +96,8 @@ export interface TaskListParams {
  */
 export interface TaskMoveParams {
   task_id: number;
-  new_status: 'todo' | 'in_progress' | 'waiting_review' | 'blocked' | 'done' | 'archived';
+  status: 'todo' | 'in_progress' | 'waiting_review' | 'blocked' | 'done' | 'archived' | 'rejected';
+  rejection_reason?: string;
 }
 
 /**

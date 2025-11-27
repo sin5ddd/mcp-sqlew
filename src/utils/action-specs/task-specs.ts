@@ -61,14 +61,14 @@ export const TASK_ACTION_SPECS: Record<string, ActionSpec> = {
   },
 
   move: {
-    required: ['task_id', 'new_status'],
+    required: ['task_id', 'status'],
     optional: ['rejection_reason'],
     example: {
       action: 'move',
       task_id: 5,
-      new_status: 'in_progress'
+      status: 'in_progress'
     },
-    hint: "v4.1: Flexible transitions between non-terminal statuses. Terminal (archived/rejected) are final. Use rejection_reason when moving to 'rejected'."
+    hint: "v4.0: Flexible transitions between non-terminal statuses. Terminal (archived/rejected) are final. Use rejection_reason when moving to 'rejected'."
   },
 
   link: {
