@@ -22,7 +22,6 @@ import {
   assertDecisionHasTags,
   assertTagIndexPopulated,
   cleanupTestData,
-  getAgentId,
   getLayerId,
   getTagId,
   getScopeId,
@@ -34,7 +33,7 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
   // Get project ID before running tests
   it('should get project ID', async () => {
     const db = getDb();
-    const project = await db('m_projects').first();
+    const project = await db('v4_projects').first();
     assert.ok(project, 'Project should exist');
     projectId = project.id;
   });
@@ -48,13 +47,12 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Try to insert decision with non-existent key_id
-      const insertPromise = db('t_decisions').insert({
+      const insertPromise = db('v4_decisions').insert({
         key_id: 999999, // Non-existent
         project_id: projectId,
         value: 'test',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: 1,
         layer_id: 1,
       });
 
@@ -71,58 +69,29 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       );
     });
 
-    it('should enforce FK constraint on agent_id', async () => {
-      const db = getDb();
-
-      // Setup: Create valid key
-      await db('m_context_keys').insert({ key: 'fk-test-agent' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'fk-test-agent' })
-        .first();
-
-      // Try to insert with invalid agent_id
-      const insertPromise = db('t_decisions').insert({
-        key_id: keyRecord.id,
-        project_id: projectId,
-        value: 'test',
-        version: '1.0.0',
-        ts: Math.floor(Date.now() / 1000),
-        agent_id: 999999, // Non-existent
-        layer_id: 1,
-      });
-
-      await assert.rejects(insertPromise, /foreign key|FOREIGN KEY|Cannot add or update a child row/i);
-
-      // Cleanup
-      await db('m_context_keys').where({ id: keyRecord.id }).del();
-    });
-
     it('should enforce FK constraint on layer_id', async () => {
       const db = getDb();
 
       // Setup: Create valid key
-      await db('m_context_keys').insert({ key: 'fk-test-layer' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'fk-test-layer' })
+      await db('v4_context_keys').insert({ key_name: 'fk-test-layer' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'fk-test-layer' })
         .first();
 
-      const agentId = await getAgentId(db);
-
       // Try to insert with invalid layer_id
-      const insertPromise = db('t_decisions').insert({
+      const insertPromise = db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: 999999, // Non-existent
       });
 
       await assert.rejects(insertPromise, /foreign key|FOREIGN KEY|Cannot add or update a child row/i);
 
       // Cleanup
-      await db('m_context_keys').where({ id: keyRecord.id }).del();
+      await db('v4_context_keys').where({ id: keyRecord.id }).del();
     });
   });
 
@@ -135,32 +104,29 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create key and decision
-      await db('m_context_keys').insert({ key: 'unique-test-pk' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'unique-test-pk' })
+      await db('v4_context_keys').insert({ key_name: 'unique-test-pk' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'unique-test-pk' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'first value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
       // Try to insert duplicate (same key_id + project_id)
-      const duplicatePromise = db('t_decisions').insert({
+      const duplicatePromise = db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'second value',
         version: '2.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -177,26 +143,24 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('m_context_keys').insert({ key: 'context-unique-test' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'context-unique-test' })
+      await db('v4_context_keys').insert({ key_name: 'context-unique-test' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'context-unique-test' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
       // Insert first context
-      await db('t_decision_context').insert({
+      await db('v4_decision_context').insert({
         decision_key_id: keyRecord.id,
         project_id: projectId,
         rationale: 'First rationale',
@@ -204,7 +168,7 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       });
 
       // Try to insert duplicate context
-      const duplicatePromise = db('t_decision_context').insert({
+      const duplicatePromise = db('v4_decision_context').insert({
         decision_key_id: keyRecord.id,
         project_id: projectId,
         rationale: 'Duplicate rationale',
@@ -230,33 +194,31 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create key and decision
-      await db('m_context_keys').insert({ key: 'cascade-test-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'cascade-test-key' })
+      await db('v4_context_keys').insert({ key_name: 'cascade-test-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'cascade-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
       // Verify decision exists
-      let decision = await db('t_decisions').where({ key_id: keyRecord.id }).first();
+      let decision = await db('v4_decisions').where({ key_id: keyRecord.id }).first();
       assert.ok(decision, 'Decision should exist before cascade');
 
       // Delete context key (should cascade to decision)
-      await db('m_context_keys').where({ id: keyRecord.id }).del();
+      await db('v4_context_keys').where({ id: keyRecord.id }).del();
 
       // Verify decision was cascade deleted
-      decision = await db('t_decisions').where({ key_id: keyRecord.id }).first();
+      decision = await db('v4_decisions').where({ key_id: keyRecord.id }).first();
       assert.strictEqual(decision, undefined, 'Decision should be cascade deleted');
     });
 
@@ -264,69 +226,65 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision with tags
-      await db('m_context_keys').insert({ key: 'cascade-test-tags' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'cascade-test-tags' })
+      await db('v4_context_keys').insert({ key_name: 'cascade-test-tags' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'cascade-test-tags' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
       const tagId = await getTagId(db, 'test');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
-      await db('t_decision_tags').insert({
+      await db('v4_decision_tags').insert({
         decision_key_id: keyRecord.id,
         project_id: projectId,
         tag_id: tagId,
       });
 
       // Verify tags exist
-      let tags = await db('t_decision_tags').where({ decision_key_id: keyRecord.id });
+      let tags = await db('v4_decision_tags').where({ decision_key_id: keyRecord.id });
       assert.ok(tags.length > 0, 'Tags should exist before cascade');
 
       // Delete decision
-      await db('t_decisions').where({ key_id: keyRecord.id }).del();
+      await db('v4_decisions').where({ key_id: keyRecord.id }).del();
 
       // Verify tags were cascade deleted
-      tags = await db('t_decision_tags').where({ decision_key_id: keyRecord.id });
+      tags = await db('v4_decision_tags').where({ decision_key_id: keyRecord.id });
       assert.strictEqual(tags.length, 0, 'Tags should be cascade deleted');
 
       // Cleanup
-      await db('m_context_keys').where({ id: keyRecord.id }).del();
+      await db('v4_context_keys').where({ id: keyRecord.id }).del();
     });
 
     it('should cascade delete decision_context when decision deleted', async () => {
       const db = getDb();
 
       // Setup: Create decision with context
-      await db('m_context_keys').insert({ key: 'cascade-test-context' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'cascade-test-context' })
+      await db('v4_context_keys').insert({ key_name: 'cascade-test-context' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'cascade-test-context' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
-      await db('t_decision_context').insert({
+      await db('v4_decision_context').insert({
         decision_key_id: keyRecord.id,
         project_id: projectId,
         rationale: 'Test rationale',
@@ -334,18 +292,18 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       });
 
       // Verify context exists
-      let context = await db('t_decision_context').where({ decision_key_id: keyRecord.id }).first();
+      let context = await db('v4_decision_context').where({ decision_key_id: keyRecord.id }).first();
       assert.ok(context, 'Context should exist before cascade');
 
       // Delete decision
-      await db('t_decisions').where({ key_id: keyRecord.id }).del();
+      await db('v4_decisions').where({ key_id: keyRecord.id }).del();
 
       // Verify context was cascade deleted
-      context = await db('t_decision_context').where({ decision_key_id: keyRecord.id }).first();
+      context = await db('v4_decision_context').where({ decision_key_id: keyRecord.id }).first();
       assert.strictEqual(context, undefined, 'Context should be cascade deleted');
 
       // Cleanup
-      await db('m_context_keys').where({ id: keyRecord.id }).del();
+      await db('v4_context_keys').where({ id: keyRecord.id }).del();
     });
   });
 
@@ -358,22 +316,20 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Insert master data
-      await db('m_context_keys').insert({ key: 'crud-test-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'crud-test-key' })
+      await db('v4_context_keys').insert({ key_name: 'crud-test-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'crud-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'infrastructure');
 
       // Insert decision
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'fastify',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -388,26 +344,24 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create initial decision
-      await db('m_context_keys').insert({ key: 'update-test-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'update-test-key' })
+      await db('v4_context_keys').insert({ key_name: 'update-test-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'update-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'data');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'postgresql',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
       // Update decision
-      await db('t_decisions')
+      await db('v4_decisions')
         .where({ key_id: keyRecord.id })
         .update({
           value: 'postgresql-v16',
@@ -426,27 +380,25 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create key
-      await db('m_context_keys').insert({ key: 'numeric-test-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'numeric-test-key' })
+      await db('v4_context_keys').insert({ key_name: 'numeric-test-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'numeric-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'infrastructure');
 
       // Insert numeric decision
-      await db('t_decisions_numeric').insert({
+      await db('v4_decisions_numeric').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 100,
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
       // Verify
-      const numericDecision = await db('t_decisions_numeric')
+      const numericDecision = await db('v4_decisions_numeric')
         .where({ key_id: keyRecord.id })
         .first();
 
@@ -467,26 +419,24 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('m_context_keys').insert({ key: 'context-test-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'context-test-key' })
+      await db('v4_context_keys').insert({ key_name: 'context-test-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'context-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'oauth2',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
       // Insert context
-      await db('t_decision_context').insert({
+      await db('v4_decision_context').insert({
         decision_key_id: keyRecord.id,
         project_id: projectId,
         rationale: 'OAuth2 provides better security and user experience',
@@ -496,7 +446,7 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       });
 
       // Verify
-      const context = await db('t_decision_context')
+      const context = await db('v4_decision_context')
         .where({ decision_key_id: keyRecord.id })
         .first();
 
@@ -513,25 +463,23 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision with context
-      await db('m_context_keys').insert({ key: 'context-update-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'context-update-key' })
+      await db('v4_context_keys').insert({ key_name: 'context-update-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'context-update-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'v1',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
-      await db('t_decision_context').insert({
+      await db('v4_decision_context').insert({
         decision_key_id: keyRecord.id,
         project_id: projectId,
         rationale: 'Original rationale',
@@ -539,7 +487,7 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       });
 
       // Update context
-      await db('t_decision_context')
+      await db('v4_decision_context')
         .where({ decision_key_id: keyRecord.id })
         .update({
           rationale: 'Updated rationale',
@@ -547,7 +495,7 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
         });
 
       // Verify
-      const context = await db('t_decision_context')
+      const context = await db('v4_decision_context')
         .where({ decision_key_id: keyRecord.id })
         .first();
 
@@ -568,21 +516,19 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('m_context_keys').insert({ key: 'tag-test-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'tag-test-key' })
+      await db('v4_context_keys').insert({ key_name: 'tag-test-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'tag-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -590,7 +536,7 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const apiTagId = await getTagId(db, 'api');
       const perfTagId = await getTagId(db, 'performance');
 
-      await db('t_decision_tags').insert([
+      await db('v4_decision_tags').insert([
         { decision_key_id: keyRecord.id, project_id: projectId, tag_id: apiTagId },
         { decision_key_id: keyRecord.id, project_id: projectId, tag_id: perfTagId },
       ]);
@@ -616,21 +562,19 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
 
       // Setup: Create decision
-      await db('m_context_keys').insert({ key: 'scope-test-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'scope-test-key' })
+      await db('v4_context_keys').insert({ key_name: 'scope-test-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'scope-test-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test value',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -645,7 +589,7 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
 
       // Verify
       const scopes = await db('t_decision_scopes')
-        .join('m_scopes', 't_decision_scopes.scope_id', 'm_scopes.id')
+        .join('v4_scopes', 't_decision_scopes.scope_id', 'm_scopes.id')
         .where({ 't_decision_scopes.decision_key_id': keyRecord.id, 't_decision_scopes.project_id': projectId })
         .pluck('m_scopes.name');
 
@@ -667,21 +611,19 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
       const longKey = 'test/' + 'a'.repeat(100);
 
-      await db('m_context_keys').insert({ key: longKey });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: longKey })
+      await db('v4_context_keys').insert({ key_name: longKey });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: longKey })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: 'test',
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -695,21 +637,19 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
       const specialValue = "Value with 'quotes', \"double quotes\", and \\backslashes";
 
-      await db('m_context_keys').insert({ key: 'special-chars-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'special-chars-key' })
+      await db('v4_context_keys').insert({ key_name: 'special-chars-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'special-chars-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: specialValue,
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 
@@ -723,21 +663,19 @@ runTestsOnAllDatabases('Decision Operations', (getDb, dbType) => {
       const db = getDb();
       const unicodeValue = '日本語 中文 한국어 🚀 emoji';
 
-      await db('m_context_keys').insert({ key: 'unicode-key' });
-      const keyRecord = await db('m_context_keys')
-        .where({ key: 'unicode-key' })
+      await db('v4_context_keys').insert({ key_name: 'unicode-key' });
+      const keyRecord = await db('v4_context_keys')
+        .where({ key_name: 'unicode-key' })
         .first();
 
-      const agentId = await getAgentId(db);
       const layerId = await getLayerId(db, 'business');
 
-      await db('t_decisions').insert({
+      await db('v4_decisions').insert({
         key_id: keyRecord.id,
         project_id: projectId,
         value: unicodeValue,
         version: '1.0.0',
         ts: Math.floor(Date.now() / 1000),
-        agent_id: agentId,
         layer_id: layerId,
       });
 

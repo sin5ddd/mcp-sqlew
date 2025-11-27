@@ -6,8 +6,10 @@ import type { DatabaseAdapter } from '../../adapters/index.js';
 import { createDatabaseAdapter } from '../../adapters/index.js';
 import { syncAgentsWithConfig } from '../../sync-agents.js';
 import { syncCommandsWithConfig } from '../../sync-commands.js';
+import { syncGitignore } from '../../sync-gitignore.js';
 import { debugLog } from '../../utils/debug-logger.js';
 import knexConfig from '../../knexfile.js';
+import { detectSchemaVersion, getSchemaVersion } from './schema-version.js';
 
 // Global adapter instance
 let adapterInstance: DatabaseAdapter | null = null;
@@ -67,6 +69,25 @@ export async function initializeDatabase(
   // Extract migrations config from baseConfig and pass to migrate()
   const migrationsConfig = baseConfig.migrations || {};
 
+  // Clear v3 migration history before running v4 migrations
+  // This allows v4-only migration directory without "missing files" errors
+  try {
+    const hasKnexMigrations = await knex.schema.hasTable('knex_migrations');
+    if (hasKnexMigrations) {
+      // Delete all v3 migration records (those not starting with v4 prefix)
+      // v4 migrations start with 20251126 timestamp
+      const deleted = await knex('knex_migrations')
+        .whereNot('name', 'like', '20251126%')
+        .delete();
+      if (deleted > 0) {
+        debugLog('INFO', `Cleared ${deleted} obsolete v3 migration records from knex_migrations`);
+      }
+    }
+  } catch (cleanupError: any) {
+    // Non-fatal: log and continue
+    debugLog('WARN', `Failed to cleanup v3 migration history: ${cleanupError.message}`);
+  }
+
   try {
     await knex.migrate.latest(migrationsConfig);
   } catch (migrationError: any) {
@@ -85,11 +106,23 @@ export async function initializeDatabase(
 
   debugLog('INFO', `Database initialized with Knex adapter (${environment})`);
 
+  // Detect schema version (v3 vs v4)
+  const schemaVersionInfo = await detectSchemaVersion(knex);
+  debugLog('INFO', 'Schema version detection complete', {
+    version: schemaVersionInfo.version,
+    hasV4Tables: schemaVersionInfo.hasV4Tables,
+    hasV3Tables: schemaVersionInfo.hasV3Tables,
+    tablePrefix: schemaVersionInfo.tablePrefix,
+  });
+
   // Sync agents with config.toml
   syncAgentsWithConfig();
 
   // Sync commands with config.toml
   syncCommandsWithConfig();
+
+  // Sync .gitignore with sqlew system patterns
+  syncGitignore();
 
   adapterInstance = adapter;
   return adapter;

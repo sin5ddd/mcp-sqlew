@@ -21,6 +21,8 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "src/database/migrations/v3",
+    "src/tests/database/migrations/v3"
   ]
 }

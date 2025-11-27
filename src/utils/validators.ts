@@ -56,11 +56,14 @@ export function validatePriority(priority: string): 'low' | 'medium' | 'high' | 
 
 /**
  * Validates priority number (1-4 range)
- * @throws Error if priority is out of range
+ * @throws Error if priority is not a number or out of range
  */
-export function validatePriorityRange(priority: number): number {
+export function validatePriorityRange(priority: unknown): number {
+  if (typeof priority !== 'number' || !Number.isInteger(priority)) {
+    throw new Error('Priority must be an integer (1=low, 2=medium, 3=high, 4=critical)');
+  }
   if (priority < 1 || priority > 4) {
-    throw new Error('Priority must be between 1 and 4');
+    throw new Error('Priority must be between 1 and 4 (1=low, 2=medium, 3=high, 4=critical)');
   }
   return priority;
 }
@@ -76,7 +79,7 @@ export async function validateLayer(adapter: DatabaseAdapter, layer: string): Pr
   }
 
   const knex = adapter.getKnex();
-  const result = await knex('m_layers').where({ name: layer }).select('id').first() as { id: number } | undefined;
+  const result = await knex('v4_layers').where({ name: layer }).select('id').first() as { id: number } | undefined;
   if (!result) {
     throw new Error(`Layer not found in database: ${layer}`);
   }
@@ -132,9 +135,12 @@ export function validateLength(value: string, paramName: string, maxLength: numb
 
 /**
  * Validates number is within range
- * @throws Error if number is out of range
+ * @throws Error if value is not a number or out of range
  */
-export function validateRange(value: number, paramName: string, min: number, max: number): number {
+export function validateRange(value: unknown, paramName: string, min: number, max: number): number {
+  if (typeof value !== 'number' || isNaN(value)) {
+    throw new Error(`${paramName} must be a number between ${min} and ${max}`);
+  }
   if (value < min || value > max) {
     throw new Error(`${paramName} must be between ${min} and ${max}`);
   }

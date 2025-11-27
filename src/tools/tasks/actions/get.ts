@@ -29,12 +29,11 @@ export async function getTask(params: {
 
   try {
     // Get task with details (with project_id isolation)
-    const task = await knex('t_tasks as t')
-      .leftJoin('m_task_statuses as s', 't.status_id', 's.id')
-      .leftJoin('m_agents as aa', 't.assigned_agent_id', 'aa.id')
-      .leftJoin('m_agents as ca', 't.created_by_agent_id', 'ca.id')
-      .leftJoin('m_layers as l', 't.layer_id', 'l.id')
-      .leftJoin('t_task_details as td', function() {
+    // Note: Agent tracking removed in v4.0 - assigned_to and created_by fields removed
+    const task = await knex('v4_tasks as t')
+      .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
+      .leftJoin('v4_layers as l', 't.layer_id', 'l.id')
+      .leftJoin('v4_task_details as td', function() {
         this.on('t.id', '=', 'td.task_id')
             .andOn('t.project_id', '=', 'td.project_id');
       })
@@ -44,8 +43,6 @@ export async function getTask(params: {
         't.title',
         's.name as status',
         't.priority',
-        'aa.name as assigned_to',
-        'ca.name as created_by',
         'l.name as layer',
         't.created_ts',
         't.updated_ts',
@@ -64,27 +61,27 @@ export async function getTask(params: {
     }
 
     // Get tags
-    const tags = await knex('t_task_tags as tt')
-      .join('m_tags as tg', 'tt.tag_id', 'tg.id')
+    const tags = await knex('v4_task_tags as tt')
+      .join('v4_tags as tg', 'tt.tag_id', 'tg.id')
       .where('tt.task_id', params.task_id)
       .select('tg.name')
       .then(rows => rows.map((row: any) => row.name));
 
     // Get decision links
-    const decisions = await knex('t_task_decision_links as tdl')
-      .join('m_context_keys as ck', 'tdl.decision_key_id', 'ck.id')
+    const decisions = await knex('v4_task_decision_links as tdl')
+      .join('v4_context_keys as ck', 'tdl.decision_key_id', 'ck.id')
       .where('tdl.task_id', params.task_id)
-      .select('ck.key', 'tdl.link_type');
+      .select('ck.key_name as key', 'tdl.link_type');
 
     // Get constraint links
-    const constraints = await knex('t_task_constraint_links as tcl')
-      .join('t_constraints as c', 'tcl.constraint_id', 'c.id')
+    const constraints = await knex('v4_task_constraint_links as tcl')
+      .join('v4_constraints as c', 'tcl.constraint_id', 'c.id')
       .where('tcl.task_id', params.task_id)
       .select('c.id', 'c.constraint_text');
 
     // Get file links
-    const files = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const files = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', params.task_id)
       .select('f.path')
       .then(rows => rows.map((row: any) => row.path));

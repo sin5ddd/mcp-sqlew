@@ -166,8 +166,7 @@ async function testConstraintTool() {
       category: 'architecture',
       constraint_text: 'Test constraint rule',
       priority: 'medium',
-      tags: ['test'],
-      created_by: 'test-agent'
+      tags: ['test']
     });
     constraintId = result.constraint_id;
     recordResult('constraint', 'add', 'PASS', undefined, Date.now() - start);
@@ -212,8 +211,7 @@ async function testTaskTool() {
       description: 'Test description',
       status: 'todo',
       priority: 2,
-      tags: ['test'],
-      created_by_agent: 'test-agent'
+      tags: ['test']
     });
     taskId1 = result.task_id;
     recordResult('task', 'create', 'PASS', undefined, Date.now() - start);
@@ -285,7 +283,7 @@ async function testTaskTool() {
   try {
     const start = Date.now();
     if (taskId1) {
-      await moveTask({ task_id: taskId1, new_status: 'in_progress' });
+      await moveTask({ task_id: taskId1, status: 'in_progress' });
       recordResult('task', 'move', 'PASS', undefined, Date.now() - start);
     } else {
       recordResult('task', 'move', 'FAIL', 'No task ID available');
@@ -351,7 +349,7 @@ async function testTaskTool() {
     const start = Date.now();
     if (taskId1) {
       // First move task to 'done' status (required before archiving)
-      await moveTask({ task_id: taskId1, new_status: 'done' });
+      await moveTask({ task_id: taskId1, status: 'done' });
       // Now archive it
       await archiveTask({ task_id: taskId1 });
       recordResult('task', 'archive', 'PASS', undefined, Date.now() - start);

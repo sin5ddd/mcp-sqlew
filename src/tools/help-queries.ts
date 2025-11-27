@@ -97,13 +97,13 @@ export async function queryHelpAction(adapter: DatabaseAdapter, targetTool: stri
   const knex = adapter.getKnex();
   try {
     // First, check if tool exists
-    const toolExists = await knex('m_help_tools')
+    const toolExists = await knex('v4_help_tools')
       .where({ tool_name: targetTool })
       .select('tool_name')
       .first();
 
     if (!toolExists) {
-      const availableTools = await knex('m_help_tools')
+      const availableTools = await knex('v4_help_tools')
         .orderBy('tool_name')
         .select('tool_name');
       return {
@@ -113,13 +113,13 @@ export async function queryHelpAction(adapter: DatabaseAdapter, targetTool: stri
     }
 
     // Get action info
-    const actionRow = await knex('m_help_actions')
+    const actionRow = await knex('v4_help_actions')
       .where({ tool_name: targetTool, action_name: targetAction })
-      .select('action_id', 'action_name', 'description')
+      .select('id as action_id', 'action_name', 'description')
       .first() as { action_id: number; action_name: string; description: string } | undefined;
 
     if (!actionRow) {
-      const availableActions = await knex('m_help_actions')
+      const availableActions = await knex('v4_help_actions')
         .where({ tool_name: targetTool })
         .orderBy('action_name')
         .select('action_name');
@@ -130,7 +130,7 @@ export async function queryHelpAction(adapter: DatabaseAdapter, targetTool: stri
     }
 
     // Get parameters
-    const paramRows = await knex('t_help_action_params')
+    const paramRows = await knex('v4_help_action_params')
       .where({ action_id: actionRow.action_id })
       .orderBy([
         { column: 'required', order: 'desc' },
@@ -156,18 +156,18 @@ export async function queryHelpAction(adapter: DatabaseAdapter, targetTool: stri
     });
 
     // Get examples
-    const exampleRows = await knex('t_help_action_examples')
+    const exampleRows = await knex('v4_help_action_examples')
       .where({ action_id: actionRow.action_id })
-      .orderBy('example_id')
-      .select('example_title', 'example_code', 'explanation') as Array<{
-        example_title: string;
-        example_code: string;
+      .orderBy('id')
+      .select('title', 'code', 'explanation') as Array<{
+        title: string;
+        code: string;
         explanation: string;
       }>;
 
     const examples: HelpExample[] = exampleRows.map(row => ({
-      title: row.example_title,
-      code: row.example_code,
+      title: row.title,
+      code: row.code,
       explanation: row.explanation
     }));
 
@@ -193,13 +193,13 @@ export async function queryHelpParams(adapter: DatabaseAdapter, targetTool: stri
   const knex = adapter.getKnex();
   try {
     // First, check if tool exists
-    const toolExists = await knex('m_help_tools')
+    const toolExists = await knex('v4_help_tools')
       .where({ tool_name: targetTool })
       .select('tool_name')
       .first();
 
     if (!toolExists) {
-      const availableTools = await knex('m_help_tools')
+      const availableTools = await knex('v4_help_tools')
         .orderBy('tool_name')
         .select('tool_name');
       return {
@@ -209,13 +209,13 @@ export async function queryHelpParams(adapter: DatabaseAdapter, targetTool: stri
     }
 
     // Get action info
-    const actionRow = await knex('m_help_actions')
+    const actionRow = await knex('v4_help_actions')
       .where({ tool_name: targetTool, action_name: targetAction })
       .select('action_id')
       .first() as { action_id: number } | undefined;
 
     if (!actionRow) {
-      const availableActions = await knex('m_help_actions')
+      const availableActions = await knex('v4_help_actions')
         .where({ tool_name: targetTool })
         .orderBy('action_name')
         .select('action_name');
@@ -226,7 +226,7 @@ export async function queryHelpParams(adapter: DatabaseAdapter, targetTool: stri
     }
 
     // Get parameters
-    const paramRows = await knex('t_help_action_params')
+    const paramRows = await knex('v4_help_action_params')
       .where({ action_id: actionRow.action_id })
       .orderBy([
         { column: 'required', order: 'desc' },
@@ -271,13 +271,13 @@ export async function queryHelpTool(adapter: DatabaseAdapter, tool: string): Pro
   const knex = adapter.getKnex();
   try {
     // Get tool info
-    const toolRow = await knex('m_help_tools')
+    const toolRow = await knex('v4_help_tools')
       .where({ tool_name: tool })
       .select('tool_name', 'description')
       .first() as { tool_name: string; description: string } | undefined;
 
     if (!toolRow) {
-      const availableTools = await knex('m_help_tools')
+      const availableTools = await knex('v4_help_tools')
         .orderBy('tool_name')
         .select('tool_name');
       return {
@@ -287,7 +287,7 @@ export async function queryHelpTool(adapter: DatabaseAdapter, tool: string): Pro
     }
 
     // Get all actions for this tool
-    const actionRows = await knex('m_help_actions')
+    const actionRows = await knex('v4_help_actions')
       .where({ tool_name: tool })
       .orderBy('action_name')
       .select('action_name', 'description') as Array<{
@@ -319,8 +319,8 @@ export async function queryHelpTool(adapter: DatabaseAdapter, tool: string): Pro
 export async function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: number): Promise<HelpUseCaseResult | { error: string }> {
   const knex = adapter.getKnex();
   try {
-    const row = await knex('t_help_use_cases as uc')
-      .join('m_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id')
+    const row = await knex('v4_help_use_cases as uc')
+      .join('v4_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id')
       .where({ 'uc.use_case_id': use_case_id })
       .select(
         'uc.use_case_id',
@@ -380,13 +380,13 @@ export async function queryHelpListUseCases(
 
     if (category) {
       // Verify category exists
-      const categoryExists = await knex('m_help_use_case_categories')
+      const categoryExists = await knex('v4_help_use_case_categories')
         .where({ category_name: category })
         .select('category_name')
         .first();
 
       if (!categoryExists) {
-        const availableCategories = await knex('m_help_use_case_categories')
+        const availableCategories = await knex('v4_help_use_case_categories')
           .select('category_name')
           .orderBy('category_name')
           .then(rows => rows.map((row: any) => row.category_name));
@@ -402,12 +402,12 @@ export async function queryHelpListUseCases(
     }
 
     // Get total count (all use-cases)
-    const totalRow = await knex('t_help_use_cases').count('* as count').first() as { count: number };
+    const totalRow = await knex('v4_help_use_cases').count('* as count').first() as { count: number };
     const total = totalRow.count;
 
     // Build filtered query
-    let filteredQuery = knex('t_help_use_cases as uc')
-      .join('m_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id');
+    let filteredQuery = knex('v4_help_use_cases as uc')
+      .join('v4_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id');
 
     if (category) {
       filteredQuery = filteredQuery.where({ 'cat.category_name': category });
@@ -459,7 +459,7 @@ export async function queryHelpListUseCases(
 
     // Add available categories if no category filter
     if (!category) {
-      const categories = await knex('m_help_use_case_categories')
+      const categories = await knex('v4_help_use_case_categories')
         .select('category_name')
         .orderBy('category_name')
         .then(rows => rows.map((row: any) => row.category_name));
@@ -483,7 +483,7 @@ export async function queryHelpNextActions(adapter: DatabaseAdapter, targetTool:
   const knex = adapter.getKnex();
   try {
     // Verify tool and action exist
-    const actionRow = await knex('m_help_actions')
+    const actionRow = await knex('v4_help_actions')
       .where({ tool_name: targetTool, action_name: targetAction })
       .select('action_id')
       .first();
@@ -493,7 +493,7 @@ export async function queryHelpNextActions(adapter: DatabaseAdapter, targetTool:
     }
 
     // Find use-cases containing this action in their sequence
-    const useCases = await knex('t_help_use_cases')
+    const useCases = await knex('v4_help_use_cases')
       .where('action_sequence', 'like', `%"${targetAction}"%`)
       .select('action_sequence', 'title', 'complexity') as Array<{
       action_sequence: string;

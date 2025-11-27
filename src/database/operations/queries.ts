@@ -14,7 +14,7 @@ export async function getLayerId(
   trx?: Knex.Transaction
 ): Promise<number | null> {
   const knex = trx || adapter.getKnex();
-  const result = await knex('m_layers').where({ name }).first('id');
+  const result = await knex('v4_layers').where({ name }).first('id');
   return result ? result.id : null;
 }
 
@@ -27,7 +27,7 @@ export async function getCategoryId(
   trx?: Knex.Transaction
 ): Promise<number | null> {
   const knex = trx || adapter.getKnex();
-  const result = await knex('m_constraint_categories').where({ name }).first('id');
+  const result = await knex('v4_constraint_categories').where({ name }).first('id');
   return result ? result.id : null;
 }
 
@@ -59,18 +59,17 @@ export async function getDecisionWithContext(
   const knex = adapter.getKnex();
 
   // First get the decision
-  const decision = await knex('t_decisions as d')
-    .join('m_context_keys as k', 'd.key_id', 'k.id')
-    .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
-    .leftJoin('m_agents as a', 'd.agent_id', 'a.id')
-    .where('k.key', decisionKey)
+  // Note: Agent tracking removed in v4.0 - decided_by field removed
+  const decision = await knex('v4_decisions as d')
+    .join('v4_context_keys as k', 'd.key_id', 'k.id')
+    .leftJoin('v4_layers as l', 'd.layer_id', 'l.id')
+    .where('k.key_name', decisionKey)
     .select(
-      'k.key',
+      'k.key_name as key',
       'd.value',
       'd.version',
       knex.raw(`CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' ELSE 'draft' END as status`),
       'l.name as layer',
-      'a.name as decided_by',
       knex.raw(`datetime(d.ts, 'unixepoch') as updated`)
     )
     .first();
@@ -78,16 +77,15 @@ export async function getDecisionWithContext(
   if (!decision) return null;
 
   // Get all contexts for this decision
-  const contexts = await knex('t_decision_context as dc')
-    .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
-    .leftJoin('m_agents as a', 'dc.agent_id', 'a.id')
-    .where('k.key', decisionKey)
+  // Note: Agent tracking removed in v4.0 - decided_by field removed
+  const contexts = await knex('v4_decision_context as dc')
+    .join('v4_context_keys as k', 'dc.decision_key_id', 'k.id')
+    .where('k.key_name', decisionKey)
     .select(
       'dc.id',
       'dc.rationale',
       'dc.alternatives_considered',
       'dc.tradeoffs',
-      'a.name as decided_by',
       knex.raw(`datetime(dc.decision_date, 'unixepoch') as decision_date`),
       'dc.related_task_id',
       'dc.related_constraint_id'
@@ -126,23 +124,22 @@ export async function listDecisionContexts(
 }>> {
   const knex = adapter.getKnex();
 
-  let query = knex('t_decision_context as dc')
-    .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
-    .leftJoin('m_agents as a', 'dc.agent_id', 'a.id')
+  // Note: Agent tracking removed in v4.0 - decided_by field removed
+  let query = knex('v4_decision_context as dc')
+    .join('v4_context_keys as k', 'dc.decision_key_id', 'k.id')
     .select(
       'dc.id',
-      'k.key as decision_key',
+      'k.key_name as decision_key',
       'dc.rationale',
       'dc.alternatives_considered',
       'dc.tradeoffs',
-      'a.name as decided_by',
       knex.raw(`datetime(dc.decision_date, 'unixepoch') as decision_date`),
       'dc.related_task_id',
       'dc.related_constraint_id'
     );
 
   if (filters?.decisionKey) {
-    query = query.where('k.key', filters.decisionKey);
+    query = query.where('k.key_name', filters.decisionKey);
   }
 
   if (filters?.relatedTaskId !== undefined) {
@@ -153,9 +150,7 @@ export async function listDecisionContexts(
     query = query.where('dc.related_constraint_id', filters.relatedConstraintId);
   }
 
-  if (filters?.decidedBy) {
-    query = query.where('a.name', filters.decidedBy);
-  }
+  // Note: decidedBy filter removed in v4.0 (agent tracking eliminated)
 
   query = query.orderBy('dc.decision_date', 'desc');
 

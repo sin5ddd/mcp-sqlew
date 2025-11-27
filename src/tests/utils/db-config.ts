@@ -34,10 +34,10 @@ export interface DbConfig {
 // When running tests, we're in dist/tests/utils/, so ../../config/knex/ is wrong
 // We need to go to the project root first
 const projectRoot = join(__dirname, '../../../'); // dist/tests/utils/ -> project root
+
+// v4 migration path (replaces v3 config/knex/bootstrap, upgrades, enhancements)
 export const migrationDirs = [
-  join(projectRoot, 'dist/config/knex/bootstrap'),
-  join(projectRoot, 'dist/config/knex/upgrades'),
-  join(projectRoot, 'dist/config/knex/enhancements'),
+  join(projectRoot, 'dist/database/migrations/v4'),
 ];
 
 // ============================================================================

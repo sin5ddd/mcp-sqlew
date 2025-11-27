@@ -1,6 +1,6 @@
 # Task System Overview - Kanban Task Watcher
 
-**Version:** 3.0.0
+**Version:** 4.0.0
 **Last Updated:** 2025-10-17
 
 ## Table of Contents
@@ -118,72 +118,62 @@ Every task has:
 - Completed tasks no longer active
 - Terminal state (no transitions out)
 
-## State Machine Transitions
+**`rejected`:** (v4.1.0)
+- Cancelled or rejected tasks
+- Terminal state (no transitions out)
+- Accepts optional `rejection_reason` parameter
 
-### Visual Diagram
+## State Machine Transitions (v4.1.0 - Relaxed Rules)
+
+### Simplified Model
 
 ```
-v3.4.0 Git-Aware Workflow:
-todo → in_progress → waiting_review → done → archived
-  ↓         ↓              ↓
-  |     (Quality gates   (Git commits)
-  |      or 2h idle)         ↓
-  |         ↓          (All watched files
-  └──── blocked        committed to Git)
+v4.1.0 Relaxed Workflow:
 
-Real-time: .git/index file watcher detects commits
-Periodic: task.list() checks git log
+Non-terminal: todo, in_progress, waiting_review, blocked, done
+    ↓ Can freely transition to any status (including terminal)
 
-Alternative (with acceptance_criteria):
-todo → in_progress → done → archived
-  ↓         ↓
-  |    (Criteria met,
-  |     skip review)
-  |         ↓
-  └──── blocked
+Terminal: archived, rejected
+    ↓ Cannot transition (final states)
 ```
 
 ### Valid Transitions
 
-| From Status | To Status(es) | Rationale |
-|-------------|--------------|-----------|
-| `todo` | `in_progress`, `blocked` | Start work or discover blocker |
-| `in_progress` | `waiting_review`, `blocked`, `done` | Quality gates met (v3.4.1), need review, hit blocker, or complete |
-| `waiting_review` | `in_progress`, `todo`, `done` | Resume work, reset to backlog, or approve |
-| `blocked` | `todo`, `in_progress` | Blocker resolved, resume or reset |
-| `done` | `archived` | Archive completed work (auto after 48h in v3.4.1) |
-| `archived` | *(terminal state)* | No transitions allowed |
+| Status Type | Statuses | Can Transition To |
+|-------------|----------|-------------------|
+| **Non-terminal** | todo, in_progress, waiting_review, blocked, done | Any status |
+| **Terminal** | archived, rejected | None |
 
 ### Complete Transition Matrix
 
-| From ↓ / To → | todo | in_progress | waiting_review | blocked | done | archived |
-|---------------|------|-------------|----------------|---------|------|----------|
-| **todo** | - | ✅ | ❌ | ✅ | ❌ | ❌ |
-| **in_progress** | ❌ | - | ✅ | ✅ | ✅ | ❌ |
-| **waiting_review** | ✅ | ✅ | - | ❌ | ✅ | ❌ |
-| **blocked** | ✅ | ✅ | ❌ | - | ❌ | ❌ |
-| **done** | ❌ | ❌ | ❌ | ❌ | - | ✅ |
-| **archived** | ❌ | ❌ | ❌ | ❌ | ❌ | - |
+| From ↓ / To → | todo | in_progress | waiting_review | blocked | done | archived | rejected |
+|---------------|------|-------------|----------------|---------|------|----------|----------|
+| **todo** | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **in_progress** | ✅ | - | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **waiting_review** | ✅ | ✅ | - | ✅ | ✅ | ✅ | ✅ |
+| **blocked** | ✅ | ✅ | ✅ | - | ✅ | ✅ | ✅ |
+| **done** | ✅ | ✅ | ✅ | ✅ | - | ✅ | ✅ |
+| **archived** | ❌ | ❌ | ❌ | ❌ | ❌ | - | ❌ |
+| **rejected** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | - |
 
 ✅ = Valid transition
-❌ = Invalid transition
+❌ = Invalid transition (terminal statuses)
 \- = Same status (no transition)
 
 ### Validation
 
 - Enforced by `move` action
-- Invalid transitions return error with valid options
-- Use `update` action to bypass validation (use with caution)
+- Only terminal statuses (`archived`, `rejected`) cannot transition
+- `rejected` accepts optional `rejection_reason` parameter
 
-**Example Error:**
+**Example - Moving to rejected:**
 ```javascript
 {
   action: "move",
   task_id: 1,
-  new_status: "archived"  // Task is in_progress
+  status: "rejected",
+  rejection_reason: "Requirements changed, task no longer needed"
 }
-// Error: Invalid status transition from in_progress to archived.
-// Valid transitions: waiting_review, blocked, done
 ```
 
 ## Auto-Stale Detection
@@ -285,37 +275,37 @@ ignore_weekend = true               # Weekend-aware mode (shared setting)
 **Via SQL (Advanced):**
 ```sql
 -- Enable/Disable auto-stale
-UPDATE m_config SET value = '1' WHERE key = 'task_auto_stale_enabled';  -- Enable
-UPDATE m_config SET value = '0' WHERE key = 'task_auto_stale_enabled';  -- Disable
+UPDATE v4_config SET value = '1' WHERE key = 'task_auto_stale_enabled';  -- Enable
+UPDATE v4_config SET value = '0' WHERE key = 'task_auto_stale_enabled';  -- Disable
 
 -- Adjust auto-archive threshold
-UPDATE m_config SET value = '3' WHERE key = 'auto_archive_done_days';  -- 3 days
+UPDATE v4_config SET value = '3' WHERE key = 'auto_archive_done_days';  -- 3 days
 
 -- Adjust stale detection thresholds
-UPDATE m_config SET value = '4' WHERE key = 'task_stale_hours_in_progress';
-UPDATE m_config SET value = '48' WHERE key = 'task_stale_hours_waiting_review';
+UPDATE v4_config SET value = '4' WHERE key = 'task_stale_hours_in_progress';
+UPDATE v4_config SET value = '48' WHERE key = 'task_stale_hours_waiting_review';
 
 -- Check current config
-SELECT key, value FROM m_config WHERE key LIKE 'task_%' OR key LIKE 'auto_%';
+SELECT key, value FROM v4_config WHERE key LIKE 'task_%' OR key LIKE 'auto_%';
 ```
 
 ### Monitoring
 
-Track transitions via `t_activity_log` table:
+Track transitions via `v4_activity_log` table:
 
 ```sql
 -- Recent auto-transitions (including auto-archive)
-SELECT * FROM t_activity_log
+SELECT * FROM v4_activity_log
 WHERE entity_type = 'task' AND action_type = 'status_change'
 ORDER BY ts DESC LIMIT 20;
 
 -- Frequently stale tasks (>2 auto-transitions)
-SELECT task_id, COUNT(*) as stale_count FROM t_activity_log
+SELECT task_id, COUNT(*) as stale_count FROM v4_activity_log
 WHERE entity_type = 'task' AND json_extract(details, '$.new_status') = 3
 GROUP BY task_id HAVING stale_count > 2;
 
 -- Recently auto-archived tasks
-SELECT * FROM t_activity_log
+SELECT * FROM v4_activity_log
 WHERE entity_type = 'task'
   AND action_type = 'status_change'
   AND json_extract(details, '$.new_status') = 6  -- ARCHIVED status
@@ -323,7 +313,7 @@ ORDER BY ts DESC LIMIT 20;
 
 -- Count of archived tasks per day
 SELECT date(ts, 'unixepoch') as day, COUNT(*) as archived_count
-FROM t_activity_log
+FROM v4_activity_log
 WHERE entity_type = 'task'
   AND action_type = 'status_change'
   AND json_extract(details, '$.new_status') = 6
@@ -444,21 +434,19 @@ When `autodelete_ignore_weekend` is enabled (via config.toml or MCP tool):
 {
   action: "move",
   task_id: 1,
-  new_status: "waiting_review"
+  status: "waiting_review"
 }
 ```
 
 ## Related Documentation
 
 - **[TASK_ACTIONS.md](TASK_ACTIONS.md)** - Complete action reference with examples
-- **[TASK_LINKING.md](TASK_LINKING.md)** - Linking tasks to decisions/constraints/files
-- **[TASK_MIGRATION.md](TASK_MIGRATION.md)** - Migrating from decision-based task tracking
-- **[TASK_SYSTEM.md](TASK_SYSTEM.md)** - Complete documentation (original)
+- **[TASK_PRUNING.md](TASK_PRUNING.md)** - Auto-pruning feature for watched files
 - **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Comprehensive AI agent guide
 - **[README.md](../README.md)** - Project overview
 
 ---
 
-**Version:** 3.0.0
-**Last Updated:** 2025-10-17
+**Version:** 4.0.0
+**Last Updated:** 2025-11-27
 **Author:** sin5ddd

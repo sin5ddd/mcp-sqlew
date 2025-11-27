@@ -21,7 +21,7 @@ describe('SQL Dump DEFAULT Value Conversions', () => {
         useNullAsDefault: true,
       });
 
-      await db.schema.createTable('t_help_token_usage', (table) => {
+      await db.schema.createTable('v4_help_token_usage', (table) => {
         table.increments('usage_id').primary();
         table.text('query_type').notNullable();
         table.integer('estimated_tokens').notNullable();
@@ -31,7 +31,7 @@ describe('SQL Dump DEFAULT Value Conversions', () => {
 
       // Generate MySQL dump
       const dump = await generateSqlDump(db, 'mysql', {
-        tables: ['t_help_token_usage'],
+        tables: ['v4_help_token_usage'],
         includeSchema: true,
       });
 
@@ -50,7 +50,7 @@ describe('SQL Dump DEFAULT Value Conversions', () => {
         useNullAsDefault: true,
       });
 
-      await db.schema.createTable('t_help_token_usage', (table) => {
+      await db.schema.createTable('v4_help_token_usage', (table) => {
         table.increments('usage_id').primary();
         table.text('query_type').notNullable();
         table.integer('estimated_tokens').notNullable();
@@ -58,7 +58,7 @@ describe('SQL Dump DEFAULT Value Conversions', () => {
       });
 
       const dump = await generateSqlDump(db, 'postgresql', {
-        tables: ['t_help_token_usage'],
+        tables: ['v4_help_token_usage'],
         includeSchema: true,
       });
 

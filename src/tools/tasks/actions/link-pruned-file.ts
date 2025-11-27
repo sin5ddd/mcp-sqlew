@@ -33,14 +33,14 @@ export async function linkPrunedFile(params: {
     const projectId = getProjectContext().getProjectId();
 
     // Get decision key_id (with project_id filter)
-    const decision = await knex('m_context_keys as k')
+    const decision = await knex('v4_context_keys as k')
       .whereExists(function() {
         this.select('*')
-          .from('t_decisions as d')
+          .from('v4_decisions as d')
           .whereRaw('d.key_id = k.id')
           .where('d.project_id', projectId);
       })
-      .where('k.key', params.decision_key)
+      .where('k.key_name', params.decision_key)
       .select('k.id as key_id')
       .first() as { key_id: number } | undefined;
 
@@ -49,7 +49,7 @@ export async function linkPrunedFile(params: {
     }
 
     // Check if pruned file exists
-    const prunedFile = await knex('t_task_pruned_files')
+    const prunedFile = await knex('v4_task_pruned_files')
       .where({ id: params.pruned_file_id })
       .select('id', 'task_id', 'file_path')
       .first() as { id: number; task_id: number; file_path: string } | undefined;
@@ -59,9 +59,9 @@ export async function linkPrunedFile(params: {
     }
 
     // Update the link
-    const updated = await knex('t_task_pruned_files')
+    const updated = await knex('v4_task_pruned_files')
       .where({ id: params.pruned_file_id })
-      .update({ linked_decision_key_id: decision.key_id });
+      .update({ linked_decision_id: decision.key_id });
 
     if (updated === 0) {
       throw new Error(`Failed to link pruned file #${params.pruned_file_id} to decision ${params.decision_key}`);

@@ -303,7 +303,7 @@ export function validateLength(
  *
  * @param value Value to validate
  * @param fieldName Field name for error messages
- * @param tableName Master table name (e.g., 'm_layers', 'm_agents')
+ * @param tableName Master table name (e.g., 'v4_layers', 'v4_agents')
  * @param columnName Column name to check (usually 'name' or 'id')
  * @param adapter Database adapter
  * @param itemIndex Item index in batch
@@ -329,8 +329,8 @@ export async function validateForeignKey(
 
   if (!exists) {
     // For layers, provide valid options
-    if (tableName === 'm_layers') {
-      const validLayers = await knex('m_layers').select('name');
+    if (tableName === 'v4_layers') {
+      const validLayers = await knex('v4_layers').select('name');
       errors.push({
         itemIndex,
         itemIdentifier,

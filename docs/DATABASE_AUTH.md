@@ -1,6 +1,6 @@
 # Database Authentication Configuration
 
-This document describes the authentication configuration system for multi-database support in mcp-sqlew v3.7.0+.
+This document describes the authentication configuration system for multi-database support in mcp-sqlew v4.0.0+.
 
 ## Overview
 

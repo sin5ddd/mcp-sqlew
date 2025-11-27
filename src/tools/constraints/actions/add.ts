@@ -6,7 +6,6 @@
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import {
   getAdapter,
-  getOrCreateAgent,
   getLayerId,
   getOrCreateTag,
   getOrCreateCategoryId
@@ -14,11 +13,11 @@ import {
 import {
   STRING_TO_PRIORITY,
   DEFAULT_PRIORITY,
-  SQLITE_TRUE
+  SQLITE_TRUE,
+  STANDARD_LAYERS
 } from '../../../constants.js';
 import { validateCategory, validatePriority } from '../../../utils/validators.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
-import { logConstraintAdd } from '../../../utils/activity-logging.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
@@ -59,9 +58,8 @@ export async function addConstraint(
       // Validate and get layer ID if provided
       let layerId: number | null = null;
       if (params.layer) {
-        const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
-        if (!validLayers.includes(params.layer)) {
-          throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
+        if (!STANDARD_LAYERS.includes(params.layer as any)) {
+          throw new Error(`Invalid layer. Must be one of: ${STANDARD_LAYERS.join(', ')}`);
         }
         layerId = await getLayerId(actualAdapter, params.layer);
         if (!layerId) {
@@ -74,21 +72,18 @@ export async function addConstraint(
         // Get or create category
         const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
 
-        // Get or create created_by agent (default to generic pool)
-        const createdBy = params.created_by || '';
-        const agentId = await getOrCreateAgent(actualAdapter, createdBy, trx);
+        // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 
         // Calculate timestamp
         const ts = Math.floor(Date.now() / 1000);
 
-        // Insert constraint with project_id
-        const [constraintId] = await trx('t_constraints').insert({
+        // Insert constraint with project_id (agent_id removed in v4.0)
+        const [constraintId] = await trx('v4_constraints').insert({
           category_id: categoryId,
           layer_id: layerId,
           constraint_text: params.constraint_text,
           priority: priority,
           active: SQLITE_TRUE,
-          agent_id: agentId,
           ts: ts,
           project_id: projectId
         });
@@ -99,23 +94,12 @@ export async function addConstraint(
           const tags = parseStringArray(params.tags);
           for (const tagName of tags) {
             const tagId = await getOrCreateTag(actualAdapter, projectId, tagName, trx);  // v3.7.3: pass projectId
-            await trx('t_constraint_tags').insert({
+            await trx('v4_constraint_tags').insert({
               constraint_id: Number(constraintId),
               tag_id: tagId
             });
           }
         }
-
-        // Activity logging (replaces trigger)
-        await logConstraintAdd(trx, {
-          constraint_id: Number(constraintId),
-          category: params.category,
-          constraint_text: params.constraint_text,
-          priority: priorityStr,
-          layer: params.layer || null,
-          created_by: createdBy,
-          agent_id: agentId
-        });
 
         return { constraintId: Number(constraintId) };
       });

@@ -1,5 +1,5 @@
 /**
- * Comprehensive Migration Test: All Versions → v3.6.1
+ * Comprehensive Migration Test: All Versions → v4.0.0
  *
  * Tests migration paths from all released versions to the current version.
  * This ensures backward compatibility and safe upgrade paths for all users.
@@ -64,7 +64,7 @@ const RELEASED_VERSIONS = [
   '3.6.0',
 ];
 
-const CURRENT_VERSION = '3.6.2';
+const CURRENT_VERSION = '4.0.0';
 
 /**
  * Simple version detection based on table existence
@@ -77,13 +77,14 @@ function detectInitialVersion(db: DatabaseType): string {
   const tableNames = tables.map(t => t.name);
 
   // Check for version indicators
-  if (tableNames.includes('m_help_tools')) return '3.6.0';
-  if (tableNames.includes('t_task_pruned_files')) return '3.5.x';
-  if (tableNames.includes('t_decision_context')) return '3.2.2+';
-  if (tableNames.includes('t_task_dependencies')) return '3.2.0';
-  if (tableNames.includes('t_tasks')) return '3.0.x';
-  if (tableNames.includes('t_activity_log')) return '2.1.x';
-  if (tableNames.includes('m_agents')) return '1.1.x/2.0.0';
+  if (tableNames.includes('v4_agents')) return '4.0.0';
+  if (tableNames.includes('v4_help_tools')) return '3.6.0';
+  if (tableNames.includes('v4_task_pruned_files')) return '3.5.x';
+  if (tableNames.includes('v4_decision_context')) return '3.2.2+';
+  if (tableNames.includes('v4_task_dependencies')) return '3.2.0';
+  if (tableNames.includes('v4_tasks')) return '3.0.x';
+  if (tableNames.includes('v4_activity_log')) return '2.1.x';
+  if (tableNames.includes('v4_agents')) return '1.1.x/2.0.0';
   if (tableNames.includes('agents')) return '1.0.0';
 
   return 'unknown';

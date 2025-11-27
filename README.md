@@ -4,11 +4,11 @@
 [![npm version](https://img.shields.io/npm/v/sqlew.svg)](https://www.npmjs.com/package/sqlew)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-> **SQL Efficient Workflow** - MCP server Provides consistency and token savings for AI coding 
+> **Never Start From Zero Context Again** – An MCP server that gives AI agents a shared SQL-backed context repository
 
 ## What is sqlew?
 
-**sqlew** is a Model Context Protocol (MCP) server that gives AI agents organizational memory across sessions.
+**sqlew** is a Model Context Protocol (MCP) server that provides AI agents with a shared SQL-backed context repository across sessions.
 
 ### Concerns About AI Coding
 Every Claude session starts with zero context. You must re-explain decisions, agents can reintroduce bugs, and there's no way to track WHY decisions were made.
@@ -19,13 +19,30 @@ However, maintaining records for large-scale projects and long-term maintenance 
 This has become problematic because it causes context rotting in AI systems, leading to performance deterioration.
 
 ### *sqlew* provides the solution for this problem
-sqlew builds efficient external memory for AI by using relational databases.
+sqlew builds an efficient external context repository for AI by using relational databases.
 - Records the reasoning behind decisions
 - Enables querying past context
 - Prevents anti-patterns through constraints
 - Eliminates duplicate work via task management
 
 > *This software does not send any data to external networks. We NEVER collect any data or usage statistics. Please use it with complete security.*
+
+## Concept: Decision & Constraint Repository Layer
+
+sqlew originally started as a way to reduce duplicated work and inconsistent behavior across multiple AI agents. Instead of letting every new session re-read the same documents and reinvent similar code, sqlew centralizes context in a shared SQL database.
+
+With recent LLMs, the most valuable part of this shared context has proved to be the **history of Decisions and Constraints**:
+
+- **Decisions** capture *why* a change or design choice was made (trade-offs, rejected options, rationale).
+- **Constraints** capture *how* things should be done (coding rules, architecture boundaries, performance requirements).
+
+Modern versions of sqlew treat this decision & constraint history as **first-class data**:
+
+- The database schema is optimized around Decisions and Constraints instead of generic notes.
+- A three-tier **duplicate detection and suggestion system** helps you reuse existing Decisions/Constraints instead of creating nearly identical ones.
+- Legacy, unused features have been removed or simplified to keep the focus on long-term context and consistency.
+
+In practice, sqlew acts as a **Decision & Constraint repository layer** for your AI tools: agents can query what was decided before, which rules already exist, and how similar situations were handled previously.
 
 ## Why Use sqlew?
 

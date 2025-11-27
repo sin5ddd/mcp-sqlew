@@ -65,7 +65,7 @@ export async function createPolicy(
     }
 
     // Check if policy already exists for this project
-    const existingPolicy = await knex('t_decision_policies')
+    const existingPolicy = await knex('v4_decision_policies')
       .where({ name: params.name, project_id: projectId })
       .first();
 
@@ -76,23 +76,7 @@ export async function createPolicy(
       };
     }
 
-    // Get or create agent
-    const agentName = params.created_by || 'system';
-    const agentResult = await knex('m_agents')
-      .where({ name: agentName })
-      .select('id')
-      .first();
-
-    let agentId: number;
-    if (agentResult) {
-      agentId = agentResult.id;
-    } else {
-      const [insertedId] = await knex('m_agents').insert({
-        name: agentName,
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      agentId = insertedId;
-    }
+    // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 
     // Prepare policy data
     const policyData = {
@@ -103,13 +87,12 @@ export async function createPolicy(
       required_fields: params.required_fields ? JSON.stringify(params.required_fields) : null,
       suggest_similar: params.suggest_similar ? 1 : 0,
       category: params.category || null,
-      created_by: agentId,
       project_id: projectId,
       ts: Math.floor(Date.now() / 1000)
     };
 
     // Insert policy
-    const [policyId] = await knex('t_decision_policies').insert(policyData);
+    const [policyId] = await knex('v4_decision_policies').insert(policyData);
 
     return {
       success: true,

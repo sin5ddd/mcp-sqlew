@@ -3,7 +3,7 @@
  *
  * Implements BFS-based topological sorting to determine safe import order for tasks
  * with dependencies. This ensures blocker tasks are imported before blocked tasks,
- * satisfying foreign key constraints in t_task_dependencies.
+ * satisfying foreign key constraints in v4_task_dependencies.
  */
 
 import type { TaskDependencyGraph } from '../../types.js';

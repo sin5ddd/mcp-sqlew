@@ -4,6 +4,8 @@
 
 The **Decision Context** feature allows you to attach rich documentation to architectural and implementation decisions, explaining **WHY** a decision was made, what alternatives were considered, and the trade-offs involved. This goes beyond simple key-value storage to provide deep historical context that helps future developers (both human and AI) understand past reasoning.
 
+> **Preserved in v4.0.0**: This feature is fully preserved in the v4.0.0 schema refactoring. All decision context data (rationale, alternatives, trade-offs, related links) continues to work without changes. The schema uses `v4_decision_context` table with the same structure and functionality.
+
 ---
 
 ## 🆕 Decision Intelligence Integration (v3.9.0)
@@ -579,6 +581,16 @@ Create traceability:
   offset: 0                            // Optional: Default 0
 }
 ```
+
+---
+
+## Version History
+
+| Version | Changes |
+|---------|---------|
+| **v4.0.0** | Feature fully preserved. Schema refactored with `v4_` prefix: `v4_decision_context` table. No API changes. |
+| **v3.9.0** | Added Decision Intelligence System with duplicate detection and automatic historical record consolidation. Added `check_duplicate`, `versions`, and policy-based management. |
+| **v3.2.2** | Initial Release: `add_decision_context` action, `rationale`, `alternatives_considered`, `tradeoffs` fields, `related_task_id` and `related_constraint_id` linking. |
 
 ---
 

@@ -286,6 +286,8 @@ export interface SetDecisionParams {
   alternatives?: any[];
   tradeoffs?: any;
   policy_name?: string;  // Explicit policy to validate against
+  // Constraint suggestion (v4.1.0)
+  suggest_constraints?: boolean;  // If true, suggest related constraints after decision creation
 }
 
 export interface QuickSetDecisionParams {
@@ -554,6 +556,16 @@ export interface SetDecisionResponse {
     layer?: string;
     key_pattern?: string;
   };
+  // Related constraints (v4.1.0)
+  related_constraints?: Array<{
+    id: number;
+    constraint_text: string;
+    category: string;
+    score: number;
+    reason: string;
+    layer?: string;
+    tags?: string[];
+  }>;
 }
 
 export interface QuickSetDecisionResponse {
@@ -605,7 +617,7 @@ export interface GetVersionsResponse {
   history: Array<{
     version: string;
     value: string;
-    agent: string | null;
+    // Note: agent field removed in v4.0 (agent tracking eliminated)
     timestamp: string;
   }>;
   count: number;
@@ -831,7 +843,7 @@ export interface ListTemplatesResponse {
     name: string;
     defaults: any;  // Parsed JSON
     required_fields: string[] | null;  // Parsed JSON array
-    created_by: string | null;
+    // Note: created_by field removed in v4.0 (agent tracking eliminated)
     created_at: string;
   }>;
   count: number;

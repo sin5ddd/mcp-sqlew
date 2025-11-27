@@ -40,15 +40,15 @@ export async function checkFileLock(
       const lockThreshold = currentTime - lockDuration;
 
       // Get the most recent change to this file within current project
-      const result = await knex('t_file_changes as fc')
-        .join('m_files as f', 'fc.file_id', 'f.id')
-        .join('m_agents as a', 'fc.agent_id', 'a.id')
+      // Note: Agent tracking removed in v4.0 - last_agent field removed
+      const result = await knex('v4_file_changes as fc')
+        .join('v4_files as f', 'fc.file_id', 'f.id')
         .where('f.path', params.file_path)
         .where('fc.project_id', projectId)
-        .select('a.name as agent', 'fc.change_type', 'fc.ts')
+        .select('fc.change_type', 'fc.ts')
         .orderBy('fc.ts', 'desc')
         .limit(1)
-        .first() as { agent: string; change_type: number; ts: number } | undefined;
+        .first() as { change_type: number; ts: number } | undefined;
 
       if (!result) {
         // File never changed
@@ -61,7 +61,6 @@ export async function checkFileLock(
       if (result.ts >= lockThreshold) {
         return {
           locked: true,
-          last_agent: result.agent,
           last_change: new Date(result.ts * 1000).toISOString(),
           change_type: CHANGE_TYPE_TO_STRING[result.change_type as 1 | 2 | 3],
         };
@@ -70,7 +69,6 @@ export async function checkFileLock(
       // Not locked (too old)
       return {
         locked: false,
-        last_agent: result.agent,
         last_change: new Date(result.ts * 1000).toISOString(),
         change_type: CHANGE_TYPE_TO_STRING[result.change_type as 1 | 2 | 3],
       };

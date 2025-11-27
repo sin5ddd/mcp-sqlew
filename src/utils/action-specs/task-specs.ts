@@ -57,18 +57,18 @@ export const TASK_ACTION_SPECS: Record<string, ActionSpec> = {
       assigned_agent: 'backend-agent',
       limit: 20
     },
-    hint: "Valid statuses: todo, in_progress, waiting_review, blocked, done, archived"
+    hint: "Valid statuses: todo, in_progress, waiting_review, blocked, done, archived, rejected"
   },
 
   move: {
-    required: ['task_id', 'new_status'],
-    optional: [],
+    required: ['task_id', 'status'],
+    optional: ['rejection_reason'],
     example: {
       action: 'move',
       task_id: 5,
-      new_status: 'in_progress'
+      status: 'in_progress'
     },
-    hint: "Status transitions are validated. E.g., can't move from 'todo' directly to 'done'"
+    hint: "v4.0: Flexible transitions between non-terminal statuses. Terminal (archived/rejected) are final. Use rejection_reason when moving to 'rejected'."
   },
 
   link: {

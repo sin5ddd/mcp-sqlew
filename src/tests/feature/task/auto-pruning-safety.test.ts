@@ -63,13 +63,13 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     // 3. Make task appear "stale" by backdating its updated_ts
     // Set updated_ts to 16 minutes ago (older than default 15-minute idle threshold)
     const sixteenMinutesAgo = Math.floor(Date.now() / 1000) - (16 * 60);
-    await knex('t_tasks')
+    await knex('v4_tasks')
       .where({ id: taskId })
       .update({ updated_ts: sixteenMinutesAgo });
 
     // 4. Verify task is in 'in_progress' before attempt
-    const beforeStatus = await knex('t_tasks as t')
-      .join('m_task_statuses as s', 't.status_id', 's.id')
+    const beforeStatus = await knex('v4_tasks as t')
+      .join('v4_task_statuses as s', 't.status_id', 's.id')
       .where('t.id', taskId)
       .select('s.name')
       .first() as { name: string };
@@ -77,7 +77,7 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     assert.strictEqual(beforeStatus.name, 'in_progress', 'Task should start in in_progress');
 
     // 5. Verify watch list has all 3 files before attempt
-    const beforeWatchCount = await knex('t_task_file_links')
+    const beforeWatchCount = await knex('v4_task_file_links')
       .where({ task_id: taskId })
       .count('* as count')
       .first() as { count: number };
@@ -93,8 +93,8 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     assert.strictEqual(transitioned, 0, 'No tasks should have been transitioned');
 
     // 8. Verify task status unchanged (remains in in_progress)
-    const afterStatus = await knex('t_tasks as t')
-      .join('m_task_statuses as s', 't.status_id', 's.id')
+    const afterStatus = await knex('v4_tasks as t')
+      .join('v4_task_statuses as s', 't.status_id', 's.id')
       .where('t.id', taskId)
       .select('s.name')
       .first() as { name: string };
@@ -102,7 +102,7 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     assert.strictEqual(afterStatus.name, 'in_progress', 'Task should remain in in_progress after safety check');
 
     // 9. Verify NO audit records created (transaction rollback)
-    const prunedCount = await knex('t_task_pruned_files')
+    const prunedCount = await knex('v4_task_pruned_files')
       .where({ task_id: taskId })
       .count('* as count')
       .first() as { count: number };
@@ -110,7 +110,7 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     assert.strictEqual(prunedCount.count, 0, 'Should have no pruned file records due to rollback');
 
     // 10. Verify watch list is NOT empty (transaction rolled back)
-    const afterWatchCount = await knex('t_task_file_links')
+    const afterWatchCount = await knex('v4_task_file_links')
       .where({ task_id: taskId })
       .count('* as count')
       .first() as { count: number };
@@ -135,12 +135,12 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
 
     // Make task appear stale (older than 15-minute default threshold)
     const sixteenMinutesAgo = Math.floor(Date.now() / 1000) - (16 * 60);
-    await knex('t_tasks')
+    await knex('v4_tasks')
       .where({ id: taskId })
       .update({ updated_ts: sixteenMinutesAgo });
 
     // Verify initial watch count
-    const beforeWatchCount = await knex('t_task_file_links')
+    const beforeWatchCount = await knex('v4_task_file_links')
       .where({ task_id: taskId })
       .count('* as count')
       .first() as { count: number };
@@ -151,7 +151,7 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     await detectAndTransitionToReview(db);
 
     // Verify some files were pruned
-    const prunedCount = await knex('t_task_pruned_files')
+    const prunedCount = await knex('v4_task_pruned_files')
       .where({ task_id: taskId })
       .count('* as count')
       .first() as { count: number };
@@ -159,7 +159,7 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     assert.strictEqual(prunedCount.count, 2, 'Should have 2 pruned file records (the non-existent ones)');
 
     // Verify watch list now has only 1 file (the existing one)
-    const afterWatchCount = await knex('t_task_file_links')
+    const afterWatchCount = await knex('v4_task_file_links')
       .where({ task_id: taskId })
       .count('* as count')
       .first() as { count: number };
@@ -167,8 +167,8 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     assert.strictEqual(afterWatchCount.count, 1, 'Watch list should have 1 remaining file after partial prune');
 
     // Verify remaining file is package.json
-    const remainingFile = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const remainingFile = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', taskId)
       .select('f.path')
       .first() as { path: string };
@@ -184,7 +184,7 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
 
     // Make task appear stale
     const tenMinutesAgo = Math.floor(Date.now() / 1000) - (10 * 60);
-    await knex('t_tasks')
+    await knex('v4_tasks')
       .where({ id: taskId })
       .update({ updated_ts: tenMinutesAgo });
 
@@ -194,8 +194,8 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
     assert.strictEqual(transitioned, 0, 'Should not transition task with no watched files');
 
     // Verify task status unchanged
-    const status = await knex('t_tasks as t')
-      .join('m_task_statuses as s', 't.status_id', 's.id')
+    const status = await knex('v4_tasks as t')
+      .join('v4_task_statuses as s', 't.status_id', 's.id')
       .where('t.id', taskId)
       .select('s.name')
       .first() as { name: string };
@@ -208,46 +208,26 @@ describe('Auto-pruning: Safety check when all files pruned', () => {
 
 /**
  * Helper: Create a test task in 'in_progress' status
+ * Note: Agent tracking removed in v4.0
  */
 async function createTestTask(db: DatabaseAdapter): Promise<number> {
   const knex = db.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
 
-  // Create test agent
-  const [agentId] = await knex('m_agents')
-    .insert({ name: 'test-agent' })
-    .onConflict('name')
-    .ignore()
-    .returning('id');
-
-  // If insert was ignored, get the existing agent
-  let actualAgentId: number;
-  if (agentId) {
-    actualAgentId = agentId.id || agentId;
-  } else {
-    const agent = await knex('m_agents')
-      .where({ name: 'test-agent' })
-      .select('id')
-      .first() as { id: number };
-    actualAgentId = agent.id;
-  }
-
   // Get 'in_progress' status ID
-  const statusRow = await knex('m_task_statuses')
+  const statusRow = await knex('v4_task_statuses')
     .where({ name: 'in_progress' })
     .select('id')
     .first() as { id: number };
 
   // Create task with updated_ts set to now (will be backdated in tests)
   const currentTs = Math.floor(Date.now() / 1000);
-  const [taskId] = await knex('t_tasks')
+  const [taskId] = await knex('v4_tasks')
     .insert({
       title: 'Test task for auto-pruning',
       status_id: statusRow.id,
       priority: 2,
       project_id: projectId,  // Required after v3.7.0
-      assigned_agent_id: actualAgentId,
-      created_by_agent_id: actualAgentId,
       created_ts: currentTs,
       updated_ts: currentTs
     })
@@ -269,13 +249,13 @@ async function addWatchedFiles(db: DatabaseAdapter, taskId: number, filePaths: s
     // because SQLite doesn't return ID when conflict is ignored
     let fileId: number;
     try {
-      const [fileResult] = await knex('m_files')
+      const [fileResult] = await knex('v4_files')
         .insert({ path: filePath })
         .returning('id');
       fileId = fileResult.id || fileResult;
     } catch (error) {
       // File already exists, get its ID
-      const fileRow = await knex('m_files')
+      const fileRow = await knex('v4_files')
         .where({ path: filePath })
         .select('id')
         .first() as { id: number };
@@ -283,7 +263,7 @@ async function addWatchedFiles(db: DatabaseAdapter, taskId: number, filePaths: s
     }
 
     // Link file to task
-    await knex('t_task_file_links')
+    await knex('v4_task_file_links')
       .insert({
         task_id: taskId,
         file_id: fileId,

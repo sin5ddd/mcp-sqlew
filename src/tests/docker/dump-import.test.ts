@@ -135,7 +135,7 @@ describe('Cross-Database Migration Tests', () => {
     it('should verify data integrity (row counts)', async () => {
       console.log('    Verifying data integrity...');
 
-      const testTables = ['m_agents', 't_tasks', 't_decisions'];
+      const testTables = ['v4_tasks', 'v4_decisions'];
 
       for (const table of testTables) {
         const sqliteCount = await sqliteDb(table).count('* as count').first();
@@ -229,7 +229,7 @@ describe('Cross-Database Migration Tests', () => {
     it('should verify data integrity (row counts)', async () => {
       console.log('    Verifying data integrity...');
 
-      const testTables = ['m_agents', 't_tasks', 't_decisions'];
+      const testTables = ['v4_tasks', 'v4_decisions'];
 
       for (const table of testTables) {
         const sqliteCount = await sqliteDb(table).count('* as count').first();
@@ -251,21 +251,16 @@ describe('Cross-Database Migration Tests', () => {
     it('should verify boolean values converted correctly (PostgreSQL)', async () => {
       console.log('    Verifying boolean conversions...');
 
-      const sqliteAgents = await sqliteDb('m_agents').select('*').limit(3);
-      const pgAgents = await postgresDb('m_agents').select('*').limit(3);
+      // Use v4_constraints which has 'active' boolean field
+      const sqliteConstraints = await sqliteDb('v4_constraints').select('*').limit(3);
+      const pgConstraints = await postgresDb('v4_constraints').select('*').limit(3);
 
-      for (let i = 0; i < sqliteAgents.length; i++) {
+      for (let i = 0; i < sqliteConstraints.length; i++) {
         // SQLite stores booleans as 0/1, PostgreSQL as TRUE/FALSE
         assert.strictEqual(
-          Boolean(sqliteAgents[i].in_use),
-          pgAgents[i].in_use,
-          'Boolean in_use should match'
-        );
-
-        assert.strictEqual(
-          Boolean(sqliteAgents[i].is_reusable),
-          pgAgents[i].is_reusable,
-          'Boolean is_reusable should match'
+          Boolean(sqliteConstraints[i].active),
+          pgConstraints[i].active,
+          'Boolean active should match'
         );
       }
 
@@ -276,13 +271,13 @@ describe('Cross-Database Migration Tests', () => {
       console.log('    Verifying string escaping...');
 
       // Find tasks with quotes in titles
-      const sqliteTasks = await sqliteDb('t_tasks')
+      const sqliteTasks = await sqliteDb('v4_tasks')
         .select('*')
         .whereRaw("title LIKE '%''%'")
         .limit(3);
 
       if (sqliteTasks.length > 0) {
-        const pgTasks = await postgresDb('t_tasks')
+        const pgTasks = await postgresDb('v4_tasks')
           .select('*')
           .whereIn('id', sqliteTasks.map(t => t.id));
 
@@ -307,7 +302,7 @@ describe('Cross-Database Migration Tests', () => {
 
       // Get a table with PRIMARY KEY from PostgreSQL
       const createSql = await generateSqlDump(postgresDb, 'postgresql', {
-        tables: ['m_agents'],
+        tables: ['v4_tasks'],
         includeSchema: true,
         chunkSize: 0, // Schema only
       });
@@ -321,7 +316,7 @@ describe('Cross-Database Migration Tests', () => {
 
       // Get a table with FOREIGN KEY from PostgreSQL
       const createSql = await generateSqlDump(postgresDb, 'postgresql', {
-        tables: ['t_tasks'],
+        tables: ['v4_tasks'],
         includeSchema: true,
         chunkSize: 0, // Schema only
       });
@@ -334,7 +329,7 @@ describe('Cross-Database Migration Tests', () => {
       console.log('    Testing PostgreSQL → MySQL conversion...');
 
       const dump = await generateSqlDump(postgresDb, 'mysql', {
-        tables: ['m_agents'],
+        tables: ['v4_tasks'],
         includeSchema: true,
         chunkSize: 0,
       });
@@ -349,7 +344,7 @@ describe('Cross-Database Migration Tests', () => {
       console.log('    Testing PostgreSQL → SQLite conversion...');
 
       const dump = await generateSqlDump(postgresDb, 'sqlite', {
-        tables: ['m_agents'],
+        tables: ['v4_tasks'],
         includeSchema: true,
         chunkSize: 0,
       });
@@ -517,13 +512,13 @@ describe('Cross-Database Migration Tests', () => {
       console.log('    Testing PostgreSQL idempotent dump...');
 
       const dump1 = await generateSqlDump(postgresDb, 'postgresql', {
-        tables: ['m_agents'],
+        tables: ['v4_tasks'],
         includeSchema: true,
         chunkSize: 0,
       });
 
       const dump2 = await generateSqlDump(postgresDb, 'postgresql', {
-        tables: ['m_agents'],
+        tables: ['v4_tasks'],
         includeSchema: true,
         chunkSize: 0,
       });

@@ -234,9 +234,26 @@ Use this tool to learn end-to-end workflows and multi-step operations. Returns w
             description: 'Suggestion action to perform',
             enum: ['by_key', 'by_tags', 'by_context', 'check_duplicate', 'help']
           },
+          target: {
+            type: 'string',
+            description: 'Target type for suggestions (default: decision)',
+            enum: ['decision', 'constraint']
+          },
           key: {
             type: 'string',
-            description: 'Decision key (for by_key, by_context, check_duplicate)'
+            description: 'Decision key (for by_key, by_context, check_duplicate when target=decision)'
+          },
+          text: {
+            type: 'string',
+            description: 'Constraint text to search (for by_key, by_context, check_duplicate when target=constraint)'
+          },
+          constraint_text: {
+            type: 'string',
+            description: 'Alias for text parameter (constraint text to search)'
+          },
+          category: {
+            type: 'string',
+            description: 'Constraint category filter (optional, when target=constraint)'
           },
           tags: {
             type: 'array',

@@ -8,7 +8,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeDatabase } from '../../../database.js';
-import { getOrCreateAgent, getOrCreateFile } from '../../../database.js';
+import { getOrCreateFile } from '../../../database.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
 import { createTestTask, addWatchedFiles } from '../../utils/test-helpers.js';
 
@@ -42,18 +42,16 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   acceptance_criteria?: string;
 }): Promise<any> {
   const knex = adapter.getKnex();
-  const agentId = await getOrCreateAgent(adapter, params.created_by_agent || 'system');
+  // Note: Agent tracking removed in v4.0 - created_by_agent param ignored
   const statusId = 1; // todo
   const currentTs = Math.floor(Date.now() / 1000);
   const projectId = 1; // Default project for tests
 
-  const [taskId] = await knex('t_tasks').insert({
+  const [taskId] = await knex('v4_tasks').insert({
     title: params.title,
     status_id: statusId,
     priority: params.priority || 2,
     project_id: projectId,        // Required v3.7.0+
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
     created_ts: currentTs,          // Required v3.8.0+
     updated_ts: currentTs           // Required v3.8.0+
   });
@@ -63,7 +61,7 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
 
   // Add description if provided
   if (params.description || params.acceptance_criteria) {
-    await knex('t_task_details').insert({
+    await knex('v4_task_details').insert({
       task_id: numericTaskId,
       description: params.description || null,
       acceptance_criteria: params.acceptance_criteria || null
@@ -73,19 +71,20 @@ async function createTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   // Add tags if provided
   if (params.tags && params.tags.length > 0) {
     for (const tag of params.tags) {
-      // Check if tag exists first (m_tags doesn't have UNIQUE constraint on name in test DB)
-      let tagResult = await knex('m_tags').where({ name: tag }).first('id');
+      // Check if tag exists first (v4_tags has composite unique on project_id, name)
+      let tagResult = await knex('v4_tags').where({ project_id: projectId, name: tag }).first('id');
       if (!tagResult) {
-        const [tagId] = await knex('m_tags').insert({ name: tag });
+        const [tagId] = await knex('v4_tags').insert({ project_id: projectId, name: tag });
         const numericTagId = typeof tagId === 'object' && tagId !== null ? (tagId as any).id : tagId;
         tagResult = { id: numericTagId };
       }
 
       // Link tag to task (idempotent via onConflict)
-      await knex('t_task_tags').insert({
+      await knex('v4_task_tags').insert({
+        project_id: projectId,  // Required v4 field
         task_id: numericTaskId,
         tag_id: tagResult.id
-      }).onConflict().ignore();
+      }).onConflict(['project_id', 'task_id', 'tag_id']).ignore();
     }
   }
 
@@ -119,7 +118,7 @@ async function updateTaskWithWatchFiles(adapter: DatabaseAdapter, params: {
   watch_files?: string[];
 }): Promise<any> {
   const knex = adapter.getKnex();
-  const task = await knex('t_tasks').where({ id: params.task_id }).first('id');
+  const task = await knex('v4_tasks').where({ id: params.task_id }).first('id');
   if (!task) {
     throw new Error(`Task #${params.task_id} not found`);
   }
@@ -177,8 +176,8 @@ describe('Task watch_files parameter tests', () => {
     });
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', 1)
       .select('f.path')
       .orderBy('f.path');
@@ -188,14 +187,14 @@ describe('Task watch_files parameter tests', () => {
     assert.strictEqual(links[1].path, 'src/index.ts');
   });
 
-  it('should register files in m_files table', async () => {
+  it('should register files in v4_files table', async () => {
     await createTaskWithWatchFiles(testDb, {
       title: 'Task with files',
       watch_files: ['src/index.ts', 'src/database.ts']
     });
 
     const knex = testDb.getKnex();
-    const files = await knex('m_files').select('path').orderBy('path');
+    const files = await knex('v4_files').select('path').orderBy('path');
 
     assert.ok(files.length >= 2, 'Should have at least 2 files registered');
     const paths = files.map(f => f.path);
@@ -213,7 +212,7 @@ describe('Task watch_files parameter tests', () => {
     assert.strictEqual(result.watched_files, undefined, 'Should not have watched_files in response');
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links').where('task_id', result.task_id);
+    const links = await knex('v4_task_file_links').where('task_id', result.task_id);
     assert.strictEqual(links.length, 0, 'Should have no file links');
   });
 
@@ -226,7 +225,7 @@ describe('Task watch_files parameter tests', () => {
     assert.strictEqual(result.watched_files, undefined, 'Should not have watched_files in response');
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links').where('task_id', result.task_id);
+    const links = await knex('v4_task_file_links').where('task_id', result.task_id);
     assert.strictEqual(links.length, 0, 'Should have no file links');
   });
 
@@ -244,8 +243,8 @@ describe('Task watch_files parameter tests', () => {
     assert.deepStrictEqual(result.watched_files, ['src/tools/tasks.ts', 'src/schema.ts']);
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', task.task_id)
       .select('f.path')
       .orderBy('f.path');
@@ -265,8 +264,8 @@ describe('Task watch_files parameter tests', () => {
     });
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', task.task_id)
       .select('f.path')
       .orderBy('f.path');
@@ -290,8 +289,8 @@ describe('Task watch_files parameter tests', () => {
     });
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', task.task_id)
       .select('f.path');
 
@@ -311,8 +310,8 @@ describe('Task watch_files parameter tests', () => {
     assert.strictEqual(result.watched_files?.length, 3);
 
     const knex = testDb.getKnex();
-    const links = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const links = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', result.task_id)
       .select('f.path')
       .orderBy('f.path');
@@ -334,7 +333,7 @@ describe('Task watch_files parameter tests', () => {
     assert.strictEqual(result.watched_files?.length, 1);
 
     const knex = testDb.getKnex();
-    const details = await knex('t_task_details')
+    const details = await knex('v4_task_details')
       .where({ task_id: result.task_id })
       .first('acceptance_criteria');
 

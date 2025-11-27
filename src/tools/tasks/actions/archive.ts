@@ -7,7 +7,6 @@ import { getAdapter } from '../../../database.js';
 import { FileWatcher } from '../../../watcher/index.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
 import connectionManager from '../../../utils/connection-manager.js';
-import { logTaskStatusChange } from '../../../utils/activity-logging.js';
 import { TASK_STATUS, ID_TO_STATUS } from '../types.js';
 
 /**
@@ -27,7 +26,7 @@ export async function archiveTask(params: { task_id: number }, adapter?: Databas
     return await connectionManager.executeWithRetry(async () => {
       return await actualAdapter.transaction(async (trx) => {
         // Check if task is in 'done' status
-        const taskRow = await trx('t_tasks')
+        const taskRow = await trx('v4_tasks')
           .where({ id: params.task_id })
           .select('status_id')
           .first() as { status_id: number } | undefined;
@@ -41,18 +40,9 @@ export async function archiveTask(params: { task_id: number }, adapter?: Databas
         }
 
         // Update to archived
-        await trx('t_tasks')
+        await trx('v4_tasks')
           .where({ id: params.task_id })
           .update({ status_id: TASK_STATUS.ARCHIVED });
-
-        // Activity logging
-        const systemAgentId = 1;
-        await logTaskStatusChange(trx, {
-          task_id: params.task_id,
-          old_status: TASK_STATUS.DONE,
-          new_status: TASK_STATUS.ARCHIVED,
-          agent_id: systemAgentId
-        });
 
         // Unregister from file watcher (archived tasks don't need tracking)
         try {

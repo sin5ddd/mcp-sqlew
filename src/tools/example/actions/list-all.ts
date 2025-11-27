@@ -21,12 +21,12 @@ export async function listAllExamples(
   const offset = params.offset || 0;
 
   try {
-    let query = db('t_help_action_examples')
-      .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.action_id');
+    let query = db('v4_help_action_examples')
+      .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id');
 
     // Apply optional filters
     if (params.tool) {
-      query = query.where('m_help_actions.tool_name', params.tool);
+      query = query.where('v4_help_actions.tool_name', params.tool);
     }
 
     // Get total count
@@ -36,10 +36,10 @@ export async function listAllExamples(
     // Get paginated results
     const examples = await query
       .select(
-        't_help_action_examples.example_id',
-        't_help_action_examples.example_title as title',
-        'm_help_actions.tool_name as tool',
-        'm_help_actions.action_name as action'
+        'v4_help_action_examples.id as example_id',
+        'v4_help_action_examples.title',
+        'v4_help_actions.tool_name as tool',
+        'v4_help_actions.action_name as action'
       )
       .limit(limit)
       .offset(offset);

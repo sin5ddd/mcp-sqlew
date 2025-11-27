@@ -7,7 +7,6 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeDatabase } from '../../../database/index.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
-import { getOrCreateAgent } from '../../../database/index.js';
 import { setDecision } from '../../../tools/context/index.js';
 import { getPrunedFiles, linkPrunedFile } from '../../../tools/tasks/index.js';
 import { ProjectContext } from '../../../utils/project-context.js';
@@ -41,21 +40,19 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
 
 /**
  * Helper: Create a test task
+ * Note: Agent tracking removed in v4.0
  */
 async function createTestTask(adapter: DatabaseAdapter, title: string): Promise<number> {
-  const agentId = await getOrCreateAgent(adapter, 'test-agent');
   const statusId = 2; // in_progress
   const knex = adapter.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
   const now = Math.floor(Date.now() / 1000);
 
-  const [id] = await knex('t_tasks').insert({
+  const [id] = await knex('v4_tasks').insert({
     title,
     status_id: statusId,
     priority: 2,
     project_id: projectId,  // Required after v3.7.0
-    created_by_agent_id: agentId,
-    assigned_agent_id: agentId,
     created_ts: now,  // Required NOT NULL field
     updated_ts: now   // Required NOT NULL field
   });
@@ -70,7 +67,7 @@ async function createPrunedFileRecord(adapter: DatabaseAdapter, taskId: number, 
   const knex = adapter.getKnex();
   const projectId = ProjectContext.getInstance().getProjectId();
 
-  const [id] = await knex('t_task_pruned_files').insert({
+  const [id] = await knex('v4_task_pruned_files').insert({
     task_id: taskId,
     file_path: filePath,
     pruned_ts: Math.floor(Date.now() / 1000),  // Unix epoch timestamp
@@ -130,13 +127,13 @@ describe('Auto-pruning: Decision linking workflow', () => {
 
     // 4. Verify link in database directly
     const knex = testDb.getKnex();
-    const linkedDecisionId = await knex('t_task_pruned_files')
+    const linkedDecisionId = await knex('v4_task_pruned_files')
       .where({ id: prunedFileId })
-      .select('linked_decision_key_id')
+      .select('linked_decision_id')
       .first();
 
     assert.ok(linkedDecisionId, 'Pruned file record should exist');
-    assert.ok(linkedDecisionId.linked_decision_key_id !== null, 'Decision key ID should be linked');
+    assert.ok(linkedDecisionId.linked_decision_id !== null, 'Decision key ID should be linked');
 
     // 5. Query pruned files - decision key should be returned
     const getPrunedResult = await getPrunedFiles({

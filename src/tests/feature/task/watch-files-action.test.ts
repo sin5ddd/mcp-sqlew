@@ -44,9 +44,7 @@ async function createTestDatabase(): Promise<DatabaseAdapter> {
     useNullAsDefault: true,
     migrations: {
       directory: [
-        join(projectRoot, 'dist/config/knex/bootstrap'),
-        join(projectRoot, 'dist/config/knex/upgrades'),
-        join(projectRoot, 'dist/config/knex/enhancements'),
+        join(projectRoot, 'dist/database/migrations/v4'),
       ],
       extension: 'js',
       tableName: 'knex_migrations',
@@ -81,8 +79,8 @@ async function watchFilesAction(db: DatabaseAdapter, params: {
   const knex = db.getKnex();
 
   // Check if task exists
-  const taskData = await knex('t_tasks as t')
-    .join('m_task_statuses as s', 't.status_id', 's.id')
+  const taskData = await knex('v4_tasks as t')
+    .join('v4_task_statuses as s', 't.status_id', 's.id')
     .where('t.id', params.task_id)
     .select('t.id', 't.title', 's.name as status')
     .first();
@@ -104,12 +102,12 @@ async function watchFilesAction(db: DatabaseAdapter, params: {
       const fileId = await getOrCreateFile(db, projectId, filePath);
 
       // Try to insert, check if row was actually inserted
-      const rowsBefore = await knex('t_task_file_links')
+      const rowsBefore = await knex('v4_task_file_links')
         .where({ project_id: projectId, task_id: params.task_id, file_id: fileId })
         .count('* as count')
         .first();
 
-      await knex('t_task_file_links')
+      await knex('v4_task_file_links')
         .insert({
           task_id: params.task_id,
           file_id: fileId,
@@ -119,7 +117,7 @@ async function watchFilesAction(db: DatabaseAdapter, params: {
         .onConflict(['project_id', 'task_id', 'file_id'])  // v3.8.0+ UNIQUE constraint
         .ignore();
 
-      const rowsAfter = await knex('t_task_file_links')
+      const rowsAfter = await knex('v4_task_file_links')
         .where({ project_id: projectId, task_id: params.task_id, file_id: fileId })
         .count('* as count')
         .first();
@@ -146,9 +144,9 @@ async function watchFilesAction(db: DatabaseAdapter, params: {
 
     const removedFiles: string[] = [];
     for (const filePath of params.file_paths) {
-      const deletedCount = await knex('t_task_file_links')
+      const deletedCount = await knex('v4_task_file_links')
         .whereIn('file_id', function() {
-          this.select('id').from('m_files').where('path', filePath);
+          this.select('id').from('v4_files').where('path', filePath);
         })
         .andWhere('task_id', params.task_id)
         .delete();
@@ -169,8 +167,8 @@ async function watchFilesAction(db: DatabaseAdapter, params: {
     };
 
   } else if (params.action === 'list') {
-    const files = await knex('t_task_file_links as tfl')
-      .join('m_files as f', 'tfl.file_id', 'f.id')
+    const files = await knex('v4_task_file_links as tfl')
+      .join('v4_files as f', 'tfl.file_id', 'f.id')
       .where('tfl.task_id', params.task_id)
       .select('f.path')
       .then(rows => rows.map((row: any) => row.path));

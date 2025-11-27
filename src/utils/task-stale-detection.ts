@@ -24,6 +24,7 @@ const TASK_STATUS = {
   BLOCKED: 4,
   DONE: 5,
   ARCHIVED: 6,
+  REJECTED: 7,
 } as const;
 
 /**
@@ -105,7 +106,7 @@ export async function detectAndTransitionStaleTasks(adapter?: DatabaseAdapter): 
     const currentTs = Math.floor(Date.now() / 1000);
     const cutoffTs = currentTs - inProgressThresholdSeconds;
 
-    const inProgressTransitioned = await trx('t_tasks')
+    const inProgressTransitioned = await trx('v4_tasks')
       .where('status_id', TASK_STATUS.IN_PROGRESS)
       .where('updated_ts', '<', cutoffTs)
       .update({
@@ -172,7 +173,7 @@ export async function autoArchiveOldDoneTasks(adapter?: DatabaseAdapter): Promis
 
   // Archive done tasks older than cutoff
   const currentTs = Math.floor(Date.now() / 1000);
-  const archivedCount = await knex('t_tasks')
+  const archivedCount = await knex('v4_tasks')
     .where('status_id', TASK_STATUS.DONE)
     .where('updated_ts', '<', cutoffTimestamp)
     .update({
@@ -210,8 +211,8 @@ export async function detectAndCompleteReviewedTasks(adapter?: DatabaseAdapter):
   const requireAllFilesCommitted = await getConfigBool(actualAdapter, CONFIG_KEYS.REQUIRE_ALL_FILES_COMMITTED, true);
 
   // 2. Find all waiting_review and in_progress tasks
-  const candidateTasks = await knex('t_tasks as t')
-    .join('m_task_statuses as s', 't.status_id', 's.id')
+  const candidateTasks = await knex('v4_tasks as t')
+    .join('v4_task_statuses as s', 't.status_id', 's.id')
     .whereIn('s.name', ['waiting_review', 'in_progress'])
     .select('t.id', 't.created_ts', 's.name as status_name') as Array<{ id: number; created_ts: number; status_name: string }>;
 
@@ -236,8 +237,8 @@ export async function detectAndCompleteReviewedTasks(adapter?: DatabaseAdapter):
   for (const task of candidateTasks) {
     try {
       // Get watched files for this task
-      const watchedFiles = await knex('t_task_file_links as tfl')
-        .join('m_files as f', 'tfl.file_id', 'f.id')
+      const watchedFiles = await knex('v4_task_file_links as tfl')
+        .join('v4_files as f', 'tfl.file_id', 'f.id')
         .where('tfl.task_id', task.id)
         .select('f.path') as Array<{ path: string }>;
 
@@ -278,7 +279,7 @@ export async function detectAndCompleteReviewedTasks(adapter?: DatabaseAdapter):
       if (shouldComplete) {
         // All watched files committed - transition to done
         const currentTs = Math.floor(Date.now() / 1000);
-        await knex('t_tasks')
+        await knex('v4_tasks')
           .where({ id: task.id })
           .update({
             status_id: TASK_STATUS.DONE,
@@ -326,8 +327,8 @@ export async function detectAndCompleteOnStaging(adapter?: DatabaseAdapter): Pro
   const requireAllFilesStaged = await getConfigBool(actualAdapter, CONFIG_KEYS.REQUIRE_ALL_FILES_STAGED, true);
 
   // 2. Find all waiting_review tasks
-  const candidateTasks = await knex('t_tasks as t')
-    .join('m_task_statuses as s', 't.status_id', 's.id')
+  const candidateTasks = await knex('v4_tasks as t')
+    .join('v4_task_statuses as s', 't.status_id', 's.id')
     .where('s.name', 'waiting_review')
     .select('t.id', 't.created_ts') as Array<{ id: number; created_ts: number }>;
 
@@ -349,8 +350,8 @@ export async function detectAndCompleteOnStaging(adapter?: DatabaseAdapter): Pro
   for (const task of candidateTasks) {
     try {
       // Get watched files for this task
-      const watchedFiles = await knex('t_task_file_links as tfl')
-        .join('m_files as f', 'tfl.file_id', 'f.id')
+      const watchedFiles = await knex('v4_task_file_links as tfl')
+        .join('v4_files as f', 'tfl.file_id', 'f.id')
         .where('tfl.task_id', task.id)
         .select('f.path') as Array<{ path: string }>;
 
@@ -388,7 +389,7 @@ export async function detectAndCompleteOnStaging(adapter?: DatabaseAdapter): Pro
       if (shouldComplete) {
         // All watched files staged - transition to done
         const currentTs = Math.floor(Date.now() / 1000);
-        await knex('t_tasks')
+        await knex('v4_tasks')
           .where({ id: task.id })
           .update({
             status_id: TASK_STATUS.DONE,
@@ -435,8 +436,8 @@ export async function detectAndArchiveOnCommit(adapter?: DatabaseAdapter): Promi
   const requireAllFilesCommitted = await getConfigBool(actualAdapter, 'require_all_files_committed_for_archive', true);
 
   // 2. Find all done tasks
-  const candidateTasks = await knex('t_tasks as t')
-    .join('m_task_statuses as s', 't.status_id', 's.id')
+  const candidateTasks = await knex('v4_tasks as t')
+    .join('v4_task_statuses as s', 't.status_id', 's.id')
     .where('s.name', 'done')
     .select('t.id', 't.created_ts') as Array<{ id: number; created_ts: number }>;
 
@@ -458,8 +459,8 @@ export async function detectAndArchiveOnCommit(adapter?: DatabaseAdapter): Promi
   for (const task of candidateTasks) {
     try {
       // Get watched files for this task
-      const watchedFiles = await knex('t_task_file_links as tfl')
-        .join('m_files as f', 'tfl.file_id', 'f.id')
+      const watchedFiles = await knex('v4_task_file_links as tfl')
+        .join('v4_files as f', 'tfl.file_id', 'f.id')
         .where('tfl.task_id', task.id)
         .select('f.path') as Array<{ path: string }>;
 
@@ -500,7 +501,7 @@ export async function detectAndArchiveOnCommit(adapter?: DatabaseAdapter): Promi
       if (shouldArchive) {
         // All watched files committed - transition to archived
         const currentTs = Math.floor(Date.now() / 1000);
-        await knex('t_tasks')
+        await knex('v4_tasks')
           .where({ id: task.id })
           .update({
             status_id: TASK_STATUS.ARCHIVED,
@@ -544,7 +545,7 @@ export async function detectAndTransitionToReview(adapter?: DatabaseAdapter): Pr
   const cutoffTs = currentTs - idleSeconds;
 
   // 2. Find idle in_progress tasks
-  const idleTasks = await knex('t_tasks')
+  const idleTasks = await knex('v4_tasks')
     .where('status_id', TASK_STATUS.IN_PROGRESS)
     .where('updated_ts', '<', cutoffTs)
     .select('id');
@@ -560,7 +561,7 @@ export async function detectAndTransitionToReview(adapter?: DatabaseAdapter): Pr
         await pruneNonExistentFilesKnex(trx, task.id, projectRoot);
 
         // Transition to waiting_review
-        await trx('t_tasks')
+        await trx('v4_tasks')
           .where('id', task.id)
           .update({
             status_id: TASK_STATUS.WAITING_REVIEW,

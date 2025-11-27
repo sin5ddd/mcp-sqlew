@@ -29,46 +29,46 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
     const projectId = projectContext.getProjectId();
 
     // Delete test policy
-    await knex('t_decision_policies')
+    await knex('v4_decision_policies')
       .where('name', 'security_vulnerability')
       .where('project_id', projectId)
       .delete();
 
     // Get key IDs for CVE decisions and test decisions
-    const cveKeyIds = await knex('m_context_keys')
+    const cveKeyIds = await knex('v4_context_keys')
       .select('id')
-      .where('key', 'like', 'CVE-%')
-      .orWhere('key', 'like', 'test/autotrigger/%');
+      .where('key_name', 'like', 'CVE-%')
+      .orWhere('key_name', 'like', 'test/autotrigger/%');
 
     const keyIds = cveKeyIds.map((row: any) => row.id);
 
     if (keyIds.length > 0) {
       // Delete in order of dependencies (child tables first)
-      await knex('t_decision_tags')
+      await knex('v4_decision_tags')
         .whereIn('decision_key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
-      await knex('t_decision_scopes')
+      await knex('v4_decision_scopes')
         .whereIn('decision_key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
-      await knex('t_decision_history')
+      await knex('v4_decision_history')
         .whereIn('key_id', keyIds)
         .delete();
 
-      await knex('t_decisions')
-        .whereIn('key_id', keyIds)
-        .where('project_id', projectId)
-        .delete();
-
-      await knex('t_decisions_numeric')
+      await knex('v4_decisions')
         .whereIn('key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
-      await knex('m_context_keys')
+      await knex('v4_decisions_numeric')
+        .whereIn('key_id', keyIds)
+        .where('project_id', projectId)
+        .delete();
+
+      await knex('v4_context_keys')
         .whereIn('id', keyIds)
         .delete();
     }
@@ -81,51 +81,51 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
     const projectId = getProjectContext().getProjectId();
 
     // Get key IDs for CVE decisions and test decisions
-    const cveKeyIds = await knex('m_context_keys')
+    const cveKeyIds = await knex('v4_context_keys')
       .select('id')
-      .where('key', 'like', 'CVE-%')
-      .orWhere('key', 'like', 'test/autotrigger/%');
+      .where('key_name', 'like', 'CVE-%')
+      .orWhere('key_name', 'like', 'test/autotrigger/%');
 
     const keyIds = cveKeyIds.map((row: any) => row.id);
 
     if (keyIds.length > 0) {
       // Delete in order of dependencies (child tables first)
       // 1. Delete decision tags (junction table)
-      await knex('t_decision_tags')
+      await knex('v4_decision_tags')
         .whereIn('decision_key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
       // 2. Delete decision scopes (junction table)
-      await knex('t_decision_scopes')
+      await knex('v4_decision_scopes')
         .whereIn('decision_key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
       // 3. Delete decision history
-      await knex('t_decision_history')
+      await knex('v4_decision_history')
         .whereIn('key_id', keyIds)
         .delete();
 
       // 4. Delete decisions from both tables
-      await knex('t_decisions')
+      await knex('v4_decisions')
         .whereIn('key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
-      await knex('t_decisions_numeric')
+      await knex('v4_decisions_numeric')
         .whereIn('key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
       // 5. Delete context keys
-      await knex('m_context_keys')
+      await knex('v4_context_keys')
         .whereIn('id', keyIds)
         .delete();
     }
 
     // Delete test policy
-    await knex('t_decision_policies')
+    await knex('v4_decision_policies')
       .where('name', 'security_vulnerability')
       .where('project_id', projectId)
       .delete();
@@ -139,26 +139,13 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
     const projectId = getProjectContext().getProjectId();
 
     // Delete existing policy first (migration may have created it with defaults)
-    await knex('t_decision_policies')
+    await knex('v4_decision_policies')
       .where('name', 'security_vulnerability')
       .where('project_id', projectId)
       .delete();
 
-    // Get system agent
-    let systemAgentId: number;
-    const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
-    if (systemAgent) {
-      systemAgentId = systemAgent.id;
-    } else {
-      const [agentId] = await knex('m_agents').insert({
-        name: 'system',
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      systemAgentId = agentId;
-    }
-
     // Create test policy with suggest_similar=1 (matches CVE-* keys)
-    await knex('t_decision_policies').insert({
+    await knex('v4_decision_policies').insert({
       name: 'security_vulnerability',
       project_id: projectId,
       defaults: JSON.stringify({ layer: 'cross-cutting', tags: ['security', 'vulnerability'] }),
@@ -169,7 +156,6 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
         }
       }),
       quality_gates: null,
-      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
 
@@ -264,33 +250,19 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
     const projectId = getProjectContext().getProjectId();
 
     // Delete existing policy from previous test
-    await knex('t_decision_policies')
+    await knex('v4_decision_policies')
       .where('name', 'security_vulnerability')
       .where('project_id', projectId)
       .delete();
 
-    // Get system agent
-    let systemAgentId: number;
-    const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
-    if (systemAgent) {
-      systemAgentId = systemAgent.id;
-    } else {
-      const [agentId] = await knex('m_agents').insert({
-        name: 'system',
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      systemAgentId = agentId;
-    }
-
     // Create policy with suggest_similar=0 (auto-trigger disabled)
-    await knex('t_decision_policies').insert({
+    await knex('v4_decision_policies').insert({
       name: 'security_vulnerability',
       project_id: projectId,
       defaults: JSON.stringify({ layer: 'cross-cutting', tags: ['security', 'vulnerability'] }),
       suggest_similar: 0,  // Disabled
       validation_rules: null,
       quality_gates: null,
-      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
 
@@ -350,33 +322,19 @@ describe('Auto-Trigger Suggestions (Task 407)', () => {
     const projectId = getProjectContext().getProjectId();
 
     // Delete existing policy from previous test
-    await knex('t_decision_policies')
+    await knex('v4_decision_policies')
       .where('name', 'security_vulnerability')
       .where('project_id', projectId)
       .delete();
 
-    // Get system agent
-    let systemAgentId: number;
-    const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
-    if (systemAgent) {
-      systemAgentId = systemAgent.id;
-    } else {
-      const [agentId] = await knex('m_agents').insert({
-        name: 'system',
-        last_active_ts: Math.floor(Date.now() / 1000)
-      });
-      systemAgentId = agentId;
-    }
-
     // Create policy with auto-trigger enabled
-    await knex('t_decision_policies').insert({
+    await knex('v4_decision_policies').insert({
       name: 'security_vulnerability',
       project_id: projectId,
       defaults: JSON.stringify({ layer: 'cross-cutting', tags: ['security', 'vulnerability'] }),
       suggest_similar: 1,  // Enabled
       validation_rules: null,
       quality_gates: null,
-      created_by: systemAgentId,
       ts: Math.floor(Date.now() / 1000)
     });
 

@@ -35,7 +35,7 @@ describe('Workflow 1 Debug', () => {
       const knex = adapter.getKnex();
       const projectId = ProjectContext.getInstance().getProjectId();
 
-      await knex('t_decision_policies')
+      await knex('v4_decision_policies')
         .where({ name: 'test-cve-policy', project_id: projectId })
         .del();
     } catch (error) {
@@ -53,24 +53,11 @@ describe('Workflow 1 Debug', () => {
       const projectId = ProjectContext.getInstance().getProjectId();
 
       // Delete existing policy if present (from failed previous run)
-      await knex('t_decision_policies')
+      await knex('v4_decision_policies')
         .where({ name: 'test-cve-policy', project_id: projectId })
         .del();
 
-      // Get system agent ID
-      let systemAgentId: number;
-      const systemAgent = await knex('m_agents').where('name', 'system').select('id').first();
-      if (systemAgent) {
-        systemAgentId = systemAgent.id;
-      } else {
-        const [agentId] = await knex('m_agents').insert({
-          name: 'system',
-          last_active_ts: Math.floor(Date.now() / 1000)
-        });
-        systemAgentId = agentId;
-      }
-
-      await knex('t_decision_policies').insert({
+      await knex('v4_decision_policies').insert({
         project_id: projectId,
         name: 'test-cve-policy',
         category: 'security',
@@ -86,7 +73,6 @@ describe('Workflow 1 Debug', () => {
         quality_gates: JSON.stringify({
           required_fields: ['severity']
         }),
-        created_by: systemAgentId,
         ts: Math.floor(Date.now() / 1000)
       });
 

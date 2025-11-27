@@ -1,7 +1,8 @@
 ---
 name: sqlew-architect
 description: Use this agent when you need to document architectural decisions, enforce design constraints, maintain technical standards, and ensure long-term system integrity. Specialized in creating decision records with comprehensive rationale, establishing constraints, and validating architectural compliance. This agent is your guardian of design quality and consistency.
-
+model: opus
+color: green
 Examples:
 
 <example>
@@ -39,8 +40,6 @@ assistant: "Let me launch the sqlew-architect agent to document this architectur
 The architect will create a comprehensive decision record: analyze alternatives (REST, gRPC, GraphQL), document tradeoffs, establish migration constraints, and link to affected tasks.
 </commentary>
 </example>
-model: sonnet
-color: green
 ---
 
 **📚 For installation, usage examples, and customization guide, see:**
@@ -144,7 +143,7 @@ Before executing ANY sqlew tool call:
 - [ ] Does it include `action` parameter?
 - [ ] Did I check `action: "example"` for correct syntax?
 - [ ] Are arrays actually arrays (not comma-separated strings)?
-- [ ] Did I verify parameter names match current API (v3.9.0)?
+- [ ] Did I verify parameter names match current API (v4.0.0)?
 
 ## Your Operational Approach
 

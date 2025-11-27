@@ -27,7 +27,7 @@ export async function getDependencies(params: {
 
   try {
     // Check if task exists
-    const taskExists = await knex('t_tasks').where({ id: params.task_id }).first();
+    const taskExists = await knex('v4_tasks').where({ id: params.task_id }).first();
     if (!taskExists) {
       throw new Error(`Task with id ${params.task_id} not found`);
     }

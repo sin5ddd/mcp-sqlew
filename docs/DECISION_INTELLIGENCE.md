@@ -1,8 +1,9 @@
-# Decision Intelligence System (v3.9.0)
+# Decision Intelligence System (v4.0.0)
 
 **Status:** Production Ready ✅
-**Release Date:** 2025-01-15
+**Release Date:** 2025-11-27
 **Test Coverage:** 495/495 tests passing (100%)
+**v3.9.0 Compatibility:** All Decision Intelligence features from v3.9.0 are preserved and fully functional in v4.0.0
 
 ---
 
@@ -23,7 +24,7 @@ The Decision Intelligence System provides AI-driven duplicate detection, similar
 
 ## Three-Tier Similarity Detection
 
-### Threshold Configuration (v3.9.0)
+### Threshold Configuration (v4.0.0)
 
 ```typescript
 // src/constants.ts
@@ -281,7 +282,7 @@ decision({
 })
 ```
 
-### Behavior (v3.9.0 Three-Tier System)
+### Behavior (v4.0.0 Three-Tier System)
 
 When a decision matches a policy with `suggest_similar=1`:
 1. Similarity detection runs automatically BEFORE decision creation
@@ -432,7 +433,7 @@ suggest({
 
 ## Threshold Adjustment Rationale
 
-**v3.9.0 (2025-11-14):** Three-tier system (45/60 with auto-update)
+**v4.0.0 (2025-11-27):** Three-tier system preserved from v3.9.0 (45/60 with auto-update)
 
 ### Why Three-Tier System?
 
@@ -494,7 +495,7 @@ suggest({
 **File:** `src/constants.ts`
 
 ```typescript
-// Suggestion & Duplicate Detection (v3.9.0 Three-Tier System)
+// Suggestion & Duplicate Detection (v4.0.0 Three-Tier System)
 export const SUGGEST_THRESHOLDS = {
   GENTLE_NUDGE: 35,       // Warning threshold (non-blocking, Tier 1)
   HARD_BLOCK: 45,         // Blocking threshold (forces choice, Tier 2)
@@ -586,9 +587,19 @@ When you hit a hard block:
 
 ---
 
+## Related Documentation
+
+| Document | Content |
+|----------|---------|
+| [CONSTRAINT_INTELLIGENCE.md](CONSTRAINT_INTELLIGENCE.md) | Constraint duplicate detection |
+| [TOOL_REFERENCE.md](TOOL_REFERENCE.md) | Complete parameter reference |
+| [SHARED_CONCEPTS.md](SHARED_CONCEPTS.md) | Layers, priorities, tags |
+
+---
+
 ## Support & Feedback
 
 **Issue Tracker:** https://github.com/anthropics/mcp-sqlew/issues
 **Documentation:** See `/docs` directory
-**Version:** v3.9.0
-**Last Updated:** 2025-11-14
+**Version:** v4.0.0
+**Last Updated:** 2025-11-27

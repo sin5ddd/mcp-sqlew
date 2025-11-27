@@ -19,16 +19,30 @@ export {
 
 export { closeDatabase } from './initialization/cleanup.js';
 
+// Schema version detection (v4.0)
+export {
+  detectSchemaVersion,
+  getSchemaVersion,
+  isSchemaVersionDetected,
+  clearSchemaVersionCache,
+  isV4Schema,
+  isV3Schema,
+  getTableName,
+  TableNames,
+} from './initialization/schema-version.js';
+export type { SchemaVersion, SchemaVersionInfo } from './initialization/schema-version.js';
+
 // Adapter factory
 export { getAdapter, getDatabase } from './config/adapter-factory.js';
 
-// Configuration operations
+// Configuration operations (v4.0: in-memory store, no database dependency)
 export {
   getConfigValue,
   setConfigValue,
   getConfigBool,
   getConfigInt,
   getAllConfig,
+  clearConfig,
 } from './config/config-ops.js';
 
 // Query operations

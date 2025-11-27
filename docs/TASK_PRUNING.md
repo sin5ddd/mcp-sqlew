@@ -1,4 +1,4 @@
-# Task File Auto-Pruning (v3.5.0)
+# Task File Auto-Pruning (v4.0.0)
 
 **Feature**: Automatic removal of non-existent watched files with audit trail preservation
 
@@ -33,7 +33,7 @@ When these files remain non-existent, tasks cannot transition to `waiting_review
 
 ### The Solution
 
-**v3.5.0 Auto-Pruning** automatically removes non-existent watched files when tasks transition to `waiting_review`, while preserving a complete audit trail for project archaeology.
+**v4.0.0 Auto-Pruning** automatically removes non-existent watched files when tasks transition to `waiting_review`, while preserving a complete audit trail for project archaeology.
 
 ### Key Benefits
 
@@ -65,22 +65,22 @@ Auto-pruning is triggered during the `in_progress → waiting_review` transition
    c. Identify non-existent files
    d. **SAFETY CHECK**: If ALL files non-existent → BLOCK transition
    e. Prune non-existent files
-   f. Record to t_task_pruned_files audit table
-   g. Remove from t_task_file_links
+   f. Record to v4_task_pruned_files audit table
+   g. Remove from v4_task_file_links
    h. Continue with quality gate checks on remaining files
 4. Transition to waiting_review (if quality gates pass)
 ```
 
 ### Database Changes
 
-**Table Created**: `t_task_pruned_files`
+**Table Created**: `v4_task_pruned_files`
 ```sql
-CREATE TABLE t_task_pruned_files (
+CREATE TABLE v4_task_pruned_files (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  task_id INTEGER NOT NULL REFERENCES t_tasks(id) ON DELETE CASCADE,
+  task_id INTEGER NOT NULL REFERENCES v4_tasks(id) ON DELETE CASCADE,
   file_path TEXT NOT NULL,
   pruned_ts INTEGER DEFAULT (unixepoch()),
-  linked_decision_id INTEGER REFERENCES t_decisions(id) ON DELETE SET NULL
+  linked_decision_id INTEGER REFERENCES v4_decisions(id) ON DELETE SET NULL
 );
 ```
 
@@ -348,10 +348,10 @@ SELECT
   tpf.file_path,
   datetime(tpf.pruned_ts, 'unixepoch') as pruned_at,
   k.key as decision
-FROM t_task_pruned_files tpf
-JOIN t_tasks t ON tpf.task_id = t.id
-LEFT JOIN t_decisions d ON tpf.linked_decision_id = d.id
-LEFT JOIN m_context_keys k ON d.key_id = k.id
+FROM v4_task_pruned_files tpf
+JOIN v4_tasks t ON tpf.task_id = t.id
+LEFT JOIN v4_decisions d ON tpf.linked_decision_id = d.id
+LEFT JOIN v4_context_keys k ON d.key_id = k.id
 WHERE tpf.pruned_ts >= unixepoch('now', '-7 days')
 ORDER BY tpf.pruned_ts DESC;
 ```
@@ -376,7 +376,7 @@ Auto-pruning runs as part of `detectAndTransitionToReview()`, triggered by:
 mcp-tool config update --key review_idle_minutes --value 5
 
 # Via SQL
-UPDATE m_config SET value = '5' WHERE key = 'review_idle_minutes';
+UPDATE v4_config SET value = '5' WHERE key = 'review_idle_minutes';
 ```
 
 ### Quality Gates
@@ -466,22 +466,22 @@ await task.link_pruned_file({
 
 ```sql
 -- Audit table
-CREATE TABLE t_task_pruned_files (
+CREATE TABLE v4_task_pruned_files (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  task_id INTEGER NOT NULL REFERENCES t_tasks(id) ON DELETE CASCADE,
+  task_id INTEGER NOT NULL REFERENCES v4_tasks(id) ON DELETE CASCADE,
   file_path TEXT NOT NULL,
   pruned_ts INTEGER DEFAULT (unixepoch()),
-  linked_decision_id INTEGER REFERENCES t_decisions(id) ON DELETE SET NULL
+  linked_decision_id INTEGER REFERENCES v4_decisions(id) ON DELETE SET NULL
 );
 
 -- Indexes
-CREATE INDEX idx_pruned_task ON t_task_pruned_files(task_id);
-CREATE INDEX idx_pruned_decision ON t_task_pruned_files(linked_decision_id);
+CREATE INDEX idx_pruned_task ON v4_task_pruned_files(task_id);
+CREATE INDEX idx_pruned_decision ON v4_task_pruned_files(linked_decision_id);
 ```
 
 ### Implementation Files
 
-- **Migration**: `src/migrations/add-v3.5.0-pruned-files.ts`
+- **Migration**: `src/database/migrations/v4/20251126000000_v4_bootstrap.ts`
 - **Core Logic**: `src/utils/file-pruning.ts`
 - **Integration**: `src/utils/task-stale-detection.ts`
 - **MCP Actions**: `src/tools/tasks.ts` (getPrunedFiles, linkPrunedFile)
@@ -525,7 +525,7 @@ task.get({ task_id: X, include_dependencies: true })
 ```bash
 # Force check by waiting for idle timeout
 # Or manually query database:
-SELECT * FROM t_task_pruned_files WHERE task_id = X;
+SELECT * FROM v4_task_pruned_files WHERE task_id = X;
 ```
 
 ### Issue: Decision link not working
@@ -545,13 +545,13 @@ task.get_pruned_files({ task_id: X })
 
 ## Migration Notes
 
-### Upgrading from v3.4.x
+### Upgrading from v3.9.x
 
-Auto-pruning is **automatic** in v3.5.0. No configuration required.
+Auto-pruning is **automatic** in v4.0.0. No configuration required.
 
 **Database Migration**:
 - Runs automatically on startup
-- Creates `t_task_pruned_files` table
+- Creates `v4_task_pruned_files` table
 - Idempotent (safe to run multiple times)
 
 **Behavioral Changes**:
@@ -559,11 +559,11 @@ Auto-pruning is **automatic** in v3.5.0. No configuration required.
 - No impact on existing tasks (pruning only affects future transitions)
 
 **Rollback**:
-If needed, downgrade to v3.4.x:
+If needed, downgrade to v3.9.x:
 ```bash
 # Audit table will remain but won't be used
 # No data loss
-git checkout v3.4.1
+git checkout v3.9.0
 npm install
 ```
 
@@ -572,14 +572,19 @@ npm install
 ## Related Documentation
 
 - **TASK_OVERVIEW.md**: Task lifecycle and status transitions
-- **TASK_ACTIONS.md**: All task action references
-- **TASK_LINKING.md**: Linking tasks to decisions/constraints/files
+- **TASK_ACTIONS.md**: All task action references (including linking)
 - **DECISION_CONTEXT.md**: Rich decision documentation
 - **ARCHITECTURE.md**: Database schema details
 
 ---
 
 ## Changelog
+
+### v4.0.0 (2025-11-27)
+- Updated to v4.0.0 schema with `v4_` table prefix
+- Migrated from legacy table names to unified v4 naming convention
+- Updated migration paths to `src/database/migrations/v4/` structure
+- All SQL examples updated for v4 schema
 
 ### v3.5.0 (2025-10-22)
 - Initial release of Auto-Pruning feature

@@ -1,6 +1,6 @@
 # Batch Validation Utilities
 
-**Version**: 3.8.0
+**Version**: 4.0.0
 **Status**: ✅ Implemented and Tested
 **Impact**: 70-85% reduction in batch validation failures
 
@@ -197,7 +197,7 @@ Validates foreign key reference exists in database.
 **Example**:
 ```typescript
 await validateForeignKey(
-  task.layer, 'layer', 'm_layers', 'name',
+  task.layer, 'layer', 'v4_layers', 'name',
   adapter, 0, 'Task 1', errors
 );
 // If invalid: provides list of valid layers from database
@@ -408,7 +408,7 @@ async function validateTaskItem(
     validateEnum(
       task.status,
       'status',
-      ['todo', 'in_progress', 'waiting_review', 'blocked', 'done', 'archived'],
+      ['todo', 'in_progress', 'waiting_review', 'blocked', 'done', 'archived', 'rejected'],
       index,
       identifier,
       errors

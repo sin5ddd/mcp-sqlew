@@ -78,7 +78,6 @@ export function runTestsOnAllDatabases(
  * Seed minimal test data for operations testing
  *
  * Creates baseline master data required for decision/constraint/task operations:
- * - 1 agent (system)
  * - 9 layers (presentation, business, data, infrastructure, cross-cutting,
  *             documentation, planning, coordination, review)
  * - 5 tags (test, api, performance, security, architecture)
@@ -87,19 +86,10 @@ export function runTestsOnAllDatabases(
  * @param db - Knex database connection
  */
 export async function seedTestData(db: Knex): Promise<void> {
-  // Agent
-  const agentExists = await db('m_agents').where({ name: 'system' }).first();
-  if (!agentExists) {
-    await db('m_agents').insert({
-      name: 'system',
-      last_active_ts: Math.floor(Date.now() / 1000),
-    });
-  }
-
   // Layers (should already exist from migrations, but verify)
-  const layerCount = await db('m_layers').count('* as count').first();
+  const layerCount = await db('v4_layers').count('* as count').first();
   if (!layerCount || layerCount.count === 0) {
-    await db('m_layers').insert([
+    await db('v4_layers').insert([
       { name: 'presentation' },
       { name: 'business' },
       { name: 'data' },
@@ -115,25 +105,25 @@ export async function seedTestData(db: Knex): Promise<void> {
   // Tags
   const tags = ['test', 'api', 'performance', 'security', 'architecture'];
   for (const tag of tags) {
-    const exists = await db('m_tags').where({ name: tag, project_id: 1 }).first();
+    const exists = await db('v4_tags').where({ name: tag, project_id: 1 }).first();
     if (!exists) {
-      await db('m_tags').insert({ name: tag, project_id: 1 });
+      await db('v4_tags').insert({ name: tag, project_id: 1 });
     }
   }
 
   // Scopes
   const scopes = ['global', 'module', 'component'];
   for (const scope of scopes) {
-    const exists = await db('m_scopes').where({ name: scope, project_id: 1 }).first();
+    const exists = await db('v4_scopes').where({ name: scope, project_id: 1 }).first();
     if (!exists) {
-      await db('m_scopes').insert({ name: scope, project_id: 1 });
+      await db('v4_scopes').insert({ name: scope, project_id: 1 });
     }
   }
 
   // Task statuses (should exist from migrations, but verify)
-  const statusCount = await db('m_task_statuses').count('* as count').first();
+  const statusCount = await db('v4_task_statuses').count('* as count').first();
   if (!statusCount || statusCount.count === 0) {
-    await db('m_task_statuses').insert([
+    await db('v4_task_statuses').insert([
       { name: 'todo' },
       { name: 'in_progress' },
       { name: 'waiting_review' },
@@ -157,29 +147,29 @@ export async function cleanupTestData(db: Knex): Promise<void> {
   // Transaction tables
 
   // t_decision_tags has (decision_key_id, project_id, tag_id)
-  await db('t_decision_tags').where('project_id', 1).del();
+  await db('v4_decision_tags').where('project_id', 1).del();
   // t_decision_scopes has (decision_key_id, project_id, scope_id)
   await db('t_decision_scopes').where('project_id', 1).del();
   // t_decision_context has project_id (added in v3.7.0)
-  await db('t_decision_context').where('project_id', 1).del();
-  // t_decisions has project_id
-  await db('t_decisions').where('project_id', 1).del();
+  await db('v4_decision_context').where('project_id', 1).del();
+  // v4_decisions has project_id
+  await db('v4_decisions').where('project_id', 1).del();
   // t_decisions_numeric has project_id
-  await db('t_decisions_numeric').where('project_id', 1).del();
-  // m_context_keys has (id, key) - NO project_id
-  await db('m_context_keys').del();
+  await db('v4_decisions_numeric').where('project_id', 1).del();
+  // v4_context_keys has (id, key_name) - NO project_id
+  await db('v4_context_keys').del();
 
-  await db('t_constraints').where('project_id', 1).del();
+  await db('v4_constraints').where('project_id', 1).del();
 
-  await db('t_task_dependencies').del();
-  await db('t_task_tags').where('project_id', 1).del();
-  await db('t_task_decision_links').del();
+  await db('v4_task_dependencies').del();
+  await db('v4_task_tags').where('project_id', 1).del();
+  await db('v4_task_decision_links').del();
   await db('t_task_constraint_links').del();
-  await db('t_task_file_links').del();
-  await db('t_tasks').where('project_id', 1).del();
+  await db('v4_task_file_links').del();
+  await db('v4_tasks').where('project_id', 1).del();
 
-  await db('t_file_changes').where('project_id', 1).del();
-  await db('m_files').where('project_id', 1).del();
+  await db('v4_file_changes').where('project_id', 1).del();
+  await db('v4_files').where('project_id', 1).del();
 
   // m_tag_index has (tag_name, decision_count, ..., total_count) - NO project_id
   await db('m_tag_index').del();
@@ -201,13 +191,13 @@ export async function assertDecisionExists(
   key: string,
   expectedValue: string
 ): Promise<void> {
-  const contextKey = await db('m_context_keys')
-    .where({ key })
+  const contextKey = await db('v4_context_keys')
+    .where({ key_name: key })
     .first();
 
   assert.ok(contextKey, `Decision key "${key}" should exist`);
 
-  const decision = await db('t_decisions')
+  const decision = await db('v4_decisions')
     .where({ key_id: contextKey.id, project_id: 1 })
     .first();
 
@@ -222,7 +212,7 @@ export async function assertDecisionExists(
  * @param rule - Constraint rule to check
  */
 export async function assertConstraintActive(db: Knex, rule: string): Promise<void> {
-  const constraint = await db('t_constraints')
+  const constraint = await db('v4_constraints')
     .where({ constraint_text: rule, active: 1, project_id: 1 })
     .first();
 
@@ -241,7 +231,7 @@ export async function assertTaskStatus(
   taskId: number,
   expectedStatus: string
 ): Promise<void> {
-  const task = await db('t_tasks')
+  const task = await db('v4_tasks')
     .where({ id: taskId })
     .first();
 
@@ -261,16 +251,16 @@ export async function assertDecisionHasTags(
   key: string,
   expectedTags: string[]
 ): Promise<void> {
-  const contextKey = await db('m_context_keys')
-    .where({ key })
+  const contextKey = await db('v4_context_keys')
+    .where({ key_name: key })
     .first();
 
   assert.ok(contextKey, `Decision key "${key}" should exist`);
 
-  const tags = await db('t_decision_tags')
-    .join('m_tags', 't_decision_tags.tag_id', 'm_tags.id')
+  const tags = await db('v4_decision_tags')
+    .join('v4_tags', 't_decision_tags.tag_id', 'v4_tags.id')
     .where({ 't_decision_tags.decision_key_id': contextKey.id, 't_decision_tags.project_id': 1 })
-    .pluck('m_tags.name');
+    .pluck('v4_tags.name');
 
   assert.strictEqual(tags.length, expectedTags.length, `Should have ${expectedTags.length} tags`);
 
@@ -291,8 +281,8 @@ export async function assertTagIndexPopulated(
   key: string,
   expectedTags: string[]
 ): Promise<void> {
-  const contextKey = await db('m_context_keys')
-    .where({ key })
+  const contextKey = await db('v4_context_keys')
+    .where({ key_name: key })
     .first();
 
   assert.ok(contextKey, `Decision key "${key}" should exist`);
@@ -313,27 +303,6 @@ export async function assertTagIndexPopulated(
 // ============================================================================
 
 /**
- * Get agent ID by name (creates if not exists)
- *
- * @param db - Knex database connection
- * @param name - Agent name
- * @returns Agent ID
- */
-export async function getAgentId(db: Knex, name: string = 'system'): Promise<number> {
-  let agent = await db('m_agents').where({ name }).first();
-
-  if (!agent) {
-    await db('m_agents').insert({
-      name,
-      last_active_ts: Math.floor(Date.now() / 1000),
-    });
-    agent = await db('m_agents').where({ name }).first();
-  }
-
-  return agent.id;
-}
-
-/**
  * Get tag ID by name (creates if not exists)
  *
  * @param db - Knex database connection
@@ -341,11 +310,11 @@ export async function getAgentId(db: Knex, name: string = 'system'): Promise<num
  * @returns Tag ID
  */
 export async function getTagId(db: Knex, tagName: string): Promise<number> {
-  let tag = await db('m_tags').where({ name: tagName, project_id: 1 }).first();
+  let tag = await db('v4_tags').where({ name: tagName, project_id: 1 }).first();
 
   if (!tag) {
-    await db('m_tags').insert({ name: tagName, project_id: 1 });
-    tag = await db('m_tags').where({ name: tagName, project_id: 1 }).first();
+    await db('v4_tags').insert({ name: tagName, project_id: 1 });
+    tag = await db('v4_tags').where({ name: tagName, project_id: 1 }).first();
   }
 
   return tag.id;
@@ -359,7 +328,7 @@ export async function getTagId(db: Knex, tagName: string): Promise<number> {
  * @returns Layer ID
  */
 export async function getLayerId(db: Knex, layerName: string): Promise<number> {
-  const layer = await db('m_layers').where({ name: layerName }).first();
+  const layer = await db('v4_layers').where({ name: layerName }).first();
   assert.ok(layer, `Layer "${layerName}" should exist`);
   return layer.id;
 }
@@ -372,11 +341,11 @@ export async function getLayerId(db: Knex, layerName: string): Promise<number> {
  * @returns Scope ID
  */
 export async function getScopeId(db: Knex, scopeName: string): Promise<number> {
-  let scope = await db('m_scopes').where({ name: scopeName, project_id: 1 }).first();
+  let scope = await db('v4_scopes').where({ name: scopeName, project_id: 1 }).first();
 
   if (!scope) {
-    await db('m_scopes').insert({ name: scopeName, project_id: 1 });
-    scope = await db('m_scopes').where({ name: scopeName, project_id: 1 }).first();
+    await db('v4_scopes').insert({ name: scopeName, project_id: 1 });
+    scope = await db('v4_scopes').where({ name: scopeName, project_id: 1 }).first();
   }
 
   return scope.id;

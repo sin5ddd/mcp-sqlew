@@ -1,166 +1,170 @@
 # Multi-Step Workflow Examples
 
-**Comprehensive multi-agent workflows demonstrating coordinated use of multiple sqlew tools**
+**Comprehensive workflows demonstrating coordinated use of multiple sqlew tools**
 
-This document demonstrates real-world scenarios showing how different tools work together in practice.
+This document demonstrates real-world scenarios showing how different tools work together in practice. All workflows are v4.0.0 compatible and focus on decision → constraint → task workflows without the agent system.
 
 ---
 
-## Workflow 1: Multi-Agent Feature Implementation
+## Workflow 1: Feature Implementation Planning
 
-**Scenario**: Orchestrator agent coordinates 3 sub-agents to implement a new authentication feature.
+**Scenario**: Plan and track implementation of a new authentication feature across multiple layers (business logic, API, database).
 
-### Step 1: Orchestrator Creates Plan
+### Phase 1: Record Architectural Decision
 
 ```javascript
 // 1. Record the architecture decision
 {
   action: "set",
   key: "auth_v2_implementation",
-  value: "Implement OAuth2 + JWT refresh token system",
+  value: "Implement OAuth2 + JWT refresh token system for v2.0.0 release",
   layer: "business",
-  tags: ["auth", "feature", "v2.0.0"],
-  agent: "orchestrator-agent"
+  tags: ["auth", "feature", "v2.0.0"]
 }
 
-// 2. Add architectural constraints
+// 2. Add security constraints
 {
   action: "add",
-  category: "architecture",
+  category: "security",
   constraint_text: "All auth tokens must expire within 15 minutes",
   priority: "critical",
   layer: "business",
   tags: ["auth", "security"]
 }
 
-// 3. Create tasks for each sub-agent
+// 3. Add architectural constraint
+{
+  action: "add",
+  category: "architecture",
+  constraint_text: "OAuth2 integration must use provider-agnostic abstraction layer",
+  priority: "high",
+  layer: "business",
+  tags: ["auth", "architecture"]
+}
+```
+
+### Phase 2: Create Implementation Tasks
+
+```javascript
+// Create implementation tasks for different layers
 {
   action: "create_batch",
   atomic: false,
   tasks: [
     {
       title: "Implement OAuth2 provider integration",
-      assigned_agent: "backend-agent",
+      description: "Create OAuth2 service with support for Google and GitHub providers",
       layer: "business",
       priority: 4,
       tags: ["auth", "oauth2"],
-      status: "todo"
+      status: "todo",
+      watch_files: ["src/auth/oauth2.ts", "src/auth/providers/"]
     },
     {
       title: "Create JWT token refresh endpoint",
-      assigned_agent: "api-agent",
+      description: "Implement /auth/refresh endpoint with token rotation",
       layer: "presentation",
       priority: 4,
       tags: ["auth", "api"],
-      status: "todo"
+      status: "todo",
+      watch_files: ["src/routes/auth.ts"]
     },
     {
       title: "Update auth database schema",
-      assigned_agent: "db-agent",
+      description: "Add oauth_tokens table and migration for token storage",
       layer: "data",
       priority: 4,
       tags: ["auth", "database"],
-      status: "todo"
+      status: "todo",
+      watch_files: ["src/db/migrations/", "src/db/schema.ts"]
     }
   ]
 }
-
-// 4. Broadcast start message
-{
-  action: "send",
-  from_agent: "orchestrator-agent",
-  to_agent: null,  // Broadcast
-  msg_type: "info",
-  message: "Starting OAuth2 + JWT implementation - check your assigned tasks",
-  priority: "high"
-}
 ```
 
-### Step 2: Backend Agent Executes Task
+### Phase 3: Track Progress
 
 ```javascript
-// 1. Mark task as in progress
+// As implementation progresses, record file changes
+{
+  action: "record",
+  file_path: "src/auth/oauth2.ts",
+  change_type: "created",
+  layer: "business",
+  description: "OAuth2 provider integration with provider abstraction"
+}
+
+// Link tasks to the architectural decision
+{
+  action: "link",
+  task_id: 1,
+  link_type: "decision",
+  target_id: "auth_v2_implementation",
+  link_relation: "implements"
+}
+
+// Move tasks through workflow
 {
   action: "move",
   task_id: 1,
-  new_status: "in_progress"
+  status: "in_progress"
 }
 
-// 2. Record file changes
+// Record additional file changes
 {
-  action: "record_batch",
-  atomic: false,
-  file_changes: [
-    {
-      file_path: "src/auth/oauth2.ts",
-      agent_name: "backend-agent",
-      change_type: "created",
-      layer: "business",
-      description: "OAuth2 provider integration"
-    },
-    {
-      file_path: "src/auth/jwt.ts",
-      agent_name: "backend-agent",
-      change_type: "modified",
-      layer: "business",
-      description: "Added refresh token logic"
-    }
-  ]
+  action: "record",
+  file_path: "src/auth/jwt.ts",
+  change_type: "created",
+  layer: "business",
+  description: "JWT token generation and refresh logic"
 }
 
-// 3. Report completion
-{
-  action: "send",
-  from_agent: "backend-agent",
-  to_agent: "orchestrator-agent",
-  msg_type: "info",
-  message: "OAuth2 provider integration complete",
-  priority: "medium",
-  payload: {
-    files_changed: 2,
-    tests_passing: true
-  }
-}
-
-// 4. Complete task
+// Update task status
 {
   action: "move",
   task_id: 1,
-  new_status: "done"
+  status: "waiting_review"
 }
 ```
 
-### Step 3: Orchestrator Monitors Progress
+### Phase 4: Verify Constraints Compliance
 
 ```javascript
-// 1. Check for updates (efficient polling)
-{
-  action: "has_updates",
-  agent_name: "orchestrator-agent",
-  since_timestamp: "2025-10-17T10:00:00Z"
-}
-
-// 2. Get task status
-{
-  action: "list",
-  tags: ["auth"],
-  assigned_agent: null  // All agents
-}
-
-// 3. Get unread messages
+// Check that all constraints are satisfied
 {
   action: "get",
-  agent_name: "orchestrator-agent",
-  unread_only: true,
-  priority_filter: "high"
-}
-
-// 4. Check constraints compliance
-{
-  action: "get",
-  category: "architecture",
+  category: "security",
   layer: "business",
   tags: ["auth"]
+}
+
+// Record completion decision
+{
+  action: "set",
+  key: "auth_v2_implementation_complete",
+  value: "OAuth2 + JWT implementation complete and tested",
+  layer: "business",
+  tags: ["auth", "v2.0.0", "completed"],
+  status: "active"
+}
+
+// Complete all related tasks
+{
+  action: "move",
+  task_id: 1,
+  status: "done"
+}
+
+{
+  action: "move",
+  task_id: 2,
+  status: "done"
+}
+
+{
+  action: "move",
+  task_id: 3,
+  status: "done"
 }
 ```
 
@@ -170,15 +174,14 @@ This document demonstrates real-world scenarios showing how different tools work
 
 **Scenario**: API endpoint is being deprecated and migrated to a new version.
 
-### Phase 1: Announce Deprecation
+### Phase 1: Document Deprecation Decision
 
 ```javascript
 // 1. Record deprecation decision
 {
-  action: "set_from_template",
-  template: "deprecation",
+  action: "set",
   key: "api_v1_users_endpoint_deprecated",
-  value: "/v1/users endpoint deprecated, use /v2/users instead",
+  value: "/v1/users endpoint deprecated, use /v2/users instead. Sunset date: 2025-12-01",
   layer: "presentation",
   tags: ["api", "deprecation", "v2.0.0"]
 }
@@ -187,61 +190,70 @@ This document demonstrates real-world scenarios showing how different tools work
 {
   action: "add",
   category: "architecture",
-  constraint_text: "All new API endpoints must use /v2 prefix",
+  constraint_text: "All new API endpoints must use /v2 prefix and maintain backwards compatibility for 30 days",
   priority: "high",
   layer: "presentation",
   tags: ["api", "migration"]
 }
 
-// 3. Create migration task
+// 3. Add timeline constraint
 {
-  action: "create",
-  title: "Update all client integrations to use /v2/users",
-  description: "Migrate existing integrations before v1 sunset on 2025-12-01",
-  acceptance_criteria: "All clients successfully calling /v2/users with no errors",
+  action: "add",
+  category: "timeline",
+  constraint_text: "/v1/users endpoint sunset on 2025-12-01",
+  priority: "high",
   layer: "presentation",
-  priority: 3,
-  tags: ["migration", "client"],
-  status: "todo"
+  tags: ["api", "deprecation", "deadline"]
 }
 
-// 4. Broadcast warning to all agents
+// 4. Create migration task
 {
-  action: "send",
-  from_agent: "api-agent",
-  to_agent: null,  // Broadcast
-  msg_type: "warning",
-  message: "/v1/users DEPRECATED - Migrate to /v2/users by Dec 1",
-  priority: "critical",
-  payload: {
-    old_endpoint: "/v1/users",
-    new_endpoint: "/v2/users",
-    sunset_date: "2025-12-01"
-  }
+  action: "create",
+  title: "Migrate API clients to /v2/users endpoint",
+  description: "Update all client integrations to use new /v2/users endpoint before sunset",
+  acceptance_criteria: "All documented clients successfully calling /v2/users with no errors; /v1 endpoint deprecated in docs",
+  layer: "presentation",
+  priority: 3,
+  tags: ["migration", "client", "api"],
+  status: "todo",
+  watch_files: ["src/routes/api/", "docs/api/"]
 }
 ```
 
-### Phase 2: Track Migration Progress
+### Phase 2: Implement Migration
 
 ```javascript
-// 1. Check file lock before editing
+// 1. Create the new v2 endpoint implementation task
 {
-  action: "check_lock",
-  file_path: "src/api/routes.ts",
-  lock_duration: 300  // 5 minutes
+  action: "create",
+  title: "Implement /v2/users endpoint",
+  description: "Create new v2 endpoint with enhanced response format",
+  layer: "presentation",
+  priority: 4,
+  tags: ["api", "v2", "implementation"],
+  status: "todo",
+  watch_files: ["src/routes/users.ts"]
 }
 
-// 2. Record migration changes
+// 2. Record implementation changes
 {
   action: "record",
-  file_path: "src/api/routes.ts",
-  agent_name: "migration-agent",
+  file_path: "src/routes/users.ts",
   change_type: "modified",
   layer: "presentation",
-  description: "Added /v2/users endpoint with backwards compatibility"
+  description: "Added /v2/users endpoint with enhanced response schema"
 }
 
-// 3. Link task to decision and constraint
+// 3. Record backwards compatibility changes
+{
+  action: "record",
+  file_path: "src/routes/api.ts",
+  change_type: "modified",
+  layer: "presentation",
+  description: "Updated /v1/users to redirect to /v2/users with deprecation warning header"
+}
+
+// 4. Link tasks to the deprecation decision
 {
   action: "link",
   task_id: 1,
@@ -250,367 +262,509 @@ This document demonstrates real-world scenarios showing how different tools work
   link_relation: "implements"
 }
 
+// 5. Move endpoint implementation to in progress
 {
-  action: "link",
-  task_id: 1,
-  link_type: "constraint",
-  target_id: 1,  // The migration constraint ID
-  link_relation: "satisfies"
+  action: "move",
+  task_id: 2,
+  status: "in_progress"
+}
+```
+
+### Phase 3: Client Migration
+
+```javascript
+// 1. Record documentation updates
+{
+  action: "record",
+  file_path: "docs/api/endpoints.md",
+  change_type: "modified",
+  layer: "documentation",
+  description: "Updated API docs - marked /v1/users as deprecated, added /v2/users examples"
 }
 
-// 4. Update task status
+// 2. Update migration task status
 {
   action: "move",
   task_id: 1,
-  new_status: "waiting_review"
-}
-```
-
-### Phase 3: Complete Migration
-
-```javascript
-// 1. Record completion decision
-{
-  action: "set",
-  key: "api_v2_migration_complete",
-  value: "All clients successfully migrated to /v2/users endpoint",
-  layer: "presentation",
-  tags: ["api", "migration", "complete"],
-  status: "active"
+  status: "in_progress"
 }
 
-// 2. Deactivate old constraint
-{
-  action: "deactivate",
-  constraint_id: 1
-}
-
-// 3. Archive completed task
-{
-  action: "archive",
-  task_id: 1
-}
-
-// 4. Notify stakeholders
-{
-  action: "send",
-  from_agent: "migration-agent",
-  to_agent: null,  // Broadcast
-  msg_type: "info",
-  message: "Migration to /v2/users complete - /v1 endpoint can be removed",
-  priority: "high"
-}
-```
-
----
-
-## Workflow 3: Session Continuity (Cross-Session Context)
-
-**Scenario**: Agent needs to resume work after restart or handoff to another agent.
-
-### Agent A: Record Context Before Exit
-
-```javascript
-// 1. Save current work state
-{
-  action: "set",
-  key: "refactor_session_state",
-  value: "Completed 3/5 modules - currently working on auth module",
-  layer: "business",
-  tags: ["refactor", "session-state"],
-  scopes: ["auth-module"],
-  agent: "refactor-agent-a"
-}
-
-// 2. Update task with notes
-{
-  action: "update",
-  task_id: 42,
-  notes: "Paused at auth/oauth2.ts line 145 - need to review token refresh logic before proceeding"
-}
-
-// 3. Record last file changes
+// 3. Record client update changes (example for one client)
 {
   action: "record_batch",
   atomic: false,
   file_changes: [
     {
-      file_path: "src/auth/oauth2.ts",
-      agent_name: "refactor-agent-a",
+      file_path: "integrations/client-sdk/src/api.ts",
       change_type: "modified",
-      layer: "business",
-      description: "WIP: Token refresh refactoring (incomplete)"
+      layer: "presentation",
+      description: "Updated to use /v2/users endpoint"
+    },
+    {
+      file_path: "integrations/client-sdk/CHANGELOG.md",
+      change_type: "modified",
+      layer: "documentation",
+      description: "Documented migration from /v1/users to /v2/users"
     }
   ]
 }
+```
 
-// 4. Send handoff message
+### Phase 4: Complete and Deactivate
+
+```javascript
+// 1. Create decision confirming migration completion
 {
-  action: "send",
-  from_agent: "refactor-agent-a",
-  to_agent: "refactor-agent-b",
-  msg_type: "request",
-  message: "Handing off refactor task - see task #42 for context",
-  priority: "high",
-  payload: {
-    task_id: 42,
-    last_file: "src/auth/oauth2.ts",
-    completion: "60%"
-  }
+  action: "set",
+  key: "api_v2_migration_complete",
+  value: "All documented clients have been migrated to /v2/users endpoint",
+  layer: "presentation",
+  tags: ["api", "migration", "complete"],
+  status: "active"
+}
+
+// 2. Deactivate migration constraints (v1 now removed)
+{
+  action: "deactivate",
+  constraint_id: 1
+}
+
+// 3. Complete implementation task
+{
+  action: "move",
+  task_id: 2,
+  status: "done"
+}
+
+// 4. Complete migration task
+{
+  action: "move",
+  task_id: 1,
+  status: "done"
+}
+
+// 5. Create decision to schedule v1 removal
+{
+  action: "set",
+  key: "api_v1_users_removal_scheduled",
+  value: "Schedule removal of /v1/users endpoint after 2025-12-01 sunset",
+  layer: "presentation",
+  tags: ["api", "cleanup"],
+  status: "active"
 }
 ```
 
-### Agent B: Resume Work
+---
+
+## Workflow 3: Context Recovery and Task Continuation
+
+**Scenario**: Resume complex refactoring work across multiple files, tracking progress and constraints.
+
+### Phase 1: Record Work-In-Progress State
 
 ```javascript
-// 1. Retrieve session state
+// 1. Save refactoring scope and current state
 {
-  action: "get",
-  key: "refactor_session_state"
+  action: "set",
+  key: "refactor_auth_module_state",
+  value: "Refactoring auth module: Completed 3/5 files. Current: src/auth/oauth2.ts line 145 - token refresh logic needs review",
+  layer: "business",
+  tags: ["refactor", "auth", "wip"],
+  scopes: ["auth-module"]
 }
 
-// 2. Get task details and history
+// 2. Create or update refactoring task with detailed notes
 {
-  action: "get",
-  task_id: 42
+  action: "create",
+  title: "Refactor authentication module (5 files)",
+  description: "Modernize auth module with improved separation of concerns. Files: oauth2, jwt, session, mfa, providers",
+  acceptance_criteria: "All 5 files refactored; tests passing; no breaking API changes",
+  layer: "business",
+  priority: 3,
+  tags: ["refactor", "auth"],
+  status: "in_progress"
 }
 
-// 3. Check recent file changes
+// 3. Create sub-tasks for each file
+{
+  action: "create_batch",
+  atomic: false,
+  tasks: [
+    {
+      title: "Refactor oauth2.ts - provider abstraction",
+      layer: "business",
+      priority: 3,
+      tags: ["refactor", "auth", "oauth2"],
+      status: "in_progress",
+      watch_files: ["src/auth/oauth2.ts"]
+    },
+    {
+      title: "Refactor jwt.ts - token generation",
+      layer: "business",
+      priority: 3,
+      tags: ["refactor", "auth", "jwt"],
+      status: "todo",
+      watch_files: ["src/auth/jwt.ts"]
+    },
+    {
+      title: "Refactor session.ts - session management",
+      layer: "business",
+      priority: 3,
+      tags: ["refactor", "auth", "session"],
+      status: "todo",
+      watch_files: ["src/auth/session.ts"]
+    }
+  ]
+}
+```
+
+### Phase 2: Record Current Progress
+
+```javascript
+// Record WIP changes to oauth2.ts (incomplete work)
+{
+  action: "record",
+  file_path: "src/auth/oauth2.ts",
+  change_type: "modified",
+  layer: "business",
+  description: "WIP: Refactoring provider abstraction - token refresh logic needs review before proceeding"
+}
+
+// Retrieve context for resuming work
+{
+  action: "get",
+  key: "refactor_auth_module_state"
+}
+
+// Check recent file changes to understand what's been modified
 {
   action: "get",
   file_path: "src/auth/oauth2.ts",
   since: "2025-10-17T00:00:00Z"
 }
 
-// 4. Check for any related constraints
+// Check related constraints
 {
   action: "get",
   layer: "business",
   tags: ["auth"],
   active_only: true
 }
+```
 
-// 5. Check messages
-{
-  action: "get",
-  agent_name: "refactor-agent-b",
-  unread_only: true
-}
+### Phase 3: Resume Work and Track Progress
 
-// 6. Acknowledge handoff
-{
-  action: "send",
-  from_agent: "refactor-agent-b",
-  to_agent: "refactor-agent-a",
-  msg_type: "info",
-  message: "Handoff received - resuming work on task #42",
-  priority: "medium"
-}
-
-// 7. Move task to in_progress
+```javascript
+// After review, move oauth2 task forward
 {
   action: "move",
-  task_id: 42,
-  new_status: "in_progress"
+  task_id: 1,  // oauth2 refactor task
+  status: "waiting_review"
+}
+
+// Record additional changes to oauth2.ts
+{
+  action: "record",
+  file_path: "src/auth/oauth2.ts",
+  change_type: "modified",
+  layer: "business",
+  description: "Provider abstraction refactoring complete - added factory pattern for provider creation"
+}
+
+// Move to next file in refactoring sequence
+{
+  action: "move",
+  task_id: 1,
+  status: "done"
+}
+
+{
+  action: "move",
+  task_id: 2,  // jwt.ts refactor task
+  status: "in_progress"
+}
+
+// Record JWT refactoring changes
+{
+  action: "record",
+  file_path: "src/auth/jwt.ts",
+  change_type: "modified",
+  layer: "business",
+  description: "JWT token generation refactored - separated signing and verification concerns"
+}
+```
+
+### Phase 4: Complete Refactoring and Track Completion
+
+```javascript
+// Mark JWT refactoring complete
+{
+  action: "move",
+  task_id: 2,
+  status: "done"
+}
+
+// Move to session refactoring
+{
+  action: "move",
+  task_id: 3,
+  status: "in_progress"
+}
+
+// Record session refactoring
+{
+  action: "record_batch",
+  atomic: false,
+  file_changes: [
+    {
+      file_path: "src/auth/session.ts",
+      change_type: "modified",
+      layer: "business",
+      description: "Session management refactored - improved cookie handling and timeout logic"
+    },
+    {
+      file_path: "src/auth/index.ts",
+      change_type: "modified",
+      layer: "business",
+      description: "Updated module exports - all submodules now expose clean APIs"
+    }
+  ]
+}
+
+// Record completion of refactoring work
+{
+  action: "set",
+  key: "refactor_auth_module_complete",
+  value: "Auth module refactoring complete - all 5 files modernized with improved separation of concerns",
+  layer: "business",
+  tags: ["refactor", "auth", "completed"],
+  status: "active"
+}
+
+// Mark main task and subtasks as complete
+{
+  action: "move",
+  task_id: 3,
+  status: "done"
+}
+
+{
+  action: "move",
+  task_id: 1,  // Main refactoring task
+  status: "done"
 }
 ```
 
 ---
 
-## Workflow 4: Update Polling Pattern (Efficient Subscription)
+## Workflow 4: Status Monitoring and Health Checks
 
-**Scenario**: Monitor agent watches for specific changes and reacts accordingly.
+**Scenario**: Monitor project health by tracking task statuses, constraints compliance, and identifying blocked work.
 
-### Monitor Agent: Efficient Polling Loop
+### Phase 1: Check Task Status and Blocked Items
 
 ```javascript
-// Initial timestamp
-let lastCheck = "2025-10-17T10:00:00Z";
-
-// Polling function (call every 30 seconds)
-async function pollForUpdates() {
-  // 1. Lightweight check for ANY updates (5-10 tokens)
-  const updates = await {
-    action: "has_updates",
-    agent_name: "monitor-agent",
-    since_timestamp: lastCheck
-  };
-
-  // Response: {
-  //   has_updates: true,
-  //   counts: {decisions: 2, messages: 3, files: 1, tasks: 1}
-  // }
-
-  if (!updates.has_updates) {
-    // Nothing changed - skip heavy queries
-    return;
-  }
-
-  // 2. Only fetch if updates detected
-  if (updates.counts.messages > 0) {
-    const messages = await {
-      action: "get",
-      agent_name: "monitor-agent",
-      unread_only: true,
-      priority_filter: "critical"
-    };
-
-    // Process critical messages
-    for (const msg of messages.messages) {
-      if (msg.msg_type === "warning") {
-        // Handle warning
-        await handleWarning(msg);
-      }
-    }
-  }
-
-  // 3. Check for task updates
-  if (updates.counts.tasks > 0) {
-    const tasks = await {
-      action: "list",
-      status: "blocked",
-      limit: 10
-    };
-
-    // Alert on blocked tasks
-    if (tasks.length > 0) {
-      await {
-        action: "send",
-        from_agent: "monitor-agent",
-        to_agent: "orchestrator-agent",
-        msg_type: "warning",
-        message: `${tasks.length} tasks are blocked - requires attention`,
-        priority: "high"
-      };
-    }
-  }
-
-  // 4. Check for breaking changes
-  if (updates.counts.decisions > 0) {
-    const breaking = await {
-      action: "search_tags",
-      tags: ["breaking-change"],
-      match_mode: "AND",
-      status: "active"
-    };
-
-    if (breaking.length > 0) {
-      // Alert on breaking changes
-      await {
-        action: "send",
-        from_agent: "monitor-agent",
-        to_agent: null,  // Broadcast
-        msg_type: "warning",
-        message: "New breaking changes detected - review required",
-        priority: "critical"
-      };
-    }
-  }
-
-  // 5. Update last check timestamp
-  lastCheck = new Date().toISOString();
+// 1. Get all active tasks
+{
+  action: "list",
+  status: "in_progress,waiting_review",
+  limit: 20
 }
 
-// Token efficiency:
-// - No updates: ~10 tokens (has_updates only)
-// - With updates: ~50-200 tokens (selective fetching)
-// - vs polling all data: ~500-1000 tokens every time
+// 2. Identify blocked tasks requiring attention
+{
+  action: "list",
+  status: "blocked",
+  priority: "high,critical"
+}
+
+// 3. Check for tasks with dependencies that might cause delays
+{
+  action: "list",
+  tags: ["critical"],
+  status: "todo,waiting_review"
+}
+
+// 4. Create decision tracking monitoring scope
+{
+  action: "set",
+  key: "project_health_check_2025_11_27",
+  value: "Health check timestamp and baseline metrics",
+  layer: "planning",
+  tags: ["monitoring", "health-check"],
+  status: "active"
+}
 ```
 
-### Activity Log Analysis
+### Phase 2: Constraint Compliance Review
 
 ```javascript
-// Monitor can also analyze activity patterns
+// 1. Get all active constraints
 {
-  action: "activity_log",
-  since: "1h",  // Last hour
-  agent_names: ["*"],  // All agents
-  actions: ["set", "send", "create"],  // Specific actions
-  limit: 100
+  action: "get",
+  active_only: true
 }
 
-// Response shows all activity:
-// [
-//   {
-//     timestamp: "2025-10-17T11:45:23Z",
-//     agent_name: "backend-agent",
-//     action: "set",
-//     table: "decisions",
-//     key_or_details: "auth_implementation_complete"
-//   },
-//   {
-//     timestamp: "2025-10-17T11:44:15Z",
-//     agent_name: "api-agent",
-//     action: "send",
-//     table: "messages",
-//     key_or_details: "message_id:145"
-//   }
-// ]
+// 2. Check constraints by priority
+{
+  action: "get",
+  priority: "critical,high",
+  active_only: true
+}
 
-// Use this for:
-// - Debugging agent behavior
-// - Audit trails
-// - Performance monitoring
-// - Detecting stuck agents (no activity)
+// 3. Check constraints by specific layers
+{
+  action: "get",
+  layer: "business,cross-cutting",
+  active_only: true
+}
+
+// 4. Check constraints that might conflict
+{
+  action: "get",
+  category: "architecture",
+  active_only: true
+}
 ```
 
-### Automatic Cleanup Trigger
+### Phase 3: Decision Review and Consistency
 
 ```javascript
-// Monitor can also manage database health
+// 1. Search for recent decisions
 {
-  action: "db_stats"
+  action: "search",
+  layer: "business",
+  limit: 20
 }
 
-// Response:
+// 2. Check for potentially conflicting decisions
+{
+  action: "search",
+  tags: ["breaking-change"],
+  layer: "presentation"
+}
+
+// 3. Look for stale or inactive decisions
+{
+  action: "search",
+  status: "inactive",
+  limit: 10
+}
+
+// 4. Verify decision implementation with tasks
+{
+  action: "list",
+  tags: ["implementation"],
+  status: "todo"
+}
+```
+
+### Phase 4: Database Health and Cleanup
+
+```javascript
+// 1. Check overall statistics
+{
+  action: "stats"
+}
+
+// Response includes:
 // {
-//   agents: 5,
 //   files: 42,
 //   context_keys: 156,
 //   active_decisions: 312,
 //   total_decisions: 342,
-//   messages: 1203,
 //   file_changes: 589,
 //   active_constraints: 12,
 //   total_constraints: 15,
 //   tags: 10,
 //   scopes: 8,
-//   layers: 5,
+//   layers: 9,
 //   total_tasks: 47,
-//   active_tasks: 23,  // Excludes done and archived
+//   active_tasks: 23,
 //   tasks_by_status: {
 //     todo: 15,
 //     in_progress: 5,
 //     waiting_review: 3,
-//     blocked: 0,
+//     blocked: 2,
 //     done: 20,
 //     archived: 4
-//   },
-//   tasks_by_priority: {
-//     low: 10,
-//     medium: 25,
-//     high: 10,
-//     critical: 2
 //   }
 // }
 
-// If database too large, trigger cleanup
-if (stats.total_messages > 1000) {
-  await {
-    action: "clear",
-    messages_older_than_hours: 24,
-    file_changes_older_than_days: 7
-  };
+// 2. Identify old file changes for cleanup
+{
+  action: "get",
+  file_path: "src/",
+  since: "2025-10-17T00:00:00Z"  // Last 40 days
+}
 
-  // Notify about cleanup
-  await {
-    action: "send",
-    from_agent: "monitor-agent",
-    to_agent: null,
-    msg_type: "info",
-    message: "Database cleanup completed - removed old messages and file history",
-    priority: "low"
-  };
+// 3. Check for excessive file history
+// If file_changes are too numerous, create cleanup decision
+{
+  action: "set",
+  key: "database_cleanup_scheduled",
+  value: "Archive old file history and inactive decisions older than 30 days",
+  layer: "infrastructure",
+  tags: ["maintenance", "cleanup"],
+  status: "active"
+}
+
+// 4. Document cleanup action
+{
+  action: "create",
+  title: "Clean up old file changes and inactive decisions",
+  description: "Archive file_changes older than 30 days to reduce database size",
+  layer: "infrastructure",
+  priority: 1,
+  tags: ["maintenance"],
+  status: "todo"
+}
+```
+
+### Phase 5: Report and Document Findings
+
+```javascript
+// 1. Create monitoring decision with findings
+{
+  action: "set",
+  key: "health_check_findings_2025_11_27",
+  value: "Health check complete: 2 blocked tasks, 1 critical constraint violation, database size nominal",
+  layer: "review",
+  tags: ["monitoring", "health-check"],
+  status: "active"
+}
+
+// 2. If issues found, create tasks to address them
+{
+  action: "create_batch",
+  atomic: false,
+  tasks: [
+    {
+      title: "Unblock database migration task",
+      description: "Database schema task blocked by dependency - review and unblock",
+      layer: "data",
+      priority: 4,
+      tags: ["blocker", "critical"],
+      status: "todo"
+    },
+    {
+      title: "Review constraint violation in API layer",
+      description: "Check why new API endpoint violates backwards compatibility constraint",
+      layer: "presentation",
+      priority: 4,
+      tags: ["constraint", "violation"],
+      status: "todo"
+    }
+  ]
+}
+
+// 3. Document health check completion
+{
+  action: "record",
+  file_path: "docs/monitoring/health-checks.md",
+  change_type: "modified",
+  layer: "documentation",
+  description: "Added health check report for 2025-11-27"
 }
 ```
 
@@ -781,7 +935,7 @@ if (stats.total_messages > 1000) {
 ## Related Documentation
 
 - **[TOOL_SELECTION.md](TOOL_SELECTION.md)** - Choosing the right tool for your task
-- **[TOOL_REFERENCE.md](TOOL_REFERENCE.md)** - Complete parameter reference
+- **[TOOL_REFERENCE.md](TOOL_REFERENCE.md)** - Complete parameter reference for all 6 MCP tools
 - **[BEST_PRACTICES.md](BEST_PRACTICES.md)** - Common errors and best practices
-- **[DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md)** - Three-tier system details (v3.9.0)
-- **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Complete guide (original comprehensive version)
+- **[DECISION_CONTEXT.md](DECISION_CONTEXT.md)** - Managing decision rationale and alternatives
+- **[TASK_OVERVIEW.md](TASK_OVERVIEW.md)** - Task system architecture and workflows

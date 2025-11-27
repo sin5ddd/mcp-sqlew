@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.0] - 2025-11-27
+
+### Changed
+
+**Concept & Positioning**
+
+- Reframed sqlew as a **shared SQL-backed context repository** and a **Decision & Constraint repository layer** for AI tools
+- Clarified that Decisions capture *why* changes were made and Constraints capture *how* code should be written
+- Updated README introduction to focus on "Never Start From Zero Context Again" and the repository-based metaphor instead of generic "memory"
+
+**Documentation & Cleanup**
+
+- Updated `README.md` to describe sqlew as a context repository rather than an abstract memory layer
+- Aligned terminology across docs around Decisions, Constraints, tasks, and the repository layer
+- Confirmed that previously removed/legacy features remain out of scope, keeping focus on decision history and constraint rules
+
+> Note: v4.0.0 is primarily a **concept and documentation alignment release**. Core Decision/Constraint features and the v3.9.x database schema remain compatible; no breaking API changes were introduced for existing integrations.
+
+---
+
 ## [3.9.0] - 2025-01-15
 
 ### Added

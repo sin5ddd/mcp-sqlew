@@ -6,7 +6,6 @@ import { DatabaseAdapter } from '../../../adapters/index.js';
 import { Knex } from 'knex';
 import {
   getOrCreateFile,
-  getOrCreateAgent,
   getLayerId
 } from '../../../database.js';
 import {
@@ -14,7 +13,6 @@ import {
   STANDARD_LAYERS
 } from '../../../constants.js';
 import { validateChangeType } from '../../../utils/validators.js';
-import { logFileRecord } from '../../../utils/activity-logging.js';
 import type { RecordFileChangeParams, RecordFileChangeResponse } from '../types.js';
 
 /**
@@ -53,30 +51,21 @@ export async function recordFileChangeInternal(
     }
   }
 
-  // Auto-register file and agent (v3.7.3: pass projectId)
+  // Auto-register file (v3.7.3: pass projectId)
+  // Note: Agent tracking removed in v4.0
   const fileId = await getOrCreateFile(adapter, projectId, params.file_path, trx);
-  const agentId = await getOrCreateAgent(adapter, params.agent_name, trx);
 
   // Current timestamp
   const ts = Math.floor(Date.now() / 1000);
 
-  // Insert file change record with project_id
-  const [changeId] = await knex('t_file_changes').insert({
+  // Insert file change record with project_id (agent_id removed in v4.0)
+  const [changeId] = await knex('v4_file_changes').insert({
     file_id: fileId,
-    agent_id: agentId,
     layer_id: layerId,
     change_type: changeTypeInt,
     description: params.description || null,
     project_id: projectId,
     ts: ts
-  });
-
-  // Activity logging (replaces trigger)
-  await logFileRecord(knex, {
-    file_path: params.file_path,
-    change_type: changeTypeInt,
-    agent_id: agentId,
-    layer_id: layerId || undefined
   });
 
   const timestamp = new Date(ts * 1000).toISOString();

@@ -3,7 +3,7 @@
  */
 
 import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter, getOrCreateAgent, getLayerId, getOrCreateFile } from '../../../database.js';
+import { getAdapter, getLayerId, getOrCreateFile } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import { FileWatcher } from '../../../watcher/index.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
@@ -32,7 +32,7 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
         const knex = actualAdapter.getKnex();
 
         // Check if task exists with project_id isolation
-        const taskExists = await trx('t_tasks')
+        const taskExists = await trx('v4_tasks')
           .where({ id: params.task_id, project_id: projectId })
           .first();
         if (!taskExists) {
@@ -50,10 +50,7 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
           updateData.priority = params.priority;
         }
 
-        if (params.assigned_agent !== undefined) {
-          const agentId = await getOrCreateAgent(actualAdapter, params.assigned_agent, trx);
-          updateData.assigned_agent_id = agentId;
-        }
+        // Note: Agent tracking removed in v4.0 (assigned_agent param kept for API compatibility but not stored)
 
         if (params.layer !== undefined) {
           const layerId = await getLayerId(actualAdapter, params.layer, trx);
@@ -77,14 +74,14 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
           updateData.layer_id = layerId;
         }
 
-        // Update t_tasks if any updates (with project_id isolation)
+        // Update v4_tasks if any updates (with project_id isolation)
         if (Object.keys(updateData).length > 0) {
-          await trx('t_tasks')
+          await trx('v4_tasks')
             .where({ id: params.task_id, project_id: projectId })
             .update(updateData);
         }
 
-        // Update t_task_details if any detail fields provided
+        // Update v4_task_details if any detail fields provided
         if (params.description !== undefined || params.acceptance_criteria !== undefined || params.notes !== undefined) {
           // Process acceptance_criteria (can be string or array)
           let acceptanceCriteriaString: string | null | undefined = undefined;
@@ -97,7 +94,7 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
           }
 
           // Check if details exist (with project_id isolation)
-          const detailsExist = await trx('t_task_details')
+          const detailsExist = await trx('v4_task_details')
             .where({ task_id: params.task_id, project_id: projectId })
             .first();
 
@@ -117,12 +114,12 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
 
           if (detailsExist && Object.keys(detailsUpdate).length > 0) {
             // Update existing details (with project_id isolation)
-            await trx('t_task_details')
+            await trx('v4_task_details')
               .where({ task_id: params.task_id, project_id: projectId })
               .update(detailsUpdate);
           } else if (!detailsExist) {
             // Insert new details
-            await trx('t_task_details').insert({
+            await trx('v4_task_details').insert({
               project_id: projectId,
               task_id: params.task_id,
               description: params.description || null,
@@ -166,7 +163,7 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
         if (file_actions && file_actions.length > 0) {
           for (const fileAction of file_actions) {
             const fileId = await getOrCreateFile(actualAdapter, projectId, fileAction.path, trx);
-            await trx('t_task_file_links').insert({
+            await trx('v4_task_file_links').insert({
               project_id: projectId,
               task_id: params.task_id,
               file_id: fileId,
@@ -176,8 +173,8 @@ export async function updateTask(params: TaskUpdateParams, adapter?: DatabaseAda
 
           // Register files with watcher for auto-tracking
           try {
-            const taskData = await trx('t_tasks as t')
-              .join('m_task_statuses as s', 't.status_id', 's.id')
+            const taskData = await trx('v4_tasks as t')
+              .join('v4_task_statuses as s', 't.status_id', 's.id')
               .where({ 't.id': params.task_id, 't.project_id': projectId })
               .select('t.title', 's.name as status')
               .first() as { title: string; status: string } | undefined;

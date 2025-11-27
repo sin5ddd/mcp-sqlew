@@ -1,6 +1,34 @@
+---
+description: Validate architectural consistency - research context, then verify decisions and constraints
+---
+
 # Sqlew Review Workflow
 
 Validation and consistency checking workflow - invokes researcher for context analysis, then architect for validation.
+
+## Agent Invocation
+
+This workflow uses two specialized sqlew agents in sequence:
+
+```
+Phase 1: Task tool → subagent_type: "sqlew-researcher" (haiku)
+Phase 2: Task tool → subagent_type: "sqlew-architect" (opus)
+```
+
+**Example:**
+```typescript
+// Phase 1: Research context
+Task({
+  subagent_type: "sqlew-researcher",
+  prompt: "Research context for: [review target]. Analyze decisions, constraints, and tasks. Identify patterns and inconsistencies."
+})
+
+// Phase 2: Architectural validation
+Task({
+  subagent_type: "sqlew-architect",
+  prompt: "Based on the research findings, validate architectural consistency. Check constraint compliance and recommend corrections."
+})
+```
 
 ## Purpose
 
@@ -10,9 +38,10 @@ Verify architectural consistency, validate decision implementation, and ensure c
 
 ### Phase 1: Research Context (Research Agent)
 1. Analyzes relevant decisions, constraints, and tasks
-2. Identifies patterns and relationships
-3. Detects gaps or inconsistencies
-4. Provides evidence-based findings
+2. **Uses constraint suggest** (v4.0) to find related constraints efficiently
+3. Identifies patterns and relationships
+4. Detects gaps or inconsistencies
+5. Provides evidence-based findings
 
 ### Phase 2: Architectural Validation (Architect Agent)
 1. Reviews research findings
@@ -25,16 +54,16 @@ Verify architectural consistency, validate decision implementation, and ensure c
 
 ### Interactive Mode
 ```bash
-/sqlew-review
+/sqw-review
 ```
 Prompts for what to review and guides through both phases.
 
 ### With Arguments
 ```bash
-/sqlew-review authentication implementation
-/sqlew-review security decisions
-/sqlew-review performance constraints
-/sqlew-review backend agent work
+/sqw-review authentication implementation
+/sqw-review security decisions
+/sqw-review performance constraints
+/sqw-review backend agent work
 ```
 
 ## Workflow
@@ -42,8 +71,9 @@ Prompts for what to review and guides through both phases.
 ### Phase 1: Researcher Analyzes Context
 
 **Researcher examines:**
-- Related decisions and their versions
-- Relevant constraints
+- Related decisions and their versions (using `suggest.by_key`, `suggest.by_tags`)
+- Relevant constraints (v4.0: using `suggest.by_context` with `target: "constraint"`)
+- Constraint compliance with decisions
 - Implementation tasks (completed, in-progress, blocked)
 - Cross-references and relationships
 
@@ -51,14 +81,17 @@ Prompts for what to review and guides through both phases.
 
 > **Researcher**: Analyzing authentication implementation...
 >
+> *Runs suggest({ action: "by_key", key: "authentication" })*
+> *Runs suggest({ action: "by_context", target: "constraint", text: "authentication", tags: ["security"] })*
+>
 > **Decisions Found** (3):
 > 1. "api-authentication-method" - JWT tokens (v2, last updated 3 days ago)
 > 2. "jwt-token-expiration-policy" - 15min access, 7d refresh (v1)
 > 3. "session-management-strategy" - stateless sessions (v1)
 >
-> **Constraints Found** (2):
-> 1. "All API endpoints must verify JWT tokens" (security, priority 4)
-> 2. "Token refresh must use rotation strategy" (security, priority 3)
+> **Constraints Found** (2) via suggest (v4.0):
+> 1. "All API endpoints must verify JWT tokens" (security, priority 4, score: 85)
+> 2. "Token refresh must use rotation strategy" (security, priority 3, score: 72)
 >
 > **Implementation Tasks** (8):
 > - ✅ 6 completed: JWT service, middleware, token rotation, tests
@@ -103,7 +136,7 @@ Prompts for what to review and guides through both phases.
 
 ## When to Use
 
-Use `/sqlew-review` when:
+Use `/sqw-review` when:
 - Verifying implementation follows decisions
 - Checking architectural consistency
 - Auditing constraint compliance
@@ -111,9 +144,9 @@ Use `/sqlew-review` when:
 - Investigating potential issues
 
 **Don't use when:**
-- Creating new decisions (use `/sqlew-decide` instead)
-- Planning new work (use `/sqlew-plan` instead)
-- Just querying history (use `/sqlew-research` instead)
+- Creating new decisions (use `/sqw-documentor` instead)
+- Planning new work (use `/sqw-plan` instead)
+- Just querying history (use `/sqw-research` instead)
 
 ## Review Types
 
@@ -152,12 +185,15 @@ Verify agents have:
 ## Example: Complete Review Session
 
 ```bash
-/sqlew-review security architecture
+/sqw-review security architecture
 ```
 
 ### Phase 1: Researcher
 
 > **Researcher**: Analyzing security architecture...
+>
+> *Runs suggest({ action: "by_tags", tags: ["security"] })*
+> *Runs suggest({ action: "by_context", target: "constraint", tags: ["security"], layer: "cross-cutting" })*
 >
 > **Security Decisions** (5):
 > 1. "api-authentication-method" - JWT tokens
@@ -166,11 +202,11 @@ Verify agents have:
 > 4. "https-enforcement-strategy" - HTTPS-only in production
 > 5. "security-headers-policy" - strict CSP, HSTS, X-Frame-Options
 >
-> **Security Constraints** (4):
-> 1. "All passwords must be hashed with bcrypt" (security, priority 4)
-> 2. "All API endpoints must verify authentication" (security, priority 4)
-> 3. "Production must enforce HTTPS" (security, priority 4)
-> 4. "All responses must include security headers" (security, priority 3)
+> **Security Constraints Found** (4) via suggest (v4.0):
+> 1. "All passwords must be hashed with bcrypt" (security, priority 4, score: 88)
+> 2. "All API endpoints must verify authentication" (security, priority 4, score: 85)
+> 3. "Production must enforce HTTPS" (security, priority 4, score: 80)
+> 4. "All responses must include security headers" (security, priority 3, score: 72)
 >
 > **Security Tasks** (12 total):
 > - ✅ 9 completed
@@ -236,8 +272,8 @@ Verify agents have:
 ## Integration with Other Workflows
 
 This workflow combines:
-- `/sqlew-research` - Context analysis (researcher phase)
-- `/sqlew-decide` - Decision updates (architect phase)
+- `/sqw-research` - Context analysis (researcher phase)
+- `/sqw-documentor` - Decision updates (architect phase)
 
 Use with:
 - **Before review**: Complete implementation work
@@ -256,10 +292,11 @@ This workflow is efficient for comprehensive validation:
 - Validate: 3k tokens
 - Total: 14k tokens
 
-**Combined /sqlew-review**:
-- Research phase: 6k tokens (automated queries)
+**Combined /sqw-review (v4.0)**:
+- Research phase: 5k tokens (using suggest for constraints)
 - Architect phase: 4k tokens (validation)
-- **Total**: 10k tokens (30% savings)
+- **Total**: 9k tokens (35% savings)
+- Constraint suggest reduces query overhead significantly
 
 **Estimated Token Usage**: 10,000-20,000 tokens per review session
 
@@ -314,7 +351,7 @@ The workflow automatically checks:
 
 ## Review Triggers
 
-Consider running `/sqlew-review` when:
+Consider running `/sqw-review` when:
 - Completing a major feature
 - Before starting related work
 - After significant decision changes

@@ -1,8 +1,9 @@
-# Git-Aware Auto-Complete (v3.4.0 - v3.5.2)
+# Git-Aware Auto-Complete (v3.4.0 - v4.0.0)
 
 **Feature Status**: Implemented ✅
-**Current Version**: v3.5.2 (Two-Step Git-Aware Workflow)
-**Previous Version**: v3.4.0 (Commit-Based Auto-Complete)
+**Current Version**: v4.0.0 (Two-Step Git-Aware Workflow with v4_ Table Prefix)
+**Previous Version**: v3.5.2 (Two-Step Git-Aware Workflow)
+**Original Version**: v3.4.0 (Commit-Based Auto-Complete)
 **Architecture Decision**: #001 - Replace flawed auto-revert with Git-based task completion
 
 ## Version Evolution
@@ -26,7 +27,7 @@ The current stale task detection system has a critical design flaw:
 // In src/utils/task-stale-detection.ts lines 105-116
 // FLAWED LOGIC: Reverts completed work after 24h idle
 const waitingReviewTransitioned = db.prepare(`
-  UPDATE t_tasks
+  UPDATE v4_tasks
   SET status_id = ?,
       updated_ts = unixepoch()
   WHERE status_id = ?
@@ -137,7 +138,7 @@ git log --since="@1698765432" --name-only -- src/auth.ts
 **AI Time**: 5 minutes
 **Token Budget**: 2k-3k tokens
 
-**File**: `/home/kitayama/TypeScriptProject/mcp-sqlew/src/utils/task-stale-detection.ts`
+**File**: `src/utils/task-stale-detection.ts`
 **Lines to Remove**: 105-116
 
 ```typescript
@@ -171,7 +172,7 @@ totalTransitioned += waitingReviewTransitioned.changes;
 **Token Budget**: 18k-25k tokens
 
 **New Function**: `detectAndCompleteReviewedTasks(db: Database): Promise<number>`
-**Location**: `/home/kitayama/TypeScriptProject/mcp-sqlew/src/utils/task-stale-detection.ts`
+**Location**: `src/utils/task-stale-detection.ts`
 
 **Function Signature**:
 ```typescript
@@ -197,7 +198,7 @@ export async function detectAndCompleteReviewedTasks(db: Database): Promise<numb
 1. Check if git_auto_complete_enabled config is true
 2. Get all tasks in waiting_review status
 3. For each task:
-   a. Get list of watched files from t_task_file_links
+   a. Get list of watched files from v4_task_file_links
    b. Get task.created_ts
    c. For each watched file:
       - Run: git log --since="@<created_ts>" --name-only -- <file_path>
@@ -230,7 +231,7 @@ export async function detectAndCompleteReviewedTasks(db: Database): Promise<numb
 **AI Time**: 10-15 minutes
 **Token Budget**: 8k-12k tokens
 
-**Files**: `/home/kitayama/TypeScriptProject/mcp-sqlew/src/tools/tasks.ts`
+**Files**: `src/tools/tasks.ts`
 **Actions to Modify**: `list` (line ~750), `stats` in utils.ts
 
 **Changes**:
@@ -275,8 +276,8 @@ async function listTasks(db: Database, params: ListTasksParams): Promise<object>
 **Token Budget**: 10k-15k tokens
 
 **Files**:
-- `/home/kitayama/TypeScriptProject/mcp-sqlew/src/watcher/file-watcher.ts`
-- `/home/kitayama/TypeScriptProject/mcp-sqlew/src/watcher/index.ts`
+- `src/watcher/file-watcher.ts`
+- `src/watcher/index.ts`
 
 **Changes**:
 1. Watch `.git/index` file for changes (indicates git commit)
@@ -327,7 +328,7 @@ this.watcher.on('change', async (path) => {
 **AI Time**: 10 minutes
 **Token Budget**: 5k-8k tokens
 
-**File**: `/home/kitayama/TypeScriptProject/mcp-sqlew/src/tools/utils.ts` (stats action)
+**File**: `src/tools/utils.ts` (stats action)
 
 **Changes**:
 Add `review_status` section to stats output showing tasks awaiting Git commits:
@@ -339,8 +340,8 @@ const reviewStatus = db.prepare(`
     COUNT(DISTINCT t.id) as awaiting_commit,
     COUNT(DISTINCT tfl.file_id) as total_files,
     COUNT(DISTINCT CASE WHEN <committed_check> THEN tfl.file_id END) as committed_files
-  FROM t_tasks t
-  JOIN t_task_file_links tfl ON t.id = tfl.task_id
+  FROM v4_tasks t
+  JOIN v4_task_file_links tfl ON t.id = tfl.task_id
   WHERE t.status_id = ?
 `).get(TASK_STATUS.WAITING_REVIEW);
 
@@ -369,8 +370,8 @@ return {
 **Token Budget**: 3k-5k tokens
 
 **Files**:
-- `/home/kitayama/TypeScriptProject/mcp-sqlew/src/database.ts` (config defaults)
-- `/home/kitayama/TypeScriptProject/mcp-sqlew/docs/CONFIGURATION.md`
+- `src/database.ts` (config defaults)
+- `docs/CONFIGURATION.md`
 
 **New Config Keys**:
 ```typescript
@@ -423,12 +424,12 @@ config action=update key="stale_review_notification_hours" value="72"
 **Token Budget**: 23k-32k tokens
 
 **Documentation Files**:
-1. `/home/kitayama/TypeScriptProject/mcp-sqlew/docs/TASK_OVERVIEW.md` - Update lifecycle diagram
-2. `/home/kitayama/TypeScriptProject/mcp-sqlew/docs/AUTO_FILE_TRACKING.md` - Add Git-aware section
-3. `/home/kitayama/TypeScriptProject/mcp-sqlew/docs/TASK_ACTIONS.md` - Update status transitions
-4. `/home/kitayama/TypeScriptProject/mcp-sqlew/CHANGELOG.md` - Add v3.4.0 entry
+1. `docs/TASK_OVERVIEW.md` - Update lifecycle diagram
+2. `docs/AUTO_FILE_TRACKING.md` - Add Git-aware section
+3. `docs/TASK_ACTIONS.md` - Update status transitions
+4. `CHANGELOG.md` - Add v3.4.0 entry
 
-**Test Files** (all in `/home/kitayama/TypeScriptProject/mcp-sqlew/src/tests/`):
+**Test Files** (all in `src/tests/`):
 1. `tasks.git-auto-complete.test.ts` - Comprehensive test suite
 2. `tasks.git-integration.test.ts` - Git log integration tests
 

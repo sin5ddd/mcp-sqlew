@@ -301,51 +301,15 @@ On every MCP server startup:
 
 ## Customizing Commands
 
-Commands are markdown files in `.claude/commands/`. You can:
+**Recommendation**: Use the default auto-installed commands. They are designed to work together in the standard workflow.
 
-### 1. Edit Existing Commands
+If customization is needed:
+1. Set the command to `false` in `.sqlew/config.toml` to prevent auto-sync
+2. Edit `.claude/commands/sqw-*.md` directly
 
-Modify `.claude/commands/sqw-*.md` to change agent behavior.
-
-**⚠️ Warning**: Enabled commands will be **overwritten** on next server startup.
-
-**To preserve customizations**:
-- Set command to `false` in config.toml to prevent auto-sync
-- Rename file (e.g., `my-custom-plan.md`) to avoid conflicts
-
-### 2. Create New Commands
-
-Add custom `.md` files to `.claude/commands/`:
-
-```markdown
-<!-- File: .claude/commands/my-workflow.md -->
-
-You are a specialized agent for my custom workflow.
-
-Process:
-1. Use mcp__sqlew__task to list current tasks
-2. Use mcp__sqlew__decision to check context
-3. Perform custom logic
-4. Report results
-```
-
-Usage: `/my-workflow "Task description"`
-
-### 3. Command File Format
-
-Slash command files are simple markdown with agent instructions:
-
-```markdown
-You are the [agent-name] agent. Use sqlew MCP tools to [purpose].
-
-If the user provided a specific [input], address it. Otherwise, ask for clarification.
-
-Process:
-1. Step 1 description (tool: action)
-2. Step 2 description (tool: action)
-3. Step 3 description (tool: action)
-
-Return: [what to return]
+```toml
+[commands]
+plan = false  # Now safe to edit sqw-plan.md
 ```
 
 ---
@@ -366,23 +330,15 @@ After 1-2 weeks, identify unused commands and set to `false`:
 - Prevents accidental invocation
 - Can always re-enable later
 
-### 3. Combine Commands
+### 3. Follow the Standard Workflow
 
-Use commands in sequence for complex workflows:
+See [Recommended Workflow](#recommended-workflow) for the standard development cycle:
 
-```bash
-# 1. Research existing context
-/sqw-research "authentication implementation"
-
-# 2. Document new decision
-/sqw-secretary "Use JWT with refresh tokens"
-
-# 3. Plan implementation
-/sqw-plan "Implement JWT authentication"
-
-# 4. Review after implementation
-/sqw-review "authentication middleware implementation"
 ```
+/sqw-plan → /sqw-scrum → /sqw-review
+```
+
+Use `/sqw-secretary` for quick decisions during implementation.
 
 ### 4. Use Arguments Effectively
 
@@ -399,21 +355,10 @@ Use commands in sequence for complex workflows:
 
 ### 5. Version Control
 
-**Recommended**: Add `.claude/commands/` to `.gitignore` if heavily customized
+Commands are auto-installed, so `.claude/commands/` can be added to `.gitignore`:
 
 ```gitignore
-# .gitignore
 .claude/commands/
-```
-
-**Alternative**: Commit default commands, customize per developer
-
-```bash
-# Commit defaults
-git add .claude/commands/sqw-*.md
-
-# Customize locally
-# Changes won't be overwritten (files already exist)
 ```
 
 ---
@@ -449,24 +394,13 @@ git add .claude/commands/sqw-*.md
 
 **Solutions**:
 
-**Option 1**: Disable auto-sync for that command
+**Solution**: Disable auto-sync for that command
 ```toml
 [commands]
-plan = false  # Prevent overwriting custom sqlew-plan.md
+plan = false  # Prevent overwriting custom sqw-plan.md
 ```
 
-**Option 2**: Rename custom file
-```bash
-mv .claude/commands/sqlew-plan.md .claude/commands/my-custom-plan.md
-# Use with: /my-custom-plan
-```
-
-**Option 3**: Edit source file
-```bash
-# Edit the source that gets synced
-vim node_modules/sqlew/assets/sample-commands/sqw-plan.md
-```
-⚠️ Not recommended: Lost on npm update
+After disabling, you can freely edit `.claude/commands/sqw-plan.md` without it being overwritten.
 
 ---
 
@@ -557,30 +491,6 @@ vim .claude/commands/sqw-plan.md
 /sqw-documentor "Document this pattern as a constraint"
 ```
 
-### Git Integration
-
-Commands work well with git workflows:
-```bash
-# 1. Feature branch
-git checkout -b feature/oauth
-
-# 2. Plan work
-/sqw-plan "Implement OAuth2 login"
-
-# 3. Develop with decisions
-/sqw-secretary "Use Passport.js library"
-
-# 4. Review before commit
-/sqw-review "OAuth implementation"
-
-# 5. Commit with context
-git commit -m "feat: Add OAuth2 login
-
-Implements: task-485
-Decision: slash-commands-oauth-library (Passport.js)
-"
-```
-
 ---
 
 ## Performance Considerations
@@ -603,22 +513,77 @@ Each command invokes agents that consume tokens:
 - Use `/sqw-research` before `/sqw-documentor` to avoid duplicate context lookups
 - Disable unused commands to prevent accidental invocation
 
-### Response Time
+---
 
-**Typical Response Times** (AI time, not wall-clock):
-- `/sqw-secretary`: 5-10 minutes
-- `/sqw-documentor`: 10-15 minutes
-- `/sqw-scrum`: 8-12 minutes (planning) / 20-40 minutes (execution)
-- `/sqw-plan`: 18-27 minutes (sequential agents)
-- `/sqw-research`: 5-8 minutes
-- `/sqw-review`: 15-23 minutes (sequential agents)
+## Recommended Workflow
+
+### Standard Development Cycle
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  /sqw-plan  │ -> │ /sqw-scrum  │ -> │ /sqw-review │
+│  (Planning) │    │(Implement)  │    │(Verification)│
+└─────────────┘    └─────────────┘    └─────────────┘
+```
+
+### Step 1: Planning with `/sqw-plan`
+
+```bash
+/sqw-plan "Implement user authentication with JWT"
+```
+
+**What happens:**
+- Architect agent analyzes requirements
+- Creates decisions with rationale
+- Scrum agent breaks down into tasks
+- Sets up dependencies between tasks
+
+### Step 2: Implementation with `/sqw-scrum`
+
+```bash
+/sqw-scrum implement
+```
+
+**What happens:**
+- Lists pending tasks from planning
+- Coordinates implementation
+- Updates task status (todo → in_progress → done)
+- Links code changes to tasks
+
+### Step 3: Verification with `/sqw-review`
+
+```bash
+/sqw-review "authentication implementation"
+```
+
+**What happens:**
+- Researcher gathers relevant decisions/constraints
+- Architect validates implementation consistency
+- Checks against architectural patterns
+- Reports deviations and suggestions
+
+### Complete Example
+
+```bash
+# 1. Plan the feature
+/sqw-plan "Add password reset functionality"
+
+# 2. Implement tasks created by planning
+/sqw-scrum implement
+
+# 3. Verify implementation matches decisions
+/sqw-review "password reset implementation"
+
+# 4. (Optional) Record any new decisions made during implementation
+/sqw-secretary "Use SendGrid for password reset emails"
+```
 
 ---
 
 ## See Also
 
 - [Specialized Agents](SPECIALIZED_AGENTS.md) - Agent-based workflows
-- [Task System](TASK_SYSTEM.md) - Task management details
+- [Task Overview](TASK_OVERVIEW.md) - Task management overview
 - [Decision Context](DECISION_CONTEXT.md) - Decision documentation
 - [Best Practices](BEST_PRACTICES.md) - General usage patterns
 - [Architecture](ARCHITECTURE.md) - System design overview
@@ -627,7 +592,13 @@ Each command invokes agents that consume tokens:
 
 ## Changelog
 
-### v3.9.0 (Current)
+### v4.0.0 (Current)
+- Database schema refactoring: unified v4_ table prefix, agent system completely removed
+- Note: Agent references like `@sqlew-architect` are Claude Code agents, not database records (v4.0.0 removed v4_agents table)
+- All slash commands remain fully functional with simplified database structure
+- Improved performance with cleaner schema design
+
+### v3.9.0
 - Command renaming for clarity: `/sqw-*` prefix, feature-based names
 - 6 commands: documentor, secretary, plan, research, review, scrum
 - Scrum executor feature: Mode B for task implementation

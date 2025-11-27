@@ -19,30 +19,30 @@ export async function getExample(
   const db = actualAdapter.getKnex();
 
   try {
-    let query = db('t_help_action_examples')
-      .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.action_id')
+    let query = db('v4_help_action_examples')
+      .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id')
       .select(
-        't_help_action_examples.example_id',
-        't_help_action_examples.example_title as title',
-        'm_help_actions.tool_name as tool',
-        'm_help_actions.action_name as action',
-        't_help_action_examples.example_code as code',
-        't_help_action_examples.explanation'
+        'v4_help_action_examples.id as example_id',
+        'v4_help_action_examples.title',
+        'v4_help_actions.tool_name as tool',
+        'v4_help_actions.action_name as action',
+        'v4_help_action_examples.code',
+        'v4_help_action_examples.explanation'
       );
 
     // Apply filters
     if (params.tool) {
-      query = query.where('m_help_actions.tool_name', params.tool);
+      query = query.where('v4_help_actions.tool_name', params.tool);
     }
 
     if (params.action_name) {
-      query = query.where('m_help_actions.action_name', params.action_name);
+      query = query.where('v4_help_actions.action_name', params.action_name);
     }
 
     if (params.topic) {
       query = query.where(function() {
-        this.where('t_help_action_examples.example_title', 'like', `%${params.topic}%`)
-          .orWhere('t_help_action_examples.explanation', 'like', `%${params.topic}%`);
+        this.where('v4_help_action_examples.title', 'like', `%${params.topic}%`)
+          .orWhere('v4_help_action_examples.explanation', 'like', `%${params.topic}%`);
       });
     }
 

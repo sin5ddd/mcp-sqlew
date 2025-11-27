@@ -43,16 +43,16 @@ export async function aggregateNumericDecisions(
   const projectId = getProjectContext().getProjectId();
 
   // Build base query
-  let query = knex('t_decisions_numeric as dn')
-    .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
-    .where('ck.key', 'like', keyPattern)
+  let query = knex('v4_decisions_numeric as dn')
+    .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+    .where('ck.key_name', 'like', keyPattern)
     .where('dn.status', 1)  // Active decisions only
     .where('dn.project_id', projectId);  // Multi-project support (v3.7.0+)
 
   // Add layer filter if provided
   if (layer) {
     query = query
-      .join('m_layers as l', 'dn.layer_id', 'l.id')
+      .join('v4_layers as l', 'dn.layer_id', 'l.id')
       .where('l.name', layer);
   }
 
@@ -143,9 +143,9 @@ export async function timeSeriesAggregation(
   }[bucket];
 
   // Query decisions in time range
-  const results = await knex('t_decisions_numeric as dn')
-    .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
-    .where('ck.key', 'like', keyPattern)
+  const results = await knex('v4_decisions_numeric as dn')
+    .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+    .where('ck.key_name', 'like', keyPattern)
     .where('dn.status', 1)
     .where('dn.project_id', projectId)  // Multi-project support (v3.7.0+)
     .whereBetween('dn.updated_ts', [startTs, endTs])
@@ -196,9 +196,9 @@ export async function calculatePercentiles(
   const projectId = getProjectContext().getProjectId();
 
   // Fetch all values
-  const results = await knex('t_decisions_numeric as dn')
-    .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
-    .where('ck.key', 'like', keyPattern)
+  const results = await knex('v4_decisions_numeric as dn')
+    .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+    .where('ck.key_name', 'like', keyPattern)
     .where('dn.status', 1)
     .where('dn.project_id', projectId)  // Multi-project support (v3.7.0+)
     .select('dn.value')

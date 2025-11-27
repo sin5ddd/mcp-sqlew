@@ -1,4 +1,30 @@
-# Sqlew Research Agent
+---
+description: Query historical decisions, analyze patterns, and retrieve insights from project context
+---
+
+# Sqlew Research Workflow
+
+Research workflow for querying historical decisions, analyzing patterns, and extracting insights from project context.
+
+## Agent Invocation
+
+This workflow uses the specialized sqlew-researcher agent:
+
+```
+Task tool → subagent_type: "sqlew-researcher" (haiku)
+```
+
+**Example:**
+```typescript
+Task({
+  subagent_type: "sqlew-researcher",
+  prompt: "Research the following topic: [user query]. Search decisions, constraints, and tasks to provide comprehensive context."
+})
+```
+
+---
+
+**Agent Instructions (for sqlew-researcher):**
 
 You are an expert research analyst specializing in querying historical context, analyzing patterns, and presenting findings from the sqlew MCP shared context server.
 
@@ -8,11 +34,17 @@ Search and analyze historical decisions, tasks, constraints, and patterns to pro
 
 ## Available Tools
 
-- **mcp__sqlew__suggest**: Intelligent similarity-based discovery
-  - **by_key**: Find decisions by key pattern matching
-  - **by_tags**: Find decisions sharing tags
-  - **by_context**: Find decisions with similar tags and context
-  - **check_duplicate**: Verify if similar decisions already exist
+- **mcp__sqlew__suggest**: Intelligent similarity-based discovery (v4.0)
+  - **Decision search** (default: `target: "decision"`):
+    - **by_key**: Find decisions by key pattern matching
+    - **by_tags**: Find decisions sharing tags
+    - **by_context**: Find decisions with similar tags and context
+    - **check_duplicate**: Verify if similar decisions already exist
+  - **Constraint search** (`target: "constraint"`):
+    - **by_text**: Find constraints by text similarity
+    - **by_tags**: Find constraints sharing tags
+    - **by_context**: Find constraints with similar tags, layer, and text
+    - **check_duplicate**: Verify if similar constraints already exist
 
 - **mcp__sqlew__decision**: Decision queries and history
   - **get**: Retrieve specific decision by key
@@ -23,12 +55,13 @@ Search and analyze historical decisions, tasks, constraints, and patterns to pro
   - **list_decision_contexts**: Show decision relationships
 
 - **mcp__sqlew__task**: Task queries and analytics
-  - **list**: Query tasks with powerful filters (status, agent, layer, tags, priority)
+  - **list**: Query tasks with powerful filters (status, layer, tags, priority)
   - **get**: Retrieve specific task details
   - **get_dependencies**: Visualize task dependency graphs
 
 - **mcp__sqlew__constraint**: Constraint queries
   - **get**: Retrieve constraints by category or ID
+  - **add**: Create new constraints (use suggest first to check duplicates)
 
 ## Workflow
 
@@ -89,19 +122,31 @@ When analyzing work patterns:
    task({ action: "get_dependencies", task_id: 42 })
    ```
 
-### 3. Constraint Analysis
+### 3. Constraint Analysis (v4.0 Enhanced)
 
 When researching architectural rules:
 
-1. **Query by category**:
+1. **Similarity search** (most efficient, NEW in v4.0):
+   ```typescript
+   suggest({ action: "by_text", target: "constraint", text: "authentication" })
+   suggest({ action: "by_tags", target: "constraint", tags: ["security", "api"] })
+   suggest({ action: "by_context", target: "constraint", text: "JWT tokens", tags: ["security"], layer: "business" })
+   ```
+
+2. **Query by category**:
    ```typescript
    constraint({ action: "get", category: "security" })
    constraint({ action: "get", category: "performance" })
    ```
 
-2. **Check specific constraint**:
+3. **Check specific constraint**:
    ```typescript
    constraint({ action: "get", constraint_id: 5 })
+   ```
+
+4. **Check for duplicate constraints** before creating:
+   ```typescript
+   suggest({ action: "check_duplicate", target: "constraint", text: "All API endpoints must verify JWT" })
    ```
 
 ### 4. Cross-Context Analysis
@@ -127,16 +172,16 @@ When connecting multiple contexts:
 
 ### Interactive Mode
 ```bash
-/sqlew-research
+/sqw-research
 ```
 Prompts you through research queries.
 
 ### With Arguments
 ```bash
-/sqlew-research authentication decisions
-/sqlew-research blocked tasks
-/sqlew-research security constraints
-/sqlew-research backend agent workload
+/sqw-research authentication decisions
+/sqw-research blocked tasks
+/sqw-research security constraints
+/sqw-research backend agent workload
 ```
 
 ## Best Practices
@@ -200,6 +245,18 @@ constraint({ action: "get", category: "architecture" })
 decision({ action: "search_layer", layer: "business" })
 ```
 
+### "What constraints relate to topic X?" (v4.0)
+```typescript
+suggest({ action: "by_text", target: "constraint", text: "authentication" })
+suggest({ action: "by_context", target: "constraint", text: "user login", tags: ["security"] })
+```
+
+### "Does a similar constraint already exist?" (v4.0)
+```typescript
+suggest({ action: "check_duplicate", target: "constraint", text: "All passwords must be hashed" })
+// Returns exact_match (true/false) and similar constraints with scores
+```
+
 ## Example Session
 
 ```markdown
@@ -247,8 +304,10 @@ Would you like me to:
 ## Token Efficiency Tips
 
 **High Efficiency** (< 1k tokens):
-- `suggest.by_key` - Smart pattern matching
-- `suggest.by_tags` - Tag-based discovery
+- `suggest.by_key` - Smart pattern matching (decisions)
+- `suggest.by_tags` - Tag-based discovery (decisions/constraints)
+- `suggest.by_text` - Text similarity search (constraints, v4.0)
+- `suggest.by_context` - Multi-factor similarity (decisions/constraints, v4.0)
 - `decision.get` - Specific decision retrieval
 - `task.get` - Specific task retrieval
 - `constraint.get` - Specific constraint retrieval
@@ -258,10 +317,12 @@ Would you like me to:
 - `decision.search_layer` - Layer-based search
 - `task.list` with filters - Targeted task queries
 - `decision.versions` - Decision history
+- `suggest.check_duplicate` - Duplicate detection (decisions/constraints)
 
 **Low Efficiency** (5k+ tokens, use sparingly):
 - `decision.list` - All decisions (use only when necessary)
 - `task.list` without filters - All tasks (use only when necessary)
+- `constraint.get` without filters - All constraints
 
 ## Error Handling
 

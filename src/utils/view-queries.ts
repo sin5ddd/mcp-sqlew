@@ -26,11 +26,11 @@ export async function getTaggedDecisions(knex: Knex): Promise<any[]> {
       : "CAST(dn.value AS CHAR)"; // MySQL/MariaDB
 
   // Use subqueries for tag/scope aggregation
-  const result = await knex("t_decisions as d")
-    .join("m_context_keys as k", "d.key_id", "k.id")
-    .leftJoin("m_layers as l", "d.layer_id", "l.id")
-    .leftJoin("m_agents as a", "d.agent_id", "a.id")
-    .leftJoin("t_decisions_numeric as dn", function () {
+  // Note: Agent tracking removed in v4.0 - decided_by field removed
+  const result = await knex("v4_decisions as d")
+    .join("v4_context_keys as k", "d.key_id", "k.id")
+    .leftJoin("v4_layers as l", "d.layer_id", "l.id")
+    .leftJoin("v4_decisions_numeric as dn", function () {
       this.on("dn.key_id", "=", "d.key_id").andOn(
         "dn.project_id",
         "=",
@@ -38,7 +38,7 @@ export async function getTaggedDecisions(knex: Knex): Promise<any[]> {
       );
     })
     .select([
-      "k.key",
+      "k.key_name as key",
       // Prefer numeric value over empty string
       knex.raw(`COALESCE(NULLIF(d.value, ''), ${castNumericToText}) as value`),
       "d.version",
@@ -48,21 +48,20 @@ export async function getTaggedDecisions(knex: Knex): Promise<any[]> {
         ELSE 'draft'
       END as status`),
       "l.name as layer",
-      "a.name as decided_by",
       "d.project_id",
       knex.raw(`${db.dateFunction("d.ts")} as updated`),
       // Tags subquery
       knex.raw(`(
         SELECT ${db.stringAgg("t2.name", ",")}
-        FROM t_decision_tags dt2
-        JOIN m_tags t2 ON dt2.tag_id = t2.id
+        FROM v4_decision_tags dt2
+        JOIN v4_tags t2 ON dt2.tag_id = t2.id
         WHERE dt2.decision_key_id = d.key_id
       ) as tags`),
       // Scopes subquery
       knex.raw(`(
         SELECT ${db.stringAgg("s2.name", ",")}
-        FROM t_decision_scopes ds2
-        JOIN m_scopes s2 ON ds2.scope_id = s2.id
+        FROM v4_decision_scopes ds2
+        JOIN v4_scopes s2 ON ds2.scope_id = s2.id
         WHERE ds2.decision_key_id = d.key_id
       ) as scopes`),
     ]);
@@ -77,18 +76,17 @@ export async function getActiveContext(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
   const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
 
-  return knex("t_decisions as d")
-    .join("m_context_keys as k", "d.key_id", "k.id")
-    .leftJoin("m_layers as l", "d.layer_id", "l.id")
-    .leftJoin("m_agents as a", "d.agent_id", "a.id")
+  // Note: Agent tracking removed in v4.0 - decided_by field removed
+  return knex("v4_decisions as d")
+    .join("v4_context_keys as k", "d.key_id", "k.id")
+    .leftJoin("v4_layers as l", "d.layer_id", "l.id")
     .where("d.ts", ">=", oneHourAgo)
     .andWhere("d.status", 1) // active only
     .select([
-      "k.key",
+      "k.key_name as key",
       "d.value",
       "d.version",
       "l.name as layer",
-      "a.name as decided_by",
       knex.raw(`${db.dateFunction("d.ts")} as updated`),
     ])
     .orderBy("d.ts", "desc");
@@ -101,18 +99,18 @@ export async function getLayerSummary(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
   const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
 
-  return knex("m_layers as l")
-    .leftJoin("t_decisions as d", function () {
+  return knex("v4_layers as l")
+    .leftJoin("v4_decisions as d", function () {
       this.on("l.id", "=", "d.layer_id").andOn("d.status", "=", knex.raw("1"));
     })
-    .leftJoin("t_constraints as c", function () {
+    .leftJoin("v4_constraints as c", function () {
       this.on("l.id", "=", "c.layer_id").andOn(
         "c.active",
         "=",
         knex.raw(db.boolTrue().toString()),
       );
     })
-    .leftJoin("t_file_changes as f", function () {
+    .leftJoin("v4_file_changes as f", function () {
       this.on("l.id", "=", "f.layer_id").andOn(
         "f.ts",
         ">=",
@@ -132,28 +130,12 @@ export async function getLayerSummary(knex: Knex): Promise<any[]> {
 /**
  * v_unread_messages_by_priority - Unread messages grouped by priority
  *
- * NOTE: This function references t_agent_messages which was dropped in v3.6.5
- * Kept for backward compatibility but will fail if table doesn't exist
+ * @deprecated Messaging system removed in v3.6.5, agent tracking removed in v4.0
+ * This function is kept for backward compatibility but always returns empty array
  */
-export async function getUnreadMessagesByPriority(knex: Knex): Promise<any[]> {
-  const db = new UniversalKnex(knex);
-
-  return knex("t_agent_messages as m")
-    .leftJoin("m_agents as a", "m.from_agent_id", "a.id")
-    .where("m.read", db.boolFalse())
-    .select([
-      knex.raw(`CASE m.priority
-        WHEN 1 THEN 'low'
-        WHEN 2 THEN 'medium'
-        WHEN 3 THEN 'high'
-        ELSE 'critical'
-      END as priority`),
-      "m.message",
-      "a.name as from_agent",
-      knex.raw(`${db.dateFunction("m.ts")} as sent_at`),
-    ])
-    .orderBy("m.priority", "desc")
-    .orderBy("m.ts", "desc");
+export async function getUnreadMessagesByPriority(_knex: Knex): Promise<any[]> {
+  // Messaging system and agent tracking removed - return empty array
+  return [];
 }
 
 /**
@@ -163,10 +145,10 @@ export async function getRecentFileChanges(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
   const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
 
-  return knex("t_file_changes as fc")
-    .join("m_files as f", "fc.file_id", "f.id")
-    .leftJoin("m_layers as l", "fc.layer_id", "l.id")
-    .leftJoin("m_agents as a", "fc.agent_id", "a.id")
+  // Note: Agent tracking removed in v4.0 - changed_by field removed
+  return knex("v4_file_changes as fc")
+    .join("v4_files as f", "fc.file_id", "f.id")
+    .leftJoin("v4_layers as l", "fc.layer_id", "l.id")
     .where("fc.ts", ">=", oneHourAgo)
     .select([
       "f.path",
@@ -176,7 +158,6 @@ export async function getRecentFileChanges(knex: Knex): Promise<any[]> {
         ELSE 'deleted'
       END as change_type`),
       "l.name as layer",
-      "a.name as changed_by",
       "fc.description",
       knex.raw(`${db.dateFunction("fc.ts")} as changed_at`),
     ])
@@ -189,10 +170,10 @@ export async function getRecentFileChanges(knex: Knex): Promise<any[]> {
 export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
 
-  return knex("t_constraints as c")
-    .join("m_constraint_categories as cat", "c.category_id", "cat.id")
-    .leftJoin("m_layers as l", "c.layer_id", "l.id")
-    .leftJoin("m_agents as a", "c.agent_id", "a.id")
+  // Note: Agent tracking removed in v4.0 - added_by field removed
+  return knex("v4_constraints as c")
+    .join("v4_constraint_categories as cat", "c.category_id", "cat.id")
+    .leftJoin("v4_layers as l", "c.layer_id", "l.id")
     .where("c.active", db.boolTrue())
     .select([
       "c.id",
@@ -205,13 +186,12 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
         ELSE 'critical'
       END as priority`),
       "l.name as layer",
-      "a.name as added_by",
       knex.raw(`${db.dateFunction("c.ts")} as added_at`),
       // Tags subquery
       knex.raw(`(
         SELECT ${db.stringAgg("t2.name", ",")}
-        FROM t_constraint_tags ct2
-        JOIN m_tags t2 ON ct2.tag_id = t2.id
+        FROM v4_constraint_tags ct2
+        JOIN v4_tags t2 ON ct2.tag_id = t2.id
         WHERE ct2.constraint_id = c.id
       ) as tags`),
     ])
@@ -225,30 +205,24 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
 export async function getTaskBoard(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
 
-  return knex("t_tasks as t")
-    .join("m_task_statuses as ts", "t.status_id", "ts.id")
-    .leftJoin("m_layers as l", "t.layer_id", "l.id")
-    .leftJoin("m_agents as a", "t.assigned_agent_id", "a.id")
+  // Note: Agent tracking removed in v4.0 - assigned_to field removed
+  return knex("v4_tasks as t")
+    .join("v4_task_statuses as ts", "t.status_id", "ts.id")
+    .leftJoin("v4_layers as l", "t.layer_id", "l.id")
     .select([
       "t.id as task_id",
       "t.title",
       "ts.name as status",
-      knex.raw(`CASE t.priority
-        WHEN 1 THEN 'low'
-        WHEN 2 THEN 'medium'
-        WHEN 3 THEN 'high'
-        ELSE 'critical'
-      END as priority`),
+      "t.priority",
       "l.name as layer",
-      "a.name as assigned_to",
       "t.project_id",
       knex.raw(`${db.dateFunction("t.created_ts")} as created`),
       knex.raw(`${db.dateFunction("t.updated_ts")} as updated`),
       // Tags subquery
       knex.raw(`(
         SELECT ${db.stringAgg("tag.name", ",")}
-        FROM t_task_tags tt
-        JOIN m_tags tag ON tt.tag_id = tag.id
+        FROM v4_task_tags tt
+        JOIN v4_tags tag ON tt.tag_id = tag.id
         WHERE tt.task_id = t.id
       ) as tags`),
     ])
