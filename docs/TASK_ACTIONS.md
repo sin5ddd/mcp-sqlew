@@ -1,7 +1,7 @@
 # Task Actions Reference
 
-**Version:** 3.2.0
-**Last Updated:** 2025-10-18
+**Version:** 4.0.0
+**Last Updated:** 2025-11-27
 
 ## Table of Contents
 
@@ -48,11 +48,11 @@ Create a new task.
 
 **Optional:**
 - `description`: Full task description (string)
-- `status`: Initial status (string: "todo", "in_progress", "waiting_review", "blocked", "done", "archived") - default: "todo"
+- `status`: Initial status (string: "todo", "in_progress", "waiting_review", "blocked", "done", "archived", "rejected") - default: "todo"
 - `priority`: Priority level (string: "low", "medium", "high", "critical")
-- `assignee`: Agent or user assigned (string)
+- `assignee`: User or agent assigned (string)
 - `tags`: Array of tags (string[])
-- `layer`: Architecture layer (string: "presentation", "business", "data", "infrastructure", "cross-cutting")
+- `layer`: Architecture layer (string: "presentation", "business", "data", "infrastructure", "cross-cutting", "documentation", "planning", "coordination", "review")
 
 ### Examples
 
@@ -72,7 +72,7 @@ Create a new task.
   description: "Add JWT-based authentication with refresh tokens",
   status: "todo",
   priority: "high",
-  assignee: "auth-agent",
+  assignee: "dev-team-1",
   tags: ["security", "authentication"],
   layer: "business"
 }
@@ -154,7 +154,7 @@ Update existing task fields.
 {
   action: "update",
   task_id: 1,
-  assignee: "senior-auth-agent",
+  assignee: "lead-dev",
   priority: "high"
 }
 ```
@@ -288,7 +288,7 @@ List tasks with filtering (metadata only, no descriptions).
 ```javascript
 {
   action: "list",
-  assignee: "auth-agent"
+  assignee: "dev-team-1"
 }
 ```
 
@@ -332,7 +332,7 @@ List tasks with filtering (metadata only, no descriptions).
       title: "Implement JWT authentication",
       status_name: "in_progress",
       priority_name: "high",
-      assignee: "auth-agent",
+      assignee: "dev-team-1",
       layer_name: "business",
       tags: "security,authentication",
       created_ts: 1697545200,
@@ -343,7 +343,7 @@ List tasks with filtering (metadata only, no descriptions).
       title: "Setup OAuth2 provider",
       status_name: "in_progress",
       priority_name: "high",
-      assignee: "auth-agent",
+      assignee: "dev-team-1",
       layer_name: "business",
       tags: "security,oauth2",
       created_ts: 1697545300,
@@ -364,7 +364,7 @@ List tasks with filtering (metadata only, no descriptions).
       title: "Implement JWT authentication",
       status_name: "in_progress",
       priority_name: "high",
-      assignee: "auth-agent",
+      assignee: "dev-team-1",
       layer_name: "business",
       tags: "security,authentication",
       created_ts: 1697545200,
@@ -377,7 +377,7 @@ List tasks with filtering (metadata only, no descriptions).
       title: "Setup OAuth2 provider",
       status_name: "in_progress",
       priority_name: "high",
-      assignee: "auth-agent",
+      assignee: "dev-team-1",
       layer_name: "business",
       tags: "security,oauth2",
       created_ts: 1697545300,
@@ -407,7 +407,10 @@ Move task to new status with validation.
 **Required:**
 - `action`: "move"
 - `task_id`: Task ID (number)
-- `new_status`: Target status (string: "todo", "in_progress", "waiting_review", "blocked", "done", "archived")
+- `status`: Target status (string: "todo", "in_progress", "waiting_review", "blocked", "done", "archived", "rejected")
+
+**Optional:**
+- `rejection_reason`: Reason for rejection (string, only when status="rejected")
 
 ### Examples
 
@@ -416,7 +419,7 @@ Move task to new status with validation.
 {
   action: "move",
   task_id: 1,
-  new_status: "waiting_review"
+  status: "waiting_review"
 }
 ```
 
@@ -425,7 +428,7 @@ Move task to new status with validation.
 {
   action: "move",
   task_id: 1,
-  new_status: "blocked"
+  status: "blocked"
 }
 ```
 
@@ -434,7 +437,17 @@ Move task to new status with validation.
 {
   action: "move",
   task_id: 1,
-  new_status: "done"
+  status: "done"
+}
+```
+
+**Move to Rejected (v4.1.0):**
+```javascript
+{
+  action: "move",
+  task_id: 1,
+  status: "rejected",
+  rejection_reason: "Requirements changed"
 }
 ```
 
@@ -451,22 +464,22 @@ Move task to new status with validation.
 
 ```javascript
 {
-  error: "Invalid status transition from in_progress to archived. Valid transitions: waiting_review, blocked, done"
+  error: "Invalid status transition from archived to todo. Terminal statuses cannot transition."
 }
 ```
 
-### State Machine Validation
+### State Machine Validation (v4.1.0 - Relaxed Rules)
 
 **Valid Transitions:**
 
-| From Status | To Status(es) |
-|-------------|--------------|
-| `todo` | `in_progress`, `blocked` |
-| `in_progress` | `waiting_review`, `blocked`, `done` |
-| `waiting_review` | `in_progress`, `todo`, `done` |
-| `blocked` | `todo`, `in_progress` |
-| `done` | `archived` |
-| `archived` | *(terminal state)* |
+| Status Type | Statuses | Can Transition To |
+|-------------|----------|-------------------|
+| **Non-terminal** | todo, in_progress, waiting_review, blocked, done | Any status |
+| **Terminal** | archived, rejected | None |
+
+- Non-terminal statuses can freely transition to any other status
+- Terminal statuses (`archived`, `rejected`) cannot transition
+- `rejected` accepts optional `rejection_reason` parameter
 
 **Auto-Stale Detection:**
 - Runs before move operation
@@ -556,7 +569,7 @@ Link task to decision, constraint, or file.
 }
 ```
 
-**See [TASK_LINKING.md](TASK_LINKING.md) for detailed linking strategies and use cases.**
+**Linking Strategies:** Use decision links for architectural context, constraint links for requirements tracking, and file links for code traceability.
 
 ## Action: archive
 
@@ -615,7 +628,7 @@ Archive completed task (soft delete).
 **Workflow:**
 ```javascript
 // 1. Complete task
-{ action: "move", task_id: 1, new_status: "done" }
+{ action: "move", task_id: 1, status: "done" }
 
 // 2. Archive task
 { action: "archive", task_id: 1 }
@@ -645,13 +658,13 @@ Create multiple tasks atomically or best-effort.
       title: "Setup database schema",
       status: "todo",
       priority: "high",
-      assignee: "db-agent"
+      assignee: "dev-team-1"
     },
     {
       title: "Implement API endpoints",
       status: "todo",
       priority: "medium",
-      assignee: "api-agent"
+      assignee: "dev-team-2"
     }
   ],
   atomic: true  // All succeed or all fail
@@ -667,21 +680,21 @@ Create multiple tasks atomically or best-effort.
       title: "Setup database schema",
       status: "todo",
       priority: "high",
-      assignee: "db-agent",
+      assignee: "dev-team-1",
       tags: ["database", "setup"]
     },
     {
       title: "Implement API endpoints",
       status: "todo",
       priority: "medium",
-      assignee: "api-agent",
+      assignee: "dev-team-2",
       tags: ["api", "development"]
     },
     {
       title: "Write integration tests",
       status: "todo",
       priority: "low",
-      assignee: "test-agent",
+      assignee: "dev-team-3",
       tags: ["testing", "qa"]
     }
   ],
@@ -980,7 +993,7 @@ Returns complete tool documentation including:
 { action: "update", task_id: 1, status: "archived" }
 
 // ✅ CORRECT (validates transition)
-{ action: "move", task_id: 1, new_status: "waiting_review" }
+{ action: "move", task_id: 1, status: "waiting_review" }
 ```
 
 **3. Use `list` Before `get`**
@@ -1034,22 +1047,22 @@ link({
 });
 ```
 
-### For Multi-Agent Workflows
+### For Workflow Coordination
 
 **1. Use Assignee for Coordination**
 ```javascript
-// Agent A creates task for Agent B
+// Create task for specific team/person
 {
   action: "create",
   title: "Implement auth middleware",
-  assignee: "auth-agent",
+  assignee: "dev-team-1",
   tags: ["handoff"]
 }
 
-// Agent B lists assigned tasks
+// List tasks for specific assignee
 {
   action: "list",
-  assignee: "auth-agent",
+  assignee: "dev-team-1",
   status: "todo"
 }
 ```
@@ -1079,20 +1092,20 @@ link({
 
 ## Common Errors
 
-### Error: "Invalid status transition"
+### Error: "Invalid status transition" (Terminal Status)
 
 **Problem:**
 ```javascript
-// Trying to move from in_progress to archived
-{ action: "move", task_id: 1, new_status: "archived" }
+// Trying to move FROM a terminal status (archived/rejected)
+{ action: "move", task_id: 1, status: "todo" }  // Task is already archived
 ```
 
-**Solution:**
+**Error:**
 ```javascript
-// Move to done first
-{ action: "move", task_id: 1, new_status: "done" }
-{ action: "archive", task_id: 1 }
+{ error: "Invalid status transition from archived to todo. Terminal statuses cannot transition." }
 ```
+
+**Note:** In v4.1.0+, non-terminal statuses (todo, in_progress, waiting_review, blocked, done) can freely transition to any status including terminal ones.
 
 ### Error: "Task not found"
 
@@ -1133,7 +1146,7 @@ link({
 **Solution:**
 ```javascript
 // Complete task first
-{ action: "move", task_id: 1, new_status: "done" }
+{ action: "move", task_id: 1, status: "done" }
 { action: "archive", task_id: 1 }
 ```
 
@@ -1154,14 +1167,11 @@ link({
 ## Related Documentation
 
 - **[TASK_OVERVIEW.md](TASK_OVERVIEW.md)** - Task system overview and core concepts
-- **[TASK_LINKING.md](TASK_LINKING.md)** - Linking tasks to decisions/constraints/files
-- **[TASK_DEPENDENCIES.md](TASK_DEPENDENCIES.md)** - Dependency management (NEW in 3.2.0)
-- **[TASK_MIGRATION.md](TASK_MIGRATION.md)** - Migrating from decision-based task tracking
-- **[TASK_SYSTEM.md](TASK_SYSTEM.md)** - Complete documentation (original)
+- **[TASK_PRUNING.md](TASK_PRUNING.md)** - Auto-pruning feature for watched files
 - **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Comprehensive AI agent guide
 
 ---
 
-**Version:** 3.2.0
-**Last Updated:** 2025-10-18
+**Version:** 4.0.0
+**Last Updated:** 2025-11-27
 **Author:** sin5ddd

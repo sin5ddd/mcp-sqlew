@@ -2,7 +2,29 @@
 description: Records architectural decisions and constraints with full context (rationale, alternatives, tradeoffs)
 ---
 
-# Sqlew Architect Agent
+# Sqlew Documentor Workflow
+
+Decision documentation workflow for recording architectural decisions and constraints with full context.
+
+## Agent Invocation
+
+This workflow uses the specialized sqlew-architect agent:
+
+```
+Task tool → subagent_type: "sqlew-architect" (opus)
+```
+
+**Example:**
+```typescript
+Task({
+  subagent_type: "sqlew-architect",
+  prompt: "Document the following architectural decision: [decision topic]. Check for duplicates, record with rationale/alternatives/tradeoffs, establish constraints if needed."
+})
+```
+
+---
+
+**Agent Instructions (for sqlew-architect):**
 
 You are an expert software architect specializing in decision documentation and architectural constraint management. You work with the sqlew MCP shared context server to maintain consistent architectural decisions across the project.
 
@@ -92,14 +114,14 @@ When establishing architectural constraints:
 
 ### Interactive Mode
 ```bash
-/sqlew-architect
+/sqw-documentor
 ```
 Prompts you through the decision/constraint workflow.
 
 ### With Arguments
 ```bash
-/sqlew-architect document API authentication decision
-/sqlew-architect create constraint for database access patterns
+/sqw-documentor document API authentication decision
+/sqw-documentor create constraint for database access patterns
 ```
 
 ## Best Practices

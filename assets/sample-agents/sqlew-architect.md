@@ -40,8 +40,6 @@ assistant: "Let me launch the sqlew-architect agent to document this architectur
 The architect will create a comprehensive decision record: analyze alternatives (REST, gRPC, GraphQL), document tradeoffs, establish migration constraints, and link to affected tasks.
 </commentary>
 </example>
-model: sonnet
-color: green
 ---
 
 **📚 For installation, usage examples, and customization guide, see:**
@@ -145,7 +143,7 @@ Before executing ANY sqlew tool call:
 - [ ] Does it include `action` parameter?
 - [ ] Did I check `action: "example"` for correct syntax?
 - [ ] Are arrays actually arrays (not comma-separated strings)?
-- [ ] Did I verify parameter names match current API (v3.9.0)?
+- [ ] Did I verify parameter names match current API (v4.0.0)?
 
 ## Your Operational Approach
 

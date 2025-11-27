@@ -2,7 +2,29 @@
 description: Query historical decisions, analyze patterns, and retrieve insights from project context
 ---
 
-# Sqlew Research Agent
+# Sqlew Research Workflow
+
+Research workflow for querying historical decisions, analyzing patterns, and extracting insights from project context.
+
+## Agent Invocation
+
+This workflow uses the specialized sqlew-researcher agent:
+
+```
+Task tool → subagent_type: "sqlew-researcher" (haiku)
+```
+
+**Example:**
+```typescript
+Task({
+  subagent_type: "sqlew-researcher",
+  prompt: "Research the following topic: [user query]. Search decisions, constraints, and tasks to provide comprehensive context."
+})
+```
+
+---
+
+**Agent Instructions (for sqlew-researcher):**
 
 You are an expert research analyst specializing in querying historical context, analyzing patterns, and presenting findings from the sqlew MCP shared context server.
 
@@ -150,16 +172,16 @@ When connecting multiple contexts:
 
 ### Interactive Mode
 ```bash
-/sqlew-research
+/sqw-research
 ```
 Prompts you through research queries.
 
 ### With Arguments
 ```bash
-/sqlew-research authentication decisions
-/sqlew-research blocked tasks
-/sqlew-research security constraints
-/sqlew-research backend agent workload
+/sqw-research authentication decisions
+/sqw-research blocked tasks
+/sqw-research security constraints
+/sqw-research backend agent workload
 ```
 
 ## Best Practices

@@ -6,6 +6,30 @@ description: Comprehensive planning - architect considers decisions, scrum maste
 
 Comprehensive planning workflow - invokes architect for architectural consideration, then scrum master for task breakdown.
 
+## Agent Invocation
+
+This workflow uses two specialized sqlew agents in sequence:
+
+```
+Phase 1: Task tool → subagent_type: "sqlew-architect" (opus)
+Phase 2: Task tool → subagent_type: "scrum-master" (sonnet)
+```
+
+**Example:**
+```typescript
+// Phase 1: Architectural consideration
+Task({
+  subagent_type: "sqlew-architect",
+  prompt: "Analyze architectural implications for: [user requirement]. Check existing decisions, document new decisions if needed, establish constraints."
+})
+
+// Phase 2: Task breakdown
+Task({
+  subagent_type: "scrum-master",
+  prompt: "Based on the architectural decisions, break down the work into tasks with dependencies, layers, and priorities."
+})
+```
+
 ## Purpose
 
 Transform ideas or requirements into documented decisions and actionable task plans. A two-phase workflow combining architectural thinking with agile task management.
@@ -30,15 +54,15 @@ Transform ideas or requirements into documented decisions and actionable task pl
 
 ### Interactive Mode
 ```bash
-/sqlew-plan
+/sqw-plan
 ```
 Prompts for feature/requirement details and guides through both phases.
 
 ### With Arguments
 ```bash
-/sqlew-plan implement user authentication
-/sqlew-plan add caching layer
-/sqlew-plan migrate to microservices
+/sqw-plan implement user authentication
+/sqw-plan add caching layer
+/sqw-plan migrate to microservices
 ```
 
 ## Workflow
@@ -124,16 +148,16 @@ Prompts for feature/requirement details and guides through both phases.
 
 ## When to Use
 
-Use `/sqlew-plan` when:
+Use `/sqw-plan` when:
 - Starting a new feature or capability
 - Architectural decisions are unclear or need documentation
 - You need a complete plan from concept to implementation
 - You want both strategic (decisions) and tactical (tasks) planning
 
 **Don't use when:**
-- Only documenting decisions (use `/sqlew-decide` instead)
-- Only creating tasks (use `/sqlew-scrum` instead)
-- Researching existing plans (use `/sqlew-research` instead)
+- Only documenting decisions (use `/sqw-documentor` instead)
+- Only creating tasks (use `/sqw-scrum` instead)
+- Researching existing plans (use `/sqw-research` instead)
 
 ## Two-Phase Benefits
 
@@ -170,7 +194,7 @@ With scrum master phase:
 ## Example: Complete Planning Session
 
 ```bash
-/sqlew-plan add Redis caching layer
+/sqw-plan add Redis caching layer
 ```
 
 ### Phase 1: Architect
@@ -240,13 +264,13 @@ With scrum master phase:
 ## Integration with Other Workflows
 
 This workflow combines:
-- `/sqlew-decide` - Decision documentation (architect phase)
-- `/sqlew-scrum` - Task management (scrum master phase)
+- `/sqw-documentor` - Decision documentation (architect phase)
+- `/sqw-scrum` - Task management (scrum master phase)
 
 Use with:
-- **Before**: `/sqlew-research` to understand existing context
+- **Before**: `/sqw-research` to understand existing context
 - **During**: Architect and scrum master handle the planning
-- **After**: Implement tasks, use `/sqlew-review` to validate
+- **After**: Implement tasks, use `/sqw-review` to validate
 
 ## Token Efficiency
 
@@ -254,12 +278,12 @@ This workflow is more token-efficient than separate operations:
 
 **Separate workflows**:
 - Research: 2k tokens
-- Decide: 5k tokens
+- Document decisions: 5k tokens
 - Constraint search: 2k tokens
 - Create tasks: 3k tokens
 - Total: 12k tokens
 
-**Combined /sqlew-plan (v4.0)**:
+**Combined /sqw-plan (v4.0)**:
 - Single context: 7k tokens (40% savings)
 - Architect→Scrum handoff preserves context
 - No redundant searches
@@ -284,27 +308,27 @@ This workflow is more token-efficient than separate operations:
 
 ## Comparison with Other Workflows
 
-### /sqlew-decide
+### /sqw-documentor
 - **Focus**: Decision documentation only
 - **Use when**: You know what decision to document
 - **Phases**: 1 (architect)
 
-### /sqlew-scrum
+### /sqw-scrum
 - **Focus**: Task management only
 - **Use when**: Decisions already documented
 - **Phases**: 1 (scrum master)
 
-### /sqlew-plan
+### /sqw-plan
 - **Focus**: Complete planning (decisions + tasks)
 - **Use when**: Starting new work, unclear architecture
 - **Phases**: 2 (architect → scrum master)
 
-### /sqlew-research
+### /sqw-research
 - **Focus**: Historical context analysis
 - **Use when**: Understanding existing state
 - **Phases**: 1 (researcher)
 
-### /sqlew-review
+### /sqw-review
 - **Focus**: Validation and consistency
 - **Use when**: Verifying completed work
 - **Phases**: 2 (researcher → architect)

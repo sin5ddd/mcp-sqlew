@@ -6,6 +6,30 @@ description: Validate architectural consistency - research context, then verify 
 
 Validation and consistency checking workflow - invokes researcher for context analysis, then architect for validation.
 
+## Agent Invocation
+
+This workflow uses two specialized sqlew agents in sequence:
+
+```
+Phase 1: Task tool → subagent_type: "sqlew-researcher" (haiku)
+Phase 2: Task tool → subagent_type: "sqlew-architect" (opus)
+```
+
+**Example:**
+```typescript
+// Phase 1: Research context
+Task({
+  subagent_type: "sqlew-researcher",
+  prompt: "Research context for: [review target]. Analyze decisions, constraints, and tasks. Identify patterns and inconsistencies."
+})
+
+// Phase 2: Architectural validation
+Task({
+  subagent_type: "sqlew-architect",
+  prompt: "Based on the research findings, validate architectural consistency. Check constraint compliance and recommend corrections."
+})
+```
+
 ## Purpose
 
 Verify architectural consistency, validate decision implementation, and ensure constraints are followed. A two-phase workflow combining historical analysis with expert validation.
@@ -30,16 +54,16 @@ Verify architectural consistency, validate decision implementation, and ensure c
 
 ### Interactive Mode
 ```bash
-/sqlew-review
+/sqw-review
 ```
 Prompts for what to review and guides through both phases.
 
 ### With Arguments
 ```bash
-/sqlew-review authentication implementation
-/sqlew-review security decisions
-/sqlew-review performance constraints
-/sqlew-review backend agent work
+/sqw-review authentication implementation
+/sqw-review security decisions
+/sqw-review performance constraints
+/sqw-review backend agent work
 ```
 
 ## Workflow
@@ -112,7 +136,7 @@ Prompts for what to review and guides through both phases.
 
 ## When to Use
 
-Use `/sqlew-review` when:
+Use `/sqw-review` when:
 - Verifying implementation follows decisions
 - Checking architectural consistency
 - Auditing constraint compliance
@@ -120,9 +144,9 @@ Use `/sqlew-review` when:
 - Investigating potential issues
 
 **Don't use when:**
-- Creating new decisions (use `/sqlew-decide` instead)
-- Planning new work (use `/sqlew-plan` instead)
-- Just querying history (use `/sqlew-research` instead)
+- Creating new decisions (use `/sqw-documentor` instead)
+- Planning new work (use `/sqw-plan` instead)
+- Just querying history (use `/sqw-research` instead)
 
 ## Review Types
 
@@ -161,7 +185,7 @@ Verify agents have:
 ## Example: Complete Review Session
 
 ```bash
-/sqlew-review security architecture
+/sqw-review security architecture
 ```
 
 ### Phase 1: Researcher
@@ -248,8 +272,8 @@ Verify agents have:
 ## Integration with Other Workflows
 
 This workflow combines:
-- `/sqlew-research` - Context analysis (researcher phase)
-- `/sqlew-decide` - Decision updates (architect phase)
+- `/sqw-research` - Context analysis (researcher phase)
+- `/sqw-documentor` - Decision updates (architect phase)
 
 Use with:
 - **Before review**: Complete implementation work
@@ -268,7 +292,7 @@ This workflow is efficient for comprehensive validation:
 - Validate: 3k tokens
 - Total: 14k tokens
 
-**Combined /sqlew-review (v4.0)**:
+**Combined /sqw-review (v4.0)**:
 - Research phase: 5k tokens (using suggest for constraints)
 - Architect phase: 4k tokens (validation)
 - **Total**: 9k tokens (35% savings)
@@ -327,7 +351,7 @@ The workflow automatically checks:
 
 ## Review Triggers
 
-Consider running `/sqlew-review` when:
+Consider running `/sqw-review` when:
 - Completing a major feature
 - Before starting related work
 - After significant decision changes

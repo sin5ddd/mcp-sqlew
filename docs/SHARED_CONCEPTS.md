@@ -12,32 +12,56 @@
 
 ## Architecture Layers
 
-5-layer architecture for organizing decisions, constraints, file changes, and tasks:
+9-layer architecture for organizing decisions, constraints, file changes, and tasks:
 
-### 1. **presentation** - User Interface
+### FILE_REQUIRED Layers (6)
+
+#### 1. **presentation** - User Interface
 UI components, API endpoints, CLI handlers, forms, response formatting
 
 **Examples**: React components, REST controllers, web forms
 
-### 2. **business** - Business Logic
+#### 2. **business** - Business Logic
 Core application logic, business rules, domain operations
 
 **Examples**: Service classes, domain models, workflows, validation rules
 
-### 3. **data** - Data Access
+#### 3. **data** - Data Access
 Data persistence and retrieval
 
 **Examples**: Database schemas, repositories, ORMs, queries
 
-### 4. **infrastructure** - Infrastructure
+#### 4. **infrastructure** - Infrastructure
 Technical capabilities and external services
 
 **Examples**: Auth, logging, message queues, caching, email/SMS services
 
-### 5. **cross-cutting** - Cross-Cutting Concerns
+#### 5. **cross-cutting** - Cross-Cutting Concerns
 Aspects spanning multiple layers
 
 **Examples**: Error handling, security, performance, i18n, configuration
+
+#### 6. **documentation** - Documentation & Knowledge
+Project documentation, guides, API docs, code comments, design rationales
+
+**Examples**: README files, API documentation, architecture guides, inline comments
+
+### FILE_OPTIONAL Layers (3)
+
+#### 7. **planning** - Planning & Requirements
+Project planning, roadmap decisions, requirements gathering, estimation
+
+**Examples**: Roadmap items, feature specifications, sprint planning, estimation notes
+
+#### 8. **coordination** - Team Coordination
+Team communication, progress tracking, meeting notes, status updates
+
+**Examples**: Meeting notes, status updates, progress reports, team announcements
+
+#### 9. **review** - Review & Quality Assurance
+Code reviews, testing decisions, quality metrics, approval workflows
+
+**Examples**: Review comments, testing strategies, quality gates, approval notes
 
 ---
 
@@ -51,6 +75,10 @@ type Layer =
   | "data"              // Database, repositories, persistence
   | "infrastructure"    // Auth, logging, external services
   | "cross-cutting"     // Security, error handling, i18n
+  | "documentation"     // Project docs, guides, comments
+  | "planning"          // Planning, roadmap, requirements (file-optional)
+  | "coordination"      // Team communication, status updates (file-optional)
+  | "review"            // Code reviews, QA, approval (file-optional)
 ```
 
 ### status (Decision/Entity Status)
@@ -104,15 +132,19 @@ type TaskStatus =
   | "blocked"          // Cannot proceed due to blocker
   | "done"             // Completed and approved
   | "archived"         // Archived for historical reference
+  | "rejected"         // Rejected/cancelled (v4.1.0)
 ```
 
-**Valid Transitions** (enforced by state machine):
-- `todo` → `in_progress`, `blocked`, `archived`
-- `in_progress` → `waiting_review`, `blocked`, `todo`, `archived`
-- `waiting_review` → `done`, `in_progress`, `blocked`, `archived`
-- `blocked` → `todo`, `in_progress`, `archived`
-- `done` → `archived`
-- `archived` → (terminal state, no transitions)
+**Valid Transitions** (v4.1.0 - relaxed rules):
+
+| Status Type | Statuses | Can Transition To |
+|-------------|----------|-------------------|
+| **Non-terminal** | todo, in_progress, waiting_review, blocked, done | Any status (including terminal) |
+| **Terminal** | archived, rejected | None (final states) |
+
+- Non-terminal statuses can freely move to any other status
+- Terminal statuses (`archived`, `rejected`) cannot transition
+- `rejected` requires optional `rejection_reason` parameter
 
 **Auto-Stale Detection & Auto-Archive**:
 - `in_progress` >2 hours → auto-move to `waiting_review`
@@ -148,7 +180,6 @@ Determines batch operation failure handling:
 
 ### Supported Tools
 - `decision`: `set_batch`
-- `message`: `send_batch`
 - `file`: `record_batch`
 - `task`: `create_batch`
 
@@ -175,7 +206,6 @@ Determines batch operation failure handling:
 ### Available Actions
 
 - **decision**: set, get, list, search_tags, search_layer, versions, set_batch, help
-- **message**: send, get, mark_read, send_batch, help
 - **file**: record, get, check_lock, record_batch, help
 - **constraint**: add, get, deactivate, help
 - **stats**: layer_summary, db_stats, clear, help
@@ -192,4 +222,4 @@ Enum values stored as integers (MCP tools auto-convert - use strings in calls):
 - **msg_type**: 1=decision, 2=warning, 3=request, 4=info
 - **priority**: 1=low, 2=medium, 3=high, 4=critical
 - **change_type**: 1=created, 2=modified, 3=deleted
-- **task_status**: 1=todo, 2=in_progress, 3=waiting_review, 4=blocked, 5=done, 6=archived
+- **task_status**: 1=todo, 2=in_progress, 3=waiting_review, 4=blocked, 5=done, 6=archived, 7=rejected

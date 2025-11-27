@@ -2,7 +2,29 @@
 description: Break down plans into tasks, manage dependencies, and coordinate parallel execution
 ---
 
-# Sqlew Scrum Master Agent
+# Sqlew Scrum Master Workflow
+
+Task management workflow for breaking down work, managing dependencies, and coordinating execution.
+
+## Agent Invocation
+
+This workflow uses the specialized scrum-master agent:
+
+```
+Task tool → subagent_type: "scrum-master" (sonnet)
+```
+
+**Example:**
+```typescript
+Task({
+  subagent_type: "scrum-master",
+  prompt: "Break down the following work into tasks: [user requirement]. Create tasks with proper layers, priorities, and dependencies."
+})
+```
+
+---
+
+**Agent Instructions (for scrum-master):**
 
 You are an expert Scrum Master specializing in agile task planning, coordination, and dependency management using the sqlew MCP shared context server.
 

@@ -4,7 +4,7 @@
 
 ## Quick Start
 
-### Basic Usage (v3.4.1+)
+### Basic Usage (v4.0.0+)
 
 Create a task with automatic file watching in one step:
 
@@ -60,7 +60,7 @@ The Auto File Tracking system monitors files linked to tasks and automatically m
 
 ### Step 1: Create Task with Files
 
-**Method 1: Using watch_files parameter (v3.4.1+, Recommended)**
+**Method 1: Using watch_files parameter (v4.0.0+, Recommended)**
 
 ```typescript
 task action=create
@@ -74,7 +74,7 @@ task action=create
   status: "todo"
 ```
 
-**Method 2: Using watch_files action (v3.4.1+)**
+**Method 2: Using watch_files action (v4.0.0+)**
 
 ```typescript
 // Create task first
@@ -140,7 +140,7 @@ After the file change, FileWatcher checks acceptance criteria:
   🎉 Task #123 "Implement user authentication": in_progress → done (all checks passed!)
 ```
 
-## Smart Review Detection (v3.4.1)
+## Smart Review Detection (v4.0.0)
 
 ### Overview
 
@@ -262,7 +262,7 @@ todo → in_progress → done
           met
 ```
 
-## API Changes (v3.4.1)
+## API Changes (v4.0.0)
 
 ### New: watch_files Parameter
 
@@ -348,25 +348,28 @@ task action=watch_files task_id=123 action=watch file_paths=["src/auth.ts"]
 
 ### Database Schema
 
-The system uses the existing `t_task_details` table with an additional column:
+The system uses the `v4_task_details` table with a column for acceptance criteria:
 
 ```sql
-ALTER TABLE t_task_details
-ADD COLUMN acceptance_criteria_json TEXT;
+CREATE TABLE v4_task_details (
+    task_id INTEGER REFERENCES v4_tasks(id) ON DELETE CASCADE,
+    acceptance_criteria_json TEXT,
+    PRIMARY KEY (task_id)
+);
 -- JSON format: [{"type": "tests_pass", "command": "npm test", "expected_pattern": "passing"}]
 ```
 
-Task-file links are stored in `t_task_file_links`:
+Task-file links are stored in `v4_task_file_links`:
 
 ```sql
-CREATE TABLE t_task_file_links (
-    task_id INTEGER REFERENCES t_tasks(id) ON DELETE CASCADE,
-    file_id INTEGER REFERENCES m_files(id),
+CREATE TABLE v4_task_file_links (
+    task_id INTEGER REFERENCES v4_tasks(id) ON DELETE CASCADE,
+    file_id INTEGER REFERENCES v4_files(id),
     PRIMARY KEY (task_id, file_id)
 );
 ```
 
-## Smart File Filtering (v3.4.1)
+## Smart File Filtering (v4.0.0)
 
 ### GitIgnore Support
 
@@ -609,7 +612,7 @@ For 6 tasks: **4,800 tokens saved** (97% reduction in status management overhead
 
 ## Best Practices
 
-### 1. Use watch_files Parameter for New Tasks (v3.4.1+)
+### 1. Use watch_files Parameter for New Tasks (v4.0.0+)
 
 ```typescript
 // GOOD: Create task with files in one step
@@ -736,7 +739,7 @@ acceptance_criteria: [
 
 ## Examples
 
-### Example 1: Simple Bug Fix (v3.4.1)
+### Example 1: Simple Bug Fix (v4.0.0)
 
 ```typescript
 // Create task with file watching
@@ -752,7 +755,7 @@ task action=create
 // Tests pass → auto-completes to done
 ```
 
-### Example 2: Feature Implementation (v3.4.1)
+### Example 2: Feature Implementation (v4.0.0)
 
 ```typescript
 // Create task with multiple files
@@ -766,7 +769,7 @@ task action=create
   ]
 ```
 
-### Example 3: Refactoring Task (v3.4.1)
+### Example 3: Refactoring Task (v4.0.0)
 
 ```typescript
 // Create task
@@ -802,7 +805,7 @@ task action=watch_files
   file_paths: ["src/api/legacy.ts"]
 ```
 
-## Migration from v3.2.x to v3.4.1
+## Migration to v4.0.0
 
 ### Before (v3.2.x)
 
@@ -815,7 +818,7 @@ task action=link task_id=123 link_type=file target_id="src/auth.ts"
 task action=link task_id=123 link_type=file target_id="src/auth.test.ts"
 ```
 
-### After (v3.4.1)
+### After (v4.0.0)
 
 ```typescript
 // Create task with files in one call
@@ -836,4 +839,3 @@ task action=create
 - [ACCEPTANCE_CRITERIA.md](./ACCEPTANCE_CRITERIA.md) - All acceptance check types
 - [WORKFLOWS.md](./WORKFLOWS.md) - Multi-agent coordination patterns
 - [BEST_PRACTICES.md](./BEST_PRACTICES.md) - Common errors and solutions
-- [TASK_MIGRATION.md](./TASK_MIGRATION.md) - Migrate from decision-based tracking

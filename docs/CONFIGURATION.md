@@ -1,6 +1,6 @@
 # sqlew Configuration Guide
 
-**Complete guide to configuring sqlew via config files, CLI arguments, and MCP tools**
+**Complete guide to configuring sqlew via CLI arguments and config files**
 
 ## Table of Contents
 
@@ -18,12 +18,10 @@
 
 ## Overview
 
-sqlew supports flexible configuration through multiple mechanisms:
+sqlew supports flexible configuration through two mechanisms:
 
+- **CLI arguments** - Override settings at startup (highest priority)
 - **Config file** (`.sqlew/config.toml`) - Persistent project settings
-- **CLI arguments** - Override config file at startup
-- **MCP tools** - Runtime configuration updates
-- **Database** (`m_config` table) - Stores active configuration
 
 ### Why Use Config Files?
 
@@ -51,9 +49,7 @@ sqlew applies configuration in this order (highest to lowest priority):
    ↓
 2. Config File (.sqlew/config.toml)
    ↓
-3. Database (m_config table)
-   ↓
-4. Code Defaults (DEFAULT_CONFIG in types.ts)
+3. Code Defaults (DEFAULT_CONFIG in types.ts)
 ```
 
 **Example:**
@@ -71,9 +67,8 @@ npx sqlew --autodelete-message-hours=48
 ```
 
 **After startup:**
-- All settings stored in `m_config` table
-- CLI and config file values merged into database
-- MCP `config` tool can update settings at runtime
+- CLI and config file values are merged
+- Settings are held in memory during runtime
 
 ---
 
@@ -330,7 +325,7 @@ git_auto_complete_enabled = true
 git_auto_complete_enabled = false
 ```
 
-**No CLI override** (use MCP `config` tool)
+**Configure via CLI arguments only**
 
 #### `tasks.require_all_files_committed`
 
@@ -358,7 +353,7 @@ require_all_files_committed = true
 require_all_files_committed = false
 ```
 
-**No CLI override** (use MCP `config` tool)
+**Configure via CLI arguments only**
 
 #### `tasks.stale_review_notification_hours`
 
@@ -384,7 +379,7 @@ stale_review_notification_hours = 72    # Notify after 3 days
 stale_review_notification_hours = 168   # Notify after 1 week
 ```
 
-**No CLI override** (use MCP `config` tool)
+**Configure via CLI arguments only**
 
 #### `tasks.auto_archive_done_days`
 
@@ -410,7 +405,7 @@ auto_archive_done_days = 7    # 1 week (production)
 auto_archive_done_days = 30   # Long retention
 ```
 
-**No CLI override** (use MCP `config` tool)
+**Configure via CLI arguments only**
 
 #### `tasks.stale_hours_in_progress`
 
@@ -436,7 +431,7 @@ stale_hours_in_progress = 4    # Relaxed (4 hours)
 stale_hours_in_progress = 24   # Very relaxed (1 day)
 ```
 
-**No CLI override** (use MCP `config` tool)
+**Configure via CLI arguments only**
 
 #### `tasks.stale_hours_waiting_review`
 
@@ -462,7 +457,7 @@ stale_hours_waiting_review = 48    # Relaxed (2 days)
 stale_hours_waiting_review = 168   # Very relaxed (1 week)
 ```
 
-**No CLI override** (use MCP `config` tool)
+**Configure via CLI arguments only**
 
 #### `tasks.auto_stale_enabled`
 
@@ -486,7 +481,7 @@ auto_stale_enabled = true
 auto_stale_enabled = false
 ```
 
-**No CLI override** (use MCP `config` tool)
+**Configure via CLI arguments only**
 
 ---
 
@@ -547,16 +542,14 @@ npx sqlew --config-path=config/custom.toml
 
 ### 5. Verify Configuration
 
-Use MCP `config` tool:
+Check the console output on startup to verify configuration was loaded:
 
-```javascript
-// Get all configuration
-{
-  action: "get"
-}
-
-// Returns current settings from m_config table
 ```
+✓ Loaded 7 config values from file (.sqlew/config.toml)
+✓ Configuration merged with CLI arguments
+```
+
+Settings are loaded from config file and CLI arguments at startup.
 
 ---
 
@@ -613,24 +606,43 @@ stale_hours_in_progress = 200   # ❌ Error: must be <= 168
 
 ## Runtime Configuration
 
-### ⚠️ Config Tool Removed (dev branch)
+### Configuration Methods (v4.0.0)
 
-**DEPRECATED**: The `config` MCP tool has been removed in the dev branch.
+v4.0.0 uses **CLI arguments only** for configuration. The config MCP tool has been removed.
 
-**Why removed:**
-- Messaging system deprecated (primary use case eliminated)
-- File-based configuration (`.sqlew/config.toml`) is clearer and more maintainable
-- Runtime updates were confusing (changes lost on restart unless manually synced to file)
-- Configuration drift between `m_config` table and config file
+**Configuration priority:**
+1. **CLI Arguments** - Highest priority, applied at startup
+2. **Config File** (.sqlew/config.toml) - Persistent project settings
+3. **Code Defaults** - Built-in defaults (lowest priority)
 
-**Migration path:**
-- ✅ **Use `.sqlew/config.toml`** for all configuration (persistent, version-controlled)
-- ✅ **Use CLI arguments** for one-time overrides (`--autodelete-message-hours=48`)
-- ❌ **Do NOT use** `config` tool (removed in dev, will error)
+### CLI Arguments (Recommended)
+
+Use CLI arguments for one-time overrides or environment-specific settings:
+
+```bash
+# Override specific settings at startup
+npx sqlew --autodelete-message-hours=48 --autodelete-ignore-weekend
+
+# Multiple arguments can be combined
+npx sqlew \
+  --db-path=.sqlew/prod.db \
+  --autodelete-ignore-weekend \
+  --autodelete-message-hours=168 \
+  --autodelete-file-history-days=30
+```
+
+**Available CLI arguments:**
+```bash
+--db-path=/path/to/database.db          # Database file location
+--autodelete-ignore-weekend              # Skip weekends in retention
+--autodelete-message-hours=N             # Message retention (1-720 hours)
+--autodelete-file-history-days=N         # File history retention (1-365 days)
+--config-path=/path/to/config.toml       # Custom config file location
+```
 
 ### File-Based Configuration (Recommended)
 
-Edit `.sqlew/config.toml` directly:
+Edit `.sqlew/config.toml` directly for persistent settings:
 
 ```toml
 [database]
@@ -638,28 +650,28 @@ path = ".sqlew/custom.db"
 
 [autodelete]
 ignore_weekend = true
-message_hours = 48  # Messaging system deprecated, but config preserved for backward compatibility
+message_hours = 48
+file_history_days = 14
+
+[tasks]
+git_auto_complete_enabled = true
+auto_archive_done_days = 2
 ```
 
 **Benefits:**
-1. **Version control** - Commit config to git, share with team
-2. **No drift** - Single source of truth (no table vs file conflicts)
-3. **Clear documentation** - Config file documents project requirements
+1. **Persistent** - Settings survive server restarts
+2. **Version control** - Commit config to git, share with team
+3. **Documentation** - Config file documents project requirements
 4. **Type safety** - TOML validation catches errors at startup
 
-### Configuration Persistence (Legacy - v3.6.6 and earlier)
+### Applying Configuration Changes
 
-**How it worked (DEPRECATED):**
-1. Config file loaded on startup
-2. Values merged with CLI arguments
-3. Final config written to `m_config` table
-4. MCP `config` tool updates `m_config` table
-5. Changes persist until next startup (then config file reloads)
+**To apply changes:**
+1. **Edit** `.sqlew/config.toml` or update CLI arguments
+2. **Restart** the MCP server (changes take effect on startup)
+3. **Verify** via console output showing loaded configuration
 
-**Migration to file-based:**
-1. Remove all `config` tool calls from workflows
-2. Update `.sqlew/config.toml` directly
-3. Restart MCP server to apply changes
+Merged settings are held in memory during runtime.
 
 ---
 
@@ -829,11 +841,6 @@ npx sqlew --config-path=.sqlew/prod.toml
    ✓ Loaded 7 config values from file
    ```
 
-3. **Query active config:**
-   ```javascript
-   {action: "get"}  // via config tool
-   ```
-
 ### Validation Warnings
 
 **Symptom:**
@@ -884,13 +891,7 @@ Error: SQLITE_CANTOPEN: unable to open database file
    ignore_weekend = true  # Must be true, not "true"
    ```
 
-2. **Verify via MCP tool:**
-   ```javascript
-   {action: "get"}
-   // Check: autodelete_ignore_weekend = "1" (true)
-   ```
-
-3. **Test behavior:**
+2. **Test behavior:**
    - Monday cleanup should reference Friday
    - Not Saturday/Sunday
 
@@ -898,8 +899,8 @@ Error: SQLITE_CANTOPEN: unable to open database file
 
 ## Related Documentation
 
-- **[Architecture](ARCHITECTURE.md)** - Database schema and `m_config` table structure
-- **[Tool Reference](TOOL_REFERENCE.md)** - MCP `config` tool usage
+- **[Architecture](ARCHITECTURE.md)** - Database schema and system design
+- **[Tool Reference](TOOL_REFERENCE.md)** - MCP tool usage
 - **[Best Practices](BEST_PRACTICES.md)** - Configuration recommendations
 
 ---
@@ -921,4 +922,4 @@ See `.sqlew/config.toml.example` in project root for complete annotated example.
 
 ---
 
-**Last Updated:** v3.4.1 (2025-10-22)
+**Last Updated:** v4.0.0 (2025-11-27)

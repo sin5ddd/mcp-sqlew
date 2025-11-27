@@ -25,7 +25,7 @@
 
 ## Parameter Validation
 
-**NEW in dev branch**: sqlew now provides comprehensive parameter validation with helpful error messages.
+**v4.0.0**: sqlew now provides comprehensive parameter validation with helpful error messages.
 
 ### Validation Features
 
@@ -42,7 +42,7 @@
   "action": "set",
   "missing_params": ["value"],
   "required_params": ["key", "value"],
-  "optional_params": ["agent", "layer", "tags", "status", "version", "scopes"],
+  "optional_params": ["layer", "tags", "status", "version", "scopes"],
   "you_provided": ["key", "layer"],
   "example": {
     "action": "set",
@@ -65,7 +65,7 @@
   "did_you_mean": {
     "tgas": "tags"
   },
-  "valid_params": ["action", "key", "value", "agent", "layer", "tags", "status", "version", "scopes"],
+  "valid_params": ["action", "key", "value", "layer", "tags", "status", "version", "scopes"],
   "hint": "Parameter names are case-sensitive"
 }
 ```
@@ -135,7 +135,7 @@
 
 ---
 
-## Parameter Validation (v3.7.0)
+## Parameter Validation
 
 sqlew provides structured error messages with examples and typo suggestions to help you fix parameter errors quickly.
 
@@ -149,7 +149,7 @@ When required parameters are missing or incorrect, sqlew returns a detailed JSON
   "action": "set",
   "missing_params": ["key"],
   "required_params": ["key", "value"],
-  "optional_params": ["agent", "layer", "tags", "status", "version", "scopes"],
+  "optional_params": ["layer", "tags", "status", "version", "scopes"],
   "you_provided": ["action", "context_key", "value"],
   "did_you_mean": {
     "context_key": "key"
@@ -258,41 +258,30 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
 
 | Action | Required | Optional |
 |--------|----------|----------|
-| **set** | action, key, value, layer | agent, version, status, tags, scopes |
+| **set** | action, key, value, layer | version, status, tags, scopes |
 | **get** | action, key | version, include_context |
 | **list** | action | status, layer, tags, scope, tag_match, limit, offset |
 | **search_tags** | action, tags | match_mode, status, layer |
 | **search_layer** | action, layer | status, include_tags |
 | **versions** | action, key | - |
-| **quick_set** | action, key, value | agent, layer, version, status, tags, scopes |
+| **quick_set** | action, key, value | layer, version, status, tags, scopes |
 | **search_advanced** | action | layers, tags_all, tags_any, exclude_tags, scopes, updated_after, updated_before, decided_by, statuses, search_text, sort_by, sort_order, limit, offset |
 | **set_batch** | action, decisions | atomic |
-| **has_updates** | action, agent_name, since_timestamp | - |
-| **set_from_template** | action, template, key, value, layer | agent, version, status, tags, scopes |
+| **set_from_template** | action, template, key, value, layer | version, status, tags, scopes |
 | **create_template** | action, name, defaults | required_fields, created_by |
 | **list_templates** | action | - |
 | **add_decision_context** | action, key, rationale | alternatives_considered, tradeoffs, decided_by, related_task_id, related_constraint_id |
 | **list_decision_contexts** | action | decision_key, related_task_id, related_constraint_id, decided_by, limit, offset |
 
-### `message` Tool ⚠️ DEPRECATED (v3.6.5)
-
-> **Note:** The messaging system was removed in v3.6.5. The `t_agent_messages` table has been dropped.
-
-~~| Action | Required | Optional |~~
-~~|--------|----------|----------|~~
-~~| **send** | action, from_agent, msg_type, message | to_agent, priority, payload |~~
-~~| **get** | action, agent_name | unread_only, priority_filter, msg_type_filter, limit |~~
-~~| **mark_read** | action, agent_name, message_ids | - |~~
-~~| **send_batch** | action, messages | atomic |~~
-
 ### `file` Tool
 
 | Action | Required | Optional |
 |--------|----------|----------|
-| **record** | action, file_path, agent_name, change_type | layer, description |
-| **get** | action | file_path, agent_name, layer, change_type, since, limit |
+| **record** | action, file_path, change_type | layer, description |
+| **get** | action | file_path, layer, change_type, since, limit |
 | **check_lock** | action, file_path | lock_duration |
 | **record_batch** | action, file_changes | atomic |
+| **sqlite_flush** | action | - |
 
 ### `constraint` Tool
 
@@ -302,36 +291,15 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
 | **get** | action | category, layer, priority, tags, active_only, limit |
 | **deactivate** | action, constraint_id | - |
 
-### `stats` Tool
-
-| Action | Required | Optional |
-|--------|----------|----------|
-| **layer_summary** | action | - |
-| **db_stats** | action | - |
-| **clear** | action | messages_older_than_hours, file_changes_older_than_days |
-| **activity_log** | action | since, agent_names, actions, limit |
-| **flush** | action | - |
-
-### `config` Tool
-
-> ⚠️ **DEPRECATED in v3.7.0** - This tool will be removed in a future version.
-> Use `.sqlew/config.toml` file instead for configuration.
-> See [CONFIGURATION.md](CONFIGURATION.md) for migration guide.
-
-| Action | Required | Optional |
-|--------|----------|----------|
-| **get** | action | - |
-| **update** | action | ignoreWeekend, messageRetentionHours, fileHistoryRetentionDays |
-
 ### `task` Tool
 
 | Action | Required | Optional |
 |--------|----------|----------|
-| **create** | action, title | description, acceptance_criteria, notes, priority, assigned_agent, created_by_agent, layer, tags, status, **watch_files** (v3.4.1) |
-| **update** | action, task_id | title, priority, assigned_agent, layer, description, acceptance_criteria, notes, **watch_files** (v3.4.1) |
+| **create** | action, title | description, acceptance_criteria, notes, priority, layer, tags, status, **watch_files** (v3.4.1) |
+| **update** | action, task_id | title, priority, layer, description, acceptance_criteria, notes, **watch_files** (v3.4.1) |
 | **get** | action, task_id | include_dependencies |
-| **list** | action | status, assigned_agent, layer, tags, limit, offset, include_dependency_counts |
-| **move** | action, task_id, new_status | - |
+| **list** | action | status, layer, tags, limit, offset, include_dependency_counts |
+| **move** | action, task_id, status | rejection_reason (when status="rejected") |
 | **link** | action, task_id, link_type, target_id | link_relation (⚠️ link_type="file" deprecated in v3.4.1) |
 | **archive** | action, task_id | - |
 | **create_batch** | action, tasks | atomic |
@@ -350,6 +318,33 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
 | **by_context** | action | key, tags, layer, limit, min_score, priority |
 | **check_duplicate** | action, key | tags, layer, min_score |
 | **help** | action | - |
+
+### `help` Tool (v3.6.0)
+
+| Action | Required | Optional |
+|--------|----------|----------|
+| **query_action** | action, tool, target_action | - |
+| **query_params** | action, tool, target_action | - |
+| **query_tool** | action, tool | - |
+| **workflow_hints** | action, tool, current_action | - |
+| **batch_guide** | action, operation | - |
+| **error_recovery** | action, error_message | - |
+
+### `example` Tool (v3.6.0)
+
+| Action | Required | Optional |
+|--------|----------|----------|
+| **get** | action | tool, action_name, topic |
+| **search** | action, keyword | tool, action_name, complexity |
+| **list_all** | action | tool, complexity, limit, offset |
+
+### `use_case` Tool (v3.6.0)
+
+| Action | Required | Optional |
+|--------|----------|----------|
+| **get** | action, use_case_id | - |
+| **search** | action, keyword | category, complexity |
+| **list_all** | action | category, complexity, limit, offset |
 
 ---
 
@@ -462,29 +457,6 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
 }
 ```
 
-#### Message Batch
-
-```javascript
-{
-  action: "send_batch",
-  atomic: false,
-  messages: [
-    {
-      from_agent: "bot1",
-      msg_type: "info",
-      message: "Task 1 completed",
-      priority: "medium"
-    },
-    {
-      from_agent: "bot1",
-      msg_type: "info",
-      message: "Task 2 completed",
-      priority: "medium"
-    }
-  ]
-}
-```
-
 #### File Change Batch
 
 ```javascript
@@ -494,13 +466,11 @@ sqlew uses Levenshtein distance (≤2 edits) to detect common typos:
   file_changes: [
     {
       file_path: "src/types.ts",
-      agent_name: "refactor-bot",
       change_type: "modified",
       layer: "data"
     },
     {
       file_path: "src/index.ts",
-      agent_name: "refactor-bot",
       change_type: "modified",
       layer: "infrastructure"
     }
@@ -533,8 +503,7 @@ Create tasks with automatic file monitoring in one step:
     {type: "tests_pass", command: "npm test auth", expected_pattern: "passing"},
     {type: "code_contains", file: "src/auth.ts", pattern: "export class AuthService"}
   ],
-  priority: 3,
-  assigned_agent: "backend-dev"
+  priority: 3
 }
 ```
 
@@ -824,12 +793,18 @@ Templates provide reusable defaults for common decision patterns.
 
 💡 **See [ARCHITECTURE.md](ARCHITECTURE.md#layers) for detailed layer definitions.**
 
-Quick reference:
+**FILE_REQUIRED layers** (require file_actions for file tool):
 - **presentation**: UI, API endpoints, user-facing interfaces
 - **business**: Service logic, workflows, business rules
 - **data**: Database models, schemas, data access
 - **infrastructure**: Configuration, deployment, DevOps
 - **cross-cutting**: Logging, monitoring, security (affects multiple layers)
+- **documentation**: README, API docs, technical documentation
+
+**FILE_OPTIONAL layers** (file_actions optional):
+- **planning**: Task planning, sprint organization
+- **coordination**: Multi-agent coordination, workflow management
+- **review**: Code review, architectural review decisions
 
 ### Statuses
 
@@ -865,6 +840,7 @@ Quick reference:
 - **blocked**: Cannot proceed due to blocker
 - **done**: Completed successfully
 - **archived**: Completed and archived (auto-archived after 48 hours)
+- **rejected**: Cancelled or rejected task (terminal state)
 
 ### Constraint Categories
 
@@ -1020,7 +996,73 @@ Override duplicate detection when needed:
 ### See Also
 
 - **[DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md)** - Comprehensive three-tier system guide
-- **[MIGRATION_GUIDE_V3.9.0.md](MIGRATION_GUIDE_V3.9.0.md)** - Migration instructions
+
+---
+
+## Constraint Intelligence System (v4.0.0)
+
+### Overview
+
+The Constraint Intelligence System provides duplicate detection and similarity-based suggestions for architectural constraints. Use `target: "constraint"` with the suggest tool.
+
+### Scoring
+
+**Total Score: 0-100 points**
+
+| Factor | Max Points | Calculation |
+|--------|------------|-------------|
+| Tag overlap | 40 | 10 per matching tag (max 4) |
+| Layer match | 25 | Same layer = 25, different = 0 |
+| Text similarity | 20 | Levenshtein distance |
+| Recency | 10 | <30 days = 10, decay over time |
+| Priority | 5 | Critical = 5, High = 4, etc. |
+
+### Thresholds
+
+| Threshold | Value | Description |
+|-----------|-------|-------------|
+| Default min_score | 30 | Minimum score for suggestions |
+| Duplicate threshold | 70 | Score triggering duplicate warning |
+
+### Using the suggest Tool for Constraints
+
+```javascript
+// Find by text pattern
+{
+  action: "by_key",
+  target: "constraint",  // Required for constraints
+  text: "API response time",
+  limit: 5
+}
+
+// Find by tags
+{
+  action: "by_tags",
+  target: "constraint",
+  tags: ["api", "performance"],
+  layer: "business"
+}
+
+// Combined search
+{
+  action: "by_context",
+  target: "constraint",
+  text: "database query",
+  tags: ["sql"],
+  layer: "data"
+}
+
+// Pre-creation duplicate check
+{
+  action: "check_duplicate",
+  target: "constraint",
+  text: "API response time must be under 100ms"
+}
+```
+
+### See Also
+
+- **[CONSTRAINT_INTELLIGENCE.md](CONSTRAINT_INTELLIGENCE.md)** - Comprehensive constraint intelligence guide
 
 ---
 
@@ -1032,3 +1074,4 @@ Override duplicate detection when needed:
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Layer definitions and system architecture
 - **[AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md)** - Complete guide (original comprehensive version)
 - **[DECISION_INTELLIGENCE.md](DECISION_INTELLIGENCE.md)** - Decision Intelligence System (v3.9.0)
+- **[CONSTRAINT_INTELLIGENCE.md](CONSTRAINT_INTELLIGENCE.md)** - Constraint Intelligence System (v4.0.0)
