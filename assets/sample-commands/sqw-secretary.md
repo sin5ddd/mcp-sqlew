@@ -1,3 +1,7 @@
+---
+description: Quick decision capture - fast-track documentation with duplicate checking and context
+---
+
 # Sqlew Decide Workflow
 
 Quick decision documentation workflow - invokes the architect agent for streamlined decision capture.

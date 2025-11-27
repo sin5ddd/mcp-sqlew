@@ -1,3 +1,7 @@
+---
+description: Comprehensive planning - architect considers decisions, scrum master breaks down into tasks
+---
+
 # Sqlew Plan Workflow
 
 Comprehensive planning workflow - invokes architect for architectural consideration, then scrum master for task breakdown.

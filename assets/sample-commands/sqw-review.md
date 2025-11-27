@@ -1,3 +1,7 @@
+---
+description: Validate architectural consistency - research context, then verify decisions and constraints
+---
+
 # Sqlew Review Workflow
 
 Validation and consistency checking workflow - invokes researcher for context analysis, then architect for validation.

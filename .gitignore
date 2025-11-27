@@ -58,3 +58,7 @@ PHASE*.md
 
 docker/data/*/
 .tmp-test-*
+
+# sqlew system files (auto-generated)
+.claude/agents/sqlew-*
+.claude/commands/sqw-*
