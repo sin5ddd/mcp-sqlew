@@ -15,8 +15,9 @@ Fast-track architectural decision documentation when you know what needs to be d
 1. Checks for duplicate/related decisions
 2. Guides you through decision documentation
 3. Records decision with full context (rationale, alternatives, tradeoffs)
-4. Links to related decisions if needed
-5. Creates constraints if decision implies architectural rules
+4. **Automatically suggests related constraints** (v4.0) - review and link relevant ones
+5. Links to related decisions if needed
+6. Creates constraints if decision implies architectural rules (with duplicate checking)
 
 ## Usage
 
@@ -45,8 +46,10 @@ When you run this command, the architect agent will:
    - Rationale for the choice
    - Tradeoffs involved
 4. **Document the decision** with comprehensive context
-5. **Link to related decisions** if applicable
-6. **Suggest constraints** if the decision implies architectural rules
+5. **Review related constraints** (v4.0) - automatically suggested in response
+6. **Link to related decisions** if applicable
+7. **Suggest constraints** if the decision implies architectural rules
+   - Uses `suggest({ target: "constraint" })` to check for duplicates first (v4.0)
 
 ## Example: Quick Authentication Decision
 
@@ -96,7 +99,11 @@ When you run this command, the architect agent will:
 >
 > Linked to existing "api-authentication-method" decision.
 >
-> Should I create a constraint requiring all tokens follow this structure?
+> **Related Constraints Found** (v4.0 auto-suggestion):
+> - "All API endpoints must verify JWT tokens" (security, score: 78)
+> - "Token refresh must use rotation strategy" (security, score: 65)
+>
+> Should I link these constraints? Should I create a new constraint requiring all tokens follow this structure?
 
 ## When to Use
 
@@ -143,11 +150,12 @@ Requires:
 ## Benefits
 
 1. **Guided Process** - Architect prompts for all necessary context
-2. **Duplicate Prevention** - Automatic similarity checking
+2. **Duplicate Prevention** - Automatic similarity checking (decisions and constraints)
 3. **Consistency** - Architect ensures proper formatting and completeness
 4. **Relationships** - Automatic linking to related decisions
-5. **Speed** - Faster than manual tool invocation
-6. **Quality** - Architect's expertise in decision documentation
+5. **Constraint Discovery** (v4.0) - Auto-suggests related constraints for review
+6. **Speed** - Faster than manual tool invocation
+7. **Quality** - Architect's expertise in decision documentation
 
 ## Integration with Other Workflows
 
@@ -161,6 +169,8 @@ This command works well with:
 
 This workflow is token-efficient because:
 - Architect uses `suggest` to check duplicates (saves 2-5k tokens vs listing all decisions)
+- Auto-suggested `related_constraints` in response (v4.0) - no separate query needed
+- Constraint duplicate checking before creation (v4.0) - prevents redundant constraints
 - Guided questions prevent missing context (saves revision tokens)
 - Automatic linking prevents orphaned decisions (saves later discovery tokens)
 
@@ -182,6 +192,11 @@ If the architect finds duplicates:
 - Review the existing decision
 - Decide if you're updating, versioning, or creating related decision
 - Architect will guide you through the appropriate action
+
+If related constraints are suggested (v4.0):
+- Review each suggested constraint for relevance
+- Link relevant constraints to the decision
+- If creating new constraint, architect will check for duplicates first
 
 If the decision is unclear:
 - Architect will ask clarifying questions

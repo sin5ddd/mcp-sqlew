@@ -14,9 +14,10 @@ Verify architectural consistency, validate decision implementation, and ensure c
 
 ### Phase 1: Research Context (Research Agent)
 1. Analyzes relevant decisions, constraints, and tasks
-2. Identifies patterns and relationships
-3. Detects gaps or inconsistencies
-4. Provides evidence-based findings
+2. **Uses constraint suggest** (v4.0) to find related constraints efficiently
+3. Identifies patterns and relationships
+4. Detects gaps or inconsistencies
+5. Provides evidence-based findings
 
 ### Phase 2: Architectural Validation (Architect Agent)
 1. Reviews research findings
@@ -46,8 +47,9 @@ Prompts for what to review and guides through both phases.
 ### Phase 1: Researcher Analyzes Context
 
 **Researcher examines:**
-- Related decisions and their versions
-- Relevant constraints
+- Related decisions and their versions (using `suggest.by_key`, `suggest.by_tags`)
+- Relevant constraints (v4.0: using `suggest.by_context` with `target: "constraint"`)
+- Constraint compliance with decisions
 - Implementation tasks (completed, in-progress, blocked)
 - Cross-references and relationships
 
@@ -55,14 +57,17 @@ Prompts for what to review and guides through both phases.
 
 > **Researcher**: Analyzing authentication implementation...
 >
+> *Runs suggest({ action: "by_key", key: "authentication" })*
+> *Runs suggest({ action: "by_context", target: "constraint", text: "authentication", tags: ["security"] })*
+>
 > **Decisions Found** (3):
 > 1. "api-authentication-method" - JWT tokens (v2, last updated 3 days ago)
 > 2. "jwt-token-expiration-policy" - 15min access, 7d refresh (v1)
 > 3. "session-management-strategy" - stateless sessions (v1)
 >
-> **Constraints Found** (2):
-> 1. "All API endpoints must verify JWT tokens" (security, priority 4)
-> 2. "Token refresh must use rotation strategy" (security, priority 3)
+> **Constraints Found** (2) via suggest (v4.0):
+> 1. "All API endpoints must verify JWT tokens" (security, priority 4, score: 85)
+> 2. "Token refresh must use rotation strategy" (security, priority 3, score: 72)
 >
 > **Implementation Tasks** (8):
 > - ✅ 6 completed: JWT service, middleware, token rotation, tests
@@ -163,6 +168,9 @@ Verify agents have:
 
 > **Researcher**: Analyzing security architecture...
 >
+> *Runs suggest({ action: "by_tags", tags: ["security"] })*
+> *Runs suggest({ action: "by_context", target: "constraint", tags: ["security"], layer: "cross-cutting" })*
+>
 > **Security Decisions** (5):
 > 1. "api-authentication-method" - JWT tokens
 > 2. "api-authorization-approach" - role-based access control
@@ -170,11 +178,11 @@ Verify agents have:
 > 4. "https-enforcement-strategy" - HTTPS-only in production
 > 5. "security-headers-policy" - strict CSP, HSTS, X-Frame-Options
 >
-> **Security Constraints** (4):
-> 1. "All passwords must be hashed with bcrypt" (security, priority 4)
-> 2. "All API endpoints must verify authentication" (security, priority 4)
-> 3. "Production must enforce HTTPS" (security, priority 4)
-> 4. "All responses must include security headers" (security, priority 3)
+> **Security Constraints Found** (4) via suggest (v4.0):
+> 1. "All passwords must be hashed with bcrypt" (security, priority 4, score: 88)
+> 2. "All API endpoints must verify authentication" (security, priority 4, score: 85)
+> 3. "Production must enforce HTTPS" (security, priority 4, score: 80)
+> 4. "All responses must include security headers" (security, priority 3, score: 72)
 >
 > **Security Tasks** (12 total):
 > - ✅ 9 completed
@@ -260,10 +268,11 @@ This workflow is efficient for comprehensive validation:
 - Validate: 3k tokens
 - Total: 14k tokens
 
-**Combined /sqlew-review**:
-- Research phase: 6k tokens (automated queries)
+**Combined /sqlew-review (v4.0)**:
+- Research phase: 5k tokens (using suggest for constraints)
 - Architect phase: 4k tokens (validation)
-- **Total**: 10k tokens (30% savings)
+- **Total**: 9k tokens (35% savings)
+- Constraint suggest reduces query overhead significantly
 
 **Estimated Token Usage**: 10,000-20,000 tokens per review session
 

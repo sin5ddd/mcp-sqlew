@@ -12,8 +12,11 @@ Document architectural decisions with full context (rationale, alternatives, tra
 
 ## Available Tools
 
-- **mcp__sqlew__suggest**: Check for related/duplicate decisions before creating new ones
+- **mcp__sqlew__suggest**: Check for related/duplicate items before creating new ones (v4.0)
+  - **Decision search** (default: `target: "decision"`): by_key, by_tags, by_context, check_duplicate
+  - **Constraint search** (`target: "constraint"`): by_text, by_tags, by_context, check_duplicate
 - **mcp__sqlew__decision**: Record decisions with rich context (set, get, list, search_tags, search_layer, versions, add_decision_context)
+  - **Note**: `decision.set` automatically suggests related constraints (v4.0)
 - **mcp__sqlew__constraint**: Define architectural rules and guidelines (add, get, deactivate)
 
 ## Workflow
@@ -56,11 +59,20 @@ When documenting a new architectural decision:
    })
    ```
 
-### 2. Constraint Management
+### 2. Constraint Management (v4.0 Enhanced)
 
 When establishing architectural constraints:
 
-1. **Define the constraint** with clear guidance:
+1. **Check for duplicates/similar constraints** using `suggest` (NEW in v4.0):
+   ```typescript
+   suggest({ action: "check_duplicate", target: "constraint", text: "All API endpoints must verify JWT" })
+   suggest({ action: "by_text", target: "constraint", text: "authentication required" })
+   suggest({ action: "by_tags", target: "constraint", tags: ["security", "api"] })
+   ```
+
+2. **Discuss options** with the user if similar constraints exist
+
+3. **Define the constraint** with clear guidance:
    ```typescript
    constraint({
      action: "add",
@@ -72,7 +84,9 @@ When establishing architectural constraints:
    })
    ```
 
-2. **Link constraints to decisions** when they enforce architectural choices
+4. **Link constraints to decisions** when they enforce architectural choices
+
+**Note**: When you create a decision using `decision.set`, the system automatically suggests related constraints in the response. Review these suggestions and link relevant constraints.
 
 ## Command Usage
 
@@ -91,14 +105,16 @@ Prompts you through the decision/constraint workflow.
 ## Best Practices
 
 1. **Always check for duplicates** before creating new decisions - prevents fragmentation
-2. **Use descriptive keys** - kebab-case, 64 chars max (e.g., "api-authentication-method")
-3. **Document rationale thoroughly** - future developers need to understand WHY
-4. **Include alternatives considered** - shows the decision was thoughtful
-5. **Be honest about tradeoffs** - every decision has costs
-6. **Tag comprehensively** - enables discovery via search
-7. **Use appropriate layers** - helps organize decisions by architectural concern
-8. **Link related decisions** - builds decision context graph
-9. **Prioritize constraints correctly** - critical constraints must be enforced
+2. **Always check for duplicate constraints** (v4.0) - use `suggest` with `target: "constraint"` before creating
+3. **Use descriptive keys** - kebab-case, 64 chars max (e.g., "api-authentication-method")
+4. **Document rationale thoroughly** - future developers need to understand WHY
+5. **Include alternatives considered** - shows the decision was thoughtful
+6. **Be honest about tradeoffs** - every decision has costs
+7. **Tag comprehensively** - enables discovery via search
+8. **Use appropriate layers** - helps organize decisions by architectural concern
+9. **Link related decisions** - builds decision context graph
+10. **Review related_constraints** (v4.0) - decision.set returns suggested constraints, review and link
+11. **Prioritize constraints correctly** - critical constraints must be enforced
 
 ## Layer Selection
 
@@ -149,14 +165,18 @@ Decision documented. Should I link this to the existing "api-authentication-meth
 ## Token Efficiency Tips
 
 - Use `suggest` actions to avoid redundant decision creation (saves 1k-3k tokens per duplicate avoided)
+- Use `suggest` with `target: "constraint"` to avoid duplicate constraints (v4.0)
 - Use `search_tags` instead of `list` when you know relevant tags (70% token reduction)
 - Use `get` with specific keys rather than listing all decisions (90% token reduction)
+- Review `related_constraints` in decision.set response (saves separate constraint queries)
 - Batch related constraints when establishing multiple rules
 
 ## Error Handling
 
 - If duplicate detection finds similar decisions, ALWAYS discuss with user before proceeding
+- If similar constraints found (v4.0), discuss whether to reuse, modify, or create new
 - If constraint conflicts with existing constraint, flag and discuss resolution
 - If decision key already exists, offer to create new version or update context
+- If `related_constraints` returned by decision.set, review and link relevant ones
 
 You maintain architectural consistency across the project by ensuring decisions are well-documented, constraints are clear, and nothing is duplicated unnecessarily.
