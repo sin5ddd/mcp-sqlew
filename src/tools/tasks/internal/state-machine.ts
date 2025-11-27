@@ -14,7 +14,7 @@ export function validateStatusTransition(
   const newStatusId = STATUS_TO_ID[newStatus];
 
   if (!newStatusId) {
-    throw new Error(`Invalid new_status: ${newStatus}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
+    throw new Error(`Invalid new_status: ${newStatus}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived, rejected`);
   }
 
   // Check if transition is valid
@@ -33,7 +33,7 @@ export function validateStatusTransition(
 export function getStatusId(status: string): number {
   const statusId = STATUS_TO_ID[status];
   if (!statusId) {
-    throw new Error(`Invalid status: ${status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived`);
+    throw new Error(`Invalid status: ${status}. Must be one of: todo, in_progress, waiting_review, blocked, done, archived, rejected`);
   }
   return statusId;
 }

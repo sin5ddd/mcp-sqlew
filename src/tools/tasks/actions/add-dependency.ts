@@ -39,13 +39,13 @@ export async function addDependency(params: {
         // Validation 2: Both tasks must exist and check if archived
         const blockerTask = await trx('v4_tasks')
           .where({ id: params.blocker_task_id })
-          .select('id', 'status_id')
-          .first() as { id: number; status_id: number } | undefined;
+          .select('id', 'status_id', 'project_id')
+          .first() as { id: number; status_id: number; project_id: number } | undefined;
 
         const blockedTask = await trx('v4_tasks')
           .where({ id: params.blocked_task_id })
-          .select('id', 'status_id')
-          .first() as { id: number; status_id: number } | undefined;
+          .select('id', 'status_id', 'project_id')
+          .first() as { id: number; status_id: number; project_id: number } | undefined;
 
         if (!blockerTask) {
           throw new Error(`Blocker task #${params.blocker_task_id} not found`);
@@ -121,10 +121,16 @@ export async function addDependency(params: {
           throw new Error(`Circular dependency detected: Task #${params.blocker_task_id} → #${cyclePath} → #${params.blocker_task_id}`);
         }
 
+        // Validation 6: Both tasks must be in the same project
+        if (blockerTask.project_id !== blockedTask.project_id) {
+          throw new Error(`Cannot add dependency: Tasks are in different projects (${blockerTask.project_id} vs ${blockedTask.project_id})`);
+        }
+
         // All validations passed - insert dependency
         await trx('v4_task_dependencies').insert({
           blocker_task_id: params.blocker_task_id,
           blocked_task_id: params.blocked_task_id,
+          project_id: blockerTask.project_id,
           created_ts: Math.floor(Date.now() / 1000)
         });
 

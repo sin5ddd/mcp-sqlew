@@ -24,6 +24,7 @@ const TASK_STATUS = {
   BLOCKED: 4,
   DONE: 5,
   ARCHIVED: 6,
+  REJECTED: 7,
 } as const;
 
 /**

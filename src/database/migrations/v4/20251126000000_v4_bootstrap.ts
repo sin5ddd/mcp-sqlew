@@ -592,22 +592,22 @@ export async function up(knex: Knex): Promise<void> {
     console.log('  ✓ Constraint categories seeded (5)');
   }
 
-  // 3. Seed v4_task_statuses
+  // 3. Seed v4_task_statuses (7 statuses including rejected)
   const existingStatuses = await knex('v4_task_statuses').count('* as count').first();
   if (!existingStatuses || Number(existingStatuses.count) === 0) {
     if (db.isPostgreSQL) {
       await knex.raw(`
         INSERT INTO v4_task_statuses (id, name) VALUES
-          (1, 'todo'), (2, 'in_progress'), (3, 'waiting_review'), (4, 'blocked'), (5, 'done'), (6, 'archived')
+          (1, 'todo'), (2, 'in_progress'), (3, 'waiting_review'), (4, 'blocked'), (5, 'done'), (6, 'archived'), (7, 'rejected')
         ON CONFLICT (id) DO NOTHING
       `);
     } else {
       await knex.raw(`
         INSERT ${insertIgnore} INTO v4_task_statuses (id, name) VALUES
-          (1, 'todo'), (2, 'in_progress'), (3, 'waiting_review'), (4, 'blocked'), (5, 'done'), (6, 'archived')
+          (1, 'todo'), (2, 'in_progress'), (3, 'waiting_review'), (4, 'blocked'), (5, 'done'), (6, 'archived'), (7, 'rejected')
       `);
     }
-    console.log('  ✓ Task statuses seeded (6)');
+    console.log('  ✓ Task statuses seeded (7)');
   }
 
   // 4. Seed v4_projects (default project)
@@ -664,6 +664,8 @@ export async function up(knex: Knex): Promise<void> {
     }
     console.log('  ✓ Configuration seeded (4)');
   }
+
+  // Note: Help system seed data is in separate migration: 20251127000002_v4_seed_help_system.ts
 
   console.log('🎉 v4.0 bootstrap migration completed!');
 }

@@ -74,21 +74,31 @@ export function taskHelp(): any {
         }
       },
       move: {
-        description: 'Move task to different status with validation',
+        description: 'Move task to different status with validation (v4.1: relaxed transitions)',
         required_params: ['task_id', 'new_status'],
-        valid_statuses: ['todo', 'in_progress', 'waiting_review', 'blocked', 'done', 'archived'],
+        optional_params: ['rejection_reason'],
+        valid_statuses: ['todo', 'in_progress', 'waiting_review', 'blocked', 'done', 'archived', 'rejected'],
         transitions: {
-          todo: ['in_progress', 'blocked'],
-          in_progress: ['waiting_review', 'blocked', 'done'],
-          waiting_review: ['in_progress', 'todo', 'done'],
-          blocked: ['todo', 'in_progress'],
-          done: ['archived'],
-          archived: []
+          todo: ['in_progress', 'waiting_review', 'blocked', 'done', 'archived', 'rejected'],
+          in_progress: ['todo', 'waiting_review', 'blocked', 'done', 'archived', 'rejected'],
+          waiting_review: ['todo', 'in_progress', 'blocked', 'done', 'archived', 'rejected'],
+          blocked: ['todo', 'in_progress', 'waiting_review', 'done', 'archived', 'rejected'],
+          done: ['todo', 'in_progress', 'waiting_review', 'blocked', 'archived', 'rejected'],
+          archived: [],
+          rejected: []
         },
+        terminal_statuses: ['archived', 'rejected'],
+        rejection_reason_param: 'Optional reason for rejection (stored in task notes)',
         example: {
           action: 'move',
           task_id: 5,
           new_status: 'in_progress'
+        },
+        example_rejection: {
+          action: 'move',
+          task_id: 5,
+          new_status: 'rejected',
+          rejection_reason: 'Requirements changed - feature no longer needed'
         }
       },
       link: {

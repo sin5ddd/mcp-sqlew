@@ -440,7 +440,7 @@ export async function up(knex: Knex): Promise<void> {
     console.log('  ℹ️ Skipping t_task_pruned_files migration (schema varies, data regenerable)');
   }
 
-  console.log('  ℹ️ Skipping help system migrations (read-only seed data, re-seeded in v4)');
+  console.log('  ℹ️ Help system data: v4_bootstrap seeds fresh data (tools, actions, params, use cases, policies)');
 
   const hasTokenUsage = await knex.schema.hasTable('t_token_usage');
   if (hasTokenUsage) {

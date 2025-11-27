@@ -17,6 +17,7 @@ import { validateStatusTransition, getStatusId, getStatusName } from '../interna
 export async function moveTask(params: {
   task_id: number;
   new_status: string;
+  rejection_reason?: string;
 }, adapter?: DatabaseAdapter): Promise<any> {
   validateActionParams('task', 'move', params);
 
@@ -59,17 +60,22 @@ export async function moveTask(params: {
           status_id: newStatusId
         };
 
-        // Set completed_ts when moving to done
-        if (newStatusId === TASK_STATUS.DONE) {
+        // Set completed_ts when moving to done or rejected
+        if (newStatusId === TASK_STATUS.DONE || newStatusId === TASK_STATUS.REJECTED) {
           updateData.completed_ts = Math.floor(Date.now() / 1000);
+        }
+
+        // Store rejection_reason in notes if moving to rejected
+        if (newStatusId === TASK_STATUS.REJECTED && params.rejection_reason) {
+          updateData.notes = params.rejection_reason;
         }
 
         await trx('v4_tasks')
           .where({ id: params.task_id })
           .update(updateData);
 
-        // Update watcher if moving to done or archived (stop watching)
-        if (params.new_status === 'done' || params.new_status === 'archived') {
+        // Update watcher if moving to done, archived, or rejected (stop watching)
+        if (params.new_status === 'done' || params.new_status === 'archived' || params.new_status === 'rejected') {
           try {
             const watcher = FileWatcher.getInstance();
             watcher.unregisterTask(params.task_id);
@@ -78,13 +84,20 @@ export async function moveTask(params: {
           }
         }
 
-        return {
+        const result: any = {
           success: true,
           task_id: params.task_id,
           old_status: getStatusName(currentStatusId),
           new_status: params.new_status,
           message: `Task ${params.task_id} moved from ${getStatusName(currentStatusId)} to ${params.new_status}`
         };
+
+        // Include rejection_reason in response if provided
+        if (params.rejection_reason) {
+          result.rejection_reason = params.rejection_reason;
+        }
+
+        return result;
       });
     });
   } catch (error) {

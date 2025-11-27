@@ -12,6 +12,7 @@ export const TASK_STATUS = {
   BLOCKED: 4,
   DONE: 5,
   ARCHIVED: 6,
+  REJECTED: 7,
 } as const;
 
 /**
@@ -24,6 +25,7 @@ export const STATUS_TO_ID: Record<string, number> = {
   'blocked': TASK_STATUS.BLOCKED,
   'done': TASK_STATUS.DONE,
   'archived': TASK_STATUS.ARCHIVED,
+  'rejected': TASK_STATUS.REJECTED,
 };
 
 export const ID_TO_STATUS: Record<number, string> = {
@@ -33,18 +35,41 @@ export const ID_TO_STATUS: Record<number, string> = {
   [TASK_STATUS.BLOCKED]: 'blocked',
   [TASK_STATUS.DONE]: 'done',
   [TASK_STATUS.ARCHIVED]: 'archived',
+  [TASK_STATUS.REJECTED]: 'rejected',
 };
 
 /**
- * Valid status transitions
+ * Terminal statuses (no transitions allowed from these)
+ */
+export const TERMINAL_STATUSES = [TASK_STATUS.ARCHIVED, TASK_STATUS.REJECTED] as const;
+
+/**
+ * Non-terminal statuses (flexible transitions between these)
+ */
+export const NON_TERMINAL_STATUSES = [
+  TASK_STATUS.TODO,
+  TASK_STATUS.IN_PROGRESS,
+  TASK_STATUS.WAITING_REVIEW,
+  TASK_STATUS.BLOCKED,
+  TASK_STATUS.DONE,
+] as const;
+
+/**
+ * Valid status transitions (v4.1.0 - relaxed rules)
+ *
+ * - Non-terminal statuses can freely transition to any other status (including terminal)
+ * - Terminal statuses (archived, rejected) cannot transition to any status
  */
 export const VALID_TRANSITIONS: Record<number, number[]> = {
-  [TASK_STATUS.TODO]: [TASK_STATUS.IN_PROGRESS, TASK_STATUS.BLOCKED],
-  [TASK_STATUS.IN_PROGRESS]: [TASK_STATUS.WAITING_REVIEW, TASK_STATUS.BLOCKED, TASK_STATUS.DONE],
-  [TASK_STATUS.WAITING_REVIEW]: [TASK_STATUS.IN_PROGRESS, TASK_STATUS.TODO, TASK_STATUS.DONE],
-  [TASK_STATUS.BLOCKED]: [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS],
-  [TASK_STATUS.DONE]: [TASK_STATUS.ARCHIVED],
-  [TASK_STATUS.ARCHIVED]: [], // No transitions from archived
+  // Non-terminal: can transition to any status except self
+  [TASK_STATUS.TODO]: [TASK_STATUS.IN_PROGRESS, TASK_STATUS.WAITING_REVIEW, TASK_STATUS.BLOCKED, TASK_STATUS.DONE, TASK_STATUS.ARCHIVED, TASK_STATUS.REJECTED],
+  [TASK_STATUS.IN_PROGRESS]: [TASK_STATUS.TODO, TASK_STATUS.WAITING_REVIEW, TASK_STATUS.BLOCKED, TASK_STATUS.DONE, TASK_STATUS.ARCHIVED, TASK_STATUS.REJECTED],
+  [TASK_STATUS.WAITING_REVIEW]: [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS, TASK_STATUS.BLOCKED, TASK_STATUS.DONE, TASK_STATUS.ARCHIVED, TASK_STATUS.REJECTED],
+  [TASK_STATUS.BLOCKED]: [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS, TASK_STATUS.WAITING_REVIEW, TASK_STATUS.DONE, TASK_STATUS.ARCHIVED, TASK_STATUS.REJECTED],
+  [TASK_STATUS.DONE]: [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS, TASK_STATUS.WAITING_REVIEW, TASK_STATUS.BLOCKED, TASK_STATUS.ARCHIVED, TASK_STATUS.REJECTED],
+  // Terminal: no transitions allowed
+  [TASK_STATUS.ARCHIVED]: [],
+  [TASK_STATUS.REJECTED]: [],
 };
 
 /**
