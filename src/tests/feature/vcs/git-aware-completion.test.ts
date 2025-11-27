@@ -8,7 +8,7 @@ import assert from 'node:assert';
 import { mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
-import { initializeDatabase, closeDatabase } from '../../../database.js';
+import { initializeDatabase, closeDatabase, setConfigValue } from '../../../database.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
 import { detectAndCompleteReviewedTasks } from '../../../utils/task-stale-detection.js';
 import { ProjectContext } from '../../../utils/project-context.js';
@@ -45,11 +45,9 @@ describe('Git-Aware Auto-Complete', () => {
       projectRootPath: process.cwd(),
     });
 
-    // Add test config for git auto-complete
-    await knex('v4_config').insert({ config_key: 'git_auto_complete_enabled', config_value: '1' })
-      .onConflict('config_key').merge();
-    await knex('v4_config').insert({ config_key: 'require_all_files_committed', config_value: '1' })
-      .onConflict('config_key').merge();
+    // Add test config for git auto-complete (v4.0: in-memory config)
+    await setConfigValue(db, 'git_auto_complete_enabled', '1');
+    await setConfigValue(db, 'require_all_files_committed', '1');
 
     // Create test directory
     if (!existsSync(TEST_DIR)) {
@@ -177,8 +175,8 @@ describe('Git-Aware Auto-Complete', () => {
     const knex = db.getKnex();
     const projectId = ProjectContext.getInstance().getProjectId();
 
-    // 1. Disable git auto-complete
-    await knex('v4_config').where({ config_key: 'git_auto_complete_enabled' }).update({ config_value: '0' });
+    // 1. Disable git auto-complete (v4.0: in-memory config)
+    await setConfigValue(db, 'git_auto_complete_enabled', '0');
 
     // 2. Create a task with all files committed
     const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
@@ -204,7 +202,7 @@ describe('Git-Aware Auto-Complete', () => {
     // 4. Verify no tasks were auto-completed
     assert.strictEqual(completedCount, 0, 'Should respect disabled config');
 
-    // Re-enable for other tests
-    await knex('v4_config').where({ config_key: 'git_auto_complete_enabled' }).update({ config_value: '1' });
+    // Re-enable for other tests (v4.0: in-memory config)
+    await setConfigValue(db, 'git_auto_complete_enabled', '1');
   });
 });

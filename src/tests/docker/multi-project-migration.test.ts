@@ -495,31 +495,8 @@ describe('Multi-Project Schema Migration Tests (v3.7.0)', () => {
       console.log('      ✅ No nullable composite PRIMARY KEY found in MySQL dump');
     });
 
-    it('should validate m_config table uses single-column PRIMARY KEY', async () => {
-      console.log('    🔍 Validating m_config PRIMARY KEY structure...');
-
-      // Generate MySQL dump
-      const dump = await generateSqlDump(sqliteDb, 'mysql', {
-        includeSchema: true,
-        chunkSize: 100,
-      });
-
-      // Find v4_config CREATE TABLE statement
-      const configTableMatch = dump.match(/CREATE TABLE[^;]*v4_config[^;]+;/i);
-      assert.ok(configTableMatch, 'Should find v4_config table in dump');
-
-      const configStmt = configTableMatch[0];
-
-      // Check for composite PRIMARY KEY (config_key, project_id) - WRONG
-      const compositePkPattern = /PRIMARY\s+KEY\s*\(\s*[`"]?config_key[`"]?\s*,\s*[`"]?project_id[`"]?\s*\)/i;
-      assert.ok(!compositePkPattern.test(configStmt), 'v4_config should NOT have composite PRIMARY KEY (config_key, project_id)');
-
-      // Check for single-column PRIMARY KEY on 'config_key' - CORRECT
-      const singlePkPattern = /[`"]?config_key[`"]?[^,]*PRIMARY\s+KEY|PRIMARY\s+KEY\s*\(\s*[`"]?config_key[`"]?\s*\)/i;
-      assert.ok(singlePkPattern.test(configStmt), 'v4_config should have single-column PRIMARY KEY on config_key');
-
-      console.log('      ✅ v4_config correctly uses single-column PRIMARY KEY');
-    });
+    // Note: v4_config removed in v4.0 - config is now in-memory
+    // Test 'should validate m_config table uses single-column PRIMARY KEY' removed
 
     it('should validate v4_help_tools.tool_name is VARCHAR not TEXT', async () => {
       console.log('    🔍 Validating v4_help_tools.tool_name data type...');

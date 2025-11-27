@@ -160,7 +160,7 @@ async function testDatabase(config: DbConfig): Promise<{ success: boolean; error
       'v4_layers',
       'v4_tags',
       'v4_task_statuses',
-      'v4_config',
+      // Note: v4_config removed in v4.0 - config is now in-memory
     ];
 
     for (const table of v4Tables) {

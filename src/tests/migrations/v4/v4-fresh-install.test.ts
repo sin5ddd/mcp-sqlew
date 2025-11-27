@@ -85,10 +85,7 @@ describe('v4.0 Fresh Install Migration', () => {
       assert.strictEqual(hasTable, true, 'v4_task_statuses table should exist');
     });
 
-    it('should create v4_config table', async () => {
-      const hasTable = await db.schema.hasTable('v4_config');
-      assert.strictEqual(hasTable, true, 'v4_config table should exist');
-    });
+    // Note: v4_config removed in v4.0 - config is now in-memory
   });
 
   describe('v4_ Master Data Seeding', () => {
@@ -139,13 +136,7 @@ describe('v4.0 Fresh Install Migration', () => {
       assert.strictEqual(tags.length, 8, 'Should have 8 tags');
     });
 
-    it('should seed 4 config values', async () => {
-      const config = await db('v4_config').select('*');
-      assert.ok(config.length >= 4, 'Should have at least 4 config values');
-
-      const schemaVersion = await db('v4_config').where({ config_key: 'schema_version' }).first();
-      assert.strictEqual(schemaVersion?.config_value, '4.0.0', 'Schema version should be 4.0.0');
-    });
+    // Note: v4_config removed in v4.0 - config is now in-memory
   });
 
   describe('v4_ Index Creation', () => {

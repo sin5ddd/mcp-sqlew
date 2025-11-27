@@ -8,7 +8,7 @@ import assert from 'node:assert';
 import { existsSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
-import { initializeDatabase, closeDatabase } from '../../../database.js';
+import { initializeDatabase, closeDatabase, setConfigValue, clearConfig } from '../../../database.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
 import { detectAndCompleteOnStaging, detectAndArchiveOnCommit } from '../../../utils/task-stale-detection.js';
 
@@ -36,17 +36,11 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       }
     });
 
-    const knex = db.getKnex();
-
-    // Add test config for two-step workflow
-    await knex('v4_config').insert({ config_key: 'git_auto_complete_on_stage', config_value: '1' })
-      .onConflict('config_key').merge();
-    await knex('v4_config').insert({ config_key: 'git_auto_archive_on_commit', config_value: '1' })
-      .onConflict('config_key').merge();
-    await knex('v4_config').insert({ config_key: 'require_all_files_staged', config_value: '1' })
-      .onConflict('config_key').merge();
-    await knex('v4_config').insert({ config_key: 'require_all_files_committed_for_archive', config_value: '1' })
-      .onConflict('config_key').merge();
+    // Add test config for two-step workflow (v4.0: in-memory config)
+    await setConfigValue(db, 'git_auto_complete_on_stage', '1');
+    await setConfigValue(db, 'git_auto_archive_on_commit', '1');
+    await setConfigValue(db, 'require_all_files_staged', '1');
+    await setConfigValue(db, 'require_all_files_committed_for_archive', '1');
 
     // Create test git repository
     mkdirSync(TEST_DIR, { recursive: true });
@@ -329,8 +323,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
     it('should respect require_all_files_staged config', async () => {
       const knex = db.getKnex();
 
-      // Set to require all files
-      await knex('v4_config').where({ config_key: 'require_all_files_staged' }).update({ config_value: '1' });
+      // Set to require all files (v4.0: in-memory config)
+      await setConfigValue(db, 'require_all_files_staged', '1');
 
       // Create task with 2 files
       const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
@@ -364,8 +358,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
     it('should respect git_auto_complete_on_stage disabled', async () => {
       const knex = db.getKnex();
 
-      // Disable staging auto-complete
-      await knex('v4_config').where({ config_key: 'git_auto_complete_on_stage' }).update({ config_value: '0' });
+      // Disable staging auto-complete (v4.0: in-memory config)
+      await setConfigValue(db, 'git_auto_complete_on_stage', '0');
 
       // Create and stage task
       const statusRow = await knex('v4_task_statuses').where({ name: 'waiting_review' }).first('id');
@@ -388,8 +382,8 @@ describe('Two-Step Git-Aware Workflow Integration Tests', () => {
       const completed = await detectAndCompleteOnStaging(db);
       assert.strictEqual(completed, 0);
 
-      // Re-enable for other tests
-      await knex('v4_config').where({ config_key: 'git_auto_complete_on_stage' }).update({ config_value: '1' });
+      // Re-enable for other tests (v4.0: in-memory config)
+      await setConfigValue(db, 'git_auto_complete_on_stage', '1');
     });
   });
 });

@@ -98,9 +98,9 @@ export async function verifySchemaIntegrity(adapter: DatabaseAdapter): Promise<{
   // v4.0: All tables use v4_ prefix, views and triggers removed for cross-DB compatibility
   // Note: v4_agents removed in v4.0 (agent tracking eliminated)
   const requiredTables = [
-    // Master tables
+    // Master tables (v4_config removed in v4.0 - config is now in-memory)
     'v4_files', 'v4_context_keys', 'v4_constraint_categories',
-    'v4_layers', 'v4_tags', 'v4_scopes', 'v4_config', 'v4_task_statuses',
+    'v4_layers', 'v4_tags', 'v4_scopes', 'v4_task_statuses',
     'v4_projects',
     // Transaction tables
     'v4_decisions', 'v4_decisions_numeric', 'v4_decision_history',
@@ -112,7 +112,7 @@ export async function verifySchemaIntegrity(adapter: DatabaseAdapter): Promise<{
     'v4_task_pruned_files',
     // Help system tables
     'v4_help_tools', 'v4_help_actions', 'v4_help_action_params', 'v4_help_action_examples',
-    'v4_help_use_case_categories', 'v4_help_use_cases', 'v4_help_action_sequences',
+    'v4_help_use_case_cats', 'v4_help_use_cases', 'v4_help_action_sequences',
   ];
 
   // v4.0: Views removed for cross-DB compatibility (replaced with application-level queries)
@@ -190,12 +190,7 @@ export async function verifySchemaIntegrity(adapter: DatabaseAdapter): Promise<{
       result.valid = false;
     }
 
-    const configResult = await knex('v4_config').count('* as count').first() as { count: number } | undefined;
-    const configCount = configResult?.count || 0;
-    if (configCount < 6) {
-      result.errors.push(`Expected 6 v4_config entries, found ${configCount}`);
-      result.valid = false;
-    }
+    // Note: v4_config removed in v4.0 - config is now in-memory
 
     const taskStatusResult = await knex('v4_task_statuses').count('* as count').first() as { count: number } | undefined;
     const taskStatusCount = taskStatusResult?.count || 0;

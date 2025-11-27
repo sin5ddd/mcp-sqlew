@@ -214,25 +214,8 @@ export async function up(knex: Knex): Promise<void> {
   totalMigrated += await migrateTable('m_tags', 'v4_tags', ['id', 'project_id', 'name'], { upsertKey: 'name' });
   totalMigrated += await migrateTable('m_scopes', 'v4_scopes', ['id', 'project_id', 'name'], { upsertKey: 'name' });
 
-  // v4_config - column mapping
-  const configExists = await knex.schema.hasTable('m_config');
-  if (configExists) {
-    const targetCount = await knex('v4_config').count('* as count').first();
-    if (!targetCount || Number(targetCount.count) === 0) {
-      const configData = await knex('m_config').select('*');
-      if (configData.length > 0) {
-        const mappedData = configData.map((row: any) => ({
-          config_key: row.key,
-          config_value: row.value,
-        }));
-        await knex('v4_config').insert(mappedData);
-        console.log(`  ✓ Migrated ${configData.length} rows: m_config → v4_config`);
-        totalMigrated += configData.length;
-      }
-    } else {
-      console.log('  ✓ v4_config already has data, skipping');
-    }
-  }
+  // Note: v4_config removed in v4.0 - config is now in-memory
+  // m_config data is not migrated (use CLI args or config file instead)
 
   const hasHelpTools = await knex.schema.hasTable('m_help_tools');
   if (hasHelpTools) {

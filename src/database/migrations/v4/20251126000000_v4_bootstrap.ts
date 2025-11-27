@@ -13,9 +13,9 @@
  * - No Views (replaced by application-level queries)
  * - No Triggers (replaced by application-level logic)
  *
- * Tables Created (34 total):
- * - Master Tables (14): v4_files, v4_context_keys, v4_layers,
- *   v4_tags, v4_scopes, v4_config, v4_task_statuses, v4_projects,
+ * Tables Created (33 total):
+ * - Master Tables (13): v4_files, v4_context_keys, v4_layers,
+ *   v4_tags, v4_scopes, v4_task_statuses, v4_projects,
  *   v4_constraint_categories, v4_help_tools, v4_help_actions,
  *   v4_help_use_case_cats, v4_tag_index, v4_builtin_policies
  * - Transaction Tables (20): v4_decisions, v4_decisions_numeric,
@@ -98,13 +98,7 @@ export async function up(knex: Knex): Promise<void> {
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
   });
 
-  // 8. v4_config - Configuration key-value store
-  await db.createTableSafe('v4_config', (table) => {
-    table.string('config_key', 191).primary();
-    table.text('config_value').notNullable();
-  });
-
-  // 9. v4_task_statuses - Task status enum
+  // 8. v4_task_statuses - Task status enum
   await db.createTableSafe('v4_task_statuses', (table) => {
     table.increments('id').primary();
     table.string('name', 50).unique().notNullable();
@@ -645,26 +639,7 @@ export async function up(knex: Knex): Promise<void> {
     console.log('  ✓ Common tags seeded (8)');
   }
 
-  // 6. Seed v4_config (default configuration)
-  const existingConfig = await knex('v4_config').count('* as count').first();
-  if (!existingConfig || Number(existingConfig.count) === 0) {
-    if (db.isPostgreSQL) {
-      await knex.raw(`
-        INSERT INTO v4_config (config_key, config_value) VALUES
-          ('autodelete_ignore_weekend', '1'), ('autodelete_message_hours', '24'),
-          ('autodelete_file_history_days', '7'), ('schema_version', '4.0.0')
-        ON CONFLICT (config_key) DO NOTHING
-      `);
-    } else {
-      await knex.raw(`
-        INSERT ${insertIgnore} INTO v4_config (config_key, config_value) VALUES
-          ('autodelete_ignore_weekend', '1'), ('autodelete_message_hours', '24'),
-          ('autodelete_file_history_days', '7'), ('schema_version', '4.0.0')
-      `);
-    }
-    console.log('  ✓ Configuration seeded (4)');
-  }
-
+  // Note: Configuration is now in-memory (v4.0), no database table needed
   // Note: Help system seed data is in separate migration: 20251127000002_v4_seed_help_system.ts
 
   console.log('🎉 v4.0 bootstrap migration completed!');
@@ -683,7 +658,7 @@ export async function down(knex: Knex): Promise<void> {
     'v4_decision_pruning_log', 'v4_decision_policies', 'v4_decision_context', 'v4_decision_scopes',
     'v4_decision_tags', 'v4_decision_history', 'v4_decisions_numeric', 'v4_decisions',
     'v4_builtin_policies', 'v4_tag_index', 'v4_help_use_case_cats', 'v4_help_actions', 'v4_help_tools',
-    'v4_constraint_categories', 'v4_task_statuses', 'v4_config', 'v4_scopes', 'v4_tags', 'v4_layers',
+    'v4_constraint_categories', 'v4_task_statuses', 'v4_scopes', 'v4_tags', 'v4_layers',
     'v4_context_keys', 'v4_files', 'v4_projects',
   ];
 

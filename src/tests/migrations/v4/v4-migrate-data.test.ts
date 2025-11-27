@@ -47,10 +47,7 @@ async function createV4Schema(db: Knex) {
     table.string('path');
   });
 
-  await db.schema.createTable('v4_config', table => {
-    table.string('config_key').primary();
-    table.text('config_value').nullable();
-  });
+  // Note: v4_config removed in v4.0 - config is now in-memory
 
   await db.schema.createTable('v4_decisions', table => {
     table.string('key_id');
@@ -266,11 +263,7 @@ describe('v4.0 Data Migration from v3.x', () => {
       assert.strictEqual(v4Files.length, 2);
       assert.strictEqual(v4Files[0].path, '/path/a');
 
-      const v4Config = await db('v4_config').orderBy('config_key');
-      assert.strictEqual(v4Config.length, 2);
-      const schemaRow = v4Config.find((r: any) => r.config_key === 'schema_version');
-      assert.ok(schemaRow);
-      assert.strictEqual(schemaRow.config_value, '3.0.0');
+      // Note: v4_config removed in v4.0 - config is now in-memory
 
       const v4Decisions = await db('v4_decisions').orderBy('key_id');
       assert.strictEqual(v4Decisions.length, 2);

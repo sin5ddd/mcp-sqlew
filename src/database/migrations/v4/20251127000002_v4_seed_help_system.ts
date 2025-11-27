@@ -147,19 +147,22 @@ export async function up(knex: Knex): Promise<void> {
     console.log('  ✓ Help actions seeded (68)');
   }
 
-  // 3. Seed v4_help_use_case_cats (6 categories)
-  const existingCats = await knex('v4_help_use_case_cats').count('* as count').first();
-  if (!existingCats || Number(existingCats.count) === 0) {
-    await knex('v4_help_use_case_cats').insert([
-      { id: 1, category_name: 'task_management', description: 'Use cases for creating, organizing, tracking, and coordinating development tasks through the Kanban-style task system.' },
-      { id: 2, category_name: 'decision_tracking', description: 'Use cases for recording, retrieving, and versioning architectural decisions, design choices, and shared context.' },
-      { id: 3, category_name: 'file_tracking', description: 'Use cases for tracking file modifications, detecting conflicts, and maintaining change history with layer associations.' },
-      { id: 4, category_name: 'constraint_management', description: 'Use cases for defining, enforcing, and tracking architectural constraints and requirements.' },
-      { id: 5, category_name: 'cross_tool_workflow', description: 'Use cases demonstrating multi-step workflows spanning multiple tools for complex scenarios.' },
-      { id: 6, category_name: 'decision_intelligence', description: 'Use cases for intelligent decision suggestions, duplicate detection, and policy-based automation.' }
-    ]);
-    console.log('  ✓ Help use case categories seeded (6)');
+  // 3. Seed v4_help_use_case_cats (6 categories) - upsert to ensure data exists
+  const categoryData = [
+    { category_name: 'task_management', description: 'Use cases for creating, organizing, tracking, and coordinating development tasks through the Kanban-style task system.' },
+    { category_name: 'decision_tracking', description: 'Use cases for recording, retrieving, and versioning architectural decisions, design choices, and shared context.' },
+    { category_name: 'file_tracking', description: 'Use cases for tracking file modifications, detecting conflicts, and maintaining change history with layer associations.' },
+    { category_name: 'constraint_management', description: 'Use cases for defining, enforcing, and tracking architectural constraints and requirements.' },
+    { category_name: 'cross_tool_workflow', description: 'Use cases demonstrating multi-step workflows spanning multiple tools for complex scenarios.' },
+    { category_name: 'decision_intelligence', description: 'Use cases for intelligent decision suggestions, duplicate detection, and policy-based automation.' }
+  ];
+  for (const cat of categoryData) {
+    await knex('v4_help_use_case_cats')
+      .insert(cat)
+      .onConflict('category_name')
+      .merge();
   }
+  console.log('  ✓ Help use case categories seeded (6)');
 
   // 4. Seed v4_builtin_policies (5 policies)
   const existingPolicies = await knex('v4_builtin_policies').count('* as count').first();
@@ -303,20 +306,27 @@ export async function up(knex: Knex): Promise<void> {
     }
   }
 
-  // 6. Seed v4_help_use_cases
+  // 6. Seed v4_help_use_cases (look up category IDs dynamically)
   const existingUseCases = await knex('v4_help_use_cases').count('* as count').first();
   if (!existingUseCases || Number(existingUseCases.count) === 0) {
+    // Get category IDs by name
+    const categories = await knex('v4_help_use_case_cats').select('id', 'category_name');
+    const catMap: Record<string, number> = {};
+    for (const c of categories) {
+      catMap[c.category_name] = c.id;
+    }
+
     await knex('v4_help_use_cases').insert([
-      { id: 1, category_id: 1, title: 'Create and track a development task', complexity: 'basic', description: 'Create a task with metadata, move through workflow, and complete it.', workflow: '1. task.create with title, layer, priority\n2. task.move to in_progress\n3. task.move to done' },
-      { id: 2, category_id: 1, title: 'Batch create sprint tasks', complexity: 'intermediate', description: 'Create multiple tasks at once for sprint planning.', workflow: '1. task.create_batch with array of task definitions\n2. task.add_dependency for dependencies\n3. task.list to verify' },
-      { id: 3, category_id: 1, title: 'Manage task dependencies', complexity: 'intermediate', description: 'Create blocking dependencies between tasks.', workflow: '1. task.create blocker task\n2. task.create blocked task\n3. task.add_dependency\n4. task.get_dependencies' },
-      { id: 4, category_id: 2, title: 'Record an architecture decision', complexity: 'basic', description: 'Document an architectural choice with context.', workflow: '1. decision.set with key, value, layer, tags\n2. decision.add_decision_context with rationale\n3. decision.get to verify' },
-      { id: 5, category_id: 2, title: 'Track decision versions', complexity: 'intermediate', description: 'Update a decision and view history.', workflow: '1. decision.set initial value\n2. decision.set updated value\n3. decision.versions to see history' },
-      { id: 6, category_id: 3, title: 'Record file changes', complexity: 'basic', description: 'Track file modifications with layer assignment.', workflow: '1. file.record with path, change_type, layer\n2. file.get to retrieve history' },
-      { id: 7, category_id: 4, title: 'Define project constraints', complexity: 'basic', description: 'Add architectural constraints with priority.', workflow: '1. constraint.add with text, category, priority\n2. constraint.get to list active constraints' },
-      { id: 8, category_id: 5, title: 'Full feature implementation workflow', complexity: 'advanced', description: 'Complete workflow from decision to implementation.', workflow: '1. decision.set for architectural choice\n2. constraint.add for requirements\n3. task.create for implementation\n4. task.link to decision and constraint\n5. file.record for changes\n6. task.move to done' },
-      { id: 9, category_id: 6, title: 'Check for duplicate decisions', complexity: 'basic', description: 'Prevent duplicate decisions with suggest tool.', workflow: '1. suggest.check_duplicate with proposed key\n2. Review suggestions\n3. Update existing or create new' },
-      { id: 10, category_id: 6, title: 'Find related decisions', complexity: 'intermediate', description: 'Discover related decisions by context.', workflow: '1. suggest.by_context with key, tags, layer\n2. Review suggestions with scores\n3. Link related decisions' }
+      { category_id: catMap['task_management'], title: 'Create and track a development task', complexity: 'basic', description: 'Create a task with metadata, move through workflow, and complete it.', workflow: '1. task.create with title, layer, priority\n2. task.move to in_progress\n3. task.move to done' },
+      { category_id: catMap['task_management'], title: 'Batch create sprint tasks', complexity: 'intermediate', description: 'Create multiple tasks at once for sprint planning.', workflow: '1. task.create_batch with array of task definitions\n2. task.add_dependency for dependencies\n3. task.list to verify' },
+      { category_id: catMap['task_management'], title: 'Manage task dependencies', complexity: 'intermediate', description: 'Create blocking dependencies between tasks.', workflow: '1. task.create blocker task\n2. task.create blocked task\n3. task.add_dependency\n4. task.get_dependencies' },
+      { category_id: catMap['decision_tracking'], title: 'Record an architecture decision', complexity: 'basic', description: 'Document an architectural choice with context.', workflow: '1. decision.set with key, value, layer, tags\n2. decision.add_decision_context with rationale\n3. decision.get to verify' },
+      { category_id: catMap['decision_tracking'], title: 'Track decision versions', complexity: 'intermediate', description: 'Update a decision and view history.', workflow: '1. decision.set initial value\n2. decision.set updated value\n3. decision.versions to see history' },
+      { category_id: catMap['file_tracking'], title: 'Record file changes', complexity: 'basic', description: 'Track file modifications with layer assignment.', workflow: '1. file.record with path, change_type, layer\n2. file.get to retrieve history' },
+      { category_id: catMap['constraint_management'], title: 'Define project constraints', complexity: 'basic', description: 'Add architectural constraints with priority.', workflow: '1. constraint.add with text, category, priority\n2. constraint.get to list active constraints' },
+      { category_id: catMap['cross_tool_workflow'], title: 'Full feature implementation workflow', complexity: 'advanced', description: 'Complete workflow from decision to implementation.', workflow: '1. decision.set for architectural choice\n2. constraint.add for requirements\n3. task.create for implementation\n4. task.link to decision and constraint\n5. file.record for changes\n6. task.move to done' },
+      { category_id: catMap['decision_intelligence'], title: 'Check for duplicate decisions', complexity: 'basic', description: 'Prevent duplicate decisions with suggest tool.', workflow: '1. suggest.check_duplicate with proposed key\n2. Review suggestions\n3. Update existing or create new' },
+      { category_id: catMap['decision_intelligence'], title: 'Find related decisions', complexity: 'intermediate', description: 'Discover related decisions by context.', workflow: '1. suggest.by_context with key, tags, layer\n2. Review suggestions with scores\n3. Link related decisions' }
     ]);
     console.log('  ✓ Help use cases seeded (10)');
   }
