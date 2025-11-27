@@ -15,11 +15,25 @@ export type SuggestAction =
   | 'help';
 
 /**
+ * Target type for suggestions
+ * - 'decision': Search for similar decisions (default)
+ * - 'constraint': Search for similar constraints
+ */
+export type SuggestTarget = 'decision' | 'constraint';
+
+/**
  * Parameters for suggest tool
  */
 export interface SuggestParams {
   action: SuggestAction;
+  target?: SuggestTarget;  // Default: 'decision'
+  // For decisions (existing)
   key?: string;
+  // For constraints (NEW)
+  text?: string;
+  constraint_text?: string;  // Alias for text
+  category?: string;
+  // Common
   tags?: string[];
   layer?: string;
   priority?: number;

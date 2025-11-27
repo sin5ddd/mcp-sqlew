@@ -13,7 +13,8 @@ import {
 import {
   STRING_TO_PRIORITY,
   DEFAULT_PRIORITY,
-  SQLITE_TRUE
+  SQLITE_TRUE,
+  STANDARD_LAYERS
 } from '../../../constants.js';
 import { validateCategory, validatePriority } from '../../../utils/validators.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
@@ -57,9 +58,8 @@ export async function addConstraint(
       // Validate and get layer ID if provided
       let layerId: number | null = null;
       if (params.layer) {
-        const validLayers = ['presentation', 'business', 'data', 'infrastructure', 'cross-cutting'];
-        if (!validLayers.includes(params.layer)) {
-          throw new Error(`Invalid layer. Must be one of: ${validLayers.join(', ')}`);
+        if (!STANDARD_LAYERS.includes(params.layer as any)) {
+          throw new Error(`Invalid layer. Must be one of: ${STANDARD_LAYERS.join(', ')}`);
         }
         layerId = await getLayerId(actualAdapter, params.layer);
         if (!layerId) {

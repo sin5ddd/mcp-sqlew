@@ -15,6 +15,7 @@ import { parseStringArray } from '../../../utils/param-parser.js';
 import { incrementSemver, isValidSemver } from '../../../utils/semver.js';
 import { validateAgainstPolicies } from '../../../utils/policy-validator.js';
 import { handleSuggestAction } from '../../suggest/index.js';
+import { constraintByContext } from '../../suggest/actions/constraint-by-context.js';
 import type { SetDecisionParams, SetDecisionResponse } from '../types.js';
 
 // ============================================================================
@@ -803,6 +804,37 @@ export async function setDecisionInternal(
     } catch (error) {
       // Errors in post-creation warning are non-critical
       console.warn('[Gentle nudge warning] Non-blocking error (ignored):', error);
+    }
+  }
+
+  // v4.1.0: Decision-Constraint Integration
+  // Automatically suggest related constraints when creating/updating decisions
+  if (params.suggest_constraints !== false) {
+    try {
+      const tags = params.tags ? parseStringArray(params.tags) : [];
+      const relatedConstraints = await constraintByContext({
+        text: typeof value === 'string' ? value : String(value),
+        tags,
+        layer: params.layer,
+        limit: 3,
+        min_score: 35,
+        knex: trx || knex
+      });
+
+      if (relatedConstraints.count > 0) {
+        response.related_constraints = relatedConstraints.suggestions.map(s => ({
+          id: s.id,
+          constraint_text: s.constraint_text,
+          category: s.category,
+          score: s.score,
+          reason: s.reason,
+          layer: s.layer,
+          tags: s.tags
+        }));
+      }
+    } catch (err) {
+      // Don't fail the decision creation if constraint suggestion fails
+      console.error('[Decision-Constraint Integration] Failed to suggest constraints:', err);
     }
   }
 

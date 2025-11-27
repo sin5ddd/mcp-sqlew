@@ -286,6 +286,8 @@ export interface SetDecisionParams {
   alternatives?: any[];
   tradeoffs?: any;
   policy_name?: string;  // Explicit policy to validate against
+  // Constraint suggestion (v4.1.0)
+  suggest_constraints?: boolean;  // If true, suggest related constraints after decision creation
 }
 
 export interface QuickSetDecisionParams {
@@ -554,6 +556,16 @@ export interface SetDecisionResponse {
     layer?: string;
     key_pattern?: string;
   };
+  // Related constraints (v4.1.0)
+  related_constraints?: Array<{
+    id: number;
+    constraint_text: string;
+    category: string;
+    score: number;
+    reason: string;
+    layer?: string;
+    tags?: string[];
+  }>;
 }
 
 export interface QuickSetDecisionResponse {

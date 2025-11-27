@@ -59,7 +59,7 @@ export async function linkTask(params: {
             project_id: projectId,
             link_type: linkRelation,
             linked_ts: Math.floor(Date.now() / 1000)
-          }).onConflict(['task_id', 'decision_key_id']).merge({ link_type: linkRelation });
+          }).onConflict(['task_id', 'project_id', 'decision_key_id']).merge({ link_type: linkRelation });
 
           return {
             success: true,
