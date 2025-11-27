@@ -213,12 +213,7 @@ export async function getTaskBoard(knex: Knex): Promise<any[]> {
       "t.id as task_id",
       "t.title",
       "ts.name as status",
-      knex.raw(`CASE t.priority
-        WHEN 1 THEN 'low'
-        WHEN 2 THEN 'medium'
-        WHEN 3 THEN 'high'
-        ELSE 'critical'
-      END as priority`),
+      "t.priority",
       "l.name as layer",
       "t.project_id",
       knex.raw(`${db.dateFunction("t.created_ts")} as created`),

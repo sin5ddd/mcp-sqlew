@@ -20,13 +20,13 @@ export async function getExample(
 
   try {
     let query = db('v4_help_action_examples')
-      .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.action_id')
+      .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id')
       .select(
-        'v4_help_action_examples.example_id',
-        'v4_help_action_examples.example_title as title',
+        'v4_help_action_examples.id as example_id',
+        'v4_help_action_examples.title',
         'v4_help_actions.tool_name as tool',
         'v4_help_actions.action_name as action',
-        'v4_help_action_examples.example_code as code',
+        'v4_help_action_examples.code',
         'v4_help_action_examples.explanation'
       );
 
@@ -41,7 +41,7 @@ export async function getExample(
 
     if (params.topic) {
       query = query.where(function() {
-        this.where('v4_help_action_examples.example_title', 'like', `%${params.topic}%`)
+        this.where('v4_help_action_examples.title', 'like', `%${params.topic}%`)
           .orWhere('v4_help_action_examples.explanation', 'like', `%${params.topic}%`);
       });
     }

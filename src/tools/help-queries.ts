@@ -115,7 +115,7 @@ export async function queryHelpAction(adapter: DatabaseAdapter, targetTool: stri
     // Get action info
     const actionRow = await knex('v4_help_actions')
       .where({ tool_name: targetTool, action_name: targetAction })
-      .select('action_id', 'action_name', 'description')
+      .select('id as action_id', 'action_name', 'description')
       .first() as { action_id: number; action_name: string; description: string } | undefined;
 
     if (!actionRow) {
@@ -158,16 +158,16 @@ export async function queryHelpAction(adapter: DatabaseAdapter, targetTool: stri
     // Get examples
     const exampleRows = await knex('v4_help_action_examples')
       .where({ action_id: actionRow.action_id })
-      .orderBy('example_id')
-      .select('example_title', 'example_code', 'explanation') as Array<{
-        example_title: string;
-        example_code: string;
+      .orderBy('id')
+      .select('title', 'code', 'explanation') as Array<{
+        title: string;
+        code: string;
         explanation: string;
       }>;
 
     const examples: HelpExample[] = exampleRows.map(row => ({
-      title: row.example_title,
-      code: row.example_code,
+      title: row.title,
+      code: row.code,
       explanation: row.explanation
     }));
 

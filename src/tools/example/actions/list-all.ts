@@ -22,7 +22,7 @@ export async function listAllExamples(
 
   try {
     let query = db('v4_help_action_examples')
-      .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.action_id');
+      .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id');
 
     // Apply optional filters
     if (params.tool) {
@@ -36,8 +36,8 @@ export async function listAllExamples(
     // Get paginated results
     const examples = await query
       .select(
-        'v4_help_action_examples.example_id',
-        'v4_help_action_examples.example_title as title',
+        'v4_help_action_examples.id as example_id',
+        'v4_help_action_examples.title',
         'v4_help_actions.tool_name as tool',
         'v4_help_actions.action_name as action'
       )
