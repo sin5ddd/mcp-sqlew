@@ -22,12 +22,42 @@ function cleanupTestDir() {
   }
 }
 
+// Helper to get current git HEAD hash
+function getGitHead(): string | null {
+  try {
+    return execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+  } catch {
+    return null;
+  }
+}
+
+// Helper to reset git to a specific commit
+function resetGitTo(commitHash: string) {
+  try {
+    execSync(`git reset --hard ${commitHash}`, { stdio: 'ignore' });
+  } catch {
+    // Ignore errors (e.g., if reset fails)
+  }
+}
+
 describe('Git-Aware Auto-Complete', () => {
   let db: DatabaseAdapter;
+  let initialGitHead: string | null = null;
 
   before(async () => {
+    // Record initial git HEAD to reset after tests (cleanup test commits)
+    initialGitHead = getGitHead();
+
     // Clean up before tests
     cleanupTestDir();
+
+    // Configure git user for test commits (required if not set globally)
+    try {
+      execSync('git config user.email 2>/dev/null || git config user.email "test@example.com"', { stdio: 'ignore' });
+      execSync('git config user.name 2>/dev/null || git config user.name "Test User"', { stdio: 'ignore' });
+    } catch {
+      // Ignore - may already be configured
+    }
 
     // Create test database (in-memory)
     db = await initializeDatabase({
@@ -63,6 +93,11 @@ describe('Git-Aware Auto-Complete', () => {
 
     // Clean up test directory
     cleanupTestDir();
+
+    // Reset git to initial HEAD to drop test commits
+    if (initialGitHead) {
+      resetGitTo(initialGitHead);
+    }
   });
 
   it('should auto-complete task when all watched files are committed', async () => {
