@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.2] - 2025-11-28
+
+### BREAKING CHANGES
+
+**SQL Dump No Longer Supports Cross-Database Format Conversion**
+
+The `db:dump` command now generates SQL for the **same database type only**. Cross-database migrations (e.g., SQLite → MySQL) must use JSON export/import instead.
+
+**Migration Required:**
+```bash
+# ❌ Old approach (no longer supported)
+npm run db:dump -- mysql backup.sql  # Generates MySQL SQL from SQLite source
+
+# ✅ New approach: Use JSON for cross-database migration
+npm run db:export -- backup.json     # Export to JSON
+npm run db:import -- backup.json     # Import to target database
+```
+
+**Rationale:**
+- SQL syntax differences between databases caused data corruption issues
+- Case-insensitive pattern matching failed in certain scenarios
+- JSON format is database-agnostic and handles all data types correctly
+
+### Fixed
+
+**Case-Insensitive Validation for Master Records**
+
+- Added case-insensitive duplicate detection when registering new records
+- Prevents duplicate entries like "MyTag" and "mytag" from being created
+- Applies to tags, scopes, layers, and other master table entries
+- New utility: `src/utils/case-insensitive-validator.ts`
+
+**SQLite to MySQL SQL Dump Case-Sensitivity Bug**
+
+- Fixed regex pattern matching that failed with case variations
+- SQL dump now correctly handles mixed-case identifiers
+- Enhanced schema table export for better compatibility
+
+### Changed
+
+**Export Version Tracking**
+
+- Export JSON now includes proper version metadata
+- Version information helps with import compatibility checks
+- Clearer error messages when importing incompatible versions
+
+**CLI Documentation Update**
+
+- Updated `docs/cli/README.md` with JSON-first migration workflow
+- Added clear guidance on when to use `db:dump` vs `db:export`/`db:import`
+- Improved comparison table for migration scenarios
+
+### Added
+
+**Case-Insensitive Validator Utility**
+
+- New `src/utils/case-insensitive-validator.ts` for consistent validation
+- Comprehensive test suite: `src/tests/unit/utils/case-insensitive-validator.test.ts`
+- Reusable across all master table operations
+
+### Migration Notes
+
+**Backward Compatibility:**
+- Existing databases unaffected
+- JSON export/import workflows unchanged
+- SQL dumps for same-database-type operations still work
+
+**Action Required:**
+- Update any scripts that use `db:dump` for cross-database migrations
+- Switch to `db:export`/`db:import` for SQLite ↔ MySQL ↔ PostgreSQL migrations
+
+---
+
 ## [4.0.1] - 2025-11-28
 
 ### Removed

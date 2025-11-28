@@ -2,6 +2,14 @@
 
 > JSON-based project data migration for sharing and multi-database workflows
 
+## 📢 v4.0.2 Update: JSON is Now Required for Cross-Database Migration
+
+Starting from v4.0.2, **JSON export/import is the ONLY supported method for cross-database migrations** (e.g., SQLite → MySQL, MySQL → PostgreSQL).
+
+SQL dump (`db:dump`) no longer supports cross-database format conversion. See [Complete Cross-Database Migration Guide](#complete-cross-database-migration-guide-v402) below for step-by-step instructions.
+
+---
+
 ## Overview
 
 sqlew provides a complete JSON export/import system for migrating project data between databases. This is useful for:
@@ -298,6 +306,324 @@ node node_modules/sqlew/dist/cli.js db:export --output=data.json --db-path=.sqle
 node node_modules/sqlew/dist/cli.js db:import --source=data.json --db-path=mysql://localhost/sqlew
 ```
 
+---
+
+## Complete Cross-Database Migration Guide (v4.0.2+)
+
+This section provides step-by-step instructions for migrating your sqlew database between different database systems.
+
+### Pre-Migration Checklist
+
+Before starting a migration, ensure you have:
+
+- [ ] **Backup your current database** (copy `.sqlew/sqlew.db` or use `db:dump`)
+- [ ] **Note your current sqlew version** (`npm list sqlew`)
+- [ ] **Target database is created and accessible**
+- [ ] **Database credentials are available**
+- [ ] **Required privileges**: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES
+
+### Migration: SQLite → MySQL
+
+#### Step 1: Export from SQLite
+
+```bash
+cd /path/to/your/project
+npm install sqlew
+
+# Export all data to JSON
+node node_modules/sqlew/dist/cli.js db:export --output=migration-backup.json
+```
+
+#### Step 2: Prepare MySQL Database
+
+```sql
+-- Connect to MySQL as admin
+mysql -u root -p
+
+-- Create database (UTF-8 required for proper text handling)
+CREATE DATABASE sqlew_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Create user with required privileges
+CREATE USER 'sqlew_user'@'localhost' IDENTIFIED BY 'your-secure-password';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES
+  ON sqlew_db.* TO 'sqlew_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+#### Step 3: Configure config.toml for MySQL
+
+Create or edit `.sqlew/config.toml`:
+
+```toml
+[database]
+type = "mysql"
+
+[database.connection]
+host = "localhost"
+port = 3306
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "your-secure-password"
+
+[project]
+name = "your-project-name"
+```
+
+#### Step 4: Import to MySQL
+
+```bash
+# Import data to MySQL (config.toml will be used automatically)
+node node_modules/sqlew/dist/cli.js db:import --source=migration-backup.json
+```
+
+#### Step 5: Verify Migration
+
+```bash
+# Test MCP server connection
+node node_modules/sqlew/dist/index.js --config-path=.sqlew/config.toml
+
+# Or test with MCP Inspector
+npx @modelcontextprotocol/inspector node node_modules/sqlew/dist/index.js
+```
+
+---
+
+### Migration: SQLite → PostgreSQL
+
+#### Step 1: Export from SQLite
+
+```bash
+cd /path/to/your/project
+npm install sqlew
+
+# Export all data to JSON
+node node_modules/sqlew/dist/cli.js db:export --output=migration-backup.json
+```
+
+#### Step 2: Prepare PostgreSQL Database
+
+```sql
+-- Connect to PostgreSQL as admin
+psql -U postgres
+
+-- Create database
+CREATE DATABASE sqlew_db WITH ENCODING 'UTF8';
+
+-- Create user with required privileges
+CREATE USER sqlew_user WITH PASSWORD 'your-secure-password';
+GRANT ALL PRIVILEGES ON DATABASE sqlew_db TO sqlew_user;
+
+-- Connect to the new database and grant schema privileges
+\c sqlew_db
+GRANT ALL ON SCHEMA public TO sqlew_user;
+```
+
+#### Step 3: Configure config.toml for PostgreSQL
+
+Create or edit `.sqlew/config.toml`:
+
+```toml
+[database]
+type = "postgres"
+
+[database.connection]
+host = "localhost"
+port = 5432
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "your-secure-password"
+
+[project]
+name = "your-project-name"
+```
+
+#### Step 4: Import to PostgreSQL
+
+```bash
+# Import data to PostgreSQL
+node node_modules/sqlew/dist/cli.js db:import --source=migration-backup.json
+```
+
+#### Step 5: Verify Migration
+
+```bash
+# Test MCP server connection
+node node_modules/sqlew/dist/index.js --config-path=.sqlew/config.toml
+```
+
+---
+
+### Migration: MySQL → PostgreSQL
+
+#### Step 1: Export from MySQL
+
+First, configure config.toml to connect to MySQL:
+
+```toml
+[database]
+type = "mysql"
+
+[database.connection]
+host = "localhost"
+port = 3306
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "mysql-password"
+```
+
+Then export:
+
+```bash
+node node_modules/sqlew/dist/cli.js db:export --output=migration-backup.json
+```
+
+#### Step 2: Prepare PostgreSQL Database
+
+```sql
+-- Connect to PostgreSQL as admin
+psql -U postgres
+
+-- Create database
+CREATE DATABASE sqlew_db WITH ENCODING 'UTF8';
+
+-- Create user
+CREATE USER sqlew_user WITH PASSWORD 'postgres-password';
+GRANT ALL PRIVILEGES ON DATABASE sqlew_db TO sqlew_user;
+\c sqlew_db
+GRANT ALL ON SCHEMA public TO sqlew_user;
+```
+
+#### Step 3: Update config.toml for PostgreSQL
+
+```toml
+[database]
+type = "postgres"
+
+[database.connection]
+host = "localhost"
+port = 5432
+database = "sqlew_db"
+
+[database.auth]
+type = "direct"
+user = "sqlew_user"
+password = "postgres-password"
+
+[project]
+name = "your-project-name"
+```
+
+#### Step 4: Import to PostgreSQL
+
+```bash
+node node_modules/sqlew/dist/cli.js db:import --source=migration-backup.json
+```
+
+---
+
+### Post-Migration Verification
+
+After any migration, verify your data:
+
+#### 1. Check Row Counts
+
+Use your database client to compare row counts:
+
+```sql
+-- Count decisions
+SELECT COUNT(*) FROM v4_decisions;
+
+-- Count tasks
+SELECT COUNT(*) FROM v4_tasks;
+
+-- Count file changes
+SELECT COUNT(*) FROM v4_file_changes;
+```
+
+#### 2. Test MCP Server
+
+```bash
+# Start MCP server with new config
+node node_modules/sqlew/dist/index.js
+
+# Or use MCP Inspector for interactive testing
+npx @modelcontextprotocol/inspector node node_modules/sqlew/dist/index.js
+```
+
+#### 3. Verify in Claude Code
+
+Update your `.mcp.json` to use the new database:
+
+```json
+{
+  "mcpServers": {
+    "sqlew": {
+      "command": "npx",
+      "args": ["sqlew", "--config-path", "/path/to/.sqlew/config.toml"]
+    }
+  }
+}
+```
+
+---
+
+### Troubleshooting
+
+#### Connection Refused
+
+```
+Error: connect ECONNREFUSED 127.0.0.1:3306
+```
+
+**Solution**: Ensure the database server is running and accepting connections on the specified port.
+
+#### Authentication Failed
+
+```
+Error: Access denied for user 'sqlew_user'@'localhost'
+```
+
+**Solution**: Verify username and password in config.toml. Check that the user has proper privileges.
+
+#### Database Does Not Exist
+
+```
+Error: Unknown database 'sqlew_db'
+```
+
+**Solution**: Create the database first (see Step 2 in migration guides above).
+
+#### Permission Denied
+
+```
+Error: permission denied for schema public
+```
+
+**Solution**: Grant schema privileges to the user:
+```sql
+-- PostgreSQL
+GRANT ALL ON SCHEMA public TO sqlew_user;
+```
+
+#### Import Skipped (Project Exists)
+
+```
+Project "my-project" already exists in target database
+```
+
+**Solution**: Use `--project-name` to specify a different name, or manually delete the existing project from the target database.
+
+---
+
 ## Error Handling
 
 ### Common Errors
@@ -365,31 +691,30 @@ This validates:
 
 ## Comparison with db:dump
 
-| Feature            | db:export (JSON)         | db:dump (SQL)                            |
-|--------------------|--------------------------|------------------------------------------|
-| Format             | JSON data only           | SQL DDL + data                           |
-| Schema             | Not included             | Full schema included                     |
-| Use Case           | Project migration        | **Backup/restore, database replication** |
-| Cross-DB           | ✅ Yes                    | ❌ No (dialect-specific)                  |
-| Size               | Smaller (~40% reduction) | Larger (includes schema)                 |
-| Import Speed       | Slower (ID remapping)    | Faster (direct SQL execution)            |
-| Conflict Handling  | Smart deduplication      | Overwrite or fail                        |
-| Restore Capability | ❌ Skips if exists        | ✅ Full restore                           |
+| Feature            | db:export (JSON)                     | db:dump (SQL)                         |
+|--------------------|--------------------------------------|---------------------------------------|
+| Format             | JSON data only                       | SQL DDL + data                        |
+| Schema             | Not included                         | Full schema included                  |
+| Use Case           | **Cross-DB migration**, sharing      | **Same-DB backup/restore**            |
+| Cross-DB           | ✅ **Yes (ONLY option for cross-DB)** | ❌ No (v4.0.2+ same-DB only)           |
+| Size               | Smaller (~40% reduction)             | Larger (includes schema)              |
+| Import Speed       | Slower (ID remapping)                | Faster (direct SQL execution)         |
+| Conflict Handling  | Smart deduplication                  | Overwrite or fail                     |
+| Restore Capability | ❌ Skips if exists                    | ✅ Full restore                        |
 
-**When to use db:export (JSON)**:
+**When to use db:export (JSON)** - **REQUIRED FOR CROSS-DATABASE**:
 
-- Migrating projects between different sqlew databases
-- Sharing specific projects with team members
-- Merging multiple projects into one database
-- Cross-database migration (SQLite → MySQL → PostgreSQL)
+- ✅ **Cross-database migration** (SQLite → MySQL → PostgreSQL) - **ONLY option**
+- ✅ Migrating projects between different sqlew databases
+- ✅ Sharing specific projects with team members
+- ✅ Merging multiple projects into one database
 
-**When to use db:dump (SQL)** - **RECOMMENDED FOR BACKUP**:
+**When to use db:dump (SQL)** - **SAME-DATABASE ONLY**:
 
-- **Full database backup with schema** ✅
-- **Database restore/recovery** ✅
-- Database replication
-- Development → Production deployment
-- Same database type migration
+- ✅ **Full database backup with schema** (same DB type)
+- ✅ **Database restore/recovery** (same DB type)
+- ✅ Database replication (same DB type)
+- ❌ Cross-database migration (use JSON instead)
 
 See [Database Migration Guide](DATABASE_MIGRATION.md) for complete `db:dump` documentation.
 
