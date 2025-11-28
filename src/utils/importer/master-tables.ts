@@ -3,7 +3,9 @@
  *
  * Handles importing master tables with intelligent ID remapping:
  * - Project-scoped tables (m_files, m_tags, m_scopes): Smart merge on UNIQUE (project_id, name/path)
- * - Global tables (m_agents, m_context_keys, etc.): Always create new IDs
+ * - Global tables (m_context_keys, etc.): Always create new IDs
+ *
+ * Note: Agent system removed in v4.0 - no agent imports
  *
  * Architectural Decision: Decision #253 - Smart merge for project-scoped master tables
  */
@@ -21,7 +23,7 @@ export async function importMasterTables(ctx: ImportContext): Promise<ImportCont
   console.error('  Importing master tables...');
 
   // Import order: no dependencies between master tables
-  await importAgents(ctx);
+  // Note: importAgents removed in v4.0 (agent system deleted)
   await importFiles(ctx);
   await importContextKeys(ctx);
   await importTags(ctx);
@@ -34,34 +36,7 @@ export async function importMasterTables(ctx: ImportContext): Promise<ImportCont
   return ctx;
 }
 
-/**
- * Import v4_agents (global, create or reuse by name)
- */
-async function importAgents(ctx: ImportContext): Promise<void> {
-  const agents = ctx.jsonData.master_tables.agents || [];
-
-  for (const agent of agents) {
-    // Check if agent exists by name (global lookup)
-    const existing = await ctx.knex('v4_agents')
-      .where({ name: agent.name })
-      .first();
-
-    if (existing) {
-      // Reuse existing global agent
-      ctx.mappings.agents.set(agent.id, existing.id);
-    } else {
-      // Create new agent
-      const [newId] = await ctx.knex('v4_agents').insert({
-        name: agent.name,
-        last_active_ts: agent.last_active_ts
-      });
-
-      ctx.mappings.agents.set(agent.id, newId);
-    }
-  }
-
-  ctx.stats.master_tables.agents_created = agents.length;
-}
+// Note: importAgents function removed in v4.0 (agent system deleted)
 
 /**
  * Import v4_files (project-scoped, smart merge)
@@ -277,10 +252,10 @@ async function importTaskStatuses(ctx: ImportContext): Promise<void> {
 
 /**
  * Get total number of ID mappings created
+ * Note: agents removed in v4.0
  */
 function getTotalMappings(ctx: ImportContext): number {
   return (
-    ctx.mappings.agents.size +
     ctx.mappings.files.size +
     ctx.mappings.context_keys.size +
     ctx.mappings.tags.size +

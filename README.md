@@ -96,7 +96,7 @@ See [docs/TASK_OVERVIEW.md](docs/TASK_OVERVIEW.md) and [docs/DECISION_CONTEXT.md
 ## Installation
 
 ### Requirements
-- Node.js 18.0.0 or higher
+- Node.js 20.0.0 or higher
 - npm or npx
 
 ### Quick Install
@@ -441,16 +441,20 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **3.9.0**
+Current version: **4.0.2**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-**What's New in v3.9.0:**
-- **Decision Intelligence System** - Three-tier duplicate detection (35-44 gentle nudge, 45-59 hard block, 60+ auto-update)
-- **New `suggest` Tool** - Find similar decisions by key, tags, or context
-- **Policy-Based Auto-Triggering** - Automatic suggestions when `suggest_similar=1`
-- **Enhanced Metadata** - Auto-update responses include `duplicate_reason`, `version_info`, `update_command`
+**What's New in v4.0.2:**
+- **Unified CLI Entry Point** - `npx sqlew db:export` works directly (no `npm install` required)
+- **Cross-DB Migration via JSON Only** - SQL dump no longer supports cross-database conversion
+- **Node.js 20+ Required** - Updated minimum version requirement
 
-See [docs/DECISION_INTELLIGENCE.md](docs/DECISION_INTELLIGENCE.md) for details.
+**What's New in v4.0.0:**
+- **Schema Refactoring** - Unified v4_ table prefix, agent system completely removed
+- **Clean Schema** - No legacy columns, optimized for Decision & Constraint repository
+- **Improved Migration System** - Reorganized v3/v4 directories
+
+See [docs/DECISION_INTELLIGENCE.md](docs/DECISION_INTELLIGENCE.md) for details on the suggest tool.
 
 ## License
 
