@@ -226,9 +226,24 @@ function buildColumnDefinition(col: Column, targetFormat: DatabaseFormat): strin
   // SQLite source: INTEGER PRIMARY KEY columns are implicitly auto-increment
   const isIntegerPrimaryKey = col.is_primary_key &&
     (col.data_type.toUpperCase().includes('INTEGER') || col.data_type.toUpperCase() === 'INT');
-  if (targetFormat === 'mysql' && (col.is_generated || isIntegerPrimaryKey) && col.generation_expression === null) {
+  const isAutoIncrement = col.is_generated || isIntegerPrimaryKey;
+
+  if (targetFormat === 'mysql' && isAutoIncrement && col.generation_expression === null) {
     if (!def.includes('AUTO_INCREMENT')) {
       def += ' AUTO_INCREMENT';
+    }
+  }
+
+  // Handle SERIAL for PostgreSQL (when source is MySQL/SQLite with auto-increment)
+  // SERIAL = INTEGER + AUTO_INCREMENT sequence
+  if (targetFormat === 'postgresql' && isAutoIncrement && col.generation_expression === null) {
+    // Replace INT/INTEGER/BIGINT with SERIAL/BIGSERIAL
+    if (!def.includes('SERIAL')) {
+      if (dataType.toUpperCase() === 'BIGINT') {
+        def = def.replace(/BIGINT/i, 'BIGSERIAL');
+      } else if (dataType.toUpperCase() === 'INT' || dataType.toUpperCase() === 'INTEGER') {
+        def = def.replace(/\bINT(EGER)?\b/i, 'SERIAL');
+      }
     }
   }
 

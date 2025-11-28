@@ -54,7 +54,6 @@
     "test:sql-dump:verbose": "node --test --test-force-exit --import tsx \"src/tests/database/sql-dump/**/*.test.ts\"",
     "test:all-features": "npm run build && node dist/tests/integration/all-features.standalone.js",
     "test:docker": "npm run build && node --test --test-force-exit dist/tests/docker/**/*.test.js",
-    "test:cross-db": "npm run build && node --test dist/tests/docker/cross-database.test.js",
     "test:native": "npm run build && node --test --test-concurrency=1 --test-force-exit dist/tests/docker/native/**/*.test.js | node scripts/filter-test-output.js",
     "test:native:verbose": "npm run build && node --test --test-concurrency=1 --test-force-exit dist/tests/docker/native/**/*.test.js",
     "test:migration-upgrade-paths": "echo 'v3 migration tests moved to v3 subdirectory - use test:native for v4 RDBMS tests'",

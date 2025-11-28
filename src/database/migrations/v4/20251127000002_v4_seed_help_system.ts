@@ -156,11 +156,14 @@ export async function up(knex: Knex): Promise<void> {
     { category_name: 'cross_tool_workflow', description: 'Use cases demonstrating multi-step workflows spanning multiple tools for complex scenarios.' },
     { category_name: 'decision_intelligence', description: 'Use cases for intelligent decision suggestions, duplicate detection, and policy-based automation.' }
   ];
+  // Use ignore instead of merge to avoid id field issues across all databases
   for (const cat of categoryData) {
-    await knex('v4_help_use_case_cats')
-      .insert(cat)
-      .onConflict('category_name')
-      .merge();
+    const exists = await knex('v4_help_use_case_cats')
+      .where('category_name', cat.category_name)
+      .first();
+    if (!exists) {
+      await knex('v4_help_use_case_cats').insert(cat);
+    }
   }
   console.log('  ✓ Help use case categories seeded (6)');
 

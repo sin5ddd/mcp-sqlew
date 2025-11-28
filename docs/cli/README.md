@@ -145,15 +145,56 @@ npm run db:import -- project.json dry-run=true
 
 ---
 
+## Recommended Data Migration Workflow
+
+### Cross-Database Migration (Recommended: JSON)
+
+For migrations between different database systems (e.g., SQLite to MySQL, PostgreSQL to MySQL), **use JSON format**:
+
+```bash
+# Step 1: Export from source database
+npm run db:export -- backup.json
+
+# Step 2: Configure target database connection
+# (Update your .sqlew/config.toml or environment variables)
+
+# Step 3: Import to target database
+npm run db:import -- backup.json
+```
+
+**Why JSON for cross-database migration?**
+- Database-agnostic format - no SQL syntax differences
+- Automatic ID remapping handles foreign key relationships
+- Preserves all data integrity across different RDBMS
+
+### SQL Dump (Same-RDBMS Only)
+
+SQL dump (`db:dump`) is designed for **same-database-type operations only**:
+
+```bash
+# SQLite backup (restore to SQLite)
+npm run db:dump -- sqlite backup.sql
+
+# MySQL backup (restore to MySQL)
+npm run db:dump -- mysql backup.sql
+
+# PostgreSQL backup (restore to PostgreSQL)
+npm run db:dump -- postgresql backup.sql
+```
+
+**Note**: SQL dump does NOT support cross-database migrations (e.g., SQLite to MySQL). The generated SQL contains database-specific syntax that may not be compatible with other RDBMS.
+
+---
+
 ## Quick Comparison: When to Use Which Command
 
 | Scenario                                      | Use Command               | Restore Capability         |
 |-----------------------------------------------|---------------------------|----------------------------|
-| **Full database backup**                      | `db:dump`                 | ✅ Full restore             |
-| **Cross-database migration** (SQLite → MySQL) | `db:dump`                 | ✅ Full restore             |
-| **Share project with team**                   | `db:export` / `db:import` | ⚠️ Skips if project exists |
-| **Consolidate multiple projects**             | `db:export` / `db:import` | ⚠️ Skips if project exists |
-| **Backup/restore same database**              | `db:dump`                 | ✅ Full restore             |
+| **Full database backup (same RDBMS)**         | `db:dump`                 | Full restore               |
+| **Cross-database migration** (SQLite -> MySQL)| `db:export` / `db:import` | Full restore via JSON      |
+| **Share project with team**                   | `db:export` / `db:import` | Skips if project exists    |
+| **Consolidate multiple projects**             | `db:export` / `db:import` | Skips if project exists    |
+| **Backup/restore same database**              | `db:dump`                 | Full restore               |
 
 **⚠️ Important**: `db:export`/`db:import` uses `--skip-if-exists=true` by default, so it's NOT suitable for
 backup/restore to the same database. Use `db:dump` for proper backup/restore.

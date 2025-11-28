@@ -122,6 +122,12 @@ export async function generateSqlDump(
         if (indexes.length > 0) {
           for (const indexName of indexes) {
             try {
+              // Skip foreign key indexes - MySQL auto-creates these with FK constraints
+              // They typically have names ending with '_foreign' or '_fkey'
+              if (indexName.endsWith('_foreign') || indexName.endsWith('_fkey')) {
+                continue;
+              }
+
               // Check if this is a single-column UNIQUE index
               // These are already included in CREATE TABLE as column-level UNIQUE constraints
               const metadata = await getIndexMetadata(knex, indexName, table);

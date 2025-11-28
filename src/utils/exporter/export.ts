@@ -4,6 +4,18 @@
  */
 
 import { Knex } from 'knex';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+// Get version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJsonPath = join(__dirname, '../../../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+const SQLEW_VERSION = packageJson.version;
+// Extract major.minor version for schema compatibility (e.g., "4.0.1" → "4.0")
+const SCHEMA_VERSION = SQLEW_VERSION.split('.').slice(0, 2).join('.');
 
 // ============================================================================
 // Export Types
@@ -16,8 +28,8 @@ export interface JsonExportOptions {
 export interface JsonExport {
   // Metadata for version compatibility and debugging
   metadata: {
-    sqlew_version: string;      // e.g., "3.7.3"
-    schema_version: number;      // Schema version number (3 = v3.7.x)
+    sqlew_version: string;      // e.g., "4.0.1"
+    schema_version: string;      // Schema version (major.minor), e.g., "4.0"
     exported_at: string;         // ISO 8601 timestamp
     export_mode: 'single_project' | 'all_projects';
     database_type: string;       // "sqlite" | "mysql" | "postgresql"
@@ -154,14 +166,14 @@ export async function generateJsonExport(
   const jsonExport: JsonExport = {
     // New metadata format (v3.7.3+)
     metadata: {
-      sqlew_version: '3.7.3',
-      schema_version: 3,  // Schema v3 = v3.7.x multi-project support
+      sqlew_version: SQLEW_VERSION,
+      schema_version: SCHEMA_VERSION,  // major.minor from SQLEW_VERSION
       exported_at: exportTimestamp,
       export_mode: exportMode,
       database_type: databaseType,
     },
     // Legacy fields (backward compatibility)
-    version: '3.7.3',
+    version: SQLEW_VERSION,
     exported_at: exportTimestamp,
     export_mode: exportMode,
     database_type: databaseType,
