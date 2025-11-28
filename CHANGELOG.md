@@ -18,17 +18,30 @@ The `db:dump` command now generates SQL for the **same database type only**. Cro
 **Migration Required:**
 ```bash
 # ❌ Old approach (no longer supported)
-npm run db:dump -- mysql backup.sql  # Generates MySQL SQL from SQLite source
+npx sqlew db:dump mysql backup.sql  # Cross-DB conversion removed
 
 # ✅ New approach: Use JSON for cross-database migration
-npm run db:export -- backup.json     # Export to JSON
-npm run db:import -- backup.json     # Import to target database
+npx sqlew db:export backup.json     # Export to JSON
+npx sqlew db:import backup.json     # Import to target database
 ```
 
 **Rationale:**
 - SQL syntax differences between databases caused data corruption issues
 - Case-insensitive pattern matching failed in certain scenarios
 - JSON format is database-agnostic and handles all data types correctly
+
+**Node.js 20+ Required**
+
+Minimum Node.js version updated from 18.0.0 to 20.0.0.
+
+### Added
+
+**Unified CLI Entry Point**
+
+- `npx sqlew db:export`, `npx sqlew db:import`, `npx sqlew db:dump` now work directly
+- No `npm install` required - just use `npx sqlew <command>`
+- CLI commands and MCP server mode unified under single `sqlew` entry point
+- Removed separate `sqlew-cli` binary
 
 ### Fixed
 

@@ -29,35 +29,27 @@ solutions including schema + data using SQL dumps.
 ### Export a Project
 
 ```bash
-# You have to install sqlew via npm to use CLI mode
-cd /path/to/your/project
-npm install sqlew
+# Export all projects (no installation required!)
+npx sqlew db:export backup.json
 
-# Export all projects
-node node_modules/sqlew/dist/cli.js db:export --output=full-backup.json
-
-# or Export specific project to file
-node node_modules/sqlew/dist/cli.js db:export --project=my-project --output=backup.json
+# Export specific project to file
+npx sqlew db:export backup.json project=my-project
 
 # Export to stdout (pipe to another command)
-node node_modules/sqlew/dist/cli.js db:export --project=visualizer
+npx sqlew db:export project=visualizer
 ```
 
 ### Import a Project
 
 ```bash
-# You have to install sqlew via npm to use CLI mode (We recommend install per project)
-cd /path/to/your/other-project
-npm install sqlew
-
 # Import from JSON export
-node node_modules/sqlew/dist/cli.js db:import --source=backup.json
+npx sqlew db:import backup.json
 
 # Import with custom project name
-node node_modules/sqlew/dist/cli.js db:import --source=backup.json --project-name=new-name
+npx sqlew db:import backup.json project-name=new-name
 
 # Dry-run validation (no actual import)
-node node_modules/sqlew/dist/cli.js db:import --source=backup.json --dry-run
+npx sqlew db:import backup.json dry-run=true
 ```
 
 ## Export Command
@@ -65,17 +57,16 @@ node node_modules/sqlew/dist/cli.js db:import --source=backup.json --dry-run
 ### Syntax
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:export [options]
+npx sqlew db:export [output-file] [key=value ...]
 ```
 
 ### Options
 
-| Option             | Description                     | Default           |
-|--------------------|---------------------------------|-------------------|
-| `--project <name>` | Export specific project by name | All projects      |
-| `--output <file>`  | Output file path                | stdout            |
-| `--db-path <path>` | Database file path              | `.sqlew/sqlew.db` |
-| `--config <path>`  | Config file path                | Auto-detect       |
+| Option            | Description                     | Default           |
+|-------------------|---------------------------------|-------------------|
+| `project=<name>`  | Export specific project by name | All projects      |
+| `db-path=<path>`  | Database file path              | `.sqlew/sqlew.db` |
+| `config=<path>`   | Config file path                | Auto-detect       |
 
 ### What Gets Exported
 
@@ -104,19 +95,19 @@ node node_modules/sqlew/dist/cli.js db:export [options]
 ### Syntax
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:import --source=<file> [options]
+npx sqlew db:import <source-file> [key=value ...]
 ```
 
 ### Options
 
-| Option                  | Description                   | Default            |
-|-------------------------|-------------------------------|--------------------|
-| `--source <file>`       | JSON export file path         | **Required**       |
-| `--project-name <name>` | Target project name           | Use name from JSON |
-| `--skip-if-exists`      | Skip import if project exists | `true`             |
-| `--dry-run`             | Validate only, don't import   | `false`            |
-| `--db-path <path>`      | Database file path            | `.sqlew/sqlew.db`  |
-| `--config <path>`       | Config file path              | Auto-detect        |
+| Option                   | Description                   | Default            |
+|--------------------------|-------------------------------|--------------------|
+| `<source-file>`          | JSON export file path         | **Required**       |
+| `project-name=<name>`    | Target project name           | Use name from JSON |
+| `skip-if-exists=true`    | Skip import if project exists | `true`             |
+| `dry-run=true`           | Validate only, don't import   | `false`            |
+| `db-path=<path>`         | Database file path            | `.sqlew/sqlew.db`  |
+| `config=<path>`          | Config file path              | Auto-detect        |
 
 ### Import Process
 
@@ -155,34 +146,24 @@ node node_modules/sqlew/dist/cli.js db:import --source=<file> [options]
 - Idempotent operations (safe to retry on failure)
 - Comprehensive error messages with validation details
 
-## Installation for CLI Usage
+## CLI Usage
 
-For users who need to use export/import commands, install sqlew per-project:
+**No installation required!** The unified entry point allows direct use via npx:
 
 ```bash
-# Install in your project directory
-cd /path/to/your/project
-npm install sqlew
+# Export data
+npx sqlew db:export backup.json
 
-# Now you can use CLI commands
-node node_modules/sqlew/dist/cli.js db:export --output=backup.json
-node node_modules/sqlew/dist/cli.js db:import --source=backup.json
+# Import data
+npx sqlew db:import backup.json
+
+# SQL dump (same-database backup)
+npx sqlew db:dump sqlite backup.sql
 ```
 
-**Tip**: Add a shortcut to your `package.json` for convenience:
-
-```json
-{
-  "scripts": {
-    "sqlew": "node node_modules/sqlew/dist/cli.js"
-  }
-}
-```
-
-Then you can use: `npm run sqlew db:export --output=backup.json`
-
-**Note**: The MCP server (`npx sqlew`) and CLI commands are both included in the same `sqlew` package. You only need to
-install once.
+**Note**: Both MCP server mode and CLI commands use the same `sqlew` entry point. The first argument determines the mode:
+- `db:export`, `db:import`, `db:dump`, `query` → CLI mode
+- No argument or MCP-related args → MCP server mode
 
 ## Use Cases
 
@@ -196,20 +177,16 @@ consolidate all project contexts into one shared database.
 ```bash
 # Step 1: Export from each project's SQLite database
 cd ~/project-a
-npm install sqlew
-node node_modules/sqlew/dist/cli.js db:export --project=project-a --output=/tmp/project-a.json
+npx sqlew db:export /tmp/project-a.json project=project-a
 
 cd ~/project-b
-npm install sqlew
-node node_modules/sqlew/dist/cli.js db:export --project=project-b --output=/tmp/project-b.json
+npx sqlew db:export /tmp/project-b.json project=project-b
 
 cd ~/project-c
-npm install sqlew
-node node_modules/sqlew/dist/cli.js db:export --project=project-c --output=/tmp/project-c.json
+npx sqlew db:export /tmp/project-c.json project=project-c
 
 # Step 2: Create shared database and import all projects
 cd ~/shared-database
-npm install sqlew
 
 # Configure to use single MySQL database (edit .sqlew/config.toml)
 # [database]
@@ -220,9 +197,9 @@ npm install sqlew
 # password = "mypassword"
 # database = "shared_sqlew_db"
 
-node node_modules/sqlew/dist/cli.js db:import --source=/tmp/project-a.json
-node node_modules/sqlew/dist/cli.js db:import --source=/tmp/project-b.json
-node node_modules/sqlew/dist/cli.js db:import --source=/tmp/project-c.json
+npx sqlew db:import /tmp/project-a.json
+npx sqlew db:import /tmp/project-b.json
+npx sqlew db:import /tmp/project-c.json
 
 # Step 3: Configure each project to use shared database
 # In each project's .mcp.json:
@@ -253,11 +230,11 @@ node node_modules/sqlew/dist/cli.js db:import --source=/tmp/project-c.json
 
 ```bash
 # Export from source database
-node node_modules/sqlew/dist/cli.js db:export --project=main --output=main-export.json
+npx sqlew db:export main-export.json project=main
 
 # Import to different database (different machine or different database type)
 # This works because the project doesn't exist in the target database yet
-node node_modules/sqlew/dist/cli.js db:import --source=main-export.json --db-path=/path/to/new/database.db
+npx sqlew db:import main-export.json db-path=/path/to/new/database.db
 ```
 
 **Note**: Import skips if project name exists.
@@ -266,44 +243,44 @@ node node_modules/sqlew/dist/cli.js db:import --source=main-export.json --db-pat
 
 ```bash
 # Backup with SQL dump (preserves schema + data)
-node node_modules/sqlew/dist/cli.js db:dump --format=sqlite --output=backup-$(date +%Y%m%d).sql
+npx sqlew db:dump sqlite backup-$(date +%Y%m%d).sql
 
 # Or simple SQLite file copy
 cp .sqlew/sqlew.db .sqlew/backup-$(date +%Y%m%d).db
 ```
 
-See `node node_modules/sqlew/dist/cli.js db:dump --help` for full backup options.
+See `npx sqlew db:dump --help` for full backup options.
 
 ### Project Sharing
 
 ```bash
 # Developer A: Export project
-node node_modules/sqlew/dist/cli.js db:export --project=feature-x --output=feature-x.json
+npx sqlew db:export feature-x.json project=feature-x
 
 # Developer B: Import project
-node node_modules/sqlew/dist/cli.js db:import --source=feature-x.json
+npx sqlew db:import feature-x.json
 ```
 
 ### Multi-Project Consolidation
 
 ```bash
 # Export from different databases
-node node_modules/sqlew/dist/cli.js db:export --project=visualizer --output=vis.json
-node node_modules/sqlew/dist/cli.js db:export --project=api --output=api.json
+npx sqlew db:export vis.json project=visualizer
+npx sqlew db:export api.json project=api
 
 # Import to single database
-node node_modules/sqlew/dist/cli.js db:import --source=vis.json
-node node_modules/sqlew/dist/cli.js db:import --source=api.json
+npx sqlew db:import vis.json
+npx sqlew db:import api.json
 ```
 
 ### Cross-Database Migration
 
 ```bash
 # Export from SQLite
-node node_modules/sqlew/dist/cli.js db:export --output=data.json --db-path=.sqlew/sqlew.db
+npx sqlew db:export data.json db-path=.sqlew/sqlew.db
 
-# Import to MySQL
-node node_modules/sqlew/dist/cli.js db:import --source=data.json --db-path=mysql://localhost/sqlew
+# Import to MySQL (configure .sqlew/config.toml for MySQL first)
+npx sqlew db:import data.json
 ```
 
 ---
@@ -328,10 +305,9 @@ Before starting a migration, ensure you have:
 
 ```bash
 cd /path/to/your/project
-npm install sqlew
 
 # Export all data to JSON
-node node_modules/sqlew/dist/cli.js db:export --output=migration-backup.json
+npx sqlew db:export migration-backup.json
 ```
 
 #### Step 2: Prepare MySQL Database
@@ -376,17 +352,17 @@ name = "your-project-name"
 
 ```bash
 # Import data to MySQL (config.toml will be used automatically)
-node node_modules/sqlew/dist/cli.js db:import --source=migration-backup.json
+npx sqlew db:import migration-backup.json
 ```
 
 #### Step 5: Verify Migration
 
 ```bash
 # Test MCP server connection
-node node_modules/sqlew/dist/index.js --config-path=.sqlew/config.toml
+npx sqlew --config-path=.sqlew/config.toml
 
 # Or test with MCP Inspector
-npx @modelcontextprotocol/inspector node node_modules/sqlew/dist/index.js
+npx @modelcontextprotocol/inspector npx sqlew
 ```
 
 ---
@@ -397,10 +373,9 @@ npx @modelcontextprotocol/inspector node node_modules/sqlew/dist/index.js
 
 ```bash
 cd /path/to/your/project
-npm install sqlew
 
 # Export all data to JSON
-node node_modules/sqlew/dist/cli.js db:export --output=migration-backup.json
+npx sqlew db:export migration-backup.json
 ```
 
 #### Step 2: Prepare PostgreSQL Database
@@ -447,14 +422,14 @@ name = "your-project-name"
 
 ```bash
 # Import data to PostgreSQL
-node node_modules/sqlew/dist/cli.js db:import --source=migration-backup.json
+npx sqlew db:import migration-backup.json
 ```
 
 #### Step 5: Verify Migration
 
 ```bash
 # Test MCP server connection
-node node_modules/sqlew/dist/index.js --config-path=.sqlew/config.toml
+npx sqlew --config-path=.sqlew/config.toml
 ```
 
 ---
@@ -483,7 +458,7 @@ password = "mysql-password"
 Then export:
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:export --output=migration-backup.json
+npx sqlew db:export migration-backup.json
 ```
 
 #### Step 2: Prepare PostgreSQL Database
@@ -525,7 +500,7 @@ name = "your-project-name"
 #### Step 4: Import to PostgreSQL
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:import --source=migration-backup.json
+npx sqlew db:import migration-backup.json
 ```
 
 ---
@@ -553,10 +528,10 @@ SELECT COUNT(*) FROM v4_file_changes;
 
 ```bash
 # Start MCP server with new config
-node node_modules/sqlew/dist/index.js
+npx sqlew
 
 # Or use MCP Inspector for interactive testing
-npx @modelcontextprotocol/inspector node node_modules/sqlew/dist/index.js
+npx @modelcontextprotocol/inspector npx sqlew
 ```
 
 #### 3. Verify in Claude Code
@@ -654,10 +629,10 @@ Solution: Ensure all referenced entities exist in export
 
 ### Dry-Run Validation
 
-Always test imports with `--dry-run` first:
+Always test imports with `dry-run=true` first:
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:import --source=data.json --dry-run
+npx sqlew db:import data.json dry-run=true
 ```
 
 This validates:

@@ -15,8 +15,8 @@ Starting from v4.0.2, `db:dump` generates SQL for the **same database type only*
 
 **For cross-database migrations**, use JSON export/import:
 ```bash
-npm run db:export -- backup.json      # Export to JSON
-npm run db:import -- backup.json      # Import to target database
+npx sqlew db:export backup.json      # Export to JSON
+npx sqlew db:import backup.json      # Import to target database
 ```
 
 See [DATA_EXPORT_IMPORT.md](DATA_EXPORT_IMPORT.md) for complete cross-database migration guide.
@@ -27,45 +27,26 @@ See [DATA_EXPORT_IMPORT.md](DATA_EXPORT_IMPORT.md) for complete cross-database m
 
 The `db:dump` CLI tool generates complete SQL dumps (CREATE TABLE + INSERT statements) for **same-database-type backup and restore operations**. The generated SQL can be imported directly into an empty database of the same type.
 
-## Installation
-
-To use the `db:dump` CLI command, install sqlew in your project:
-
-```bash
-cd /path/to/your/project
-npm install sqlew
-```
-
-**Tip**: Add a shortcut to your `package.json` for convenience:
-
-```json
-{
-  "scripts": {
-    "sqlew": "node node_modules/sqlew/dist/cli.js"
-  }
-}
-```
-
-Then you can use: `npm run sqlew db:dump --format=mysql --output=dump.sql`
-
 ## Usage
 
-### Basic Syntax
+**No installation required!** Use directly via npx:
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:dump [--from <source>] --format <target> [options]
+npx sqlew db:dump <format> [output-file] [key=value ...]
 ```
 
 **Parameters:**
 
-- `--from <source>`: Source database (sqlite, mysql, postgresql). Default: sqlite
-- `--format <target>`: Target SQL format (sqlite, mysql, postgresql). **Required**
-- `--output <file>`: Output file path (omit for stdout)
-- `--tables <list>`: Comma-separated list of specific tables to dump
-- `--chunk-size <n>`: Rows per INSERT statement (default: 100)
-- `--on-conflict <mode>`: Duplicate key handling (error, ignore, replace). Default: error
-- `--exclude-schema`: Exclude CREATE TABLE statements (data-only dump)
-- `--db-path <path>`: SQLite database path (default: .sqlew/sqlew.db)
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `<format>` | Target SQL format: sqlite, mysql, postgresql | **Required** |
+| `[output-file]` | Output file path | stdout |
+| `from=<source>` | Source database type | sqlite |
+| `tables=<list>` | Comma-separated table names | all tables |
+| `chunk-size=<n>` | Rows per INSERT statement | 100 |
+| `on-conflict=<mode>` | error, ignore, replace | error |
+| `exclude-schema=true` | Data-only dump (no CREATE TABLE) | false |
+| `db-path=<path>` | SQLite database path | .sqlew/sqlew.db |
 
 **Note:** By default, the dump includes both schema (CREATE TABLE) and data (INSERT) for complete migration.
 
@@ -75,13 +56,13 @@ node node_modules/sqlew/dist/cli.js db:dump [--from <source>] --format <target> 
 
 ```bash
 # Backup SQLite database (default)
-node node_modules/sqlew/dist/cli.js db:dump --format sqlite --output backup-sqlite.sql
+npx sqlew db:dump sqlite backup-sqlite.sql
 ```
 
 **MySQL Backup:**
 
 ```bash
-# Configure connection via environment variables
+# Configure connection via .sqlew/config.toml or environment variables
 export MYSQL_HOST=127.0.0.1
 export MYSQL_PORT=3306
 export MYSQL_USER=youruser
@@ -89,13 +70,13 @@ export MYSQL_PASSWORD=yourpass
 export MYSQL_DATABASE=mcp_context
 
 # Backup MySQL database
-node node_modules/sqlew/dist/cli.js db:dump --from mysql --format mysql --output backup-mysql.sql
+npx sqlew db:dump mysql backup-mysql.sql from=mysql
 ```
 
 **PostgreSQL Backup:**
 
 ```bash
-# Configure connection via environment variables
+# Configure connection via .sqlew/config.toml or environment variables
 export PG_HOST=localhost
 export PG_PORT=5432
 export PG_USER=postgres
@@ -103,7 +84,7 @@ export PG_PASSWORD=yourpass
 export PG_DATABASE=mcp_context
 
 # Backup PostgreSQL database
-node node_modules/sqlew/dist/cli.js db:dump --from postgresql --format postgresql --output backup-pg.sql
+npx sqlew db:dump postgresql backup-pg.sql from=postgresql
 ```
 
 > **Note**: For cross-database migrations (e.g., SQLite → MySQL), use JSON export/import instead.
@@ -114,7 +95,7 @@ node node_modules/sqlew/dist/cli.js db:dump --from postgresql --format postgresq
 Export only specific tables:
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:dump --format mysql --tables t_decisions,t_tasks,m_agents --output partial.sql
+npx sqlew db:dump mysql partial.sql tables=v4_decisions,v4_tasks,v4_files
 ```
 
 ### Custom Chunk Size
@@ -122,7 +103,7 @@ node node_modules/sqlew/dist/cli.js db:dump --format mysql --tables t_decisions,
 For large tables, adjust INSERT batch size:
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:dump --format mysql --chunk-size 500 --output dump.sql
+npx sqlew db:dump mysql dump.sql chunk-size=500
 ```
 
 ### Data-Only Dumps
@@ -130,7 +111,7 @@ node node_modules/sqlew/dist/cli.js db:dump --format mysql --chunk-size 500 --ou
 For advanced use cases where you manage schema separately:
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:dump --format mysql --exclude-schema --output data-only.sql
+npx sqlew db:dump mysql data-only.sql exclude-schema=true
 ```
 
 This generates INSERT statements without CREATE TABLE, useful for:
@@ -145,13 +126,13 @@ Handle duplicate keys when importing into existing databases:
 
 ```bash
 # Ignore duplicates (safe for adding new data)
-node node_modules/sqlew/dist/cli.js db:dump --format mysql --on-conflict ignore --output dump.sql
+npx sqlew db:dump mysql dump.sql on-conflict=ignore
 
 # Update existing rows (sync/overwrite mode)
-node node_modules/sqlew/dist/cli.js db:dump --format mysql --on-conflict replace --output dump.sql
+npx sqlew db:dump mysql dump.sql on-conflict=replace
 
 # Fail on duplicates (default, strict mode)
-node node_modules/sqlew/dist/cli.js db:dump --format mysql --on-conflict error --output dump.sql
+npx sqlew db:dump mysql dump.sql on-conflict=error
 ```
 
 **Modes:**
