@@ -29,58 +29,38 @@ export function showDbImportHelp(): void {
 sqlew db:import - Import project data from JSON export
 
 USAGE:
-  npx sqlew db:import --source=<file> [options]
+  npm run db:import -- <source-file> [key=value ...]
 
-OPTIONS:
-  --source <file>          JSON export file path (required)
-  --project-name <name>    Target project name (default: use name from JSON)
-  --skip-if-exists         Skip import if project exists (default: true)
-  --dry-run                Validate only, don't import (default: false)
-  --db-path <path>         SQLite database file path (overrides config file)
-  --config <path>          Config file path (default: auto-detect .sqlew/config.toml)
-  --help                   Show this help message
+ARGUMENTS:
+  <source-file>            JSON export file (required)
 
-CONFIG FILE:
-  The command automatically loads database settings from config.toml.
-  Priority: CLI args > config file > environment variables > defaults
+OPTIONS (use key=value format):
+  project-name=<name>      Target project name (default: from JSON)
+  skip-if-exists=true      Skip if project exists (default: true)
+  dry-run=true             Validate only, don't import
+  db-path=<path>           SQLite database path
+  config=<path>            Config file path
 
 EXAMPLES:
-  # Import from JSON export
-  npx sqlew db:import --source=visualizer-data.json
+  # Import from JSON
+  npm run db:import -- data.json
 
   # Import with custom project name
-  npx sqlew db:import --source=data.json --project-name=visualizer-v2
+  npm run db:import -- data.json project-name=newproject
 
   # Dry run validation
-  npx sqlew db:import --source=data.json --dry-run
-
-  # Import to specific database
-  npx sqlew db:import --source=data.json --db-path=.sqlew/target.db
-
-IMPORT BEHAVIOR:
-  - Always creates new IDs (no ID preservation from source)
-  - Skips import if project name already exists (prevents conflicts)
-  - Uses topological sort for task dependencies
-  - Wraps entire import in transaction (atomic all-or-nothing)
-  - Smart merge for project-scoped tables (files, tags, scopes)
+  npm run db:import -- data.json dry-run=true
 
 WORKFLOW:
-  1. Export data from source database:
-     npx sqlew db:export --project=myproject --output=data.json
-
-  2. Copy JSON file to target project directory
-
-  3. Import data into target database:
-     npx sqlew db:import --source=data.json
-
-SEE ALSO:
-  npx sqlew db:export --help    # Export project data to JSON
-  npx sqlew db:dump --help      # SQL export with schema (for database migration)
+  1. Export: npm run db:export -- data.json project=myproject
+  2. Copy JSON to target
+  3. Import: npm run db:import -- data.json
 `);
 }
 
 /**
  * Parse command-line arguments for db:import
+ * Supports key=value format (npm/PowerShell friendly)
  */
 export function parseDbImportArgs(args: string[]): DbImportArgs {
   const parsed: Partial<DbImportArgs> = {};
@@ -88,45 +68,27 @@ export function parseDbImportArgs(args: string[]): DbImportArgs {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg.startsWith('--')) {
-      // Handle both --key=value and --key value formats
-      let key: string;
-      let value: string | undefined;
+    // Handle key=value format (without -- prefix, npm/PowerShell friendly)
+    if (arg.includes('=') && !arg.startsWith('-')) {
+      const [key, ...v] = arg.split('=');
+      const value = v.join('=');
 
-      if (arg.includes('=')) {
-        // --key=value format
-        const [k, ...v] = arg.slice(2).split('=');
-        key = k;
-        value = v.join('='); // Rejoin in case value contains '='
-      } else {
-        // --key value format
-        key = arg.slice(2);
-        value = args[i + 1];
+      if (key === 'project-name' || key === 'projectName') {
+        parsed['project-name'] = value;
+      } else if (key === 'skip-if-exists' || key === 'skipIfExists') {
+        parsed['skip-if-exists'] = value === 'true' || value === '1';
+      } else if (key === 'dry-run' || key === 'dryRun') {
+        parsed['dry-run'] = value === 'true' || value === '1';
+      } else if (key === 'db-path' || key === 'dbPath') {
+        parsed['db-path'] = value;
+      } else if (key === 'config') {
+        parsed.config = value;
       }
-
-      // Handle boolean flags
-      if (key === 'help') {
-        parsed.help = true;
-      } else if (key === 'skip-if-exists') {
-        parsed['skip-if-exists'] = true;
-      } else if (key === 'dry-run') {
-        parsed['dry-run'] = true;
-      } else if (value && !value.startsWith('--')) {
-        // Handle value arguments
-        if (key === 'db-path') {
-          parsed['db-path'] = value;
-        } else if (key === 'config') {
-          parsed.config = value;
-        } else if (key === 'project-name') {
-          parsed['project-name'] = value;
-        } else {
-          (parsed as any)[key] = value;
-        }
-        // Only skip next arg if we used --key value format (not --key=value)
-        if (!arg.includes('=')) {
-          i++;
-        }
-      }
+    } else if (arg === 'help' || arg === '--help') {
+      parsed.help = true;
+    } else if (!arg.startsWith('-') && !arg.includes('=') && !parsed.source) {
+      // Positional argument for source file
+      parsed.source = arg;
     }
   }
 

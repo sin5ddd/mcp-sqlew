@@ -123,6 +123,7 @@ async function performImport(
   console.error(`  ✓ Created project "${projectName}" (ID: ${projectId})`);
 
   // Step 2: Initialize import context
+  // Note: agents mapping removed in v4.0 (agent system deleted)
   const ctx: ImportContext = {
     knex: trx,
     projectId,
@@ -130,7 +131,6 @@ async function performImport(
     options: {},
     mappings: {
       projects: new Map(),
-      agents: new Map(),
       files: new Map(),
       context_keys: new Map(),
       tags: new Map(),
@@ -138,7 +138,8 @@ async function performImport(
       constraint_categories: new Map(),
       layers: new Map(),
       task_statuses: new Map(),
-      tasks: new Map()
+      tasks: new Map(),
+      decision_policies: new Map()
     },
     stats: initializeStats()
   };
@@ -169,6 +170,7 @@ async function importTransactionTables(ctx: ImportContext): Promise<void> {
   console.error('  Importing transaction tables...');
 
   // Import in dependency order
+  // Note: activity_log removed in v4.0 (table was never created)
   await importDecisions(ctx);
   await importDecisionsNumeric(ctx);
   await importDecisionHistory(ctx);
@@ -177,7 +179,8 @@ async function importTransactionTables(ctx: ImportContext): Promise<void> {
   await importConstraints(ctx);
   await importTasks(ctx);  // Uses topological sort internally
   await importTaskDetails(ctx);
-  await importActivityLog(ctx);
+  await importDecisionPolicies(ctx);  // v4.0+ table
+  await importTagIndex(ctx);  // v4.0+ table
 
   console.error(`  ✓ Transaction tables imported`);
 }
@@ -192,10 +195,10 @@ async function importDecisions(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(decision.key_id);
     if (!newKeyId) continue;
 
+    // Note: agent_id removed in v4.0
     await ctx.knex('v4_decisions').insert({
       key_id: newKeyId,
       value: decision.value,
-      agent_id: ctx.mappings.agents.get(decision.agent_id) || null,
       layer_id: ctx.mappings.layers.get(decision.layer_id) || null,
       version: decision.version,
       status: decision.status,
@@ -217,10 +220,10 @@ async function importDecisionsNumeric(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(decision.key_id);
     if (!newKeyId) continue;
 
+    // Note: agent_id removed in v4.0
     await ctx.knex('v4_decisions_numeric').insert({
       key_id: newKeyId,
       value: decision.value,
-      agent_id: ctx.mappings.agents.get(decision.agent_id) || null,
       layer_id: ctx.mappings.layers.get(decision.layer_id) || null,
       version: decision.version,
       status: decision.status,
@@ -242,11 +245,11 @@ async function importDecisionHistory(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(entry.key_id);
     if (!newKeyId) continue;
 
+    // Note: agent_id removed in v4.0
     await ctx.knex('v4_decision_history').insert({
       key_id: newKeyId,
       version: entry.version,
       value: entry.value,
-      agent_id: ctx.mappings.agents.get(entry.agent_id) || null,
       ts: entry.ts,
       project_id: ctx.projectId
     });
@@ -265,13 +268,13 @@ async function importDecisionContext(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(context.decision_key_id);
     if (!newKeyId) continue;
 
+    // Note: agent_id removed in v4.0
     await ctx.knex('v4_decision_context').insert({
       decision_key_id: newKeyId,
       rationale: context.rationale,
       alternatives_considered: context.alternatives_considered,
       tradeoffs: context.tradeoffs,
       decision_date: context.decision_date,
-      agent_id: ctx.mappings.agents.get(context.agent_id) || null,
       related_task_id: null,  // Will be updated later if task exists
       related_constraint_id: null,
       project_id: ctx.projectId
@@ -291,10 +294,10 @@ async function importFileChanges(ctx: ImportContext): Promise<void> {
     const newFileId = ctx.mappings.files.get(change.file_id);
     if (!newFileId) continue;
 
+    // Note: agent_id removed in v4.0
     await ctx.knex('v4_file_changes').insert({
       file_id: newFileId,
       change_type: change.change_type,
-      agent_id: ctx.mappings.agents.get(change.agent_id) || null,
       layer_id: ctx.mappings.layers.get(change.layer_id) || null,
       description: change.description,
       ts: change.ts,
@@ -312,12 +315,12 @@ async function importConstraints(ctx: ImportContext): Promise<void> {
   const constraints = ctx.jsonData.transaction_tables.constraints || [];
 
   for (const constraint of constraints) {
+    // Note: agent_id removed in v4.0
     await ctx.knex('v4_constraints').insert({
       category_id: ctx.mappings.constraint_categories.get(constraint.category_id) || constraint.category_id,
       constraint_text: constraint.constraint_text,
       priority: constraint.priority,
       active: constraint.active,
-      agent_id: ctx.mappings.agents.get(constraint.agent_id) || null,
       layer_id: ctx.mappings.layers.get(constraint.layer_id) || null,
       ts: constraint.ts,
       project_id: ctx.projectId
@@ -338,11 +341,10 @@ async function importTasks(ctx: ImportContext): Promise<void> {
   const sortedTasks = sortTasksByDependencies(tasks, dependencies);
 
   for (const task of sortedTasks) {
+    // Note: assigned_agent_id, created_by_agent_id removed in v4.0
     const [newTaskId] = await ctx.knex('v4_tasks').insert({
       title: task.title,
       status_id: ctx.mappings.task_statuses.get(task.status_id) || task.status_id,
-      assigned_agent_id: ctx.mappings.agents.get(task.assigned_agent_id) || null,
-      created_by_agent_id: ctx.mappings.agents.get(task.created_by_agent_id) || null,
       priority: task.priority,
       layer_id: ctx.mappings.layers.get(task.layer_id) || null,
       created_ts: task.created_ts,
@@ -367,12 +369,13 @@ async function importTaskDetails(ctx: ImportContext): Promise<void> {
     const newTaskId = ctx.mappings.tasks.get(detail.task_id);
     if (!newTaskId) continue;
 
+    // Note: v4_task_details doesn't have project_id column
     await ctx.knex('v4_task_details').insert({
       task_id: newTaskId,
       description: detail.description,
       acceptance_criteria: detail.acceptance_criteria,
-      notes: detail.notes,
-      project_id: ctx.projectId
+      acceptance_criteria_json: detail.acceptance_criteria_json || null,
+      notes: detail.notes
     });
   }
 
@@ -380,24 +383,59 @@ async function importTaskDetails(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_activity_log with remapped IDs
+ * Import v4_decision_policies (v4.0+ table)
  */
-async function importActivityLog(ctx: ImportContext): Promise<void> {
-  const activities = ctx.jsonData.transaction_tables.activity_log || [];
+async function importDecisionPolicies(ctx: ImportContext): Promise<void> {
+  const policies = ctx.jsonData.master_tables?.decision_policies || [];
 
-  for (const activity of activities) {
-    await ctx.knex('v4_activity_log').insert({
-      ts: activity.ts,
-      agent_id: ctx.mappings.agents.get(activity.agent_id) || null,
-      action_type: activity.action_type,
-      target: activity.target,
-      layer_id: ctx.mappings.layers.get(activity.layer_id) || null,
-      details: activity.details,
+  for (const policy of policies) {
+    const [newPolicyId] = await ctx.knex('v4_decision_policies').insert({
+      name: policy.name,
+      description: policy.description,
+      defaults: policy.defaults,
+      required_fields: policy.required_fields,
+      validation_rules: policy.validation_rules,
+      quality_gates: policy.quality_gates,
+      suggest_similar: policy.suggest_similar ?? 1,
+      category: policy.category,
+      ts: policy.ts || Math.floor(Date.now() / 1000),
       project_id: ctx.projectId
+    });
+
+    ctx.mappings.decision_policies.set(policy.id, newPolicyId);
+  }
+
+  ctx.stats.transaction_tables.decision_policies_created = policies.length;
+}
+
+/**
+ * Import v4_tag_index (v4.0+ table)
+ * Note: source_id remapping depends on source_type (decision, constraint, task)
+ */
+async function importTagIndex(ctx: ImportContext): Promise<void> {
+  const indices = ctx.jsonData.master_tables?.tag_index || [];
+
+  for (const index of indices) {
+    // Remap source_id based on source_type
+    let newSourceId: number | null = null;
+    if (index.source_type === 'decision') {
+      newSourceId = ctx.mappings.context_keys.get(index.source_id) ?? null;
+    } else if (index.source_type === 'task') {
+      newSourceId = ctx.mappings.tasks.get(index.source_id) ?? null;
+    }
+    // Skip if we couldn't remap the source_id (e.g., constraint)
+    if (!newSourceId && index.source_type !== 'constraint') continue;
+
+    await ctx.knex('v4_tag_index').insert({
+      tag: index.tag,
+      source_type: index.source_type,
+      source_id: newSourceId || index.source_id,  // Use original for constraints
+      project_id: ctx.projectId,
+      created_ts: index.created_ts || Math.floor(Date.now() / 1000)
     });
   }
 
-  ctx.stats.transaction_tables.activity_log_created = activities.length;
+  ctx.stats.transaction_tables.tag_index_created = indices.length;
 }
 
 /**
@@ -570,7 +608,7 @@ function initializeStats(): ImportStats {
   return {
     project_created: false,
     master_tables: {
-      agents_created: 0,
+      // Note: agents_created removed in v4.0
       files_created: 0,
       files_reused: 0,
       context_keys_created: 0,
@@ -588,7 +626,9 @@ function initializeStats(): ImportStats {
       constraints_created: 0,
       tasks_created: 0,
       task_details_created: 0,
-      activity_log_created: 0
+      // Note: activity_log_created removed in v4.0
+      decision_policies_created: 0,  // v4.0+ table
+      tag_index_created: 0  // v4.0+ table
     },
     junction_tables: {
       decision_tags_created: 0,

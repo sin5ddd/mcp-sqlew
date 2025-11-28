@@ -6,7 +6,7 @@ import { generateHeader } from '../generators/headers.js';
 import { generateForeignKeyControls, generateTransactionControl } from '../generators/controls.js';
 import { getAllTables, getCreateTableStatement } from './table-export.js';
 import { getAllViews, getCreateViewStatement } from './view-export.js';
-import { getAllIndexes, getCreateIndexStatement } from './index-export.js';
+import { getAllIndexes, getCreateIndexStatement, getIndexMetadata } from './index-export.js';
 import { generateSequenceResets } from './sequence-reset.js';
 import { getTableDependencies, topologicalSort } from './dependency-sort.js';
 import { getPrimaryKeyColumns } from '../schema/primary-keys.js';
@@ -51,10 +51,16 @@ export async function generateSqlDump(
 
   // Get tables to dump
   // Include knex_migrations table when schema is included for complete migration state
-  const allTables = await getAllTables(knex, includeSchema);
-  const tablesToDump = requestedTables
-    ? allTables.filter(t => requestedTables.includes(t))
-    : allTables;
+  let tablesToDump: string[];
+  if (requestedTables && requestedTables.length > 0) {
+    // When specific tables are requested, use them directly (no prefix filtering)
+    // This allows dumping tables with any prefix for testing and flexibility
+    tablesToDump = requestedTables;
+  } else {
+    // No specific tables requested: get all tables with default v4_ prefix filter
+    const allTables = await getAllTables(knex, includeSchema);
+    tablesToDump = allTables;
+  }
 
   // Sort tables by foreign key dependencies for PostgreSQL compatibility
   // Parent tables must be created before child tables
@@ -108,6 +114,7 @@ export async function generateSqlDump(
     }
 
     // Generate CREATE INDEX statements
+    // Skip single-column UNIQUE indexes (already output as UNIQUE constraint in CREATE TABLE)
     try {
       const indexStatements: string[] = [];
       for (const table of sortedTables) {
@@ -115,6 +122,14 @@ export async function generateSqlDump(
         if (indexes.length > 0) {
           for (const indexName of indexes) {
             try {
+              // Check if this is a single-column UNIQUE index
+              // These are already included in CREATE TABLE as column-level UNIQUE constraints
+              const metadata = await getIndexMetadata(knex, indexName, table);
+              if (metadata && metadata.isUnique && metadata.columns.length === 1) {
+                // Skip - already output as UNIQUE constraint in CREATE TABLE
+                continue;
+              }
+
               const createIndexSql = await getCreateIndexStatement(knex, indexName, format);
               indexStatements.push(`-- Index: ${indexName} on ${table}`);
               indexStatements.push(createIndexSql);

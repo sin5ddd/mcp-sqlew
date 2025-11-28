@@ -51,9 +51,8 @@ export interface JsonExport {
   }>;
 
   // Master tables (only entries used by exported project(s))
-  // Note: Only m_files, m_tags, m_scopes have project_id (added in v3.7.3)
+  // Note: Agent system removed in v4.0 - agents field no longer exists
   master_tables: {
-    agents: Array<{ id: number; name: string; last_active_ts: number }>;
     files: Array<{ id: number; project_id: number; path: string }>;
     context_keys: Array<{ id: number; key: string }>;  // No project_id - global keys
     tags: Array<{ id: number; project_id: number; name: string }>;
@@ -61,9 +60,13 @@ export interface JsonExport {
     constraint_categories: Array<{ id: number; name: string }>;
     layers: Array<{ id: number; name: string }>;
     task_statuses: Array<{ id: number; name: string }>;
+    // v4.0+ tables
+    decision_policies: Array<{ id: number; project_id: number; name: string; description: string | null; defaults: string | null; required_fields: string | null; validation_rules: string | null; quality_gates: string | null; suggest_similar: number; category: string | null; ts: number }>;
+    tag_index: Array<{ id: number; tag: string; source_type: string; source_id: number; project_id: number; created_ts: number }>;
   };
 
   // Transaction tables (filtered by project_id)
+  // Note: activity_log removed in v4.0 (was never created)
   transaction_tables: {
     decisions: any[];
     decisions_numeric: any[];
@@ -80,7 +83,6 @@ export interface JsonExport {
     task_file_links: any[];
     task_decision_links: any[];
     task_dependencies: any[];
-    activity_log: any[];
   };
 }
 
@@ -164,7 +166,6 @@ export async function generateJsonExport(
     export_mode: exportMode,
     database_type: databaseType,
     master_tables: {
-      agents: [],
       files: [],
       context_keys: [],
       tags: [],
@@ -172,6 +173,8 @@ export async function generateJsonExport(
       constraint_categories: [],
       layers: [],
       task_statuses: [],
+      decision_policies: [],
+      tag_index: [],
     },
     transaction_tables: {
       decisions: [],
@@ -189,7 +192,6 @@ export async function generateJsonExport(
       task_file_links: [],
       task_decision_links: [],
       task_dependencies: [],
-      activity_log: [],
     },
   };
 
@@ -217,7 +219,6 @@ async function exportMasterTables(
   projectIds: number[]
 ): Promise<JsonExport['master_tables']> {
   const masterTables: JsonExport['master_tables'] = {
-    agents: [],
     files: [],
     context_keys: [],
     tags: [],
@@ -225,50 +226,11 @@ async function exportMasterTables(
     constraint_categories: [],
     layers: [],
     task_statuses: [],
+    decision_policies: [],
+    tag_index: [],
   };
 
-  // Get used agent IDs from all transaction tables
-  const usedAgentIds = new Set<number>();
-
-  // From v4_decisions
-  const decisionAgents = await knex('v4_decisions')
-    .whereIn('project_id', projectIds)
-    .whereNotNull('agent_id')
-    .distinct('agent_id');
-  decisionAgents.forEach(row => usedAgentIds.add(row.agent_id));
-
-  // From v4_file_changes
-  const fileChangeAgents = await knex('v4_file_changes')
-    .whereIn('project_id', projectIds)
-    .distinct('agent_id');
-  fileChangeAgents.forEach(row => usedAgentIds.add(row.agent_id));
-
-  // From v4_constraints
-  const constraintAgents = await knex('v4_constraints')
-    .whereIn('project_id', projectIds)
-    .whereNotNull('agent_id')
-    .distinct('agent_id');
-  constraintAgents.forEach(row => usedAgentIds.add(row.agent_id));
-
-  // From v4_tasks
-  const taskAgents = await knex('v4_tasks')
-    .whereIn('project_id', projectIds)
-    .whereNotNull('assigned_agent_id')
-    .distinct('assigned_agent_id as agent_id');
-  taskAgents.forEach(row => usedAgentIds.add(row.agent_id));
-
-  // From v4_decision_context
-  const contextAgents = await knex('v4_decision_context')
-    .whereIn('project_id', projectIds)
-    .whereNotNull('agent_id')
-    .distinct('agent_id');
-  contextAgents.forEach(row => usedAgentIds.add(row.agent_id));
-
-  if (usedAgentIds.size > 0) {
-    masterTables.agents = await knex('v4_agents')
-      .whereIn('id', Array.from(usedAgentIds))
-      .select('id', 'name', 'last_active_ts');
-  }
+  // Note: Agent system removed in v4.0 - no agent-related queries needed
 
   // Get used file IDs from v4_file_changes and v4_task_file_links
   const usedFileIds = new Set<number>();
@@ -412,6 +374,16 @@ async function exportMasterTables(
   masterTables.task_statuses = await knex('v4_task_statuses')
     .select('id', 'name');
 
+  // Export v4.0+ tables: decision_policies (filtered by project_id)
+  masterTables.decision_policies = await knex('v4_decision_policies')
+    .whereIn('project_id', projectIds)
+    .select('id', 'project_id', 'name', 'description', 'defaults', 'required_fields', 'validation_rules', 'quality_gates', 'suggest_similar', 'category', 'ts');
+
+  // Export v4.0+ tables: tag_index (filtered by project_id)
+  masterTables.tag_index = await knex('v4_tag_index')
+    .whereIn('project_id', projectIds)
+    .select('id', 'tag', 'source_type', 'source_id', 'project_id', 'created_ts');
+
   return masterTables;
 }
 
@@ -438,7 +410,6 @@ async function exportTransactionTables(
     task_file_links: [],
     task_decision_links: [],
     task_dependencies: [],
-    activity_log: [],
   };
 
   // Export each transaction table
@@ -488,9 +459,11 @@ async function exportTransactionTables(
     .whereIn('project_id', projectIds)
     .select('*');
 
-  transactionTables.task_details = await knex('v4_task_details')
-    .whereIn('project_id', projectIds)
-    .select('*');
+  // task_details doesn't have project_id, join through v4_tasks
+  transactionTables.task_details = await knex('v4_task_details as td')
+    .join('v4_tasks as t', 'td.task_id', 't.id')
+    .whereIn('t.project_id', projectIds)
+    .select('td.*');
 
   // Junction table - filter by joining through parent table
   transactionTables.task_tags = await knex('v4_task_tags as tt')
@@ -510,9 +483,7 @@ async function exportTransactionTables(
     .whereIn('project_id', projectIds)
     .select('*');
 
-  transactionTables.activity_log = await knex('v4_activity_log')
-    .whereIn('project_id', projectIds)
-    .select('*');
+  // Note: activity_log removed in v4.0 (table was never created)
 
   return transactionTables;
 }

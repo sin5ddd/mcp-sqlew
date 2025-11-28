@@ -7,55 +7,62 @@
 sqlew provides CLI commands for advanced database operations that complement the main MCP server functionality. These
 commands are useful for database administration, backup/restore, and cross-project data migration.
 
+> **⚠️ Important**: Database CLI commands must be run via `npm run` from the project directory.
+> `npx` is not supported for database operations.
+
 ## What is CLI Mode?
 
 While the primary use of sqlew is as an **MCP server** (integrated with Claude Code via `.mcp.json`), it also provides
 standalone **CLI commands** for:
 
-- **Database Migration** - Generate SQL dumps for SQLite, MySQL, PostgresSQL migration
+- **Database Migration** - Generate SQL dumps for SQLite, MySQL, PostgreSQL migration
 - **Project Export/Import** - Share project data across databases or team members
 - **Backup/Restore** - Create SQL backups with schema and data
 
 ## MCP Server vs CLI Mode
 
-| Feature         | MCP Server (`npx sqlew`)               | CLI Mode                                     |
+| Feature         | MCP Server (via `.mcp.json`)           | CLI Mode                                     |
 |-----------------|----------------------------------------|----------------------------------------------|
 | **Primary Use** | AI agent context management            | Database administration                      |
 | **Setup**       | `.mcp.json` configuration              | Per-project npm install                      |
 | **Commands**    | MCP tools (decision, task, file, etc.) | CLI commands (db:dump, db:export, db:import) |
 | **When to Use** | Daily AI development workflow          | Database migration, backup, data sharing     |
 
-## Installation
+## Usage
 
-### Install sqlew in Your Project
+### Within mcp-sqlew Project (Development)
+
+Use npm scripts with `--` to pass arguments:
 
 ```bash
-cd /path/to/your/project
-npm install sqlew
+# Generate MySQL dump
+npm run db:dump -- mysql backup.sql
+
+# Export project to JSON
+npm run db:export -- data.json project=myproject
+
+# Import from JSON
+npm run db:import -- data.json
 ```
 
-### Add npm Script Shortcut (Recommended)
+### In Projects with sqlew as Dependency
 
 Add to your `package.json`:
 
 ```json
 {
   "scripts": {
-    "sqlew": "node node_modules/sqlew/dist/cli.js"
+    "db:dump": "node node_modules/sqlew/dist/cli.js db:dump",
+    "db:export": "node node_modules/sqlew/dist/cli.js db:export",
+    "db:import": "node node_modules/sqlew/dist/cli.js db:import"
   }
 }
 ```
 
-Then you can use shorter commands:
+Then use:
 
 ```bash
-npm run sqlew db:dump --format=mysql --output=backup.sql
-```
-
-### Direct Command (Without Shortcut)
-
-```bash
-node node_modules/sqlew/dist/cli.js db:dump --format=mysql --output=backup.sql
+npm run db:dump -- mysql backup.sql
 ```
 
 ## Available Commands
@@ -67,17 +74,20 @@ Generate complete SQL dumps (schema + data) for database migration or backup.
 **Use Cases**:
 
 - Full database backup with schema
-- Cross-database migration (SQLite → MySQL/PostgresSQL)
+- Cross-database migration (SQLite → MySQL/PostgreSQL)
 - Development → Production deployment
 
 **Quick Example**:
 
 ```bash
-# Backup SQLite to MySQL dump
-node node_modules/sqlew/dist/cli.js db:dump --format=mysql --output=backup.sql
+# Generate MySQL dump (positional format argument)
+npm run db:dump -- mysql backup.sql
 
-# Backup to PostgresSQL dump
-node node_modules/sqlew/dist/cli.js db:dump --format=postgresql --output=backup.sql
+# Generate PostgreSQL dump
+npm run db:dump -- postgresql backup.sql
+
+# MySQL from PostgreSQL source
+npm run db:dump -- mysql backup.sql from=postgresql
 ```
 
 **📖 Full Documentation**: [DATABASE_MIGRATION.md](DATABASE_MIGRATION.md)
@@ -98,10 +108,10 @@ Export project data to JSON format for sharing or multi-project consolidation.
 
 ```bash
 # Export specific project
-node node_modules/sqlew/dist/cli.js db:export --project=my-project --output=project.json
+npm run db:export -- project.json project=my-project
 
 # Export all projects
-node node_modules/sqlew/dist/cli.js db:export --output=all-projects.json
+npm run db:export -- all-projects.json
 ```
 
 **📖 Full Documentation**: [DATA_EXPORT_IMPORT.md](DATA_EXPORT_IMPORT.md#export-command)
@@ -122,13 +132,13 @@ Import project data from JSON export files.
 
 ```bash
 # Import from JSON export
-node node_modules/sqlew/dist/cli.js db:import --source=project.json
+npm run db:import -- project.json
 
 # Import with custom name
-node node_modules/sqlew/dist/cli.js db:import --source=project.json --project-name=new-name
+npm run db:import -- project.json project-name=new-name
 
 # Dry-run validation
-node node_modules/sqlew/dist/cli.js db:import --source=project.json --dry-run
+npm run db:import -- project.json dry-run=true
 ```
 
 **📖 Full Documentation**: [DATA_EXPORT_IMPORT.md](DATA_EXPORT_IMPORT.md#import-command)
@@ -154,7 +164,7 @@ backup/restore to the same database. Use `db:dump` for proper backup/restore.
 
 ```bash
 # Create SQL backup with schema + data
-node node_modules/sqlew/dist/cli.js db:dump --format=sqlite --output=backup-$(date +%Y%m%d).sql
+npm run db:dump -- sqlite backup-$(date +%Y%m%d).sql
 
 # Or simple SQLite file copy
 cp .sqlew/sqlew.db .sqlew/backup-$(date +%Y%m%d).db
@@ -164,36 +174,35 @@ cp .sqlew/sqlew.db .sqlew/backup-$(date +%Y%m%d).db
 
 ```bash
 # Developer A: Export project
-node node_modules/sqlew/dist/cli.js db:export --project=feature-x --output=feature-x.json
+npm run db:export -- feature-x.json project=feature-x
 
 # Developer B: Import project (in their own database)
-node node_modules/sqlew/dist/cli.js db:import --source=feature-x.json
+npm run db:import -- feature-x.json
 ```
 
 ### Workflow 3: Migrate to MySQL from SQLite
 
 ```bash
 # Step 1: Generate MySQL dump
-node node_modules/sqlew/dist/cli.js db:dump --format=mysql --output=migrate-to-mysql.sql
+npm run db:dump -- mysql migrate-to-mysql.sql
 
 # Step 2: Create MySQL database
 mysql -e "CREATE DATABASE sqlew_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 # Step 3: Import dump
-mysql sqlew_db < migrate-to-mysql.sql
+mysql -u user -p sqlew_db < migrate-to-mysql.sql
 ```
 
-### Workflow 4: Consolidate Multiple Projects (Permission-Constrained)
+### Workflow 4: Consolidate Multiple Projects
 
 ```bash
 # Export from each project
-cd ~/project-a && node node_modules/sqlew/dist/cli.js db:export --project=project-a --output=/tmp/a.json
-cd ~/project-b && node node_modules/sqlew/dist/cli.js db:export --project=project-b --output=/tmp/b.json
+npm run db:export -- /tmp/a.json project=project-a
+npm run db:export -- /tmp/b.json project=project-b
 
 # Import all to shared database
-cd ~/shared-db
-node node_modules/sqlew/dist/cli.js db:import --source=/tmp/a.json
-node node_modules/sqlew/dist/cli.js db:import --source=/tmp/b.json
+npm run db:import -- /tmp/a.json
+npm run db:import -- /tmp/b.json
 ```
 
 ## Getting Help
@@ -201,9 +210,9 @@ node node_modules/sqlew/dist/cli.js db:import --source=/tmp/b.json
 Show command-specific help:
 
 ```bash
-node node_modules/sqlew/dist/cli.js db:dump --help
-node node_modules/sqlew/dist/cli.js db:export --help
-node node_modules/sqlew/dist/cli.js db:import --help
+npm run db:dump -- --help
+npm run db:export -- --help
+npm run db:import -- --help
 ```
 
 ## Detailed Documentation

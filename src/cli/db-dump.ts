@@ -29,126 +29,95 @@ export function showDbDumpHelp(): void {
 sqlew db:dump - Generate SQL dump for database migration
 
 USAGE:
-  npx sqlew db:dump --format=<format> [options]
+  npm run db:dump -- <format> [output-file] [key=value ...]
 
-REQUIRED OPTIONS:
-  --format <format>        Target database format: mysql, postgresql, or sqlite
+ARGUMENTS:
+  <format>                 Target format: mysql, postgresql, sqlite
+  [output-file]            Output file (optional, default: stdout)
 
-OPTIONS:
-  --from <database>        Source database: sqlite, mysql, or postgresql (default: sqlite)
-  --output <file>          Output file path (default: stdout)
-  --tables <tables>        Comma-separated list of tables to dump (default: all)
-  --chunk-size <number>    Rows per INSERT statement (default: 100)
-  --max-statements <num>   Max statements per file - splits into multiple files if exceeded
-                           (default: unlimited, recommended: 900 for MariaDB batch mode)
-  --on-conflict <mode>     Duplicate key handling: error, ignore, replace (default: error)
-                           - error: Standard INSERT (fails on duplicates)
-                           - ignore: Skip duplicate rows (INSERT IGNORE/ON CONFLICT DO NOTHING)
-                           - replace: Update existing rows (ON DUPLICATE KEY UPDATE/ON CONFLICT DO UPDATE)
-  --exclude-schema         Exclude CREATE TABLE statements (data-only dump)
-                           By default, schema is included for complete migration
-  --db-path <path>         SQLite database file path (overrides config file)
-  --config <path>          Config file path (default: auto-detect .sqlew/config.toml or config.toml)
-  --help                   Show this help message
-
-CONFIG FILE:
-  The command automatically loads database settings from config.toml.
-  Priority: CLI args > config file > environment variables > defaults
-
-ENVIRONMENT VARIABLES (for MySQL/PostgreSQL sources):
-  MYSQL_HOST               MySQL host (default: 127.0.0.1)
-  MYSQL_PORT               MySQL port (default: 3306)
-  MYSQL_USER               MySQL username
-  MYSQL_PASSWORD           MySQL password
-  MYSQL_DATABASE           MySQL database name
-
-  PG_HOST                  PostgreSQL host (default: localhost)
-  PG_PORT                  PostgreSQL port (default: 5432)
-  PG_USER                  PostgreSQL username
-  PG_PASSWORD              PostgreSQL password
-  PG_DATABASE              PostgreSQL database name
+OPTIONS (use key=value format):
+  to=<format>              Target format (alternative to positional)
+  from=<database>          Source database (default: sqlite)
+  tables=<list>            Comma-separated table names (default: all)
+  chunk-size=<n>           Rows per INSERT (default: 100)
+  max-statements=<n>       Max statements per file (for MariaDB batch mode)
+  on-conflict=<mode>       error|ignore|replace (default: ignore for MySQL)
+  exclude-schema=true      Data only, no CREATE TABLE
+  db-path=<path>           SQLite database path
+  config=<path>            Config file path
 
 EXAMPLES:
-  # SQLite → MySQL (default source)
-  npx sqlew db:dump --format mysql --output dump-mysql.sql
+  # SQLite → MySQL
+  npm run db:dump -- mysql dump.sql
 
-  # MySQL → SQLite (reverse migration)
-  npx sqlew db:dump --from mysql --format sqlite --output dump-sqlite.sql
+  # MySQL → SQLite
+  npm run db:dump -- sqlite dump.sql from=mysql
 
-  # PostgreSQL → MySQL (cross-database)
-  npx sqlew db:dump --from postgresql --format mysql --output dump-mysql.sql
+  # PostgreSQL → MySQL
+  npm run db:dump -- mysql dump.sql from=postgresql
 
-  # MySQL → PostgreSQL (cross-database)
-  npx sqlew db:dump --from mysql --format postgresql --output dump-pg.sql
+  # Specific tables only
+  npm run db:dump -- mysql dump.sql tables=v4_decisions,v4_tasks
 
-  # Dump specific tables from PostgreSQL
-  npx sqlew db:dump --from postgresql --format sqlite --tables t_decisions,t_tasks
+  # For MariaDB batch mode (1000 statement limit)
+  npm run db:dump -- mysql dump.sql max-statements=900
 
-  # Split dump for MariaDB batch mode (1000 statement limit)
-  npx sqlew db:dump --format mysql --output dump.sql --max-statements=900
+  # Using key=value for target format
+  npm run db:dump -- dump.sql to=mysql from=sqlite
 
-MIGRATION WORKFLOW:
-  1. Create schema on target database:
-     npm run migrate:latest --env=<target>
-
-  2. Generate SQL dump from source:
-     npx sqlew db:dump --from=<source> --format=<target> --output=dump.sql
-
-  3. Import data into target database:
-     mysql < dump.sql    # for MySQL
-     psql -f dump.sql    # for PostgreSQL
-     sqlite3 db.db < dump.sql    # for SQLite
+WORKFLOW:
+  1. Create schema: npm run migrate:latest
+  2. Generate dump: npm run db:dump -- mysql dump.sql
+  3. Import: mysql -u user -p database < dump.sql
 `);
 }
 
 /**
  * Parse command-line arguments for db:dump
+ *
+ * Supports:
+ * - Positional: `db:dump mysql dump.sql`
+ * - key=value format: `db:dump to=mysql from=sqlite` (npm/PowerShell friendly)
  */
 export function parseDbDumpArgs(args: string[]): DbDumpArgs {
   const parsed: Partial<DbDumpArgs> = {};
+  const validFormats = ['mysql', 'postgresql', 'sqlite'];
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg.startsWith('--')) {
-      // Handle both --key=value and --key value formats
-      let key: string;
-      let value: string | undefined;
+    // Handle key=value format (without -- prefix, npm/PowerShell friendly)
+    if (arg.includes('=') && !arg.startsWith('-')) {
+      const [key, ...v] = arg.split('=');
+      const value = v.join('=');
 
-      if (arg.includes('=')) {
-        // --key=value format
-        const [k, ...v] = arg.slice(2).split('=');
-        key = k;
-        value = v.join('='); // Rejoin in case value contains '='
-      } else {
-        // --key value format
-        key = arg.slice(2);
-        value = args[i + 1];
+      if (key === 'to' || key === 'format') {
+        parsed.format = value as DatabaseFormat;
+      } else if (key === 'from') {
+        parsed.from = value as 'sqlite' | 'mysql' | 'postgresql';
+      } else if (key === 'tables') {
+        parsed.tables = value;
+      } else if (key === 'chunk-size' || key === 'chunkSize') {
+        parsed['chunk-size'] = parseInt(value, 10);
+      } else if (key === 'max-statements' || key === 'maxStatements') {
+        parsed['max-statements'] = parseInt(value, 10);
+      } else if (key === 'on-conflict' || key === 'onConflict') {
+        parsed['on-conflict'] = value as ConflictMode;
+      } else if (key === 'db-path' || key === 'dbPath') {
+        parsed['db-path'] = value;
+      } else if (key === 'config') {
+        parsed.config = value;
+      } else if (key === 'exclude-schema' || key === 'excludeSchema') {
+        parsed['exclude-schema'] = value === 'true' || value === '1';
       }
-
-      if (key === 'help') {
-        parsed.help = true;
-      } else if (key === 'exclude-schema') {
-        parsed['exclude-schema'] = true;
-      } else if (value && !value.startsWith('--')) {
-        if (key === 'chunk-size') {
-          parsed['chunk-size'] = parseInt(value, 10);
-        } else if (key === 'max-statements') {
-          parsed['max-statements'] = parseInt(value, 10);
-        } else if (key === 'db-path') {
-          parsed['db-path'] = value;
-        } else if (key === 'config') {
-          parsed.config = value;
-        } else if (key === 'on-conflict') {
-          parsed['on-conflict'] = value as ConflictMode;
-        } else {
-          (parsed as any)[key] = value;
-        }
-        // Only skip next arg if we used --key value format (not --key=value)
-        if (!arg.includes('=')) {
-          i++;
-        }
-      }
+    } else if (arg === 'help' || arg === '--help') {
+      parsed.help = true;
+    } else if (!parsed.format && validFormats.includes(arg.toLowerCase())) {
+      // First positional: target format
+      parsed.format = arg.toLowerCase() as DatabaseFormat;
+    } else if (parsed.format && !parsed.output && !arg.startsWith('-') && !arg.includes('=')) {
+      // Second positional: output file
+      parsed.output = arg;
     }
   }
 
@@ -297,7 +266,9 @@ export async function executeDbDump(args: DbDumpArgs): Promise<void> {
   const output = args.output;
   const tables = args.tables ? args.tables.split(',').map(t => t.trim()) : undefined;
   const chunkSize = args['chunk-size'] || 100;
-  const conflictMode = args['on-conflict'] || 'error';
+  // MySQL/MariaDB: Default to 'ignore' due to case-insensitive collation (utf8mb4_unicode_ci)
+  // This prevents duplicate key errors when source DB has case-sensitive duplicates (e.g., 'dry' vs 'DRY')
+  const conflictMode = args['on-conflict'] || (format === 'mysql' ? 'ignore' : 'error');
   const includeSchema = !args['exclude-schema'];  // Include schema by default
 
   // Load config file - prioritize: explicit --config > default locations
