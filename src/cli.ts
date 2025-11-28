@@ -255,24 +255,29 @@ async function queryFiles(args: CLIArgs): Promise<void> {
 // Main Entry Point
 // ============================================================================
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+/**
+ * Run CLI with provided arguments
+ * This function is exported for use by index.ts (unified entry point)
+ * @param rawArgs - Command line arguments (without 'node' and script path)
+ */
+export async function runCli(rawArgs: string[]): Promise<void> {
+  const args = parseArgs(rawArgs);
 
   // Special handling for db:dump command (passes through --help to subcommand)
   if (args.command === 'db:dump') {
-    await dbDumpCommand(process.argv.slice(3));
+    await dbDumpCommand(rawArgs.slice(1));
     return;
   }
 
   // Special handling for db:export command (passes through --help to subcommand)
   if (args.command === 'db:export') {
-    await dbExportCommand(process.argv.slice(3));
+    await dbExportCommand(rawArgs.slice(1));
     return;
   }
 
   // Special handling for db:import command (passes through --help to subcommand)
   if (args.command === 'db:import') {
-    await dbImportCommand(process.argv.slice(3));
+    await dbImportCommand(rawArgs.slice(1));
     return;
   }
 
@@ -316,5 +321,17 @@ async function main(): Promise<void> {
   }
 }
 
-// Run main function
-main();
+/**
+ * Check if a command is a CLI command (for use by index.ts)
+ */
+export function isCliCommand(command: string): boolean {
+  const cliCommands = ['db:dump', 'db:export', 'db:import', 'query'];
+  return cliCommands.includes(command);
+}
+
+// Run CLI when executed directly
+// Check if this module is the main entry point
+const isDirectExecution = process.argv[1]?.endsWith('cli.js') || process.argv[1]?.endsWith('cli.ts');
+if (isDirectExecution) {
+  runCli(process.argv.slice(2));
+}
