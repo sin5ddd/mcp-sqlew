@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.1] - 2025-11-28
+
+### Removed
+
+**Database Views Eliminated**
+
+- Dropped all database views (`v_tagged_constraints`, `v_recent_file_changes`, etc.)
+- Views caused migration complexity across SQLite/MySQL/PostgreSQL due to database-specific syntax
+- Migration: `20251128000000_drop_all_views.ts`
+
+### Changed
+
+**JOIN-Based Queries**
+
+- `src/tools/constraints/actions/get.ts` - Replaced `v_tagged_constraints` view with JOIN query
+- `src/tools/files/actions/get.ts` - Replaced `v_recent_file_changes` view with JOIN query
+- Uses `UniversalKnex` wrapper for cross-database compatibility (date functions, boolean values, string aggregation)
+
+**VCS Test Cleanup**
+
+- `src/tests/feature/vcs/git-aware-completion.test.ts` - Added automatic git reset after tests
+- Test commits are now automatically dropped when tests complete
+- Prevents test artifacts from polluting git history
+
+### Added
+
+**No-Views Guardrail Skill**
+
+- `.claude/skills/no-views/SKILL.md` - Documentation for view prohibition policy
+- `.claude/skills/skill-rules.json` - Added `no-views` rule (enforcement: block)
+- Blocks creation of database views, requires JOINs instead
+
+**Documentation Updates**
+
+- `CLAUDE.md` - Updated to reflect no-views policy
+- Removed Views section from database schema documentation
+- Added `no-views` to Guardrail Skills table
+
+---
+
 ## [4.0.0] - 2025-11-27
 
 ### Changed
