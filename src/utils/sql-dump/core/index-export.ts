@@ -5,9 +5,10 @@ import type { DatabaseFormat } from '../types.js';
 import {
   convertIdentifierQuotes,
 } from '../../sql-dump-converters.js';
-import { getAllIndexes } from '../schema/indexes.js';
+import { getAllIndexes, getIndexMetadata } from '../schema/indexes.js';
+export type { IndexMetadata } from '../schema/indexes.js';
 
-export { getAllIndexes };
+export { getAllIndexes, getIndexMetadata };
 
 /**
  * Get CREATE INDEX statement for an index

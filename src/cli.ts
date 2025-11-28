@@ -131,55 +131,37 @@ function showHelp(): void {
   console.log(`
 sqlew CLI - Query and database migration tool for mcp-sqlew
 
+NOTE: Database commands must be run via "npm run" from the project directory.
+      npx is not supported for database operations.
+
 USAGE:
-  sqlew <command> [subcommand] [options]
+  npm run <command> -- [options]
 
 COMMANDS:
-  query      Query context data (decisions, messages, files)
   db:dump    Generate SQL dump for database migration (schema + data)
   db:export  Export project data to JSON format (data-only, for append-import)
   db:import  Import project data from JSON export (append to existing database)
 
-QUERY SUBCOMMANDS:
-  decisions  Query decisions with filtering
-  messages   Query agent messages
-  files      Query file changes
-
-QUERY OPTIONS:
-  --layer <layer>          Filter by layer (presentation, business, data, infrastructure, cross-cutting)
-  --tags <tags>            Filter by tags (comma-separated)
-  --since <time>           Time filter (e.g., "5m", "1h", "2d", or ISO timestamp)
-  --unread                 Show only unread messages (messages only)
-  --priority <priority>    Filter by priority (low, medium, high, critical)
-  --agent <agent>          Filter by agent name
-  --limit <number>         Limit number of results
-  --output <format>        Output format: json or table (default: json)
-  --db-path <path>         Database file path (default: .sqlew/sqlew.db)
+OPTIONS:
   --help                   Show this help message
 
 EXAMPLES:
-  # Query active decisions with breaking changes
-  sqlew query decisions --layer=business --tags=breaking --output=table
-
-  # Query unread high-priority messages
-  sqlew query messages --unread --priority=high --output=json
-
   # Generate MySQL dump for database migration
-  sqlew db:dump --format=mysql --output=dump-mysql.sql
+  npm run db:dump -- mysql -o dump-mysql.sql
 
   # Generate PostgreSQL dump
-  sqlew db:dump --format=postgresql --output=dump-pg.sql
+  npm run db:dump -- postgresql -o dump-pg.sql
 
   # Export project data to JSON (for merging data across databases)
-  sqlew db:export --project=visualizer --output=data.json
+  npm run db:export -- --project=visualizer -o data.json
 
   # Import project data from JSON export
-  sqlew db:import --source=data.json --project-name=visualizer-v2
+  npm run db:import -- --source=data.json --project-name=visualizer-v2
 
 For more information on commands, run:
-  sqlew db:dump --help
-  sqlew db:export --help
-  sqlew db:import --help
+  npm run db:dump -- --help
+  npm run db:export -- --help
+  npm run db:import -- --help
 `);
 }
 

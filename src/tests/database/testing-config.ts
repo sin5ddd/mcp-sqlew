@@ -35,7 +35,7 @@ export interface DockerContainerConfig {
 /**
  * Database configurations for testing environments
  */
-const TEST_CONFIGS: Record<DatabaseType, Knex.Config | DockerContainerConfig> = {
+export const TEST_CONFIGS: Record<DatabaseType, Knex.Config | DockerContainerConfig> = {
   sqlite: {
     client: 'better-sqlite3',
     connection: { filename: '.sqlew/sqlew.db' },

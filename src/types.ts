@@ -988,10 +988,10 @@ export interface IdMapping extends Map<number, number> {}
 
 /**
  * Complete ID mapping context for all master tables
+ * Note: agents removed in v4.0 (agent system deleted)
  */
 export interface ImportIdMappings {
   projects: IdMapping;
-  agents: IdMapping;
   files: IdMapping;
   context_keys: IdMapping;
   tags: IdMapping;
@@ -1000,6 +1000,7 @@ export interface ImportIdMappings {
   layers: IdMapping;
   task_statuses: IdMapping;
   tasks: IdMapping;  // Transaction table, but needed for dependencies
+  decision_policies: IdMapping;  // v4.0+ table
 }
 
 /**
@@ -1022,11 +1023,11 @@ export interface ImportContext {
 
 /**
  * Import statistics
+ * Note: agents_created, activity_log_created removed in v4.0
  */
 export interface ImportStats {
   project_created: boolean;
   master_tables: {
-    agents_created: number;
     files_created: number;
     files_reused: number;
     context_keys_created: number;
@@ -1044,7 +1045,8 @@ export interface ImportStats {
     constraints_created: number;
     tasks_created: number;
     task_details_created: number;
-    activity_log_created: number;
+    decision_policies_created: number;  // v4.0+ table
+    tag_index_created: number;  // v4.0+ table
   };
   junction_tables: {
     decision_tags_created: number;
@@ -1120,10 +1122,10 @@ export interface IdMapping extends Map<number, number> {}
 
 /**
  * Complete ID mapping context for all master tables
+ * Note: agents removed in v4.0 (agent system deleted)
  */
 export interface ImportIdMappings {
   projects: IdMapping;
-  agents: IdMapping;
   files: IdMapping;
   context_keys: IdMapping;
   tags: IdMapping;
@@ -1132,6 +1134,7 @@ export interface ImportIdMappings {
   layers: IdMapping;
   task_statuses: IdMapping;
   tasks: IdMapping;  // Transaction table, but needed for dependencies
+  decision_policies: IdMapping;  // v4.0+ table
 }
 
 /**
@@ -1154,11 +1157,11 @@ export interface ImportContext {
 
 /**
  * Import statistics
+ * Note: agents_created, activity_log_created removed in v4.0
  */
 export interface ImportStats {
   project_created: boolean;
   master_tables: {
-    agents_created: number;
     files_created: number;
     files_reused: number;
     context_keys_created: number;
@@ -1176,7 +1179,8 @@ export interface ImportStats {
     constraints_created: number;
     tasks_created: number;
     task_details_created: number;
-    activity_log_created: number;
+    decision_policies_created: number;  // v4.0+ table
+    tag_index_created: number;  // v4.0+ table
   };
   junction_tables: {
     decision_tags_created: number;

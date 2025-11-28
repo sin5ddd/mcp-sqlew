@@ -5,6 +5,7 @@
 import { Knex } from 'knex';
 import type { DatabaseAdapter } from '../../adapters/index.js';
 import { getProjectContext } from '../../utils/project-context.js';
+import { validateNoCaseInsensitiveDuplicate } from '../../utils/case-insensitive-validator.js';
 
 /**
  * Validate JSON structure for alternatives array
@@ -130,6 +131,12 @@ export async function getOrCreateTag(
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
+  // Case-insensitive duplicate check (v4.0.2)
+  // Prevents creating 'DRY' when 'dry' already exists
+  await validateNoCaseInsensitiveDuplicate(
+    knex, 'v4_tags', 'name', name, 'tag', { project_id: projectId }
+  );
+
   // Insert with composite key (project_id, name)
   await knex('v4_tags')
     .insert({ project_id: projectId, name })
@@ -157,6 +164,12 @@ export async function getOrCreateScope(
   trx?: Knex.Transaction
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
+
+  // Case-insensitive duplicate check (v4.0.2)
+  // Prevents creating 'Global' when 'global' already exists
+  await validateNoCaseInsensitiveDuplicate(
+    knex, 'v4_scopes', 'name', name, 'scope', { project_id: projectId }
+  );
 
   // Insert with composite key (project_id, name)
   await knex('v4_scopes')

@@ -223,9 +223,27 @@ function buildColumnDefinition(col: Column, targetFormat: DatabaseFormat): strin
   }
 
   // Handle AUTO_INCREMENT for MySQL
-  if (targetFormat === 'mysql' && col.is_generated && col.generation_expression === null) {
+  // SQLite source: INTEGER PRIMARY KEY columns are implicitly auto-increment
+  const isIntegerPrimaryKey = col.is_primary_key &&
+    (col.data_type.toUpperCase().includes('INTEGER') || col.data_type.toUpperCase() === 'INT');
+  const isAutoIncrement = col.is_generated || isIntegerPrimaryKey;
+
+  if (targetFormat === 'mysql' && isAutoIncrement && col.generation_expression === null) {
     if (!def.includes('AUTO_INCREMENT')) {
       def += ' AUTO_INCREMENT';
+    }
+  }
+
+  // Handle SERIAL for PostgreSQL (when source is MySQL/SQLite with auto-increment)
+  // SERIAL = INTEGER + AUTO_INCREMENT sequence
+  if (targetFormat === 'postgresql' && isAutoIncrement && col.generation_expression === null) {
+    // Replace INT/INTEGER/BIGINT with SERIAL/BIGSERIAL
+    if (!def.includes('SERIAL')) {
+      if (dataType.toUpperCase() === 'BIGINT') {
+        def = def.replace(/BIGINT/i, 'BIGSERIAL');
+      } else if (dataType.toUpperCase() === 'INT' || dataType.toUpperCase() === 'INTEGER') {
+        def = def.replace(/\bINT(EGER)?\b/i, 'SERIAL');
+      }
     }
   }
 
@@ -267,9 +285,14 @@ function buildForeignKeyDefinition(fk: ForeignKey, targetFormat: DatabaseFormat)
 
 /**
  * Get all table names from the database (excluding system tables)
+ * @param knex Knex instance
+ * @param includeKnexTables Include knex_* migration tables
+ * @param tablePrefix Filter tables by prefix (default: 'v4_' for v4 schema only)
  */
-export async function getAllTables(knex: Knex, includeKnexTables = false): Promise<string[]> {
+export async function getAllTables(knex: Knex, includeKnexTables = false, tablePrefix = 'v4_'): Promise<string[]> {
   const client = knex.client.config.client;
+
+  let tables: string[] = [];
 
   if (client === 'better-sqlite3' || client === 'sqlite3') {
     const knexFilter = includeKnexTables ? '' : "AND name NOT LIKE 'knex_%'";
@@ -280,12 +303,14 @@ export async function getAllTables(knex: Knex, includeKnexTables = false): Promi
       ${knexFilter}
       ORDER BY name
     `);
-    return result.map((row: any) => row.name);
+    tables = result.map((row: any) => row.name);
   } else if (client === 'mysql' || client === 'mysql2') {
     const result = await knex.raw('SHOW TABLES');
     const tableKey = Object.keys(result[0][0])[0];
-    const tables = result[0].map((row: any) => row[tableKey]);
-    return includeKnexTables ? tables : tables.filter((t: string) => !t.startsWith('knex_'));
+    tables = result[0].map((row: any) => row[tableKey]);
+    if (!includeKnexTables) {
+      tables = tables.filter((t: string) => !t.startsWith('knex_'));
+    }
   } else if (client === 'pg') {
     const knexFilter = includeKnexTables ? '' : "AND tablename NOT LIKE 'knex_%'";
     const result = await knex.raw(`
@@ -294,10 +319,17 @@ export async function getAllTables(knex: Knex, includeKnexTables = false): Promi
       ${knexFilter}
       ORDER BY tablename
     `);
-    return result.rows.map((row: any) => row.tablename);
+    tables = result.rows.map((row: any) => row.tablename);
+  } else {
+    throw new Error(`Unsupported database client: ${client}`);
   }
 
-  throw new Error(`Unsupported database client: ${client}`);
+  // Filter by table prefix (default: v4_ for current schema)
+  if (tablePrefix) {
+    tables = tables.filter((t: string) => t.startsWith(tablePrefix));
+  }
+
+  return tables;
 }
 
 /**

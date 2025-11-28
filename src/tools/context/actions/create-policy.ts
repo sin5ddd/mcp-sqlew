@@ -8,6 +8,7 @@
 import type { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
+import { validateNoCaseInsensitiveDuplicate } from '../../../utils/case-insensitive-validator.js';
 
 export interface CreatePolicyParams {
   name: string;
@@ -64,7 +65,7 @@ export async function createPolicy(
       };
     }
 
-    // Check if policy already exists for this project
+    // Check if policy already exists for this project (exact match)
     const existingPolicy = await knex('v4_decision_policies')
       .where({ name: params.name, project_id: projectId })
       .first();
@@ -75,6 +76,12 @@ export async function createPolicy(
         error: `Policy "${params.name}" already exists for this project`
       };
     }
+
+    // Case-insensitive duplicate check (v4.0.2)
+    // Prevents creating 'API-Design' when 'api-design' already exists
+    await validateNoCaseInsensitiveDuplicate(
+      knex, 'v4_decision_policies', 'name', params.name, 'policy', { project_id: projectId }
+    );
 
     // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 

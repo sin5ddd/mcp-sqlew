@@ -26,57 +26,36 @@ export function showDbExportHelp(): void {
 sqlew db:export - Export project data to JSON format
 
 USAGE:
-  npx sqlew db:export [options]
+  npm run db:export -- [output-file] [key=value ...]
 
-OPTIONS:
-  --project <name>         Export specific project by name (required for multi-project databases)
-                           If not specified, exports all projects
-  --output <file>          Output file path (default: stdout)
-  --db-path <path>         SQLite database file path (overrides config file)
-  --config <path>          Config file path (default: auto-detect .sqlew/config.toml or config.toml)
-  --help                   Show this help message
+ARGUMENTS:
+  [output-file]            Output file (optional, default: stdout)
 
-CONFIG FILE:
-  The command automatically loads database settings from config.toml.
-  Priority: CLI args > config file > environment variables > defaults
+OPTIONS (use key=value format):
+  project=<name>           Export specific project (default: all projects)
+  db-path=<path>           SQLite database path
+  config=<path>            Config file path
 
 EXAMPLES:
-  # Export specific project to file
-  npx sqlew db:export --project=visualizer --output=visualizer-data.json
+  # Export specific project
+  npm run db:export -- data.json project=myproject
 
   # Export all projects
-  npx sqlew db:export --output=full-backup.json
+  npm run db:export -- backup.json
 
-  # Export to stdout (pipe to file or another command)
-  npx sqlew db:export --project=myproject
+  # Export to stdout
+  npm run db:export -- project=myproject
 
-  # Export with explicit database path
-  npx sqlew db:export --project=myproject --db-path=.sqlew/sqlew.db --output=data.json
-
-EXPORT FORMAT:
-  The exported JSON contains:
-  - Project metadata
-  - Master tables (agents, files, tags, etc.) - only entries used by project
-  - Transaction tables (decisions, tasks, constraints, etc.) - filtered by project_id
-  - Statistics (decision count, task count, etc.)
-
-IMPORT WORKFLOW:
-  1. Export data from source database:
-     npx sqlew db:export --project=visualizer --output=data.json
-
-  2. Copy JSON file to target project directory
-
-  3. Import data into target database:
-     npx sqlew db:import --source=data.json --project-name=visualizer-v2
-
-SEE ALSO:
-  npx sqlew db:dump --help    # SQL export with schema (for full database migration)
-  npx sqlew db:import --help  # Import JSON data (append to existing database)
+WORKFLOW:
+  1. Export: npm run db:export -- data.json project=myproject
+  2. Copy JSON to target
+  3. Import: npm run db:import -- data.json
 `);
 }
 
 /**
  * Parse command-line arguments for db:export
+ * Supports key=value format (npm/PowerShell friendly)
  */
 export function parseDbExportArgs(args: string[]): DbExportArgs {
   const parsed: Partial<DbExportArgs> = {};
@@ -84,37 +63,23 @@ export function parseDbExportArgs(args: string[]): DbExportArgs {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg.startsWith('--')) {
-      // Handle both --key=value and --key value formats
-      let key: string;
-      let value: string | undefined;
+    // Handle key=value format (without -- prefix, npm/PowerShell friendly)
+    if (arg.includes('=') && !arg.startsWith('-')) {
+      const [key, ...v] = arg.split('=');
+      const value = v.join('=');
 
-      if (arg.includes('=')) {
-        // --key=value format
-        const [k, ...v] = arg.slice(2).split('=');
-        key = k;
-        value = v.join('='); // Rejoin in case value contains '='
-      } else {
-        // --key value format
-        key = arg.slice(2);
-        value = args[i + 1];
+      if (key === 'project') {
+        parsed.project = value;
+      } else if (key === 'db-path' || key === 'dbPath') {
+        parsed['db-path'] = value;
+      } else if (key === 'config') {
+        parsed.config = value;
       }
-
-      if (key === 'help') {
-        parsed.help = true;
-      } else if (value && !value.startsWith('--')) {
-        if (key === 'db-path') {
-          parsed['db-path'] = value;
-        } else if (key === 'config') {
-          parsed.config = value;
-        } else {
-          (parsed as any)[key] = value;
-        }
-        // Only skip next arg if we used --key value format (not --key=value)
-        if (!arg.includes('=')) {
-          i++;
-        }
-      }
+    } else if (arg === 'help' || arg === '--help') {
+      parsed.help = true;
+    } else if (!arg.startsWith('-') && !arg.includes('=') && !parsed.output) {
+      // Positional argument for output file
+      parsed.output = arg;
     }
   }
 
