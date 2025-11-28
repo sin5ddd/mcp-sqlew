@@ -62,3 +62,7 @@ docker/data/*/
 # sqlew system files (auto-generated)
 .claude/agents/sqlew-*
 .claude/commands/sqw-*
+
+# testing directories
+test-two-step-git/
+test-vcs-staging/
