@@ -2,63 +2,93 @@
 /**
  * MCP Shared Context Server - Entry Point
  * Provides context management tools via Model Context Protocol
+ *
+ * Unified entry point (v4.0.2+):
+ * - No args or MCP args: Start MCP server
+ * - CLI commands (db:export, db:import, db:dump, query): Delegate to CLI
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import { parseArgs, validateArgs } from './server/arg-parser.js';
-import { getToolRegistry } from './server/tool-registry.js';
-import { handleToolCall } from './server/tool-handlers.js';
-import { initializeServer, startFileWatcher } from './server/setup.js';
-import { registerShutdownHandlers, performCleanup } from './server/shutdown.js';
-import { handleInitializationError, safeConsoleError } from './utils/error-handler.js';
+// ============================================================================
+// CLI Command Detection (must be first, before any MCP imports)
+// ============================================================================
+const rawArgs = process.argv.slice(2);
+const firstArg = rawArgs[0] || '';
 
-// Parse command-line arguments
-const args = process.argv.slice(2);
-const parsedArgs = parseArgs(args);
+// Check if this is a CLI command
+const cliCommands = ['db:dump', 'db:export', 'db:import', 'query'];
+const isCliCommand = cliCommands.includes(firstArg);
 
-// Validate arguments (throws if invalid)
-try {
-  validateArgs(parsedArgs);
-} catch (error) {
-  console.error('Error:', error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (isCliCommand) {
+  // Delegate to CLI module
+  import('./cli.js').then(async (cli) => {
+    await cli.runCli(rawArgs);
+  }).catch((error) => {
+    console.error('CLI Error:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+} else {
+  // Start MCP Server
+  startMcpServer();
 }
 
-// Create MCP server
-const server = new Server(
-  {
-    name: 'mcp-sqlew',
-    version: '3.6.6',
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
+// ============================================================================
+// MCP Server
+// ============================================================================
+async function startMcpServer(): Promise<void> {
+  const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
+  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+  const {
+    CallToolRequestSchema,
+    ListToolsRequestSchema,
+  } = await import('@modelcontextprotocol/sdk/types.js');
+  const { parseArgs, validateArgs } = await import('./server/arg-parser.js');
+  const { getToolRegistry } = await import('./server/tool-registry.js');
+  const { handleToolCall } = await import('./server/tool-handlers.js');
+  const { initializeServer, startFileWatcher } = await import('./server/setup.js');
+  const { registerShutdownHandlers, performCleanup } = await import('./server/shutdown.js');
+  const { handleInitializationError, safeConsoleError } = await import('./utils/error-handler.js');
+
+  // Parse command-line arguments
+  const args = process.argv.slice(2);
+  const parsedArgs = parseArgs(args);
+
+  // Validate arguments (throws if invalid)
+  try {
+    validateArgs(parsedArgs);
+  } catch (error) {
+    console.error('Error:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
   }
-);
 
-// Handle tool listing
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: getToolRegistry(),
-  };
-});
+  // Create MCP server
+  const server = new Server(
+    {
+      name: 'mcp-sqlew',
+      version: '4.0.2',
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
-// Handle tool execution
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  return await handleToolCall(request);
-});
+  // Handle tool listing
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: getToolRegistry(),
+    };
+  });
 
-// Setup centralized global error handlers
-registerShutdownHandlers();
+  // Handle tool execution
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    return await handleToolCall(request);
+  });
 
-// Start server with stdio transport
-async function main() {
+  // Setup centralized global error handlers
+  registerShutdownHandlers();
+
+  // Start server
   let debugLoggerInitialized = false;
 
   try {
@@ -106,12 +136,3 @@ async function main() {
     process.exit(1);
   }
 }
-
-main().catch((error) => {
-  // Use centralized initialization error handler (writes to log file)
-  safeConsoleError('\n❌ FATAL ERROR:');
-  handleInitializationError(error);
-
-  performCleanup();
-  process.exit(1);
-});
