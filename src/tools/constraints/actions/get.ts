@@ -1,6 +1,6 @@
 /**
  * Retrieve constraints with advanced filtering
- * Uses v_tagged_constraints view for token efficiency
+ * Uses JOIN queries instead of database views for cross-DB compatibility
  */
 
 import { DatabaseAdapter } from '../../../adapters/index.js';
@@ -10,6 +10,7 @@ import { validateActionParams } from '../../../utils/parameter-validator.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
+import { UniversalKnex } from '../../../utils/universal-knex.js';
 import type {
   GetConstraintsParams,
   GetConstraintsResponse,
@@ -18,7 +19,7 @@ import type {
 
 /**
  * Retrieve v4_constraints with advanced filtering
- * Uses v_tagged_constraints view for token efficiency
+ * Uses JOIN queries for cross-database compatibility (no views)
  *
  * @param params - Filter parameters
  * @param adapter - Optional database adapter (for testing)
@@ -39,46 +40,84 @@ export async function getConstraints(
       // Validate parameters
       validateActionParams('constraint', 'get', params);
 
-      // Build query using v_tagged_constraints view (already filters active=1)
-      let query = knex('v_tagged_constraints')
-        .where('project_id', projectId);
+      const db = new UniversalKnex(knex);
+
+      // Build query using JOINs (no views - cross-DB compatible)
+      let query = knex('v4_constraints as c')
+        .join('v4_constraint_categories as cat', 'c.category_id', 'cat.id')
+        .leftJoin('v4_layers as l', 'c.layer_id', 'l.id')
+        .where('c.project_id', projectId)
+        .where('c.active', db.boolTrue());
 
       // Filter by category
       if (params.category) {
         validateCategory(params.category);
-        query = query.where('category', params.category);
+        query = query.where('cat.name', params.category);
       }
 
       // Filter by layer
       if (params.layer) {
-        query = query.where('layer', params.layer);
+        query = query.where('l.name', params.layer);
       }
 
       // Filter by priority
       if (params.priority) {
-        query = query.where('priority', params.priority);
+        // Convert priority string to integer for DB query
+        const priorityMap: Record<string, number> = {
+          low: 1, medium: 2, high: 3, critical: 4
+        };
+        const priorityInt = priorityMap[params.priority];
+        if (priorityInt !== undefined) {
+          query = query.where('c.priority', priorityInt);
+        }
       }
 
-      // Filter by m_tags (OR logic - match ANY tag)
+      // Filter by tags (OR logic - match ANY tag)
       if (params.tags && params.tags.length > 0) {
-        // Parse tags (handles both arrays and JSON strings from MCP)
         const tags = parseStringArray(params.tags);
-        query = query.where((builder) => {
-          for (const tag of tags) {
-            builder.orWhere('tags', 'like', `%${tag}%`);
-          }
+        query = query.whereExists(function() {
+          this.select(knex.raw('1'))
+            .from('v4_constraint_tags as ct')
+            .join('v4_tags as t', 'ct.tag_id', 't.id')
+            .whereRaw('ct.constraint_id = c.id')
+            .whereIn('t.name', tags);
         });
       }
 
-      // Note: v_tagged_constraints view already orders by priority DESC, category, ts DESC
-      // Add limit if provided
+      // Order by priority DESC, category, ts DESC
+      query = query
+        .orderBy('c.priority', 'desc')
+        .orderBy('cat.name', 'asc')
+        .orderBy('c.ts', 'desc');
+
+      // Add limit
       const limit = params.limit || 50;
       query = query.limit(limit);
 
-      // Execute query
-      const rows = await query.select('*') as TaggedConstraint[];
+      // Select columns with tags subquery
+      const rows = await query.select([
+        'c.id',
+        'c.project_id',
+        'cat.name as category',
+        'l.name as layer',
+        'c.constraint_text',
+        knex.raw(`CASE c.priority
+          WHEN 1 THEN 'low'
+          WHEN 2 THEN 'medium'
+          WHEN 3 THEN 'high'
+          ELSE 'critical'
+        END as priority`),
+        knex.raw(`${db.dateFunction('c.ts')} as created_at`),
+        // Tags subquery
+        knex.raw(`(
+          SELECT ${db.stringAgg('t2.name', ',')}
+          FROM v4_constraint_tags ct2
+          JOIN v4_tags t2 ON ct2.tag_id = t2.id
+          WHERE ct2.constraint_id = c.id
+        ) as tags`),
+      ]) as TaggedConstraint[];
 
-      // Parse m_tags from comma-separated to array for consistency
+      // Parse tags from comma-separated to array for consistency
       const constraints = rows.map(row => ({
         ...row,
         tags: row.tags ? row.tags.split(',') : null,
