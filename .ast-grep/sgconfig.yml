@@ -1,0 +1,9 @@
+# ast-grep configuration for mcp-sqlew project
+# See: https://ast-grep.github.io/reference/sgconfig.html
+
+ruleDirs:
+  - rules
+
+# Test configuration (optional)
+testConfigs:
+  - testDir: tests

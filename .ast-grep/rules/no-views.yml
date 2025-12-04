@@ -1,0 +1,23 @@
+# no-views: Prohibit database view creation
+# Architectural Decision: No views in v4+ schema - use JOINs instead
+# See: .claude/skills/no-views/SKILL.md
+
+id: no-create-view
+language: TypeScript
+severity: error
+message: |
+  DATABASE VIEW PROHIBITED: Creating database views is not allowed.
+
+  Use JOINs via Knex query builder instead.
+  See: src/utils/view-queries.ts for reference patterns.
+
+rule:
+  pattern: createViewSafe($$$ARGS)
+
+files:
+  - src/**/*.ts
+
+ignores:
+  - src/tests/**/*.ts
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
