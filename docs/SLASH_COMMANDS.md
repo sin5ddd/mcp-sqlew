@@ -1,495 +1,287 @@
-# Slash Commands Guide
+# Unified /sqlew Command Guide
 
-**🎯 Recommended for Human Users**
+**🎯 Recommended Interface**
 
-Slash commands are the PRIMARY way to interact with sqlew. They provide guided workflows that are easier than raw MCP tool calls or direct agent invocation. Commands are installed automatically to `.claude/commands/` and can be invoked with the `/` prefix in Claude Code.
+The `/sqlew` command is the PRIMARY way to interact with sqlew. It provides a natural language interface with automatic intent detection that is easier than raw MCP tool calls.
 
-## Why Use Slash Commands?
+## Why Use /sqlew?
 
-✅ **Guided workflows** - Commands prompt you through the process
-✅ **Agent coordination** - Automatically invokes the right agents
+✅ **Natural language input** - Describe what you want, it figures out the intent
+✅ **Single command** - `/sqlew` handles all operations (search, record, list, execute, plan)
+✅ **Automatic intent detection** - Recognizes search, record, update, execute, task creation
 ✅ **Error handling** - Built-in validation and helpful error messages
-✅ **Mode detection** - `/sqw-scrum plan` manages tasks, `/sqw-scrum implement` builds code
 ✅ **No MCP knowledge needed** - Just describe what you want in plain English
 
 ## Quick Start
 
 ```bash
-# Most common commands
-/sqw-plan "Implement user authentication"
-/sqw-secretary "Use PostgreSQL 15 for production database"
-/sqw-scrum implement JWT authentication
-/sqw-research "Why did we choose Knex for migrations?"
+# Show current status and suggested next actions
+/sqlew
 
-# All commands work with or without arguments (will prompt if needed)
-/sqw-documentor "Document API versioning strategy"
-/sqw-review "authentication implementation"
+# Search for decisions
+/sqlew search why we chose Knex for migrations
+
+# Record a decision
+/sqlew record we use PostgreSQL 15 for production database
+
+# List remaining tasks
+/sqlew show remaining tasks
+
+# Create tasks from a plan
+/sqlew plan implementing user authentication
 ```
-
-## Available Commands
-
-| Command | What It Does | Perfect For |
-|---------|--------------|-------------|
-| **`/sqw-plan`** | Complete feature planning (architecture + tasks) | Starting new features, planning sprints |
-| **`/sqw-secretary`** | Record decisions like meeting minutes | Documenting team decisions, capturing context |
-| **`/sqw-scrum`** | Create tasks AND coordinate agents to implement them | Actually building features end-to-end |
-| **`/sqw-documentor`** | Document architectural decisions with full context | Design reviews, architecture documentation |
-| **`/sqw-research`** | Search past decisions and analyze patterns | Onboarding, understanding past choices |
-| **`/sqw-review`** | Validate code/design against decisions & constraints | Code reviews, ensuring consistency |
 
 ---
 
-### /sqw-plan
-**Purpose**: Comprehensive planning workflow combining architectural consideration and task breakdown
+## Intent Detection System
 
-**Agent Flow**:
-1. Invokes `@sqlew-architect` for architectural documentation
-2. Invokes `@sqlew-scrum-master` for task creation and dependency management
+The `/sqlew` command analyzes your input and executes in this priority order:
 
-**Best For**:
-- Planning new features
-- Breaking down large initiatives
-- Architectural decisions + task tracking
+### 1. List/Status Intent (Highest Priority)
 
-**Example Usage**:
+**Keywords**: list, show, status, remaining, current, pending, what, overview, existing, left, 確認, 見せて, 表示, 一覧
+
+**Use when you want to**:
+- See all decisions
+- Check remaining tasks
+- Get current status
+- View what exists in the database
+
+**Examples**:
 ```bash
-/sqw-plan "Implement OAuth2 social login with Google and GitHub"
+/sqlew
+/sqlew show remaining tasks
+/sqlew what decisions do we have
+/sqlew list all constraints
 ```
 
-**What It Does**:
-- Checks existing decisions for related context
-- Documents architectural choices
-- Creates actionable tasks with proper layers
-- Sets up task dependencies
-- Provides complete implementation roadmap
+**Actions executed**:
+- Lists recent decisions
+- Shows task status summary
+- Provides suggestions for next steps
 
 ---
 
-### /sqw-secretary
-**Purpose**: Record decisions like meeting minutes
+### 2. Search Intent
 
-**Agent**: `@sqlew-architect` (focused mode)
+**Keywords**: search, find, look for, about, related, explore, 検索, 探して, 調べて
 
-**Best For**:
-- Quick decisions without full planning
-- Recording choices made during development
-- Building institutional knowledge
-- Capturing team meeting decisions
+**Use when you want to**:
+- Find related decisions
+- Search for past context
+- Understand why something was decided
+- Explore related patterns
 
-**Example Usage**:
+**Examples**:
 ```bash
-/sqw-secretary "Use PostgreSQL 15 for production database"
+/sqlew search why we chose PostgreSQL
+/sqlew find authentication decisions
+/sqlew look for API design decisions
 ```
 
-**What It Does**:
-- Simplified architect workflow
-- Focuses on decision capture
-- Minimal task creation (only if needed)
-- Saves decision with context for future reference
+**Actions executed**:
+- Queries decision tags and keys
+- Shows related context
+- Displays decision rationale
 
 ---
 
-### /sqw-scrum
-**Purpose**: Task management AND agent coordination for implementation
+### 3. Record Intent
 
-**Agent**: `@sqlew-scrum-master`
+**Keywords**: record, add, save, register, decide, decided, decision, 記録, 登録, 保存
 
-**Best For**:
-- Creating tasks with dependencies
-- Reviewing sprint progress
-- Managing task states (todo → in_progress → done)
-- **Actually implementing features** (not just planning)
+**Use when you want to**:
+- Capture a new decision
+- Record meeting minutes
+- Document a choice made during development
+- Add a new constraint
 
-**Two Modes**:
-
-**Mode A: Task Planning Only**
+**Examples**:
 ```bash
-/sqw-scrum "Create tasks for database migration feature"
+/sqlew record we decided to use JWT for authentication
+/sqlew add PostgreSQL 15 as our production database
+/sqlew save that we use async/await pattern
 ```
 
-**Mode B: Task Planning + Execution** (NEW)
-```bash
-/sqw-scrum implement JWT authentication
-# → Creates tasks, coordinates agents, writes code, updates status
-```
-
-**What It Does**:
-- Uses `mcp__sqlew__task` (action: list) to check current work
-- Breaks down goals into concrete tasks
-- Creates tasks with proper layers and file_actions
-- Sets up dependencies between related tasks
-- **Coordinates agents to implement tasks** (Mode B)
-- Tracks progress and updates task status
+**Actions executed**:
+- Checks for duplicates
+- Records decision with context
+- Suggests related decisions
 
 ---
 
-### /sqw-documentor
-**Purpose**: Document architectural decisions with rationale, alternatives, and tradeoffs
+### 4. Update Intent
 
-**Agent**: `@sqlew-architect`
+**Keywords**: update, change, modify, revise, 更新, 変更, 修正
 
-**Best For**:
-- Recording design decisions
-- Establishing constraints
-- Documenting rationale for future reference
-- Creating comprehensive architecture documentation
+**Use when you want to**:
+- Modify an existing decision
+- Change a constraint
+- Revise previous context
 
-**Example Usage**:
+**Examples**:
 ```bash
-/sqw-documentor "Choose between REST and GraphQL for API design"
+/sqlew update authentication to use OAuth2 instead
+/sqlew modify database choice to PostgreSQL 14
+/sqlew revise API response format
 ```
 
-**What It Does**:
-- Uses `mcp__sqlew__suggest` to find related decisions
-- Documents decision with full context (rationale, alternatives, tradeoffs)
-- Uses `mcp__sqlew__decision` to record permanently
-- Uses `mcp__sqlew__constraint` to establish rules if needed
+**Actions executed**:
+- Retrieves existing decision
+- Updates with new information
+- Shows before/after changes
 
 ---
 
-### /sqw-research
-**Purpose**: Query historical context and analyze patterns
+### 5. Execute Intent
 
-**Agent**: `@sqlew-researcher`
+**Keywords**: execute, run, do, proceed, continue, finish, 実行, 進めて, 続けて, やって
 
-**Best For**:
-- Understanding past decisions
-- Finding related work
-- Avoiding duplicate efforts
-- Onboarding new team members
+**Use when you want to**:
+- Start implementing pending tasks
+- Continue work from previous session
+- Execute next steps
 
-**Example Usage**:
+**Examples**:
 ```bash
-/sqw-research "Why did we choose Knex for database migrations?"
+/sqlew execute
+/sqlew run pending tasks
+/sqlew proceed with implementation
+/sqlew continue from where we left off
 ```
 
-**What It Does**:
-- Uses `mcp__sqlew__suggest` to find related context
-- Uses `mcp__sqlew__decision` (search_*) to query decisions
-- Uses `mcp__sqlew__task` (list) to find related tasks
-- Analyzes patterns and presents findings
+**Actions executed**:
+- Lists pending tasks
+- Coordinates implementation
+- Updates task status
 
 ---
 
-### /sqw-review
-**Purpose**: Review code/design against architectural decisions and constraints
+### 6. Task Creation Intent (Lowest Priority - Explicit Only)
 
-**Agent Flow**:
-1. Invokes `@sqlew-researcher` to gather context
-2. Invokes `@sqlew-architect` to validate against constraints
+**Keywords**: create task, make task, breakdown, plan tasks, generate tasks, タスク作成, タスクを作って, 洗い出し
 
-**Best For**:
-- Code review with architectural consistency
-- Validating implementation matches decisions
-- Ensuring constraints are followed
+**IMPORTANT**: Only triggers for EXPLICIT creation verbs. Does NOT trigger for:
+- "remaining tasks" → List/Status intent instead
+- "task list" → List/Status intent instead
+- "show tasks" → List/Status intent instead
 
-**Example Usage**:
+**Use when you want to**:
+- Break down a feature into tasks
+- Create an implementation plan
+- Generate task breakdown
+
+**Examples**:
 ```bash
-/sqw-review "API endpoint implementation for user service"
+/sqlew create tasks for user authentication feature
+/sqlew breakdown OAuth2 implementation into tasks
+/sqlew plan implementing password reset feature
 ```
 
-**What It Does**:
-- Researches relevant decisions and constraints
-- Checks implementation consistency
-- Identifies deviations from architectural patterns
-- Suggests corrections if needed
+**Actions executed**:
+- Parses input into tasks
+- Creates task records with dependencies
+- Provides task summary
 
 ---
 
-## Installation
+## Common Use Cases
 
-### Automatic Installation (Default)
-
-Slash commands are **automatically installed** when the MCP server starts:
+### Planning a Feature
 
 ```bash
-# Commands sync on every server startup
-# Based on .sqlew/config.toml [commands] section
+# Step 1: Get current status
+/sqlew
+
+# Step 2: Record architectural decision
+/sqlew record we will use JWT for authentication with 24h expiry
+
+# Step 3: Create implementation tasks
+/sqlew plan implementing JWT authentication
 ```
 
-**First Startup**:
-```
-✓ Installed slash commands: Architect, Decide, Plan, Research, Review, Scrum
-  Location: /path/to/project/.claude/commands
-  Use commands with / prefix: /sqlew-plan, /sqlew-architect, /sqlew-scrum
-```
-
-### Manual Installation
-
-If you need to manually trigger installation:
+### Onboarding to a Project
 
 ```bash
-# Install all enabled commands
-npx sqlew-init-commands
+# Get overview
+/sqlew
 
-# Install to custom location
-npx sqlew-init-commands --path /custom/path
+# Explore decisions
+/sqlew search authentication decisions
+/sqlew search database architecture
+
+# Check current work
+/sqlew show remaining tasks
 ```
+
+### During Implementation
+
+```bash
+# Record decisions made
+/sqlew record we added Redis cache for performance
+
+# Check related past decisions
+/sqlew search caching decisions
+
+# Update status
+/sqlew continue with next task
+```
+
+---
+
+## Advanced: Direct MCP Tool Access
+
+**Note**: For most use cases, the `/sqlew` command is sufficient and preferred.
+
+Power users can still call MCP tools directly via the tool interface:
+
+```
+mcp__sqlew__decision action="list"
+mcp__sqlew__task action="list"
+mcp__sqlew__decision action="search_tags" tags=["authentication"]
+```
+
+See [docs/TOOL_REFERENCE.md](TOOL_REFERENCE.md) for complete MCP tool documentation.
 
 ---
 
 ## Configuration
 
-Edit `.sqlew/config.toml` to customize which commands are installed:
+The `/sqlew` command is configured in `.sqlew/config.toml`:
 
 ```toml
-[commands]
-# Enable/disable individual commands (default: true)
-
-documentor = true  # /sqw-documentor: Document architectural decisions
-secretary = true   # /sqw-secretary: Record decisions (meeting minutes)
-plan = true        # /sqw-plan: Complete planning workflow
-research = true    # /sqw-research: Search and analyze history
-review = true      # /sqw-review: Validate architectural consistency
-scrum = true       # /sqw-scrum: Task management + execution
-```
-
-### Configuration Examples
-
-**Minimal Configuration** (only essential workflows):
-```toml
-[commands]
-plan = true        # Keep comprehensive planning
-secretary = true   # Keep quick decisions/meeting minutes
-documentor = false # Disable (can use via /sqw-plan)
-scrum = false      # Disable (can use via /sqw-plan)
-research = false   # Disable if not needed
-review = false     # Disable if not needed
-```
-
-**Development Team** (all workflows):
-```toml
-[commands]
-documentor = true
-secretary = true
-plan = true
-research = true
-review = true
-scrum = true
-```
-
-**Solo Developer** (focused set):
-```toml
-[commands]
-plan = true        # Main workflow
-secretary = true   # Quick decisions
-research = true    # Context lookup
-documentor = false # Handled by /sqw-plan
-scrum = false      # Handled by /sqw-plan
-review = false     # Manual reviews
-```
-
----
-
-## Auto-Sync Behavior
-
-On every MCP server startup:
-- **Enabled commands** (true/default) → Installed if missing
-- **Disabled commands** (false) → Removed if present
-
-**Example Workflow**:
-1. Edit `.sqlew/config.toml`: Set `research = false`
-2. Restart MCP server
-3. Result: `sqw-research.md` deleted from `.claude/commands/`
-
-**Reverting**:
-1. Edit `.sqlew/config.toml`: Set `research = true`
-2. Restart MCP server
-3. Result: `sqw-research.md` restored to `.claude/commands/`
-
----
-
-## Customizing Commands
-
-**Recommendation**: Use the default auto-installed commands. They are designed to work together in the standard workflow.
-
-If customization is needed:
-1. Set the command to `false` in `.sqlew/config.toml` to prevent auto-sync
-2. Edit `.claude/commands/sqw-*.md` directly
-
-```toml
-[commands]
-plan = false  # Now safe to edit sqw-plan.md
-```
-
----
-
-## Best Practices
-
-### 1. Start with Defaults
-
-Use all commands initially to understand workflows:
-- `/sqw-plan` for features
-- `/sqw-secretary` for quick decisions
-- `/sqw-research` to explore history
-
-### 2. Disable Unused Commands
-
-After 1-2 weeks, identify unused commands and set to `false`:
-- Reduces clutter in command palette
-- Prevents accidental invocation
-- Can always re-enable later
-
-### 3. Follow the Standard Workflow
-
-See [Recommended Workflow](#recommended-workflow) for the standard development cycle:
-
-```
-/sqw-plan → /sqw-scrum → /sqw-review
-```
-
-Use `/sqw-secretary` for quick decisions during implementation.
-
-### 4. Use Arguments Effectively
-
-**With Arguments** (faster):
-```bash
-/sqw-documentor "Choose between monolith and microservices"
-```
-
-**Without Arguments** (interactive):
-```bash
-/sqw-documentor
-# Agent will prompt: "What architectural decision needs to be made?"
-```
-
-### 5. Version Control
-
-Commands are auto-installed, so `.claude/commands/` can be added to `.gitignore`:
-
-```gitignore
-.claude/commands/
+[sqlew]
+# Default enabled - no configuration needed
 ```
 
 ---
 
 ## Troubleshooting
 
-### Commands not appearing in Claude Code
+### Command not recognized
 
-**Symptoms**: Typing `/sqw-` shows no commands
+**Symptom**: `/sqlew` appears as unrecognized command
 
-**Solutions**:
+**Solution**:
 1. Restart Claude Code after installation
-2. Check `.claude/commands/` directory exists:
-   ```bash
-   ls .claude/commands/
-   ```
-3. Verify config.toml has commands enabled:
-   ```bash
-   cat .sqlew/config.toml | grep -A 10 "\[commands\]"
-   ```
-4. Manually run installer:
-   ```bash
-   npx sqlew-init-commands
-   ```
+2. Verify `.claude/commands/sqlew.md` exists
+3. Check MCP server is running (check console for errors)
 
----
+### Wrong intent detected
 
-### Commands being overwritten
+**Symptom**: Command executes wrong action
 
-**Symptoms**: Customizations lost after server restart
+**Solution**:
+- Use more explicit keywords
+- Example: Instead of `/sqlew tasks`, use `/sqlew show remaining tasks`
 
-**Cause**: Enabled commands sync from `assets/sample-commands/` on startup
+### Need more details
 
-**Solutions**:
+**Symptom**: Result seems incomplete
 
-**Solution**: Disable auto-sync for that command
-```toml
-[commands]
-plan = false  # Prevent overwriting custom sqw-plan.md
-```
-
-After disabling, you can freely edit `.claude/commands/sqw-plan.md` without it being overwritten.
-
----
-
-### Commands not syncing
-
-**Symptoms**: Changes to config.toml don't take effect
-
-**Solutions**:
-1. Check source files exist:
-   ```bash
-   ls node_modules/sqlew/assets/sample-commands/
-   ```
-2. Check console output for sync errors
-3. Manually run installer:
-   ```bash
-   npx sqlew-init-commands
-   ```
-4. Check file permissions:
-   ```bash
-   ls -la .claude/commands/
-   ```
-
----
-
-### Wrong agent invoked
-
-**Symptoms**: `/sqw-plan` invokes wrong agent
-
-**Cause**: Command file edited with different agent reference
-
-**Solution**: Restore default or fix agent reference:
-```bash
-# Restore default
-rm .claude/commands/sqw-plan.md
-# Restart MCP server (auto-reinstalls)
-
-# Or fix manually
-vim .claude/commands/sqw-plan.md
-# Ensure correct agent is referenced
-```
-
----
-
-## Comparison: Commands vs Direct Agent Invocation
-
-### Use Slash Commands When:
-- You want guided workflows (commands have built-in logic)
-- You need multi-agent coordination (`/sqlew-plan` = architect + scrum)
-- You prefer quick shortcuts (less typing)
-
-### Use Direct Agent Invocation When:
-- You need more control over agent behavior
-- You want custom instructions per invocation
-- You're debugging agent interactions
-
-**Example Comparison**:
-
-```bash
-# Slash command (guided workflow)
-/sqw-plan "Implement feature X"
-# → Architect considers architecture
-# → Scrum creates tasks
-# → Both record in sqlew
-
-# Direct agent (custom control)
-@sqlew-architect "Consider feature X architecture, focus on scalability, ignore cost"
-# → Full control over architect instructions
-```
-
----
-
-## Integration with Other Tools
-
-### Claude Code Features
-
-**Slash Commands + File Context**:
-```bash
-# Open relevant files first
-# Then invoke command
-/sqw-review "authentication implementation"
-# Agent sees open files in context
-```
-
-**Slash Commands + Selection**:
-```bash
-# Select code block
-# Then invoke command
-/sqw-documentor "Document this pattern as a constraint"
-```
+**Solution**:
+- Try searching directly: `/sqlew search <topic>`
+- Or list all: `/sqlew show what we have`
 
 ---
 
@@ -497,118 +289,45 @@ vim .claude/commands/sqw-plan.md
 
 ### Token Usage
 
-Each command invokes agents that consume tokens:
-
-| Command | Agent(s) | Approx Token Cost |
-|---------|----------|-------------------|
-| `/sqw-documentor` | architect | ~20KB per invocation |
-| `/sqw-scrum` | scrum-master | ~12KB per invocation |
-| `/sqw-research` | researcher | ~14KB per invocation |
-| `/sqw-secretary` | architect | ~20KB per invocation |
-| `/sqw-plan` | architect + scrum | ~32KB per invocation |
-| `/sqw-review` | researcher + architect | ~34KB per invocation |
-
-**Optimization**:
-- Use `/sqw-secretary` instead of `/sqw-plan` for simple decisions (saves ~12KB)
-- Use `/sqw-research` before `/sqw-documentor` to avoid duplicate context lookups
-- Disable unused commands to prevent accidental invocation
+The `/sqlew` command is designed for token efficiency:
+- **List/Status**: ~2-5KB (minimal queries)
+- **Search**: ~3-8KB (depending on results)
+- **Record**: ~2-6KB (single write operation)
+- **Execute**: ~5-15KB (task coordination)
 
 ---
 
-## Recommended Workflow
+## Related Documentation
 
-### Standard Development Cycle
+- [DECISION_CONTEXT.md](DECISION_CONTEXT.md) - How to structure decisions
+- [TASK_OVERVIEW.md](TASK_OVERVIEW.md) - Task management overview
+- [TOOL_REFERENCE.md](TOOL_REFERENCE.md) - Direct MCP tool reference
+- [BEST_PRACTICES.md](BEST_PRACTICES.md) - Usage patterns and examples
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  /sqw-plan  │ -> │ /sqw-scrum  │ -> │ /sqw-review │
-│  (Planning) │    │(Implement)  │    │(Verification)│
-└─────────────┘    └─────────────┘    └─────────────┘
-```
+---
 
-### Step 1: Planning with `/sqw-plan`
+## Version History
 
-```bash
-/sqw-plan "Implement user authentication with JWT"
-```
+### v4.1.0 (Current)
 
-**What happens:**
-- Architect agent analyzes requirements
-- Creates decisions with rationale
-- Scrum agent breaks down into tasks
-- Sets up dependencies between tasks
+- **Major Change**: Unified `/sqlew` command replaces multiple slash commands
+- **New**: Automatic intent detection (6 intent types)
+- **New**: Natural language interface
+- **Removed**: Legacy slash commands (`/sqw-plan`, `/sqw-scrum`, `/sqw-secretary`, etc.)
+- **Removed**: Custom agent definitions (replaced with unified command)
 
-### Step 2: Implementation with `/sqw-scrum`
+### v4.0.0
 
-```bash
-/sqw-scrum implement
-```
-
-**What happens:**
-- Lists pending tasks from planning
-- Coordinates implementation
-- Updates task status (todo → in_progress → done)
-- Links code changes to tasks
-
-### Step 3: Verification with `/sqw-review`
-
-```bash
-/sqw-review "authentication implementation"
-```
-
-**What happens:**
-- Researcher gathers relevant decisions/constraints
-- Architect validates implementation consistency
-- Checks against architectural patterns
-- Reports deviations and suggestions
-
-### Complete Example
-
-```bash
-# 1. Plan the feature
-/sqw-plan "Add password reset functionality"
-
-# 2. Implement tasks created by planning
-/sqw-scrum implement
-
-# 3. Verify implementation matches decisions
-/sqw-review "password reset implementation"
-
-# 4. (Optional) Record any new decisions made during implementation
-/sqw-secretary "Use SendGrid for password reset emails"
-```
+- Slash commands released (`/sqw-plan`, `/sqw-secretary`, `/sqw-scrum`, etc.)
+- Agent system refactored (agents completely removed from database in v4.0)
 
 ---
 
 ## See Also
 
-- [Specialized Agents](SPECIALIZED_AGENTS.md) - Agent-based workflows
-- [Task Overview](TASK_OVERVIEW.md) - Task management overview
-- [Decision Context](DECISION_CONTEXT.md) - Decision documentation
-- [Best Practices](BEST_PRACTICES.md) - General usage patterns
-- [Architecture](ARCHITECTURE.md) - System design overview
-
----
-
-## Changelog
-
-### v4.0.0 (Current)
-- Database schema refactoring: unified v4_ table prefix, agent system completely removed
-- Note: Agent references like `@sqlew-architect` are Claude Code agents, not database records (v4.0.0 removed v4_agents table)
-- All slash commands remain fully functional with simplified database structure
-- Improved performance with cleaner schema design
-
-### v3.9.0
-- Command renaming for clarity: `/sqw-*` prefix, feature-based names
-- 6 commands: documentor, secretary, plan, research, review, scrum
-- Scrum executor feature: Mode B for task implementation
-- Updated documentation to position slash commands as primary interface
-
-### v3.8.0
-- Initial release of slash commands system
-- Auto-sync on server startup
-- Configuration via `.sqlew/config.toml`
-- Manual installer: `npx sqlew-init-commands`
+- [AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md) - For LLM/agent usage patterns
+- [WORKFLOWS.md](WORKFLOWS.md) - Multi-step workflow examples
+- [BEST_PRACTICES.md](BEST_PRACTICES.md) - General usage patterns
 
 ---
 
@@ -616,8 +335,3 @@ Each command invokes agents that consume tokens:
 
 Found a bug or have a suggestion? Please report at:
 https://github.com/sin5ddd/mcp-sqlew/issues
-
-**Common Requests**:
-- New command ideas
-- Command workflow improvements
-- Documentation clarifications

@@ -1,88 +1,126 @@
-# Specialized Agents for sqlew
+# Specialized Agents (Deprecated)
 
-Claude Code agents that leverage sqlew's context management for development workflows.
+**Status**: Deprecated as of v4.1.0 - Replaced by unified `/sqlew` command
 
-## Usage
+This document is kept for reference. For current usage, see [SLASH_COMMANDS.md](SLASH_COMMANDS.md).
 
-Agents are **automatically invoked via slash commands**. See [SLASH_COMMANDS.md](SLASH_COMMANDS.md) for the standard workflow:
+---
 
-```
-/sqw-plan → /sqw-scrum → /sqw-review
-```
+## Migration to /sqlew Command
 
-Direct invocation is also available with the `@` prefix:
+As of v4.1.0, the custom agent system has been superseded by the unified `/sqlew` command with automatic intent detection.
+
+### Old Approach (v4.0 and earlier)
 
 ```bash
+# Custom agents
 @sqlew-scrum-master "Create sprint plan"
 @sqlew-researcher "Find auth decisions"
 @sqlew-architect "Document OAuth2 decision"
 ```
 
----
+### New Approach (v4.1.0+)
 
-## Available Agents
-
-| Agent | Role | Model | Slash Command |
-|-------|------|-------|---------------|
-| **Scrum Master** | Task coordination, sprint planning, dependency management | Sonnet | `/sqw-scrum`, `/sqw-plan` |
-| **Researcher** | Query history, analyze patterns, find related decisions | Sonnet | `/sqw-research`, `/sqw-review` |
-| **Architect** | Document decisions, create constraints, validate compliance | Sonnet | `/sqw-documentor`, `/sqw-secretary`, `/sqw-plan`, `/sqw-review` |
-
----
-
-## Agent Roles
-
-### Scrum Master (`sqlew-scrum-master`)
-
-**Purpose**: Multi-agent coordination, task management, sprint planning
-
-- Creates tasks with dependencies
-- Coordinates parallel work
-- Tracks sprint progress
-- Detects stale tasks and blockers
-
-### Researcher (`sqlew-researcher`)
-
-**Purpose**: Query historical context, analyze patterns
-
-- Searches decisions by tags, layers, keys
-- Retrieves constraint rationale
-- Cross-references decisions ↔ tasks ↔ files
-- Tracks decision version history
-
-### Architect (`sqlew-architect`)
-
-**Purpose**: Document decisions, enforce constraints
-
-- Creates rich decision records (rationale, alternatives, tradeoffs)
-- Establishes constraints linked to decisions
-- Validates architectural compliance
-- Uses decision-making frameworks
+```bash
+# Unified command with intent detection
+/sqlew plan sprint implementation
+/sqlew search for auth decisions
+/sqlew record OAuth2 decision for authentication
+```
 
 ---
 
-## Configuration
+## Historical Agent System
 
-Agents are configured in `.sqlew/config.toml`:
+For reference, the v4.0.0 system included:
+
+| Agent | Role | Purpose |
+|-------|------|---------|
+| **Scrum Master** | Task coordination, sprint planning | Multi-agent task coordination |
+| **Researcher** | Query history, analyze patterns | Decision and constraint queries |
+| **Architect** | Document decisions, enforce constraints | Architectural decision documentation |
+
+### Why the Change?
+
+1. **Unified Interface**: Single `/sqlew` command instead of remembering three agent names
+2. **Automatic Intent Detection**: Command analyzes input and selects appropriate MCP tool
+3. **Natural Language**: No need to know about "agents" - just describe what you want
+4. **Better Discoverability**: One command in autocomplete instead of three agent references
+5. **Token Efficiency**: Reduced context overhead from agent system
+
+---
+
+## Current Architecture (v4.1.0+)
+
+The `/sqlew` command provides all the functionality of the previous agent system:
+
+- **Intent Analysis** (replaces agent role selection)
+- **MCP Tool Invocation** (replaces direct agent calls)
+- **Automatic Routing** (replaces manual agent selection)
+
+See [SLASH_COMMANDS.md](SLASH_COMMANDS.md) for current usage patterns.
+
+---
+
+## Configuration (Legacy - Not Used in v4.1.0+)
+
+The following configuration was used in v4.0 and is no longer applicable:
 
 ```toml
+# DEPRECATED - v4.0.0 and earlier
 [agents]
 scrum_master = true
 researcher = true
 architect = true
 ```
 
-**Recommendation**: Use all three agents. They are complementary specialists designed to work together via slash commands.
+All agent functionality is now handled by the `/sqlew` command with no additional configuration needed.
 
 ---
 
 ## Related Documentation
 
-- [SLASH_COMMANDS.md](SLASH_COMMANDS.md) - Standard workflow with slash commands
-- [TASK_OVERVIEW.md](TASK_OVERVIEW.md) - Task management overview
-- [DECISION_CONTEXT.md](DECISION_CONTEXT.md) - Decision documentation
+- [SLASH_COMMANDS.md](SLASH_COMMANDS.md) - Current `/sqlew` command documentation
+- [TOOL_REFERENCE.md](TOOL_REFERENCE.md) - MCP tools (underlying infrastructure)
+- [AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md) - Guidelines for AI agents using sqlew
 
 ---
 
-**Version:** 4.0.0
-**Last Updated:** 2025-11-27
+## Legacy Reference
+
+### Scrum Master (Historical)
+
+**Purpose**: Multi-agent coordination, task management, sprint planning
+
+Provided by `/sqlew` commands:
+```bash
+/sqlew plan <feature>        # Replace: /sqw-scrum plan
+/sqlew execute              # Replace: /sqw-scrum implement
+```
+
+### Researcher (Historical)
+
+**Purpose**: Query historical context, analyze patterns
+
+Provided by `/sqlew` commands:
+```bash
+/sqlew search <topic>       # Replace: /sqw-research
+```
+
+### Architect (Historical)
+
+**Purpose**: Document decisions, enforce constraints
+
+Provided by `/sqlew` commands:
+```bash
+/sqlew record <decision>    # Replace: /sqw-secretary
+/sqlew update <decision>    # Replaces modifications
+```
+
+---
+
+**Version**: 4.1.0
+**Status**: Deprecated
+**Last Updated**: 2025-12-04
+
+See [SLASH_COMMANDS.md](SLASH_COMMANDS.md) for current documentation.

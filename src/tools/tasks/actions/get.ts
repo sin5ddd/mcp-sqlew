@@ -33,10 +33,7 @@ export async function getTask(params: {
     const task = await knex('v4_tasks as t')
       .leftJoin('v4_task_statuses as s', 't.status_id', 's.id')
       .leftJoin('v4_layers as l', 't.layer_id', 'l.id')
-      .leftJoin('v4_task_details as td', function() {
-        this.on('t.id', '=', 'td.task_id')
-            .andOn('t.project_id', '=', 'td.project_id');
-      })
+      .leftJoin('v4_task_details as td', 't.id', 'td.task_id')
       .where({ 't.id': params.task_id, 't.project_id': projectId })
       .select(
         't.id',

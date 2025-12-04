@@ -44,10 +44,7 @@ export async function queryTaskDependencies(
 
   if (includeDetails) {
     blockersQuery = blockersQuery
-      .leftJoin('v4_task_details as td', function() {
-        this.on('t.id', '=', 'td.task_id')
-            .andOn('t.project_id', '=', 'td.project_id');
-      });
+      .leftJoin('v4_task_details as td', 't.id', 'td.task_id');
   }
 
   const blockers = await blockersQuery;
@@ -61,10 +58,7 @@ export async function queryTaskDependencies(
 
   if (includeDetails) {
     blockingQuery = blockingQuery
-      .leftJoin('v4_task_details as td', function() {
-        this.on('t.id', '=', 'td.task_id')
-            .andOn('t.project_id', '=', 'td.project_id');
-      });
+      .leftJoin('v4_task_details as td', 't.id', 'td.task_id');
   }
 
   const blocking = await blockingQuery;
