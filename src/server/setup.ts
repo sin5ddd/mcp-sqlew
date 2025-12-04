@@ -15,6 +15,7 @@ import { initDebugLogger, debugLog } from '../utils/debug-logger.js';
 import { ensureSqlewDirectory } from '../config/example-generator.js';
 import { determineProjectRoot } from '../utils/project-root.js';
 import { ParsedArgs } from './arg-parser.js';
+import { initializeSqlewIntegrations } from '../init-skills.js';
 
 export interface SetupResult {
   db: DatabaseAdapter;
@@ -197,6 +198,14 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
     autoDeleteConfig: { messageHours, fileHistoryDays, ignoreWeekend },
     debugLogLevel: debugLogLevel
   });
+
+  // 5. Initialize sqlew integrations (skills + CLAUDE.md) - silent, non-blocking
+  try {
+    initializeSqlewIntegrations(finalProjectRoot);
+  } catch (error) {
+    debugLog('WARN', 'Failed to initialize sqlew integrations', { error });
+    // Non-fatal - continue server startup
+  }
 
   return {
     db,

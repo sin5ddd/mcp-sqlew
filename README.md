@@ -119,27 +119,30 @@ The first time, sqlew initializes database, installs custom agents and slash com
 
 It's Ready!
 
-## 🚀 Quick Start: Slash Commands (Recommended)
+## 🚀 Quick Start: /sqlew Command
 
-**Slash commands are the easiest way to use sqlew!** Just type `/sqw-` in Claude Code to see available commands.
+**The `/sqlew` command is the easiest way to use sqlew!** Just type `/sqlew` in Claude Code with natural language input.
 
-### Most Common Commands
+### Most Common Uses
 
 ```bash
-# Plan a new feature (architecture + tasks)
-/sqw-plan "Implement user authentication"
+# Show status and get suggestions
+/sqlew
 
-# Record a decision (like meeting minutes)
-/sqw-secretary "Use PostgreSQL 15 for production database"
-
-# Implement a feature (creates tasks AND coordinates agents to build it!)
-/sqw-scrum implement JWT authentication
+# Record a decision
+/sqlew record we use PostgreSQL 15 for production database
 
 # Search past decisions
-/sqw-research "Why did we choose Knex for migrations?"
+/sqlew search why we chose Knex for migrations
+
+# List remaining tasks
+/sqlew show remaining tasks
+
+# Plan a new feature (breakdown into tasks)
+/sqlew plan implementing user authentication
 ```
 
-**All 6 commands** are installed automatically on first run. See [Slash Commands](#slash-commands) section below for complete guide.
+The `/sqlew` command automatically detects your intent (search, record, list, execute, task creation) and invokes the appropriate MCP tools.
 
 ---
 
@@ -262,100 +265,9 @@ or invoke Specialized Agent
 
 Specialized Agents use sqlew more efficiently.
 
-## Specialized Agents
+---
 
-sqlew provides three specialized agents for efficient multi-agent coordination in Claude Code:
-
-| Agent | Purpose | Token Cost | Use When |
-|-------|---------|------------|----------|
-| **Scrum Master** | Multi-agent coordination, task management, sprint planning | 12KB/conversation | Coordinating complex features, managing dependencies, tracking progress |
-| **Researcher** | Query decisions, analyze patterns, investigate context | 14KB/conversation | Understanding past decisions, onboarding new members, sprint retrospectives |
-| **Architect** | Document decisions, enforce constraints, maintain standards | 20KB/conversation | Making architectural choices, establishing rules, validating compliance |
-
-### Detailed Installation
-
-**By default, all three specialized agents are automatically installed** to your project's `.claude/agents/` directory on first run.
-
-To disable specific agents, create `.sqlew/config.toml`:
-
-```toml
-[agents]
-scrum_master = true   # Coordination specialist (12KB)
-researcher = false    # Disable this agent
-architect = true      # Documentation specialist (20KB)
-```
-
-**Note**: Set an agent to `false` in the config file to prevent it from being installed.
-
-**Usage**: Invoke agents with the `@` prefix: `@sqlew-scrum-master`, `@sqlew-researcher`, `@sqlew-architect`
-
-**Recommendation**: Use all three agents together - they're complementary specialists (46KB total).
-
-**Token Optimization** (if needed): Disable unused agents in config.
-Savings: Scrum + Architect = 32KB (30%) | Scrum only = 12KB (74%)
-
-**See [docs/SPECIALIZED_AGENTS.md](docs/SPECIALIZED_AGENTS.md) for complete installation guide, usage examples, and customization.**
-
-## Slash Commands
-
-**🎯 Recommended for Human Users** - Slash commands provide guided workflows that are easier than raw MCP tool calls.
-
-Installed automatically to `.claude/commands/` on server startup. Just type `/sqw-` in Claude Code to get started!
-
-### Available Commands
-
-| Command | What It Does | Perfect For |
-|---------|--------------|-------------|
-| **`/sqw-plan`** | Complete feature planning (architecture + tasks) | Starting new features, planning sprints |
-| **`/sqw-secretary`** | Record decisions like meeting minutes | Documenting team decisions, capturing context |
-| **`/sqw-scrum`** | Create tasks AND coordinate agents to implement them | Actually building features end-to-end |
-| **`/sqw-documentor`** | Document architectural decisions with full context | Design reviews, architecture documentation |
-| **`/sqw-research`** | Search past decisions and analyze patterns | Onboarding, understanding past choices |
-| **`/sqw-review`** | Validate code/design against decisions & constraints | Code reviews, ensuring consistency |
-
-### Why Use Slash Commands?
-
-✅ **Guided workflows** - Commands prompt you through the process
-✅ **Agent coordination** - Automatically invokes the right agents
-✅ **Error handling** - Built-in validation and helpful error messages
-✅ **Mode detection** - `/sqw-scrum plan` manages tasks, `/sqw-scrum implement` builds code
-✅ **No MCP knowledge needed** - Just describe what you want in plain English
-
-### Quick Examples
-
-```bash
-# Starting a new feature
-/sqw-plan Add OAuth2 social login with Google and GitHub
-# → Architect documents decisions, Scrum creates tasks
-
-# Recording a decision from today's meeting
-/sqw-secretary Team decided to use PostgreSQL 15 for production
-# → Saves with context, checks for duplicates
-
-# Actually implementing a feature (game changer!)
-/sqw-scrum implement JWT authentication
-# → Creates tasks, coordinates agents, writes code, runs tests
-
-# Finding out why something was done
-/sqw-research Why did we choose Knex over Prisma?
-# → Searches decisions, shows rationale and tradeoffs
-```
-
-### Configuration
-
-All commands install by default. Customize in `.sqlew/config.toml`:
-
-```toml
-[commands]
-plan = true        # Feature planning
-secretary = true   # Record decisions
-scrum = true       # Task management + execution
-documentor = true  # Architecture docs
-research = true    # Search history
-review = true      # Code/design validation
-```
-
-**📚 Complete Guide**: [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) - Usage patterns, customization, examples
+**Note**: The `/sqlew` command supersedes the previous multi-command system (`/sqw-plan`, `/sqw-scrum`, etc.). All functionality is now available through the unified `/sqlew` interface with automatic intent detection.
 
 ### Advanced: Direct MCP Tool Access
 
