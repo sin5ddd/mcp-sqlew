@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.3] - 2025-12-04
+
+### Added
+
+**Unified `/sqlew` Slash Command**
+
+- Consolidated all slash commands (`/sqw-plan`, `/sqw-scrum`, `/sqw-research`, etc.) into single `/sqlew` command
+- Natural language interface with automatic intent detection
+- 6-level intent priority: List/Status → Search → Record → Update → Execute → Task Creation
+- Supports both English and Japanese keywords
+- Removed custom agent definitions (sqlew-architect, scrum-master, sqlew-researcher)
+
+**Usage Examples:**
+```bash
+/sqlew                           # Show status and suggest next action
+/sqlew show remaining tasks      # List/Status intent
+/sqlew search for auth decisions # Search intent
+/sqlew record that we use JWT    # Record intent
+/sqlew execute pending tasks     # Execute intent
+```
+
+### Fixed
+
+**v4_task_details JOIN Bug**
+
+- Fixed `task.get` action failing with "no such column: td.project_id" error
+- Root cause: `v4_task_details` table has only `task_id` as PK, not `project_id`
+- Removed invalid `.andOn('t.project_id', '=', 'td.project_id')` from JOIN conditions
+- Affected files: `task-queries.ts`, `get.ts`
+
+### Changed
+
+**Documentation Updates**
+
+- Rewrote `CLAUDE.md` with unified `/sqlew` command section
+- Updated `README.md` Quick Start to use `/sqlew`
+- Rewrote `docs/SLASH_COMMANDS.md` as Unified /sqlew Command Guide
+- Marked `docs/SPECIALIZED_AGENTS.md` as deprecated with migration guide
+
+---
+
 ## [4.0.2] - 2025-11-28
 
 ### BREAKING CHANGES
