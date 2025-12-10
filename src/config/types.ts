@@ -320,18 +320,8 @@ export interface AgentsConfig {
  * Slash commands configuration
  */
 export interface CommandsConfig {
-  /** Install /sqw-documentor command (document architectural decisions) */
-  documentor?: boolean;
-  /** Install /sqw-secretary command (record decisions like meeting minutes) */
-  secretary?: boolean;
-  /** Install /sqw-plan command (planning workflow) */
-  plan?: boolean;
-  /** Install /sqw-research command (research workflow) */
-  research?: boolean;
-  /** Install /sqw-review command (review workflow) */
-  review?: boolean;
-  /** Install /sqw-scrum command (task management + agent coordination) */
-  scrum?: boolean;
+  /** Install /sqlew command (unified natural language interface for decisions and tasks) */
+  sqlew?: boolean;
 }
 
 /**
@@ -434,11 +424,6 @@ export const DEFAULT_CONFIG: SqlewConfig = {
     architect: true,
   },
   commands: {
-    documentor: true,
-    secretary: true,
-    plan: true,
-    research: true,
-    review: true,
-    scrum: true,
+    sqlew: true,
   },
 };

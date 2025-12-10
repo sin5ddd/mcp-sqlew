@@ -3,6 +3,7 @@ name: sqlew-researcher
 description: Use this agent when you need to query, analyze, and extract insights from sqlew's context database. Specialized in searching decisions, reviewing constraints, analyzing task patterns, and investigating historical context. This agent is your go-to for understanding "what was decided and why" across the project lifecycle.
 model: haiku
 color: blue
+skills: sqlew-plan-guidance
 Examples:
 
 <example>

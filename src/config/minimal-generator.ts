@@ -49,32 +49,13 @@ architect = true
 # Which slash commands to install on server startup
 # Set to false to skip commands you don't need
 
-# /sqw-documentor: Document architectural decisions with context
-documentor = true
-
-# /sqw-secretary: Record decisions (like meeting minutes)
-secretary = true
-
-# /sqw-plan: Planning workflow (architecture + tasks)
-plan = true
-
-# /sqw-research: Search and analyze decision/task history
-research = true
-
-# /sqw-review: Validate architectural consistency
-review = true
-
-# /sqw-scrum: Task management + agent coordination
-scrum = true
-
-# Example: Minimal installation (only core workflows)
-# [commands]
-# plan = true
-# secretary = true
-# research = false
-# review = false
-# documentor = false
-# scrum = false
+# /sqlew: Unified natural language interface for decisions and tasks
+# Usage: /sqlew <what you want to do>
+# Examples:
+#   /sqlew show remaining tasks
+#   /sqlew search for auth decisions
+#   /sqlew record that we use PostgreSQL 15
+sqlew = true
 
 # ============================================================================
 # Other Settings (Optional - uncomment to customize)
