@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.4] - 2025-12-10
+
+### Fixed
+
+**Slash Command Sync Bug**
+
+- Fixed `sync-commands.ts` referencing obsolete command files (`sqw-scrum.md`, `sqw-documentor.md`, etc.)
+- Updated to use new unified `sqlew.md` command file
+- Resolves "Source file not found" errors during npm package installation
+
+### Added
+
+**Agent Skills Configuration**
+
+- Added `skills` field to agent YAML frontmatter for automatic skill loading
+- All sqlew agents now reference `sqlew-plan-guidance` skill
+- Agents: `sqlew-architect`, `sqlew-researcher`, `sqlew-scrum-master`
+
+**Config Example Update**
+
+- Added `[commands]` section to `assets/config.example.toml`
+- Documents the unified `/sqlew` command configuration
+
+### Changed
+
+**Plan Mode Integration Documentation**
+
+- Changed `Phase 1 (Research)` → `Research Phase` for flexibility
+- Changed `Phase 4 (Final Plan)` → `Final Plan Phase`
+- Plan mode phases are now semantically named instead of numbered
+
+**CommandsConfig Simplified**
+
+- Consolidated 6 individual command options into single `sqlew` option
+- Updated `src/config/types.ts` and `src/config/minimal-generator.ts`
+
+---
+
 ## [4.0.3] - 2025-12-04
 
 ### Added

@@ -3,6 +3,7 @@ name: sqlew-architect
 description: Use this agent when you need to document architectural decisions, enforce design constraints, maintain technical standards, and ensure long-term system integrity. Specialized in creating decision records with comprehensive rationale, establishing constraints, and validating architectural compliance. This agent is your guardian of design quality and consistency.
 model: opus
 color: green
+skills: sqlew-plan-guidance
 Examples:
 
 <example>
