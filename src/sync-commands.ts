@@ -21,12 +21,7 @@ interface CommandConfig {
 }
 
 const COMMANDS: CommandConfig[] = [
-  { filename: 'sqw-documentor.md', configKey: 'documentor', displayName: 'Documentor' },
-  { filename: 'sqw-secretary.md', configKey: 'secretary', displayName: 'Secretary' },
-  { filename: 'sqw-plan.md', configKey: 'plan', displayName: 'Plan' },
-  { filename: 'sqw-research.md', configKey: 'research', displayName: 'Research' },
-  { filename: 'sqw-review.md', configKey: 'review', displayName: 'Review' },
-  { filename: 'sqw-scrum.md', configKey: 'scrum', displayName: 'Scrum' },
+  { filename: 'sqlew.md', configKey: 'sqlew', displayName: 'sqlew' },
 ];
 
 /**
@@ -124,7 +119,7 @@ export function syncCommandsWithConfig(): void {
 
     // Show usage hint if any commands were copied
     if (copied.length > 0) {
-      console.log(`  Use commands with / prefix: /sqw-plan, /sqw-documentor, /sqw-scrum`);
+      console.log(`  Use command with / prefix: /sqlew`);
     }
 
   } catch (error) {

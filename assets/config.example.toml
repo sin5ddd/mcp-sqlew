@@ -191,6 +191,22 @@ architect = true
 # See: https://github.com/sin5ddd/mcp-sqlew/blob/main/docs/SPECIALIZED_AGENTS.md
 
 # ============================================================================
+# Slash Commands Settings
+# ============================================================================
+[commands]
+# Which slash commands to install on server startup
+# Set to false to skip commands you don't need
+
+# /sqlew: Unified natural language interface for decisions and tasks
+# Usage: /sqlew <what you want to do>
+# Examples:
+#   /sqlew show remaining tasks
+#   /sqlew search for auth decisions
+#   /sqlew record that we use PostgreSQL 15
+# Default: true
+sqlew = true
+
+# ============================================================================
 # Example Configurations
 # ============================================================================
 
