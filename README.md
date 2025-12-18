@@ -6,6 +6,33 @@
 
 > **ADR (Architecture Decision Record) for AI Agents** – An MCP server that enables AI agents to create, query, and maintain architecture decision records in a structured SQL database
 
+## 🚀 Quick Start: /sqlew Command
+
+**The `/sqlew` command is the easiest way to use sqlew!** Just type `/sqlew` in Claude Code with natural language input.
+
+### Most Common Uses
+
+```bash
+# Show status and get suggestions
+/sqlew
+
+# Record a decision
+/sqlew record we use PostgreSQL 15 for production database
+
+# Search past decisions
+/sqlew search why we chose Knex for migrations
+
+# List remaining tasks
+/sqlew show remaining tasks
+
+# Plan a new feature (breakdown into tasks)
+/sqlew plan implementing user authentication
+```
+
+The `/sqlew` command automatically detects your intent (search, record, list, execute, task creation) and invokes the appropriate MCP tools.
+
+---
+
 ## What is sqlew?
 
 **sqlew** is a Model Context Protocol (MCP) server that brings ADR (Architecture Decision Record) capabilities to AI agents through a shared SQL-backed repository.
@@ -165,33 +192,6 @@ on `.mcp.json` in your project's root, add these lines:
 The first time, sqlew initializes database, installs custom agents and slash commands. But agents and commands are not loaded in this time. So, please exit claude once, and restart claude again.
 
 It's Ready!
-
-## 🚀 Quick Start: /sqlew Command
-
-**The `/sqlew` command is the easiest way to use sqlew!** Just type `/sqlew` in Claude Code with natural language input.
-
-### Most Common Uses
-
-```bash
-# Show status and get suggestions
-/sqlew
-
-# Record a decision
-/sqlew record we use PostgreSQL 15 for production database
-
-# Search past decisions
-/sqlew search why we chose Knex for migrations
-
-# List remaining tasks
-/sqlew show remaining tasks
-
-# Plan a new feature (breakdown into tasks)
-/sqlew plan implementing user authentication
-```
-
-The `/sqlew` command automatically detects your intent (search, record, list, execute, task creation) and invokes the appropriate MCP tools.
-
----
 
 **⚠️Note**: Global install (`npm install -g`) is **not recommended** because sqlew requires an independent settings per project. Each project should maintain its own context database in `.sqlew/sqlew.db`.
 
