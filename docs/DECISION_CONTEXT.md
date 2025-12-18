@@ -1,10 +1,19 @@
-# Decision Context - Rich Decision Documentation (v3.2.2+)
+# ADR Data Model - Architecture Decision Records (v3.2.2+)
 
 ## Overview
 
-The **Decision Context** feature allows you to attach rich documentation to architectural and implementation decisions, explaining **WHY** a decision was made, what alternatives were considered, and the trade-offs involved. This goes beyond simple key-value storage to provide deep historical context that helps future developers (both human and AI) understand past reasoning.
+sqlew implements a **structured ADR (Architecture Decision Record) data model** that captures not just decisions, but the complete context: **WHY** a decision was made, what alternatives were considered, and the trade-offs involved. This transforms traditional text-based ADR into a queryable, AI-native database that maintains architectural knowledge across sessions.
 
-> **Preserved in v4.0.0**: This feature is fully preserved in the v4.0.0 schema refactoring. All decision context data (rationale, alternatives, trade-offs, related links) continues to work without changes. The schema uses `v4_decision_context` table with the same structure and functionality.
+### What is an ADR?
+
+**Architecture Decision Records (ADR)** are documents that capture important architectural decisions made along with their context and consequences. sqlew extends this concept by:
+
+- **Structured storage** – ADR data stored as relational database records
+- **Version history** – Track how decisions evolve over time
+- **Relationship tracking** – Link decisions to tasks, files, and constraints
+- **AI-native queries** – Search by tags, layers, similarity scores
+
+> **Preserved in v4.0.0**: This feature is fully preserved in the v4.0.0 schema refactoring. All ADR context data (rationale, alternatives, trade-offs, related links) continues to work without changes. The schema uses `v4_decision_context` table with the same structure and functionality.
 
 ---
 
@@ -650,26 +659,39 @@ If you have old decisions that need context, add it retroactively:
 
 ## Key Takeaways
 
-### Decision Context + Decision Intelligence = Complete Historical Records
+### ADR for AI Agents: Context + Intelligence = Complete Knowledge Repository
 
-**v3.9.0 transforms how you manage project knowledge:**
+**sqlew transforms traditional ADR into an AI-native knowledge system:**
 
-1. **Decision Context** (v3.2.2) → Adds rich documentation (rationale, alternatives, trade-offs)
-2. **Decision Intelligence** (v3.9.0) → Prevents fragmentation, maintains continuity
+1. **ADR Data Model** (v3.2.2) → Structured storage of decisions with rationale, alternatives, and trade-offs
+2. **Decision Intelligence** (v3.9.0) → Automatic duplicate detection and version consolidation
+3. **AI-Native Queries** → Fast, structured access to architectural decisions across sessions
 
 **Together they provide:**
-- **Living historical records** that evolve with your project
-- **Version trails** showing decision evolution over time
-- **Automatic consolidation** preventing scattered duplicates
-- **Rich context** explaining WHY decisions were made
-- **Discoverable knowledge** via similarity search
+- **Living ADR repository** – Decisions evolve with your project through version history
+- **AI-queryable records** – Search by tags, layers, similarity instead of reading files
+- **Automatic consolidation** – Prevent duplicate ADRs, maintain single source of truth
+- **Complete context** – Capture WHY, not just WHAT (alternatives, trade-offs, consequences)
+- **Cross-session memory** – AI agents maintain architectural understanding across days/weeks
 
-**Best workflow:**
-1. Use `check_duplicate` before creating new decisions
-2. Let auto-update merge similar decisions into canonical records
-3. Add rich context to the consolidated record
-4. Query `versions` to see decision evolution
+### ADR Best Practices for AI
 
-**Decision Context transforms decisions from "what" into "why"** - making your codebase understandable to future developers and AI agents across months or years of development.
+**Before creating a decision:**
+1. Use `check_duplicate` to find existing related ADRs
+2. Review similar decisions to avoid redundancy
+3. Update existing ADR if it's the same topic
 
-**Decision Intelligence ensures decisions are living records** - automatically updated and consolidated rather than scattered across fragmented entries.
+**When documenting a decision:**
+1. Include **rationale** – Explain WHY this choice was made
+2. Document **alternatives** – Show what was considered and rejected
+3. Capture **trade-offs** – Honest pros/cons for future reference
+4. Link **related entities** – Connect to tasks, files, constraints
+
+**After implementation:**
+1. Track affected files to show ADR impact
+2. Update decision status as it evolves (active → deprecated → superseded)
+3. Query `versions` to see architectural evolution over time
+
+**ADR transforms your codebase from "what we built" into "why we built it this way"** - making architectural decisions discoverable and understandable to AI agents across the entire project lifecycle.
+
+**Decision Intelligence ensures ADRs remain living documents** - automatically consolidated and updated rather than scattered across fragmented entries.
