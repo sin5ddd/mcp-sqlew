@@ -1,6 +1,30 @@
-# AI Agent Guide for MCP sqlew
+# AI Agent Guide for sqlew ADR System
 
 **Quick Reference for Claude Code and other AI agents using sqlew (v4.0.0+)**
+
+## What is sqlew?
+
+sqlew is an **ADR (Architecture Decision Record) system designed for AI agents**. It enables you to create, query, and maintain structured architectural decisions in a SQL database, providing persistent context across sessions.
+
+### Core Concept: ADR for AI
+
+Traditional ADR uses Markdown files. sqlew brings ADR to AI agents through **RDBMS + MCP**:
+
+**RDBMS (Relational Database)** enables efficient operations:
+- **Indexed queries** – Find decisions by tags/layers in milliseconds
+- **JOIN operations** – Query related decisions, constraints, and tasks together
+- **Transaction safety** – ACID guarantees prevent data corruption
+- **Scalability** – Handle thousands of ADRs without slowdown
+
+**MCP (Model Context Protocol)** provides AI-native access:
+- **Native tool calls** – AI agents use ADR as built-in functions
+- **Structured parameters** – Type-safe, validated inputs prevent errors
+- **Token efficiency** – Retrieve only required data (60-75% reduction)
+- **Session persistence** – ADRs survive beyond individual conversations
+
+**Result**: AI agents query ADRs like database operations, not file reads.
+
+---
 
 ## Most Important Rule
 
@@ -9,44 +33,52 @@
 ```javascript
 // WRONG - Missing action
 {
-  key: "some_key",
-  value: "some value"
+  key: "auth_method",
+  value: "jwt"
 }
 
 // CORRECT - action parameter present
 {
   action: "set",
-  key: "some_key",
-  value: "some value"
+  key: "auth_method",
+  value: "jwt"
 }
 ```
 
 ---
 
-## Quick Start
+## Quick Start: Creating Your First ADR
 
-### Basic Decision Workflow
+### Basic ADR Workflow
 
 ```javascript
-// 1. Set a decision
+// 1. Record an architectural decision
 {
   action: "set",
   key: "auth_method",
-  value: "jwt",
+  value: "We chose JWT authentication over session-based auth. JWT enables stateless API design and better horizontal scaling. Session-based auth was rejected due to scaling concerns with shared session stores.",
   layer: "business",
-  tags: ["security", "authentication"]
+  tags: ["security", "authentication", "api"]
 }
 
-// 2. Get the decision
+// 2. Retrieve the decision
 {
   action: "get",
   key: "auth_method"
 }
 
-// 3. List decisions with filters
+// 3. Search for related decisions
 {
   action: "list",
-  status: "active",
+  tags: ["authentication"],
+  status: "active"
+}
+
+// 4. Add architectural constraint
+{
+  action: "add",
+  category: "security",
+  constraint_text: "All authentication must use JWT with RS256 signing algorithm",
   layer: "business"
 }
 ```
@@ -55,33 +87,71 @@
 
 ## When to Use Each Tool
 
-| Tool | Use For | Key Feature |
+### Core ADR Tools
+
+| Tool | ADR Purpose | Key Feature |
+|------|-------------|-------------|
+| **decision** | Record architectural decisions | Full version history, alternatives tracking |
+| **constraint** | Define architectural principles | Category-based rules, validation support |
+| **task** | Track decision implementation | Links to decisions, status tracking |
+| **file** | Document impacted code | Shows which files implement decisions |
+| **suggest** | Find similar decisions | Prevent duplicate ADRs, detect conflicts |
+
+### Utility Tools
+
+| Tool | Purpose | When to Use |
 |------|---------|-------------|
-| **decision** | Recording choices made | Version history tracking |
-| **constraint** | Requirements & rules | Category-based organization |
-| **task** | Work tracking (TODO) | Kanban status, dependencies |
-| **file** | File change tracking | Layer-based organization |
-| **stats** | Metrics & cleanup | Aggregated views |
+| **help** | Query action parameters | Need to check available parameters for an action |
+| **example** | Browse code examples | Want to see working code snippets |
+| **use_case** | Learn complete workflows | Need end-to-end multi-step scenarios |
 
-### Decision vs Constraint vs Task
+> **Note**: Utility tools provide documentation and examples without affecting your ADR data.
 
-| Concept | Definition | Example |
-|---------|------------|---------|
-| **Decision** | A choice that WAS made | "We chose JWT authentication" |
-| **Constraint** | A requirement that MUST be followed | "Response time must be <100ms" |
-| **Task** | Work that NEEDS to be done | "Implement JWT authentication" |
+### Understanding the ADR Data Model
 
-### Quick Scenario
+| Concept | ADR Equivalent | Example |
+|---------|----------------|---------|
+| **Decision** | Architecture Decision Record | "We chose PostgreSQL over MongoDB for ACID compliance" |
+| **Constraint** | Architectural Principle/Rule | "All database queries must use prepared statements" |
+| **Task** | Implementation Action | "Migrate user authentication to JWT" |
+| **File** | Impacted Component | "Modified auth.ts to implement JWT" |
+
+### Complete ADR Workflow Example
 
 ```javascript
-// 1. Record decision
-{ action: "set", key: "api_change", value: "Moved to /v2/users", layer: "presentation", tags: ["api"] }
+// 1. Record decision with full context
+{
+  action: "set",
+  key: "database_choice",
+  value: "PostgreSQL selected for production database. Alternatives considered: MongoDB (rejected: no ACID), MySQL (rejected: weaker JSON support). PostgreSQL chosen for ACID compliance, mature ecosystem, and superior JSON handling.",
+  layer: "data",
+  tags: ["database", "postgresql", "architecture"]
+}
 
-// 2. Add constraint
-{ action: "add", category: "architecture", constraint_text: "All API endpoints must include version prefix", layer: "presentation" }
+// 2. Define constraints based on decision
+{
+  action: "add",
+  category: "database",
+  constraint_text: "All database operations must use connection pooling with max 20 connections",
+  layer: "data"
+}
 
-// 3. Create task
-{ action: "create", title: "Migrate clients to /v2/users", layer: "presentation", tags: ["migration"] }
+// 3. Create implementation task
+{
+  action: "create",
+  title: "Set up PostgreSQL connection pool",
+  description: "Implement connection pooling as per database_choice ADR",
+  layer: "data",
+  tags: ["database", "postgresql"]
+}
+
+// 4. Track file changes
+{
+  action: "set",
+  path: "src/db/connection.ts",
+  description: "PostgreSQL connection pool implementation",
+  layer: "data"
+}
 ```
 
 ---
@@ -147,13 +217,44 @@
 
 ---
 
-## Best Practices Summary
+## ADR Best Practices for AI Agents
+
+### Writing Good ADRs
+
+1. **Include rationale** - Explain WHY, not just WHAT
+   ```javascript
+   // BAD: "Use PostgreSQL"
+   // GOOD: "Use PostgreSQL for ACID compliance (rejected MongoDB for lack of transactions)"
+   ```
+
+2. **Document alternatives** - Show what was considered and rejected
+   ```javascript
+   value: "JWT chosen. Alternatives: session-based (rejected: scaling), OAuth (overkill for internal API)"
+   ```
+
+3. **Use descriptive keys** - Make decisions discoverable
+   ```javascript
+   // BAD: key: "db"
+   // GOOD: key: "database_postgresql_production"
+   ```
+
+4. **Tag comprehensively** - Enable efficient searching
+   ```javascript
+   tags: ["database", "postgresql", "production", "acid", "scalability"]
+   ```
+
+5. **Link related entities** - Connect decisions to implementation
+   ```javascript
+   // Record decision → Create constraint → Make task → Track files
+   ```
+
+### Technical Best Practices
 
 1. **Always include `action` parameter** - #1 error source
-2. **Use `atomic: false` for batch operations** - Avoid all-or-nothing failures
-3. **Always specify `layer`** - Required for organization
-4. **Use meaningful tags** - Critical for searchability
-5. **Use `status` (not `new_status`)** for task.move action
+2. **Always specify `layer`** - Required for architectural organization
+3. **Use `atomic: false` for batch operations** - Avoid all-or-nothing failures
+4. **Check for duplicates first** - Use `suggest` tool before creating decisions
+5. **Version important changes** - Increment version for significant updates
 
 > **Detailed best practices**: See [BEST_PRACTICES.md](BEST_PRACTICES.md)
 
