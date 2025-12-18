@@ -8,11 +8,21 @@ sqlew is an **ADR (Architecture Decision Record) system designed for AI agents**
 
 ### Core Concept: ADR for AI
 
-Traditional ADR uses Markdown files. sqlew brings ADR to AI agents through:
-- **Structured storage** – Query decisions like database records
-- **Relationship tracking** – Link decisions to tasks, files, and constraints
-- **Similarity detection** – Find duplicate or related decisions automatically
-- **Token efficiency** – Retrieve only relevant context (60-75% reduction)
+Traditional ADR uses Markdown files. sqlew brings ADR to AI agents through **RDBMS + MCP**:
+
+**RDBMS (Relational Database)** enables efficient operations:
+- **Indexed queries** – Find decisions by tags/layers in milliseconds
+- **JOIN operations** – Query related decisions, constraints, and tasks together
+- **Transaction safety** – ACID guarantees prevent data corruption
+- **Scalability** – Handle thousands of ADRs without slowdown
+
+**MCP (Model Context Protocol)** provides AI-native access:
+- **Native tool calls** – AI agents use ADR as built-in functions
+- **Structured parameters** – Type-safe, validated inputs prevent errors
+- **Token efficiency** – Retrieve only required data (60-75% reduction)
+- **Session persistence** – ADRs survive beyond individual conversations
+
+**Result**: AI agents query ADRs like database operations, not file reads.
 
 ---
 
@@ -77,14 +87,25 @@ Traditional ADR uses Markdown files. sqlew brings ADR to AI agents through:
 
 ## When to Use Each Tool
 
+### Core ADR Tools
+
 | Tool | ADR Purpose | Key Feature |
 |------|-------------|-------------|
 | **decision** | Record architectural decisions | Full version history, alternatives tracking |
 | **constraint** | Define architectural principles | Category-based rules, validation support |
 | **task** | Track decision implementation | Links to decisions, status tracking |
 | **file** | Document impacted code | Shows which files implement decisions |
-| **stats** | ADR repository metrics | Decision counts, layer distribution |
 | **suggest** | Find similar decisions | Prevent duplicate ADRs, detect conflicts |
+
+### Utility Tools
+
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| **help** | Query action parameters | Need to check available parameters for an action |
+| **example** | Browse code examples | Want to see working code snippets |
+| **use_case** | Learn complete workflows | Need end-to-end multi-step scenarios |
+
+> **Note**: Utility tools provide documentation and examples without affecting your ADR data.
 
 ### Understanding the ADR Data Model
 

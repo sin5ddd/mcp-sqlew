@@ -68,6 +68,22 @@ sqlew's **SQL-backed ADR repository** enables AI to:
 
 **Token efficiency**: 60-75% reduction compared to reading Markdown ADRs
 
+### Why RDBMS + MCP for ADR?
+
+**RDBMS (Relational Database)** provides efficient structured queries:
+- **Indexed searches** – Find decisions by tags/layers in milliseconds, not seconds
+- **JOIN operations** – Query related decisions, constraints, and tasks in a single operation
+- **Transaction support** – ACID guarantees ensure data integrity across concurrent AI agents
+- **Scalability** – Handle thousands of ADRs without performance degradation
+
+**MCP (Model Context Protocol)** enables seamless AI integration:
+- **Direct tool access** – AI agents call ADR operations as native functions
+- **Token efficiency** – Retrieve only required data, avoiding full-file reads
+- **Type safety** – Structured parameters prevent errors and guide correct usage
+- **Cross-session persistence** – ADRs survive beyond individual chat sessions
+
+**Together**: AI agents gain SQL-powered ADR capabilities without managing databases directly.
+
 ## Why Use sqlew?
 
 ### 🏛️ ADR Made AI-Native
@@ -115,7 +131,7 @@ Traditional ADR approaches weren't designed for AI agents. sqlew reimagines ADR 
 
 ---
 
-**Technical Features**: 6 specialized MCP tools (decision, constraint, task, file, stats, suggest), three-tier similarity detection (0-100 point scoring), ACID transaction support, multi-database backend (SQLite/PostgreSQL/MySQL), metadata-driven organization with layers and tags
+**Technical Features**: 8 MCP tools (5 core: decision, constraint, task, file, suggest + 3 utility: help, example, use_case), three-tier similarity detection (0-100 point scoring), ACID transaction support, multi-database backend (SQLite/PostgreSQL/MySQL), metadata-driven organization with layers and tags
 
 See [docs/DECISION_CONTEXT.md](docs/DECISION_CONTEXT.md) for ADR data model details.
 
@@ -306,14 +322,23 @@ Power users can still call MCP tools directly. See [Available Tools](#available-
 
 ### Available Tools
 
+#### Core ADR Tools
+
 | Tool | Purpose | Example Use |
 |------|---------|------------|
-| **decision** | Record choices and reasons | "We chose PostgreSQL" |
-| **constraint** | Define rules | "DO NOT use raw SQL, use ORM" |
-| **task** | Track work | "Implement feature X" |
-| **file** | Track changes | "Modified auth.ts" |
-| **stats** | Database metrics | Get layer summary |
-| **suggest** | Find similar decisions (v3.9.0) | Duplicate detection, pattern search |
+| **decision** | Record architectural decisions with context | "We chose PostgreSQL over MongoDB (ACID requirement)" |
+| **constraint** | Define architectural rules and principles | "All API endpoints must use /v2/ prefix" |
+| **task** | Track implementation of decisions | "Implement JWT authentication" |
+| **file** | Track code changes linked to decisions | "Modified auth.ts per security ADR" |
+| **suggest** | Find similar decisions, prevent duplicates | Duplicate detection, similarity search |
+
+#### Utility Tools
+
+| Tool | Purpose | Example Use |
+|------|---------|------------|
+| **help** | Query action documentation and parameters | Get decision.set parameters |
+| **example** | Browse code examples by tool/action | Find task.create examples |
+| **use_case** | Complete workflow scenarios | Multi-step ADR workflows |
 
 
 ## Documentation
