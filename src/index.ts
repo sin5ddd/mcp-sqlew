@@ -64,7 +64,7 @@ async function startMcpServer(): Promise<void> {
   const server = new Server(
     {
       name: 'mcp-sqlew',
-      version: '4.0.2',
+      version: '4.0.4',
     },
     {
       capabilities: {
