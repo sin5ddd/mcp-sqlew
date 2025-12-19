@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.5] - 2025-12-19
+
+### Changed
+
+**License Change: AGPL-3.0 → Apache-2.0**
+
+- Changed license from AGPLv3 to Apache License 2.0
+- More permissive license for commercial and enterprise adoption
+- Added NOTICE file with third-party attributions
+- Updated LICENSE file with full Apache 2.0 text
+- Updated package.json license field
+
+**Why Apache 2.0?**
+- Patent protection for contributors and users
+- Widely adopted by major tech companies (Google, Microsoft, AWS)
+- Easier enterprise adoption without copyleft concerns
+- Compatible with most open source licenses
+
+---
+
 ## [4.0.4] - 2025-12-10
 
 ### Fixed
