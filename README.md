@@ -2,7 +2,7 @@
 ![sqlew_logo](assets/sqlew-logo.png)
 
 [![npm version](https://img.shields.io/npm/v/sqlew.svg)](https://www.npmjs.com/package/sqlew)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 > **ADR (Architecture Decision Record) for AI Agents** – An MCP server that enables AI agents to create, query, and maintain architecture decision records in a structured SQL database
 
@@ -448,7 +448,7 @@ See [docs/DECISION_INTELLIGENCE.md](docs/DECISION_INTELLIGENCE.md) for details o
 
 ## License
 
-AGPLv3 - Free to use. Open-source required when embedding or modifying. See [LICENSE](LICENSE) for details.
+Apache License 2.0 - Free for commercial and personal use. See [LICENSE](LICENSE) for details.
 
 ## Links
 

@@ -1,7 +1,7 @@
 {
   "name": "sqlew",
-  "version": "4.0.4",
-  "description": "ADR (Architecture Decision Record) for AI Agents - MCP server enabling structured architectural decision management with SQL-backed repository",
+  "description": "MCP server that gives AI agents a shared SQL-backed context repository for decisions, constraints, and tasks",
+  "version": "4.0.5",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -15,6 +15,7 @@
     "docs/",
     "README.md",
     "LICENSE",
+    "NOTICE",
     "CHANGELOG.md",
     "MIGRATION_v2.md",
     "ARCHITECTURE.md"
@@ -99,7 +100,7 @@
     "token-efficiency"
   ],
   "author": "sin5ddd",
-  "license": "AGPL-3.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.21.1",
     "better-sqlite3": "^12.4.1",
