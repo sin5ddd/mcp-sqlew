@@ -10,6 +10,13 @@ import { getFileChanges } from './tools/files/index.js';
 import { dbDumpCommand } from './cli/db-dump.js';
 import { dbExportCommand } from './cli/db-export.js';
 import { dbImportCommand } from './cli/db-import.js';
+// Claude Code Hooks commands
+import { suggestCommand } from './cli/hooks/suggest.js';
+import { trackPlanCommand } from './cli/hooks/track-plan.js';
+import { saveCommand } from './cli/hooks/save.js';
+import { checkCompletionCommand } from './cli/hooks/check-completion.js';
+import { markDoneCommand } from './cli/hooks/mark-done.js';
+import { initHooksCommand } from './cli/hooks/init-hooks.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
@@ -131,32 +138,35 @@ function showHelp(): void {
   console.log(`
 sqlew CLI - Query and database migration tool for mcp-sqlew
 
-NOTE: Database commands must be run via "npm run" from the project directory.
-      npx is not supported for database operations.
-
 USAGE:
-  npm run <command> -- [options]
+  sqlew <command> [options]
 
 COMMANDS:
-  db:dump    Generate SQL dump for database migration (schema + data)
-  db:export  Export project data to JSON format (data-only, for append-import)
-  db:import  Import project data from JSON export (append to existing database)
+  Database:
+    db:dump    Generate SQL dump for database migration (schema + data)
+    db:export  Export project data to JSON format (data-only, for append-import)
+    db:import  Import project data from JSON export (append to existing database)
+
+  Claude Code Hooks (v4.1.0+):
+    suggest          Find related decisions (PreToolUse hook for Task)
+    track-plan       Track plan files (PreToolUse hook for Write)
+    save             Save decisions on code edit (PostToolUse hook for Edit|Write)
+    check-completion Check task completion (PostToolUse hook for TodoWrite)
+    mark-done        Mark decisions as implemented (Git hooks or manual)
+    init --hooks     Initialize Claude Code and Git hooks
 
 OPTIONS:
   --help                   Show this help message
 
 EXAMPLES:
+  # Initialize hooks for Claude Code integration
+  sqlew init --hooks
+
   # Generate MySQL dump for database migration
   npm run db:dump -- mysql -o dump-mysql.sql
 
-  # Generate PostgreSQL dump
-  npm run db:dump -- postgresql -o dump-pg.sql
-
-  # Export project data to JSON (for merging data across databases)
-  npm run db:export -- --project=visualizer -o data.json
-
-  # Import project data from JSON export
-  npm run db:import -- --source=data.json --project-name=visualizer-v2
+  # Test hook commands manually
+  echo '{"tool_input": {"description": "auth"}}' | sqlew suggest
 
 For more information on commands, run:
   npm run db:dump -- --help
@@ -281,6 +291,38 @@ export async function runCli(rawArgs: string[]): Promise<void> {
     return;
   }
 
+  // Claude Code Hooks commands (v4.1.0+)
+  if (args.command === 'suggest') {
+    await suggestCommand();
+    return;
+  }
+
+  if (args.command === 'track-plan') {
+    await trackPlanCommand();
+    return;
+  }
+
+  if (args.command === 'save') {
+    await saveCommand();
+    return;
+  }
+
+  if (args.command === 'check-completion') {
+    await checkCompletionCommand();
+    return;
+  }
+
+  if (args.command === 'mark-done') {
+    await markDoneCommand(rawArgs.slice(1));
+    return;
+  }
+
+  // init --hooks command
+  if (args.command === 'init' && rawArgs.includes('--hooks')) {
+    await initHooksCommand(rawArgs.slice(1));
+    return;
+  }
+
   // Show help if requested or no command
   if (args.help || !args.command) {
     showHelp();
@@ -325,7 +367,11 @@ export async function runCli(rawArgs: string[]): Promise<void> {
  * Check if a command is a CLI command (for use by index.ts)
  */
 export function isCliCommand(command: string): boolean {
-  const cliCommands = ['db:dump', 'db:export', 'db:import', 'query'];
+  const cliCommands = [
+    'db:dump', 'db:export', 'db:import', 'query',
+    // Claude Code Hooks commands (v4.1.0+)
+    'suggest', 'track-plan', 'save', 'check-completion', 'mark-done', 'init',
+  ];
   return cliCommands.includes(command);
 }
 

@@ -1,0 +1,114 @@
+/**
+ * Track Plan Hook Command
+ *
+ * PreToolUse hook for Write tool - tracks plan files.
+ * When a .claude/plans/*.md file is being written:
+ * 1. Ensures plan has sqlew-plan-id in YAML frontmatter
+ * 2. Saves current plan info to session cache
+ *
+ * Usage:
+ *   echo '{"tool_input": {"file_path": ".claude/plans/my-plan.md"}}' | sqlew track-plan
+ *
+ * @since v4.1.0
+ */
+
+import { readStdinJson, sendContinue, isPlanFile, getProjectPath } from './stdin-parser.js';
+import { ensurePlanId, extractPlanFileName, getPlanId } from './plan-id-utils.js';
+import { saveCurrentPlan, type CurrentPlanInfo } from '../../config/global-config.js';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
+
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
+/**
+ * Main track-plan command entry point
+ *
+ * Called as PreToolUse hook when Write tool is invoked.
+ * Only processes .claude/plans/*.md files.
+ */
+export async function trackPlanCommand(): Promise<void> {
+  try {
+    const input = await readStdinJson();
+
+    // Only process plan files
+    if (!isPlanFile(input)) {
+      // Not a plan file - continue without action
+      sendContinue();
+      return;
+    }
+
+    const projectPath = getProjectPath(input);
+    if (!projectPath) {
+      // No project path - continue without action
+      sendContinue();
+      return;
+    }
+
+    const filePath = input.tool_input?.file_path;
+    if (!filePath) {
+      sendContinue();
+      return;
+    }
+
+    // Resolve absolute path
+    const absolutePath = resolve(projectPath, filePath);
+
+    // Check if file exists (it might be a new file being created)
+    if (!existsSync(absolutePath)) {
+      // File doesn't exist yet - this is PreToolUse, file will be created after
+      // We'll inject context about plan tracking
+      sendContinue(
+        `[sqlew] New plan file detected: ${extractPlanFileName(absolutePath)}. ` +
+        `After the file is created, run 'sqlew track-plan' again to assign a plan ID.`
+      );
+      return;
+    }
+
+    // Ensure plan has an ID (creates one if missing)
+    const planId = ensurePlanId(absolutePath);
+    const planFileName = extractPlanFileName(absolutePath);
+
+    // Save current plan info to session cache
+    const planInfo: CurrentPlanInfo = {
+      plan_id: planId,
+      plan_file: planFileName,
+      plan_updated_at: new Date().toISOString(),
+      recorded: false,
+    };
+
+    saveCurrentPlan(projectPath, planInfo);
+
+    // Continue with context about the tracked plan
+    sendContinue(
+      `[sqlew] Tracking plan: ${planFileName} (ID: ${planId.slice(0, 8)}...)`
+    );
+  } catch (error) {
+    // On error, log to stderr but continue execution
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[sqlew track-plan] Error: ${message}`);
+    sendContinue();
+  }
+}
+
+/**
+ * Check if a plan is currently being tracked for a project
+ *
+ * @param projectPath - Project root path
+ * @returns Current plan info or null
+ */
+export function getCurrentTrackedPlan(projectPath: string): CurrentPlanInfo | null {
+  const { loadCurrentPlan } = require('../../config/global-config.js');
+  return loadCurrentPlan(projectPath);
+}
+
+/**
+ * Get plan ID from a file path (convenience wrapper)
+ *
+ * @param filePath - Path to plan file
+ * @returns Plan ID or null
+ */
+export function getPlanIdFromFile(filePath: string): string | null {
+  return getPlanId(filePath);
+}

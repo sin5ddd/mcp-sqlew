@@ -9,10 +9,52 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { createMinimalConfigIfNotExists } from './config/minimal-generator.js';
-import { loadConfigFile } from './config/loader.js';
+import { loadConfigFile, DEFAULT_CONFIG_PATH } from './config/loader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Check if we're in a git worktree with parent config
+ * If so, we should not create local .sqlew/config.toml
+ */
+function hasParentConfig(): boolean {
+  const cwd = process.cwd();
+  const gitPath = path.join(cwd, '.git');
+
+  try {
+    const stat = fs.statSync(gitPath);
+    if (!stat.isFile()) {
+      return false; // Regular git repo, not a worktree
+    }
+
+    // Read .git file to find main repo
+    const gitContent = fs.readFileSync(gitPath, 'utf-8').trim();
+    const match = gitContent.match(/^gitdir:\s*(.+)$/);
+    if (!match) {
+      return false;
+    }
+
+    // Parse worktree gitdir path to find main repo
+    const gitdirPath = match[1];
+    const worktreesIndex = gitdirPath.lastIndexOf('/worktrees/');
+    if (worktreesIndex === -1) {
+      const winIndex = gitdirPath.lastIndexOf('\\worktrees\\');
+      if (winIndex === -1) {
+        return false;
+      }
+      const mainGitDir = gitdirPath.substring(0, winIndex);
+      const mainRepoRoot = path.dirname(mainGitDir);
+      return fs.existsSync(path.join(mainRepoRoot, DEFAULT_CONFIG_PATH));
+    }
+
+    const mainGitDir = gitdirPath.substring(0, worktreesIndex);
+    const mainRepoRoot = path.dirname(mainGitDir);
+    return fs.existsSync(path.join(mainRepoRoot, DEFAULT_CONFIG_PATH));
+  } catch {
+    return false;
+  }
+}
 
 interface CommandConfig {
   filename: string;
@@ -48,9 +90,11 @@ function getTargetPath(): string {
  */
 export function syncCommandsWithConfig(): void {
   try {
-    // Ensure minimal config.toml exists
+    // Ensure minimal config.toml exists (skip if using parent config in worktree)
     const projectRoot = process.cwd();
-    createMinimalConfigIfNotExists(projectRoot);
+    if (!hasParentConfig()) {
+      createMinimalConfigIfNotExists(projectRoot);
+    }
 
     // Load config
     const config = loadConfigFile();
