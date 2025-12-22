@@ -11,12 +11,14 @@ import { Database } from 'better-sqlite3';
 
 /**
  * Decision status enumeration
- * 1 = active, 2 = deprecated, 3 = draft
+ * 1 = active, 2 = deprecated, 3 = draft, 4 = in_review, 5 = implemented
  */
 export enum Status {
   ACTIVE = 1,
   DEPRECATED = 2,
   DRAFT = 3,
+  IN_REVIEW = 4,
+  IMPLEMENTED = 5,
 }
 
 /**

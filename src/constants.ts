@@ -76,6 +76,8 @@ export const STATUS_TO_STRING: Record<Status, string> = {
   [Status.ACTIVE]: 'active',
   [Status.DEPRECATED]: 'deprecated',
   [Status.DRAFT]: 'draft',
+  [Status.IN_REVIEW]: 'in_review',
+  [Status.IMPLEMENTED]: 'implemented',
 };
 
 /**
@@ -85,7 +87,14 @@ export const STRING_TO_STATUS: Record<string, Status> = {
   'active': Status.ACTIVE,
   'deprecated': Status.DEPRECATED,
   'draft': Status.DRAFT,
+  'in_review': Status.IN_REVIEW,
+  'implemented': Status.IMPLEMENTED,
 };
+
+/**
+ * Valid status values for error messages
+ */
+export const VALID_STATUSES = Object.keys(STRING_TO_STATUS);
 
 /**
  * Map message type integer to string

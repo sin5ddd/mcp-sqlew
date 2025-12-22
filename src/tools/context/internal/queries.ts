@@ -10,7 +10,7 @@ import {
   getOrCreateScope,
   getLayerId
 } from '../../../database.js';
-import { STRING_TO_STATUS, DEFAULT_VERSION, DEFAULT_STATUS, SUGGEST_THRESHOLDS, SUGGEST_LIMITS } from '../../../constants.js';
+import { STRING_TO_STATUS, DEFAULT_VERSION, DEFAULT_STATUS, SUGGEST_THRESHOLDS, SUGGEST_LIMITS, VALID_STATUSES } from '../../../constants.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { incrementSemver, isValidSemver } from '../../../utils/semver.js';
 import { validateAgainstPolicies } from '../../../utils/policy-validator.js';
@@ -409,7 +409,10 @@ export async function setDecisionInternal(
   const isNumeric = typeof params.value === 'number';
   const value = params.value;
 
-  // Set defaults
+  // Validate and set status
+  if (params.status && !STRING_TO_STATUS[params.status]) {
+    throw new Error(`Invalid status: "${params.status}". Valid values: ${VALID_STATUSES.join(', ')}`);
+  }
   const status = params.status ? STRING_TO_STATUS[params.status] : DEFAULT_STATUS;
   // Note: Agent tracking removed in v4.0 (agent param kept for API compatibility but not stored)
 
