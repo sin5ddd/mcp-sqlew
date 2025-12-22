@@ -1,6 +1,11 @@
 /**
  * Configuration file loader
  * Reads .sqlew/config.toml and merges with defaults
+ *
+ * Worktree Support (v4.1.0+):
+ * - Detects if current directory is a git worktree
+ * - Loads config from main repository if worktree has no local config
+ * - Local worktree config overrides main repository config
  */
 
 import { readFileSync, existsSync } from 'fs';
@@ -8,6 +13,7 @@ import { resolve } from 'path';
 import { parse as parseTOML } from 'smol-toml';
 import type { SqlewConfig, FlatConfig, DatabaseConfig } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
+import { GitAdapter } from '../utils/vcs-adapter.js';
 
 /**
  * Default config file path (relative to project root)
@@ -350,4 +356,111 @@ export function validateConfig(config: SqlewConfig): { valid: boolean; errors: s
     valid: errors.length === 0,
     errors,
   };
+}
+
+// ============================================================================
+// Worktree Support (v4.1.0+)
+// ============================================================================
+
+/**
+ * Resolve config path with worktree support
+ *
+ * If the current directory is a git worktree:
+ * 1. Check for local config in worktree
+ * 2. If not found, check for config in main repository
+ * 3. If neither exists, return null
+ *
+ * @param projectRoot - Current project root directory
+ * @returns Resolved config path or null if not found
+ */
+export async function resolveConfigPath(projectRoot: string): Promise<string | null> {
+  const localConfigPath = resolve(projectRoot, DEFAULT_CONFIG_PATH);
+
+  // Check local config first
+  if (existsSync(localConfigPath)) {
+    return localConfigPath;
+  }
+
+  // Check if we're in a worktree
+  const gitAdapter = new GitAdapter(projectRoot);
+  const isWorktree = await gitAdapter.isWorktree();
+
+  if (isWorktree) {
+    const mainRoot = await gitAdapter.getMainRepositoryRoot();
+    if (mainRoot) {
+      const mainConfigPath = resolve(mainRoot, DEFAULT_CONFIG_PATH);
+      if (existsSync(mainConfigPath)) {
+        return mainConfigPath;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Load configuration with worktree support (v4.1.0+)
+ *
+ * This function automatically detects worktree environments and loads
+ * config from the main repository if the worktree doesn't have its own config.
+ *
+ * Priority:
+ * 1. Local worktree config (.sqlew/config.toml in current directory)
+ * 2. Main repository config (if in worktree)
+ * 3. Default config
+ *
+ * @param projectRoot - Project root directory
+ * @returns Loaded configuration
+ */
+export async function loadConfigWithWorktreeSupport(
+  projectRoot: string = process.cwd()
+): Promise<SqlewConfig> {
+  const configPath = await resolveConfigPath(projectRoot);
+
+  if (configPath) {
+    // Load config from resolved path
+    // Extract directory from config path to use as base
+    const configDir = resolve(configPath, '..');
+    const configFile = configPath.slice(configDir.length + 1);
+
+    return loadConfigFile(configDir, configFile);
+  }
+
+  // No config found - use defaults
+  return DEFAULT_CONFIG;
+}
+
+/**
+ * Get the effective project root for configuration
+ *
+ * If in a worktree and config comes from main repo, returns main repo root.
+ * Otherwise returns the current project root.
+ *
+ * @param projectRoot - Current project root directory
+ * @returns Effective project root for configuration
+ */
+export async function getEffectiveConfigRoot(projectRoot: string): Promise<string> {
+  const localConfigPath = resolve(projectRoot, DEFAULT_CONFIG_PATH);
+
+  // If local config exists, use current project root
+  if (existsSync(localConfigPath)) {
+    return projectRoot;
+  }
+
+  // Check if we're in a worktree
+  const gitAdapter = new GitAdapter(projectRoot);
+  const isWorktree = await gitAdapter.isWorktree();
+
+  if (isWorktree) {
+    const mainRoot = await gitAdapter.getMainRepositoryRoot();
+    if (mainRoot) {
+      const mainConfigPath = resolve(mainRoot, DEFAULT_CONFIG_PATH);
+      if (existsSync(mainConfigPath)) {
+        return mainRoot;
+      }
+    }
+  }
+
+  // No config found - use current project root
+  return projectRoot;
 }
