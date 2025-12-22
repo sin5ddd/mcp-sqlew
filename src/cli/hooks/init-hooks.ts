@@ -213,7 +213,7 @@ function installGitHooks(projectPath: string): boolean {
   const gitPath = join(projectPath, '.git');
 
   if (existsSync(gitPath)) {
-    const stat = require('fs').statSync(gitPath);
+    const stat = statSync(gitPath);
     if (stat.isFile()) {
       // Worktree - read gitdir from .git file
       const content = readFileSync(gitPath, 'utf-8').trim();
