@@ -11,15 +11,22 @@ import { Database } from 'better-sqlite3';
 
 /**
  * Decision status enumeration
- * 1 = active, 2 = deprecated, 3 = draft, 4 = in_review, 5 = implemented
+ * 1 = active, 2 = deprecated, 3 = draft, 4 = in_progress, 5 = in_review, 6 = implemented
  */
 export enum Status {
   ACTIVE = 1,
   DEPRECATED = 2,
   DRAFT = 3,
-  IN_REVIEW = 4,
-  IMPLEMENTED = 5,
+  IN_PROGRESS = 4,
+  IN_REVIEW = 5,
+  IMPLEMENTED = 6,
 }
+
+/**
+ * Valid status string values for API parameters
+ * Matches STRING_TO_STATUS keys in constants.ts
+ */
+export type StatusString = 'active' | 'deprecated' | 'draft' | 'in_progress' | 'in_review' | 'implemented';
 
 /**
  * Message type enumeration
@@ -218,7 +225,7 @@ export interface TaggedDecision {
   readonly key: string;
   readonly value: string;
   readonly version: string;
-  readonly status: 'active' | 'deprecated' | 'draft';
+  readonly status: StatusString;
   readonly layer: string | null;
   readonly tags: string | null;  // Comma-separated
   readonly scopes: string | null;  // Comma-separated
@@ -280,7 +287,7 @@ export interface SetDecisionParams {
   layer?: string;
   version?: string;
   auto_increment?: 'major' | 'minor' | 'patch';
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   tags?: string[];
   scopes?: string[];
   // Policy validation context (v3.9.0)
@@ -298,7 +305,7 @@ export interface QuickSetDecisionParams {
   agent?: string;
   layer?: string;
   version?: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   tags?: string[];
   scopes?: string[];
 }
@@ -306,7 +313,7 @@ export interface QuickSetDecisionParams {
 export interface GetContextParams {
   tags?: string[];
   layer?: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   scope?: string;
   tag_match?: 'AND' | 'OR';
   _reference_project?: string;  // Cross-project query: project name to query instead of current project
@@ -323,7 +330,7 @@ export interface HardDeleteDecisionParams {
 export interface SearchByTagsParams {
   tags: string[];
   match_mode?: 'AND' | 'OR';
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   layer?: string;
 }
 
@@ -333,7 +340,7 @@ export interface GetVersionsParams {
 
 export interface SearchByLayerParams {
   layer: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   include_tags?: boolean;
   _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
@@ -347,7 +354,7 @@ export interface SearchAdvancedParams {
   updated_after?: string;  // ISO timestamp or relative time ("7d")
   updated_before?: string;  // ISO timestamp or relative time
   decided_by?: string[];  // Array of agent names
-  statuses?: ('active' | 'deprecated' | 'draft')[];  // Multiple statuses
+  statuses?: StatusString[];  // Multiple statuses
   search_text?: string;  // Full-text search in value field
   sort_by?: 'updated' | 'key' | 'version';
   sort_order?: 'asc' | 'desc';
@@ -498,7 +505,7 @@ export interface SetFromTemplateParams {
   // Override template defaults if needed
   layer?: string;
   version?: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   tags?: string[];
   scopes?: string[];
   // Required fields (template-specific)
@@ -509,7 +516,7 @@ export interface CreateTemplateParams {
   name: string;
   defaults: {
     layer?: string;
-    status?: 'active' | 'deprecated' | 'draft';
+    status?: StatusString;
     tags?: string[];
     priority?: 'low' | 'medium' | 'high' | 'critical';
   };

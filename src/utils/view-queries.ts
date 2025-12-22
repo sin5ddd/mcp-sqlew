@@ -1,6 +1,7 @@
 // src/utils/view-queries.ts
 import { Knex } from "knex";
 import { UniversalKnex } from "./universal-knex.js";
+import { convertStatusArray, convertChangeTypeArray, convertPriorityArray } from "./enum-converter.js";
 
 /**
  * View query functions - cross-database replacements for SQL views
@@ -42,11 +43,7 @@ export async function getTaggedDecisions(knex: Knex): Promise<any[]> {
       // Prefer numeric value over empty string
       knex.raw(`COALESCE(NULLIF(d.value, ''), ${castNumericToText}) as value`),
       "d.version",
-      knex.raw(`CASE d.status
-        WHEN 1 THEN 'active'
-        WHEN 2 THEN 'deprecated'
-        ELSE 'draft'
-      END as status`),
+      "d.status",
       "l.name as layer",
       "d.project_id",
       knex.raw(`${db.dateFunction("d.ts")} as updated`),
@@ -66,7 +63,7 @@ export async function getTaggedDecisions(knex: Knex): Promise<any[]> {
       ) as scopes`),
     ]);
 
-  return result;
+  return convertStatusArray(result);
 }
 
 /**
@@ -146,22 +143,20 @@ export async function getRecentFileChanges(knex: Knex): Promise<any[]> {
   const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
 
   // Note: Agent tracking removed in v4.0 - changed_by field removed
-  return knex("v4_file_changes as fc")
+  const result = await knex("v4_file_changes as fc")
     .join("v4_files as f", "fc.file_id", "f.id")
     .leftJoin("v4_layers as l", "fc.layer_id", "l.id")
     .where("fc.ts", ">=", oneHourAgo)
     .select([
       "f.path",
-      knex.raw(`CASE fc.change_type
-        WHEN 1 THEN 'created'
-        WHEN 2 THEN 'modified'
-        ELSE 'deleted'
-      END as change_type`),
+      "fc.change_type",
       "l.name as layer",
       "fc.description",
       knex.raw(`${db.dateFunction("fc.ts")} as changed_at`),
     ])
     .orderBy("fc.ts", "desc");
+
+  return convertChangeTypeArray(result);
 }
 
 /**
@@ -171,7 +166,7 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
 
   // Note: Agent tracking removed in v4.0 - added_by field removed
-  return knex("v4_constraints as c")
+  const result = await knex("v4_constraints as c")
     .join("v4_constraint_categories as cat", "c.category_id", "cat.id")
     .leftJoin("v4_layers as l", "c.layer_id", "l.id")
     .where("c.active", db.boolTrue())
@@ -179,12 +174,7 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
       "c.id",
       "cat.name as category",
       "c.constraint_text",
-      knex.raw(`CASE c.priority
-        WHEN 1 THEN 'low'
-        WHEN 2 THEN 'medium'
-        WHEN 3 THEN 'high'
-        ELSE 'critical'
-      END as priority`),
+      "c.priority",
       "l.name as layer",
       knex.raw(`${db.dateFunction("c.ts")} as added_at`),
       // Tags subquery
@@ -197,6 +187,8 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
     ])
     .orderBy("c.priority", "desc")
     .orderBy("c.ts", "desc");
+
+  return convertPriorityArray(result);
 }
 
 /**

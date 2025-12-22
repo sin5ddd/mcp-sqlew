@@ -12,6 +12,7 @@ export type {
   GetDecisionResponse,
   TaggedDecision,
   Status,
+  StatusString,
   SearchByTagsParams,
   SearchByTagsResponse,
   GetVersionsParams,

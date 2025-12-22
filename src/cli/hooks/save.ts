@@ -1,9 +1,8 @@
 /**
  * Save Hook Command
  *
- * PostToolUse hook for Edit|Write tools - saves decision when code is edited.
- * Only saves when a plan is being tracked (via track-plan).
- * Uses plan_id + timestamp for uniqueness - skips if already recorded.
+ * PostToolUse hook for Edit|Write tools - updates decision status when code is edited.
+ * When code editing starts, updates the plan's decision from draft to in_progress.
  *
  * Usage:
  *   echo '{"tool_input": {"file_path": "src/foo.ts"}}' | sqlew save
@@ -13,9 +12,10 @@
 
 import { readStdinJson, sendContinue, isPlanFile, getProjectPath } from './stdin-parser.js';
 import { loadCurrentPlan, saveCurrentPlan, type CurrentPlanInfo } from '../../config/global-config.js';
-import { initializeDatabase } from '../../database.js';
-import { quickSetDecision } from '../../tools/context/actions/quick-set.js';
-import { join } from 'path';
+import { initializeDatabase, getAdapter } from '../../database.js';
+import { setDecision } from '../../tools/context/actions/set.js';
+import { ProjectContext } from '../../utils/project-context.js';
+import { join, basename } from 'path';
 
 // ============================================================================
 // Constants
@@ -24,11 +24,8 @@ import { join } from 'path';
 /** Decision key prefix for plan-based decisions */
 const PLAN_DECISION_PREFIX = 'plan/implementation';
 
-/** Status for in-progress decisions (using 'draft' as DB only supports active/deprecated/draft) */
-const IN_PROGRESS_STATUS = 'draft' as const;
-
-/** Workflow tag for in-progress state */
-const WORKFLOW_TAG_IN_PROGRESS = 'workflow:in_progress';
+/** Status for in-progress decisions */
+const IN_PROGRESS_STATUS = 'in_progress' as const;
 
 // ============================================================================
 // Main Entry Point
@@ -88,24 +85,36 @@ export async function saveCommand(): Promise<void> {
       return;
     }
 
+    // Initialize ProjectContext (required for decision operations)
+    try {
+      const adapter = getAdapter();
+      const knex = adapter.getKnex();
+      const projectName = basename(projectPath);
+      const projectContext = ProjectContext.getInstance();
+      await projectContext.ensureProject(knex, projectName, 'cli', {
+        projectRootPath: projectPath,
+      });
+    } catch {
+      // ProjectContext initialization failed - continue without saving
+      sendContinue();
+      return;
+    }
+
     // Build decision key from plan file name
     const planName = planInfo.plan_file.replace(/\.md$/, '');
     const decisionKey = `${PLAN_DECISION_PREFIX}/${planName}`;
 
-    // Get file path being edited for context
-    const filePath = input.tool_input?.file_path || 'unknown';
-
-    // Save decision with draft status (in_progress tracked via tag)
+    // Update decision status from draft to in_progress
     try {
-      await quickSetDecision({
+      await setDecision({
         key: decisionKey,
-        value: `Implementation started for plan: ${planInfo.plan_file}`,
+        value: `Implementation in progress for plan: ${planInfo.plan_file}`,
         status: IN_PROGRESS_STATUS,
         layer: 'cross-cutting',
-        tags: ['plan', 'implementation', WORKFLOW_TAG_IN_PROGRESS, planInfo.plan_id.slice(0, 8)],
+        tags: ['plan', 'implementation', 'in_progress', planInfo.plan_id.slice(0, 8)],
       });
 
-      // Mark plan as recorded
+      // Mark plan as recorded (status updated to in_progress)
       const updatedInfo: CurrentPlanInfo = {
         ...planInfo,
         recorded: true,
@@ -114,23 +123,12 @@ export async function saveCommand(): Promise<void> {
       saveCurrentPlan(projectPath, updatedInfo);
 
       sendContinue(
-        `[sqlew] Decision recorded for plan: ${planInfo.plan_file} (status: ${IN_PROGRESS_STATUS})`
+        `[sqlew] Decision updated to in_progress for plan: ${planInfo.plan_file}`
       );
     } catch (error) {
-      // Decision might already exist - that's OK
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('already exists') || message.includes('duplicate')) {
-        // Mark as recorded anyway
-        const updatedInfo: CurrentPlanInfo = {
-          ...planInfo,
-          recorded: true,
-        };
-        saveCurrentPlan(projectPath, updatedInfo);
-        sendContinue();
-      } else {
-        console.error(`[sqlew save] Error saving decision: ${message}`);
-        sendContinue();
-      }
+      console.error(`[sqlew save] Error updating decision: ${message}`);
+      sendContinue();
     }
   } catch (error) {
     // On error, log to stderr but continue execution

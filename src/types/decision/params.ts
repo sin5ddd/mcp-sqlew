@@ -2,6 +2,8 @@
  * Decision tool parameter types
  */
 
+import type { StatusString } from '../../types.js';
+
 export interface SetDecisionParams {
   key: string;
   value: string | number;
@@ -9,7 +11,7 @@ export interface SetDecisionParams {
   layer?: string;
   version?: string;
   auto_increment?: 'major' | 'minor' | 'patch';
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   tags?: string[];
   scopes?: string[];
   // Policy validation context (v3.9.0)
@@ -28,7 +30,7 @@ export interface QuickSetDecisionParams {
   agent?: string;
   layer?: string;
   version?: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   tags?: string[];
   scopes?: string[];
 }
@@ -36,7 +38,7 @@ export interface QuickSetDecisionParams {
 export interface GetContextParams {
   tags?: string[];
   layer?: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   scope?: string;
   tag_match?: 'AND' | 'OR';
   _reference_project?: string;
@@ -53,7 +55,7 @@ export interface HardDeleteDecisionParams {
 export interface SearchByTagsParams {
   tags: string[];
   match_mode?: 'AND' | 'OR';
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   layer?: string;
 }
 
@@ -63,7 +65,7 @@ export interface GetVersionsParams {
 
 export interface SearchByLayerParams {
   layer: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   include_tags?: boolean;
   _reference_project?: string;
 }
@@ -77,7 +79,7 @@ export interface SearchAdvancedParams {
   updated_after?: string;
   updated_before?: string;
   decided_by?: string[];
-  statuses?: ('active' | 'deprecated' | 'draft')[];
+  statuses?: StatusString[];
   search_text?: string;
   sort_by?: 'updated' | 'key' | 'version';
   sort_order?: 'asc' | 'desc';

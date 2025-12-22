@@ -15,6 +15,7 @@ import {
 import { validateChangeType } from '../../../utils/validators.js';
 import { validateActionParams } from '../internal/validation.js';
 import { UniversalKnex } from '../../../utils/universal-knex.js';
+import { convertChangeTypeArray } from '../../../utils/enum-converter.js';
 import type {
   GetFileChangesParams,
   GetFileChangesResponse,
@@ -88,11 +89,7 @@ export async function getFileChanges(
       query = query.select(
         'f.path',
         'l.name as layer',
-        knex.raw(`CASE fc.change_type
-          WHEN 1 THEN 'created'
-          WHEN 2 THEN 'modified'
-          ELSE 'deleted'
-        END as change_type`),
+        'fc.change_type',
         'fc.description',
         knex.raw(`${db.dateFunction('fc.ts')} as changed_at`)
       );
@@ -102,7 +99,8 @@ export async function getFileChanges(
         .orderBy('fc.ts', 'desc')
         .limit(limit);
 
-      const rows = await query as RecentFileChange[];
+      const rawRows = await query;
+      const rows = convertChangeTypeArray(rawRows) as RecentFileChange[];
 
       return {
         changes: rows,

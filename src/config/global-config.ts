@@ -6,7 +6,7 @@
  */
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { parse as parseTOML, stringify as stringifyTOML } from 'smol-toml';
 
@@ -274,8 +274,28 @@ export function getSessionCachePath(projectPath: string): string {
     mkdirSync(cacheDir, { recursive: true });
   }
 
+  // Normalize path for cross-platform consistency
+  // - Handle Git Bash/MSYS2 paths (/c/Users → C:\Users) on Windows
+  // - Lowercase drive letter ensures consistent cache filename
+  // - On macOS/Linux, resolve() is sufficient (no drive letters)
+  let normalizedPath = projectPath;
+
+  // Convert Git Bash/MSYS2 paths (/c/Users/...) to Windows paths (C:\Users\...)
+  if (process.platform === 'win32' && /^\/[a-zA-Z]\//.test(normalizedPath)) {
+    const driveLetter = normalizedPath[1].toUpperCase();
+    normalizedPath = driveLetter + ':' + normalizedPath.slice(2).replace(/\//g, '\\');
+  }
+
+  // Resolve to absolute path
+  normalizedPath = resolve(normalizedPath);
+
+  // Lowercase drive letter for consistency
+  if (process.platform === 'win32' && /^[A-Z]:/.test(normalizedPath)) {
+    normalizedPath = normalizedPath[0].toLowerCase() + normalizedPath.slice(1);
+  }
+
   // Create a safe filename from project path
-  const safeName = projectPath
+  const safeName = normalizedPath
     .replace(/[^a-zA-Z0-9]/g, '_')
     .replace(/_+/g, '_')
     .slice(-100); // Limit length

@@ -2,6 +2,8 @@
 // Decision Template Types (FR-006)
 // ============================================================================
 
+import type { StatusString } from '../../types.js';
+
 /**
  * Parameters for creating a decision from a template
  */
@@ -13,7 +15,7 @@ export interface SetFromTemplateParams {
   // Override template defaults if needed
   layer?: string;
   version?: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   tags?: string[];
   scopes?: string[];
   // Required fields (template-specific)
@@ -27,7 +29,7 @@ export interface CreateTemplateParams {
   name: string;
   defaults: {
     layer?: string;
-    status?: 'active' | 'deprecated' | 'draft';
+    status?: StatusString;
     tags?: string[];
     priority?: 'low' | 'medium' | 'high' | 'critical';
   };
