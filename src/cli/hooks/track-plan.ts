@@ -15,73 +15,8 @@
 import { readStdinJson, sendContinue, isPlanFile, getProjectPath } from './stdin-parser.js';
 import { ensurePlanId, extractPlanFileName, getPlanId, parseFrontmatter, generatePlanId } from './plan-id-utils.js';
 import { saveCurrentPlan, loadCurrentPlan, type CurrentPlanInfo } from '../../config/global-config.js';
-import { initializeDatabase, getAdapter } from '../../database.js';
-import { quickSetDecision } from '../../tools/context/actions/quick-set.js';
-import { ProjectContext } from '../../utils/project-context.js';
 import { existsSync } from 'fs';
-import { resolve, basename } from 'path';
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/** Decision key prefix for plan-based decisions */
-const PLAN_DECISION_PREFIX = 'plan/implementation';
-
-/** Status for draft decisions (planning stage) */
-const DRAFT_STATUS = 'draft' as const;
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Register a draft decision for a new plan
- *
- * @param projectPath - Project root path
- * @param planFileName - Plan file name (e.g., "my-plan.md")
- * @param planId - Plan ID (UUID)
- * @returns true if decision was registered, false otherwise
- */
-async function registerDraftDecision(
-  projectPath: string,
-  planFileName: string,
-  planId: string
-): Promise<boolean> {
-  try {
-    // Initialize database
-    await initializeDatabase();
-
-    // Initialize ProjectContext
-    const adapter = getAdapter();
-    const knex = adapter.getKnex();
-    const projectName = basename(projectPath);
-    const projectContext = ProjectContext.getInstance();
-    await projectContext.ensureProject(knex, projectName, 'cli', {
-      projectRootPath: projectPath,
-    });
-
-    // Build decision key from plan file name
-    const planName = planFileName.replace(/\.md$/, '');
-    const decisionKey = `${PLAN_DECISION_PREFIX}/${planName}`;
-
-    // Register decision with draft status
-    await quickSetDecision({
-      key: decisionKey,
-      value: `Plan created: ${planFileName}`,
-      status: DRAFT_STATUS,
-      layer: 'planning',
-      tags: ['plan', 'draft', planId.slice(0, 8)],
-    });
-
-    return true;
-  } catch (error) {
-    // Log error but don't fail the hook
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[sqlew track-plan] Failed to register decision: ${message}`);
-    return false;
-  }
-}
+import { resolve } from 'path';
 
 // ============================================================================
 // Main Entry Point
@@ -145,24 +80,21 @@ export async function trackPlanCommand(): Promise<void> {
 
       const planFileName = extractPlanFileName(absolutePath);
 
-      // Register draft decision for the new plan
-      const decisionRegistered = await registerDraftDecision(projectPath, planFileName, planId);
-
-      // Save current plan info to session cache
-      // recorded: false means "not yet updated to in_progress"
+      // Save current plan info to session cache (no DB operations - lazy registration)
+      // decision_pending: true means decision needs to be created in DB when save runs
       const planInfo: CurrentPlanInfo = {
         plan_id: planId,
         plan_file: planFileName,
         plan_updated_at: new Date().toISOString(),
         recorded: false,
+        decision_pending: true,
       };
 
       saveCurrentPlan(projectPath, planInfo);
 
       // Continue with context about the tracked plan
-      const statusMsg = decisionRegistered ? ' Decision registered (draft).' : '';
       sendContinue(
-        `[sqlew] Tracking new plan: ${planFileName} (ID: ${planId.slice(0, 8)}...).${statusMsg}`
+        `[sqlew] Tracking new plan: ${planFileName} (ID: ${planId.slice(0, 8)}...)`
       );
       return;
     }
@@ -171,12 +103,17 @@ export async function trackPlanCommand(): Promise<void> {
     const planId = ensurePlanId(absolutePath);
     const planFileName = extractPlanFileName(absolutePath);
 
-    // Save current plan info to session cache
+    // Check if we already have cached info for this plan
+    const existingPlan = loadCurrentPlan(projectPath);
+    const isNewPlan = !existingPlan || existingPlan.plan_id !== planId;
+
+    // Save current plan info to session cache (no DB operations - lazy registration)
     const planInfo: CurrentPlanInfo = {
       plan_id: planId,
       plan_file: planFileName,
       plan_updated_at: new Date().toISOString(),
-      recorded: false,
+      recorded: existingPlan?.recorded ?? false,
+      decision_pending: isNewPlan ? true : (existingPlan?.decision_pending ?? false),
     };
 
     saveCurrentPlan(projectPath, planInfo);

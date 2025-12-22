@@ -259,6 +259,8 @@ export interface CurrentPlanInfo {
   plan_updated_at: string;
   /** Whether decision has been recorded for this plan */
   recorded: boolean;
+  /** Whether decision needs to be created in DB (lazy registration) */
+  decision_pending?: boolean;
 }
 
 /**
