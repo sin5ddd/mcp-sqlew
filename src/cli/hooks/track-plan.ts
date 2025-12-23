@@ -15,8 +15,16 @@
 import { readStdinJson, sendContinue, isPlanFile, getProjectPath } from './stdin-parser.js';
 import { ensurePlanId, extractPlanFileName, getPlanId, parseFrontmatter, generatePlanId } from './plan-id-utils.js';
 import { saveCurrentPlan, loadCurrentPlan, type CurrentPlanInfo } from '../../config/global-config.js';
+import { enqueueDecisionCreate } from '../../utils/hook-queue.js';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Decision key prefix for plan-based decisions */
+const PLAN_DECISION_PREFIX = 'plan/implementation';
 
 // ============================================================================
 // Main Entry Point
@@ -80,8 +88,7 @@ export async function trackPlanCommand(): Promise<void> {
 
       const planFileName = extractPlanFileName(absolutePath);
 
-      // Save current plan info to session cache (no DB operations - lazy registration)
-      // decision_pending: true means decision needs to be created in DB when save runs
+      // Save current plan info to session cache
       const planInfo: CurrentPlanInfo = {
         plan_id: planId,
         plan_file: planFileName,
@@ -91,6 +98,16 @@ export async function trackPlanCommand(): Promise<void> {
       };
 
       saveCurrentPlan(projectPath, planInfo);
+
+      // Enqueue draft decision for later processing by MCP server
+      const decisionKey = `${PLAN_DECISION_PREFIX}/${planFileName.replace(/\.md$/, '')}`;
+      enqueueDecisionCreate(projectPath, {
+        key: decisionKey,
+        value: `Plan created: ${planFileName}`,
+        status: 'draft',
+        layer: 'cross-cutting',
+        tags: ['plan', 'draft', planId.slice(0, 8)],
+      });
 
       // Continue with context about the tracked plan
       sendContinue(
@@ -107,7 +124,7 @@ export async function trackPlanCommand(): Promise<void> {
     const existingPlan = loadCurrentPlan(projectPath);
     const isNewPlan = !existingPlan || existingPlan.plan_id !== planId;
 
-    // Save current plan info to session cache (no DB operations - lazy registration)
+    // Save current plan info to session cache
     const planInfo: CurrentPlanInfo = {
       plan_id: planId,
       plan_file: planFileName,
@@ -117,6 +134,18 @@ export async function trackPlanCommand(): Promise<void> {
     };
 
     saveCurrentPlan(projectPath, planInfo);
+
+    // Enqueue draft decision for new plans
+    if (isNewPlan) {
+      const decisionKey = `${PLAN_DECISION_PREFIX}/${planFileName.replace(/\.md$/, '')}`;
+      enqueueDecisionCreate(projectPath, {
+        key: decisionKey,
+        value: `Plan created: ${planFileName}`,
+        status: 'draft',
+        layer: 'cross-cutting',
+        tags: ['plan', 'draft', planId.slice(0, 8)],
+      });
+    }
 
     // Continue with context about the tracked plan
     sendContinue(

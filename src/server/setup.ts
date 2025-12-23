@@ -21,6 +21,7 @@ import { ensureProjectConfig } from '../config/writer.js';
 import { ProjectContext } from '../utils/project-context.js';
 import { detectVCS, GitAdapter } from '../utils/vcs-adapter.js';
 import { FileWatcher } from '../watcher/index.js';
+import { startQueueWatcher } from '../watcher/queue-watcher.js';
 import { initDebugLogger, debugLog } from '../utils/debug-logger.js';
 import { ensureSqlewDirectory } from '../config/example-generator.js';
 import { determineProjectRoot } from '../utils/project-root.js';
@@ -341,6 +342,15 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
   } catch (error) {
     debugLog('WARN', 'Failed to initialize sqlew integrations', { error });
     // Non-fatal - continue server startup
+  }
+
+  // 9. Start queue watcher for hook-to-DB processing
+  // Watches .sqlew/queue/pending.json and processes queued decisions
+  try {
+    await startQueueWatcher(currentDir);
+  } catch (error) {
+    debugLog('WARN', 'Failed to start queue watcher', { error });
+    // Non-fatal - hooks will still enqueue, processed on next startup
   }
 
   return {
