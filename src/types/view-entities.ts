@@ -2,11 +2,13 @@
  * View result type interfaces
  */
 
+import type { StatusString } from '../types.js';
+
 export interface TaggedDecision {
   readonly key: string;
   readonly value: string;
   readonly version: string;
-  readonly status: 'active' | 'deprecated' | 'draft';
+  readonly status: StatusString;
   readonly layer: string | null;
   readonly tags: string | null;  // Comma-separated
   readonly scopes: string | null;  // Comma-separated

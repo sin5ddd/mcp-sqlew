@@ -6,7 +6,6 @@ This directory contains specialized agent files for efficient multi-agent coordi
 
 **For complete installation guide, usage examples, and customization:**
 
-➡️ **[docs/SPECIALIZED_AGENTS.md](../../docs/SPECIALIZED_AGENTS.md)**
 
 ## Agent Files
 
@@ -14,7 +13,6 @@ This directory contains specialized agent files for efficient multi-agent coordi
 - `sqlew-researcher.md` - Query decisions, analyze patterns, investigate context (14KB tokens)
 - `sqlew-architect.md` - Document decisions, enforce constraints, maintain standards (20KB tokens)
 
-**v3.7.0 Update**: Templates now emphasize **error-prevention** (reduces tool call errors from 60% to <10%) through discovery-first workflow. Existing users: see upgrade instructions in [docs/SPECIALIZED_AGENTS.md](../../docs/SPECIALIZED_AGENTS.md#upgrading-to-error-prevention-templates-v370).
 
 ## Quick Install
 
@@ -31,10 +29,8 @@ Agents configured as `true` are automatically installed to your project's `.clau
 
 **Usage**: Invoke agents with the `@` prefix: `@sqlew-scrum-master`, `@sqlew-researcher`, `@sqlew-architect`
 
-See [docs/SPECIALIZED_AGENTS.md](../../docs/SPECIALIZED_AGENTS.md) for detailed installation instructions and configuration options.
 
 ## Links
 
 - [Main README](../../README.md#specialized-agents)
-- [Complete Documentation](../../docs/SPECIALIZED_AGENTS.md)
 - [Project Repository](https://github.com/sin5ddd/mcp-sqlew)

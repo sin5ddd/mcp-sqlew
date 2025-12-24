@@ -274,4 +274,3 @@ npm run db:import -- --help
 
 - [Main README](../../README.md) - MCP server setup and usage
 - [Configuration Guide](../CONFIGURATION.md) - Database configuration options
-- [Architecture](../ARCHITECTURE.md) - Technical architecture overview

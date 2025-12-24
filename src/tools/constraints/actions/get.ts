@@ -11,6 +11,7 @@ import { parseStringArray } from '../../../utils/param-parser.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
 import { UniversalKnex } from '../../../utils/universal-knex.js';
+import { convertPriorityArray } from '../../../utils/enum-converter.js';
 import type {
   GetConstraintsParams,
   GetConstraintsResponse,
@@ -95,18 +96,13 @@ export async function getConstraints(
       query = query.limit(limit);
 
       // Select columns with tags subquery
-      const rows = await query.select([
+      const rawRows = await query.select([
         'c.id',
         'c.project_id',
         'cat.name as category',
         'l.name as layer',
         'c.constraint_text',
-        knex.raw(`CASE c.priority
-          WHEN 1 THEN 'low'
-          WHEN 2 THEN 'medium'
-          WHEN 3 THEN 'high'
-          ELSE 'critical'
-        END as priority`),
+        'c.priority',
         knex.raw(`${db.dateFunction('c.ts')} as created_at`),
         // Tags subquery
         knex.raw(`(
@@ -115,9 +111,10 @@ export async function getConstraints(
           JOIN v4_tags t2 ON ct2.tag_id = t2.id
           WHERE ct2.constraint_id = c.id
         ) as tags`),
-      ]) as TaggedConstraint[];
+      ]);
 
-      // Parse tags from comma-separated to array for consistency
+      // Convert priority integer to string and parse tags
+      const rows = convertPriorityArray(rawRows) as TaggedConstraint[];
       const constraints = rows.map(row => ({
         ...row,
         tags: row.tags ? row.tags.split(',') : null,

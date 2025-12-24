@@ -697,4 +697,3 @@ See [Database Migration Guide](DATABASE_MIGRATION.md) for complete `db:dump` doc
 
 - [Database Migration](DATABASE_MIGRATION.md) - SQLite → MySQL/PostgreSQL migration
 - [CHANGELOG.md](../../CHANGELOG.md#374) - v3.7.4 release notes
-- [Architecture](../ARCHITECTURE.md) - Technical architecture overview

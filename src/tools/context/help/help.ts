@@ -55,11 +55,6 @@ export function decisionHelp(): any {
       list_decision_contexts: 'List decision contexts with filters (v3.2.2)'
     },
     documentation: {
-      tool_selection: 'docs/TOOL_SELECTION.md - Decision tree, tool comparison',
-      tool_reference: 'docs/TOOL_REFERENCE.md - Parameter requirements, batch operations',
-      workflows: 'docs/WORKFLOWS.md - Multi-step workflow examples',
-      best_practices: 'docs/BEST_PRACTICES.md - Common errors, best practices',
-      shared_concepts: 'docs/SHARED_CONCEPTS.md - Layer definitions, enum values'
     }
   };
 }

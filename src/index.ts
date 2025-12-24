@@ -15,7 +15,10 @@ const rawArgs = process.argv.slice(2);
 const firstArg = rawArgs[0] || '';
 
 // Check if this is a CLI command
-const cliCommands = ['db:dump', 'db:export', 'db:import', 'query'];
+const cliCommands = [
+  'db:dump', 'db:export', 'db:import', 'query',
+  'suggest', 'track-plan', 'save', 'check-completion', 'mark-done', 'init'
+];
 const isCliCommand = cliCommands.includes(firstArg);
 
 if (isCliCommand) {

@@ -1,13 +1,24 @@
 ## Plan Mode Integration
 
+### With Claude Code Hooks (Recommended)
+
+If you've run `sqlew init --hooks`, sqlew integration is **fully automatic**:
+- Related decisions are auto-suggested before Task execution
+- Plan files are auto-tracked with unique IDs
+- Decisions are auto-saved when code is edited
+- Status updates to `in_review` when all tasks complete
+- Status updates to `implemented` after git merge/rebase
+
+### Manual Usage (Without Hooks)
+
 When `<system-reminder>Plan mode is active</system-reminder>` appears:
 
-### Research Phase - Check existing context:
-- `mcp__sqlew__suggest action="by_tags"` - find related decisions
-- `mcp__sqlew__task action="list" status="in_progress"` - check active tasks
+**Research Phase:**
+- `/sqlew search for <topic>` - find related decisions
+- `/sqlew show remaining tasks` - check active tasks
 
-### Final Plan Phase - Record outcomes:
-- `mcp__sqlew__decision action="set"` - record key architectural decisions
-- `mcp__sqlew__task action="create_batch"` - create implementation tasks
+**Final Plan Phase:**
+- `/sqlew record <decision>` - record key architectural decisions
+- `/sqlew create task <description>` - create implementation tasks
 
 **Quick Reference**: `.claude/skills/sqw-plan-guidance/SKILL.md`

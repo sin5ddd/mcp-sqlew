@@ -241,7 +241,6 @@ mcp__sqlew__task action="list"
 mcp__sqlew__decision action="search_tags" tags=["authentication"]
 ```
 
-See [docs/TOOL_REFERENCE.md](TOOL_REFERENCE.md) for complete MCP tool documentation.
 
 ---
 
@@ -299,10 +298,6 @@ The `/sqlew` command is designed for token efficiency:
 
 ## Related Documentation
 
-- [DECISION_CONTEXT.md](DECISION_CONTEXT.md) - How to structure decisions
-- [TASK_OVERVIEW.md](TASK_OVERVIEW.md) - Task management overview
-- [TOOL_REFERENCE.md](TOOL_REFERENCE.md) - Direct MCP tool reference
-- [BEST_PRACTICES.md](BEST_PRACTICES.md) - Usage patterns and examples
 
 ---
 
@@ -325,9 +320,6 @@ The `/sqlew` command is designed for token efficiency:
 
 ## See Also
 
-- [AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md) - For LLM/agent usage patterns
-- [WORKFLOWS.md](WORKFLOWS.md) - Multi-step workflow examples
-- [BEST_PRACTICES.md](BEST_PRACTICES.md) - General usage patterns
 
 ---
 

@@ -11,6 +11,7 @@ import { STRING_TO_STATUS } from '../../../constants.js';
 import { validateActionParams } from '../internal/validation.js';
 import { getTaggedDecisions } from '../../../utils/view-queries.js';
 import { UniversalKnex } from '../../../utils/universal-knex.js';
+import { convertStatusArray } from '../../../utils/enum-converter.js';
 import type { SearchByLayerParams, SearchByLayerResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -112,7 +113,7 @@ export async function searchByLayer(
           'ck.key_name as key',
           'd.value',
           'd.version',
-          knex.raw(`CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' WHEN 3 THEN 'draft' END as status`),
+          'd.status',
           'l.name as layer',
           knex.raw('NULL as tags'),
           knex.raw('NULL as scopes'),
@@ -129,7 +130,7 @@ export async function searchByLayer(
           'ck.key_name as key',
           knex.raw('CAST(dn.value AS TEXT) as value'),
           'dn.version',
-          knex.raw(`CASE dn.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' WHEN 3 THEN 'draft' END as status`),
+          'dn.status',
           'l.name as layer',
           knex.raw('NULL as tags'),
           knex.raw('NULL as scopes'),
@@ -137,7 +138,8 @@ export async function searchByLayer(
         );
 
       // Union both queries
-      rows = await stringDecisions.union([numericDecisions]).orderBy('updated', 'desc') as TaggedDecision[];
+      const rawRows = await stringDecisions.union([numericDecisions]).orderBy('updated', 'desc');
+      rows = convertStatusArray(rawRows) as TaggedDecision[];
     }
 
     return {

@@ -187,8 +187,6 @@ architect = true
 # - Scrum + Architect: ~32KB (30% reduction)
 # - Scrum only: ~12KB (74% reduction)
 
-# NOTE: Documentation is centralized in docs/SPECIALIZED_AGENTS.md
-# See: https://github.com/sin5ddd/mcp-sqlew/blob/main/docs/SPECIALIZED_AGENTS.md
 
 # ============================================================================
 # Slash Commands Settings

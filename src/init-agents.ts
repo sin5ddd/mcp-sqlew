@@ -127,7 +127,6 @@ function getAgentsToInstall(): { files: string[]; summary: string } {
     installed.push('Architect (20KB)');
   }
 
-  // NOTE: Documentation is now centralized in docs/SPECIALIZED_AGENTS.md
   // No longer installing README/QUICK_START to agent directories
 
   const summary = installed.length > 0 ? installed.join(', ') : 'None';

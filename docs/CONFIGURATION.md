@@ -899,9 +899,6 @@ Error: SQLITE_CANTOPEN: unable to open database file
 
 ## Related Documentation
 
-- **[Architecture](ARCHITECTURE.md)** - Database schema and system design
-- **[Tool Reference](TOOL_REFERENCE.md)** - MCP tool usage
-- **[Best Practices](BEST_PRACTICES.md)** - Configuration recommendations
 
 ---
 

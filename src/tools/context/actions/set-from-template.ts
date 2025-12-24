@@ -50,7 +50,7 @@ export async function setFromTemplate(
     // Parse template defaults
     const defaults = JSON.parse(templateRow.defaults) as {
       layer?: string;
-      status?: 'active' | 'deprecated' | 'draft';
+      status?: 'active' | 'deprecated' | 'draft' | 'in_review' | 'implemented';
       tags?: string[];
       priority?: 'low' | 'medium' | 'high' | 'critical';
     };

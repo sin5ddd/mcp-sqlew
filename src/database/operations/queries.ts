@@ -4,6 +4,7 @@
 
 import { Knex } from 'knex';
 import type { DatabaseAdapter } from '../../adapters/index.js';
+import { convertStatus } from '../../utils/enum-converter.js';
 
 /**
  * Get layer ID by name
@@ -68,13 +69,16 @@ export async function getDecisionWithContext(
       'k.key_name as key',
       'd.value',
       'd.version',
-      knex.raw(`CASE d.status WHEN 1 THEN 'active' WHEN 2 THEN 'deprecated' ELSE 'draft' END as status`),
+      'd.status',
       'l.name as layer',
       knex.raw(`datetime(d.ts, 'unixepoch') as updated`)
     )
     .first();
 
   if (!decision) return null;
+
+  // Convert status integer to string
+  const convertedDecision = convertStatus(decision);
 
   // Get all contexts for this decision
   // Note: Agent tracking removed in v4.0 - decided_by field removed
@@ -93,7 +97,13 @@ export async function getDecisionWithContext(
     .orderBy('dc.decision_date', 'desc');
 
   return {
-    ...decision,
+    key: convertedDecision.key as string,
+    value: convertedDecision.value as string,
+    version: convertedDecision.version as string,
+    status: convertedDecision.status,
+    layer: convertedDecision.layer as string | null,
+    decided_by: null, // Agent tracking removed in v4.0
+    updated: convertedDecision.updated as string,
     context: contexts,
   };
 }

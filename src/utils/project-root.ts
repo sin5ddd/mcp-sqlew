@@ -2,6 +2,7 @@
  * Project Root Determination Utility
  *
  * Determines the project root directory with correct priority order:
+ * 0. CLAUDE_PROJECT_DIR environment variable (Claude Code Hooks set this automatically)
  * 1. SQLEW_PROJECT_ROOT environment variable (MCP client can set this)
  * 2. CLI --db-path argument (absolute path) → use dirname
  * 3. CLI --config-path argument (absolute path) → use dirname
@@ -11,8 +12,9 @@
  * This prevents issues on Windows when launched from system directories
  * like C:\Windows\System32 (e.g., by MCP hosts like Claude Desktop or Junie AI).
  *
- * Environment Variable Support (Serena-MCP pattern):
- * MCP clients can set SQLEW_PROJECT_ROOT to specify the project directory.
+ * Environment Variable Support:
+ * - CLAUDE_PROJECT_DIR: Set automatically by Claude Code Hooks (v4.1.0+)
+ * - SQLEW_PROJECT_ROOT: MCP clients can set this (Serena-MCP pattern)
  * This allows project-relative database paths without absolute CLI arguments.
  */
 
@@ -42,6 +44,7 @@ export interface ProjectRootOptions {
  * Determines the project root directory based on available path information.
  *
  * Priority order (highest to lowest):
+ * 0. CLAUDE_PROJECT_DIR environment variable (Claude Code Hooks)
  * 1. SQLEW_PROJECT_ROOT environment variable
  * 2. CLI --db-path (absolute)
  * 3. CLI --config-path (absolute)
@@ -53,6 +56,10 @@ export interface ProjectRootOptions {
  *
  * @example
  * ```typescript
+ * // Claude Code Hooks set CLAUDE_PROJECT_DIR automatically
+ * const root = determineProjectRoot({});
+ * // Returns: value of CLAUDE_PROJECT_DIR (highest priority)
+ *
  * // MCP client sets environment variable (Junie, Claude Desktop, etc.)
  * // In Junie config: { "env": { "SQLEW_PROJECT_ROOT": "/path/to/project" } }
  * const root = determineProjectRoot({});
@@ -72,6 +79,14 @@ export interface ProjectRootOptions {
  * ```
  */
 export function determineProjectRoot(options: ProjectRootOptions = {}): string {
+  // Priority 0: CLAUDE_PROJECT_DIR environment variable (v4.1.0+)
+  // Claude Code Hooks set this automatically when executing hook commands
+  const claudeProjectDir = process.env.CLAUDE_PROJECT_DIR;
+  if (claudeProjectDir && path.isAbsolute(claudeProjectDir)) {
+    // Normalize to forward slashes for cross-platform consistency
+    return claudeProjectDir.replace(/\\/g, '/');
+  }
+
   // Priority 1: SQLEW_PROJECT_ROOT environment variable
   // MCP clients (Junie, Claude Desktop, etc.) can set this to specify project directory
   const envProjectRoot = process.env.SQLEW_PROJECT_ROOT;
