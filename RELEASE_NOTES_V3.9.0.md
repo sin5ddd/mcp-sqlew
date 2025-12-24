@@ -263,7 +263,6 @@ New fields in decision responses:
 ## 📚 Documentation
 
 ### Updated
-- `docs/DECISION_INTELLIGENCE.md` - Comprehensive three-tier system guide
 - `CHANGELOG.md` - Detailed v3.9.0 changes
 - `README.md` - Updated features list
 - `CLAUDE.md` - Test execution guidelines
@@ -361,7 +360,6 @@ await decision.set({
 ## 🚀 Upgrade Checklist
 
 - [x] Update package: `npm install sqlew@3.9.0`
-- [x] Review three-tier system: `docs/DECISION_INTELLIGENCE.md`
 - [x] Test duplicate detection with existing decisions
 - [x] Consider enabling policy-based auto-triggering
 - [x] Update team documentation on new features

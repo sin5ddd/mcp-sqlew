@@ -815,7 +815,6 @@ export function taskUseCase(): any {
       file_watcher: 'Use action: "watcher" to check which files are being monitored',
       task_linking: 'Link tasks to decisions/constraints with action: "link"',
       dependencies: 'Use add_dependency/remove_dependency/get_dependencies for task ordering',
-      full_docs: 'See docs/TASK_ACTIONS.md for complete action reference'
     }
   };
 }

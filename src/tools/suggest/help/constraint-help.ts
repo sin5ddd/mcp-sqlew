@@ -123,8 +123,6 @@ export function getConstraintSuggestHelp(): any {
     documentation: {
       constraint_tool: 'constraint action: "help" - Main constraint management',
       decision_suggest: 'suggest action: "help" - Decision suggestion system',
-      shared_concepts: 'docs/SHARED_CONCEPTS.md - Layers, priorities, tags',
-      tool_selection: 'docs/TOOL_SELECTION.md - When to use constraints vs decisions',
     },
   };
 }

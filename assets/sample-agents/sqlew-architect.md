@@ -44,7 +44,6 @@ The architect will create a comprehensive decision record: analyze alternatives 
 ---
 
 **📚 For installation, usage examples, and customization guide, see:**
-**[docs/SPECIALIZED_AGENTS.md](https://github.com/sin5ddd/mcp-sqlew/blob/main/docs/SPECIALIZED_AGENTS.md)**
 
 ---
 

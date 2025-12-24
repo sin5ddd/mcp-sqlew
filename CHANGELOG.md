@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.0] - 2025-12-24
+
+### Added
+
+**Claude Code Hooks Integration**
+
+- File Queue Architecture for async decision operations
+- Hook commands: `suggest`, `track-plan`, `save`, `check-completion`, `mark-done`
+- QueueWatcher monitors `.sqlew/queue/pending.json` for changes
+- Auto-initialization with `sqlew init --hooks`
+- PreToolUse hooks (Task, Write triggers)
+- PostToolUse hooks (Edit/Write, TodoWrite, ExitPlanMode triggers)
+- Git hooks integration (post-merge, post-rewrite)
+
+**PostgreSQL Compatibility**
+
+- Replaced GROUP_CONCAT with string_agg for PostgreSQL
+- Expanded GROUP BY clauses for PostgreSQL strictness compliance
+- Cross-DB compatibility verified: SQLite, MySQL, MariaDB, PostgreSQL
+
+### Changed
+
+- Hook operations now use file queue instead of direct DB access (<100ms latency)
+- QueueWatcher singleton monitors queue file and processes decisions asynchronously
+
+---
+
 ## [4.0.5] - 2025-12-19
 
 ### Changed
@@ -102,7 +129,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rewrote `CLAUDE.md` with unified `/sqlew` command section
 - Updated `README.md` Quick Start to use `/sqlew`
 - Rewrote `docs/SLASH_COMMANDS.md` as Unified /sqlew Command Guide
-- Marked `docs/SPECIALIZED_AGENTS.md` as deprecated with migration guide
 
 ---
 
@@ -832,7 +858,6 @@ Use database-level backups (SQLite file copy, MySQL dump) for backup/restore sce
 - **sqlew-architect.md** - Enhanced decision documentation and constraint enforcement workflows
 
 #### New Documentation
-- **docs/SPECIALIZED_AGENTS.md** - Comprehensive guide for specialized agents
   - Installation and configuration instructions
   - Usage examples for each agent
   - Token optimization guidelines
@@ -1045,7 +1070,6 @@ rm .claude/agents/sqlew-{architect,researcher,scrum-master}.md
 # Restart MCP server (auto-copies new templates from assets/sample-agents/)
 ```
 
-See [docs/SPECIALIZED_AGENTS.md#upgrading-to-error-prevention-templates-v370](docs/SPECIALIZED_AGENTS.md#upgrading-to-error-prevention-templates-v370) for detailed instructions.
 
 #### Impact
 - ✅ **Target: 60% → <10% error rate** for agent tool calls
@@ -1769,7 +1793,6 @@ if (!hasProjectId) {
 - New MCP actions: `get_pruned_files`, `link_pruned_file`
 
 #### Documentation
-- `TASK_PRUNING.md` - Comprehensive guide with examples and best practices
 
 ---
 

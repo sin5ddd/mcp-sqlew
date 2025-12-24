@@ -81,7 +81,6 @@ This version was replaced by v3.2.4. Use v3.2.4 or later.
 - Enhanced `get` action with `include_context` parameter
 
 #### Documentation
-- `DECISION_CONTEXT.md` - Comprehensive guide for decision documentation
 
 ---
 
@@ -157,8 +156,6 @@ This version was replaced by v3.2.4. Use v3.2.4 or later.
 - `watch_files` - Start file watching for auto-transitions
 
 #### Documentation
-- `TASK_OVERVIEW.md` - Lifecycle, status transitions
-- `TASK_ACTIONS.md` - All action references with examples
 - `TASK_LINKING.md` - Link tasks to decisions/constraints/files
 - `TASK_MIGRATION.md` - Migrate from decision-based tracking
 

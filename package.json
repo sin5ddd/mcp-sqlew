@@ -17,8 +17,7 @@
     "LICENSE",
     "NOTICE",
     "CHANGELOG.md",
-    "MIGRATION_v2.md",
-    "ARCHITECTURE.md"
+    "MIGRATION_v2.md"
   ],
   "scripts": {
     "build": "tsc",

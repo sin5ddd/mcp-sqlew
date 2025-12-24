@@ -6,30 +6,53 @@
 
 > **ADR (Architecture Decision Record) for AI Agents** – An MCP server that enables AI agents to create, query, and maintain architecture decision records in a structured SQL database
 
-## 🚀 Quick Start: /sqlew Command
+## 🚀 Quick Start
 
-**The `/sqlew` command is the easiest way to use sqlew!** Just type `/sqlew` in Claude Code with natural language input.
-
-### Most Common Uses
+### 1. Install globally (Recommended)
 
 ```bash
-# Show status and get suggestions
-/sqlew
-
-# Record a decision
-/sqlew record we use PostgreSQL 15 for production database
-
-# Search past decisions
-/sqlew search why we chose Knex for migrations
-
-# List remaining tasks
-/sqlew show remaining tasks
-
-# Plan a new feature (breakdown into tasks)
-/sqlew plan implementing user authentication
+npm install -g sqlew
 ```
 
-The `/sqlew` command automatically detects your intent (search, record, list, execute, task creation) and invokes the appropriate MCP tools.
+### 2. Add to your MCP config
+
+Add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "sqlew": {
+      "command": "sqlew"
+    }
+  }
+}
+```
+
+### 3. Initialize hooks
+
+```bash
+sqlew init --hooks
+```
+
+### 4. Just use Plan Mode!
+
+**That's it!** Now every time you:
+1. Create a plan in Claude Code
+2. Get user approval (ExitPlanMode)
+
+→ Your architectural decisions are **automatically recorded** as ADR knowledge.
+
+No special commands needed. Just plan your work normally, and sqlew captures the decisions in the background.
+
+### Optional: /sqlew command
+
+For manual queries and explicit decision recording:
+
+```bash
+/sqlew                    # Show status
+/sqlew search auth        # Search past decisions
+/sqlew record use Redis   # Record a decision manually
+```
 
 ---
 
@@ -53,119 +76,31 @@ sqlew transforms ADR from static documentation into a **queryable, AI-native dec
 - **Efficient querying** – AI agents retrieve only relevant decisions via SQL queries
 - **Smart suggestions** – Three-tier similarity system detects duplicate or related decisions
 - **Constraint tracking** – Architectural rules and principles as first-class entities
-- **Task integration** – Link decisions to implementation tasks and affected files
+- **Auto-capture** – Claude Code Hooks automatically record decisions from Plan Mode
 
 > *This software does not send any data to external networks. We NEVER collect any data or usage statistics. Please use it with complete security.*
 
-## Concept: ADR (Architecture Decision Record) for AI Agents
+## Why sqlew?
 
-**Architecture Decision Records (ADR)** document the architectural decisions made on a project, including context, consequences, and alternatives considered. sqlew extends this proven pattern to AI agents.
+AI agents automatically accumulate project knowledge through Plan Mode. Decisions are stored in SQL for efficient querying.
 
-### Core ADR Concepts in sqlew
+**Perfect for:**
+- 🏢 Large-scale projects with many architectural decisions
+- 🔧 Long-term maintenance where context must persist across sessions
+- 👥 Team environments where multiple AI agents share knowledge
 
-**Decisions** capture architectural choices with full context:
-- **What** was decided (the decision itself)
-- **Why** it was chosen (rationale, trade-offs)
-- **What else** was considered (alternatives rejected)
-- **Impact** on the system (consequences, affected components)
+**Key benefits:**
+- ⚡ **60-75% token reduction** vs reading Markdown ADRs
+- 🔍 **Millisecond queries** (2-50ms) even with thousands of decisions
+- 🛡️ **Duplicate prevention** via similarity detection
+- 📚 **Persistent memory** across all AI sessions
 
-**Constraints** define architectural principles and rules:
-- **Performance requirements** (response time limits, throughput goals)
-- **Technology choices** ("must use PostgreSQL", "avoid microservices")
-- **Coding standards** ("async/await only", "no any types")
-- **Security policies** (authentication patterns, data handling rules)
-
-**Implementation tracking** connects decisions to reality:
-- **Tasks** link decisions to actual implementation work
-- **File tracking** shows which code was affected by decisions
-- **Status evolution** tracks decision lifecycle (draft → active → deprecated)
-
-### Why SQL for ADR?
-
-Traditional text-based ADR forces AI to:
-- Read complete files even for simple queries
-- Parse unstructured text to find relationships
-- Manually detect duplicate or conflicting decisions
-
-sqlew's **SQL-backed ADR repository** enables AI to:
-- Query by layer, tags, status in milliseconds (2-50ms)
-- Join decisions with constraints, tasks, and files
-- Leverage similarity algorithms to prevent duplicates
-- Scale to thousands of decisions without context explosion
-
-**Token efficiency**: 60-75% reduction compared to reading Markdown ADRs
-
-### Why RDBMS + MCP for ADR?
-
-**RDBMS (Relational Database)** provides efficient structured queries:
-- **Indexed searches** – Find decisions by tags/layers in milliseconds, not seconds
-- **JOIN operations** – Query related decisions, constraints, and tasks in a single operation
-- **Transaction support** – ACID guarantees ensure data integrity across concurrent AI agents
-- **Scalability** – Handle thousands of ADRs without performance degradation
-
-**MCP (Model Context Protocol)** enables seamless AI integration:
-- **Direct tool access** – AI agents call ADR operations as native functions
-- **Token efficiency** – Retrieve only required data, avoiding full-file reads
-- **Type safety** – Structured parameters prevent errors and guide correct usage
-- **Cross-session persistence** – ADRs survive beyond individual chat sessions
-
-**Together**: AI agents gain SQL-powered ADR capabilities without managing databases directly.
-
-## Why Use sqlew?
-
-### 🏛️ ADR Made AI-Native
-Traditional ADR approaches weren't designed for AI agents. sqlew reimagines ADR for the AI era:
-
-| Traditional ADR (Markdown) | sqlew ADR (SQL) |
-|---------------------------|-----------------|
-| Read entire files | Query specific decisions |
-| Manual duplicate checking | Automatic similarity detection |
-| Text parsing required | Structured, typed data |
-| Linear token scaling | Constant-time lookups |
-| File-based organization | Relational queries with JOINs |
-
-### 🎯 Key Benefits for AI-Driven Development
-
-#### 📚 **Persistent Architectural Memory**
-- **Zero context loss** – AI agents remember every architectural decision across sessions
-- **Rationale preservation** – Never forget WHY a decision was made, not just WHAT
-- **Alternative tracking** – Document rejected options to prevent circular debates
-- **Evolution history** – See how decisions changed over time with full version history
-
-#### 🛡️ **Prevent Architectural Drift**
-- **Constraint enforcement** – Define architectural rules once, AI follows them forever
-- **Pattern consistency** – AI generates code matching established patterns automatically
-- **Anti-pattern prevention** – Document "what NOT to do" as enforceable constraints
-- **Regression prevention** – AI won't reintroduce previously rejected approaches
-
-#### 🔍 **Intelligent Decision Discovery**
-- **Similarity detection** – AI identifies duplicate or related decisions before creating new ones
-- **Context-aware search** – Query by layer, tags, or relationships to find relevant decisions
-- **Impact analysis** – Trace which files and tasks are affected by each decision
-- **Conflict detection** – Find decisions that contradict or supersede each other
-
-#### 📊 **Implementation Transparency**
-- **Decision-to-task linking** – Track implementation status of architectural choices
-- **File impact tracking** – See exactly which code implements each decision
-- **Status lifecycle** – Draft → Active → Deprecated → Superseded transitions
-- **Progress visibility** – Monitor which ADRs are implemented, which are pending
-
-#### ⚡ **Extreme Efficiency**
-- **60-75% token reduction** – Query only relevant decisions instead of reading all ADRs
-- **Millisecond queries** – 2-50ms response times even with thousands of decisions
-- **Scalable architecture** – Perform well with large decision histories
-- **Production-ready** – 495/495 tests passing (100%), battle-tested on real projects
+→ See [ADR Concepts](docs/ADR_CONCEPTS.md) for detailed architecture.
 
 ---
 
-**Technical Features**: 8 MCP tools (5 core: decision, constraint, task, file, suggest + 3 utility: help, example, use_case), three-tier similarity detection (0-100 point scoring), ACID transaction support, multi-database backend (SQLite/PostgreSQL/MySQL), metadata-driven organization with layers and tags
+**Technical Features**: 7 MCP tools (4 core: decision, constraint, file, suggest + 3 utility: help, example, use_case), three-tier similarity detection (0-100 point scoring), ACID transaction support, multi-database backend (SQLite/PostgreSQL/MySQL), metadata-driven organization with layers and tags
 
-See [docs/DECISION_CONTEXT.md](docs/DECISION_CONTEXT.md) for ADR data model details.
-
-### 🔖Kanban-style AI Scrum
-![kanban-style task management](assets/kanban-visualizer.png)
-
-(This visualizer is not included in this package)
 
 ## Installation
 
@@ -173,9 +108,27 @@ See [docs/DECISION_CONTEXT.md](docs/DECISION_CONTEXT.md) for ADR data model deta
 - Node.js 20.0.0 or higher
 - npm or npx
 
-### Quick Install
+### Recommended: Global Install
 
-on `.mcp.json` in your project's root, add these lines:
+```bash
+npm install -g sqlew
+```
+
+> **Why global install?** Claude Code Hooks call `sqlew` directly from shell. Global install ensures hooks work correctly without npx overhead.
+
+Then add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "sqlew": {
+      "command": "sqlew"
+    }
+  }
+}
+```
+
+### Alternative: npx (No Install)
 
 ```json
 {
@@ -187,13 +140,10 @@ on `.mcp.json` in your project's root, add these lines:
   }
 }
 ```
-**Recommend to restart claude after initialize**
 
-The first time, sqlew initializes database, installs custom agents and slash commands. But agents and commands are not loaded in this time. So, please exit claude once, and restart claude again.
+**Note**: First run initializes the database. Restart Claude Code to load the MCP server.
 
-It's Ready!
-
-**⚠️Note**: Global install (`npm install -g`) is **not recommended** because sqlew requires an independent settings per project. Each project should maintain its own context database in `.sqlew/sqlew.db`.
+Each project maintains its own context database in `.sqlew/sqlew.db`.
 
 **Custom database path:** Add path as argument: `"args": ["sqlew", "/path/to/db.db"]`
 **Default location:** `.sqlew/sqlew.db`
@@ -328,7 +278,6 @@ Power users can still call MCP tools directly. See [Available Tools](#available-
 |------|---------|------------|
 | **decision** | Record architectural decisions with context | "We chose PostgreSQL over MongoDB (ACID requirement)" |
 | **constraint** | Define architectural rules and principles | "All API endpoints must use /v2/ prefix" |
-| **task** | Track implementation of decisions | "Implement JWT authentication" |
 | **file** | Track code changes linked to decisions | "Modified auth.ts per security ADR" |
 | **suggest** | Find similar decisions, prevent duplicates | Duplicate detection, similarity search |
 
@@ -357,34 +306,18 @@ All tools support:
 ### For AI Agents
 
 **Essential Guides:**
-- [Tool Selection](docs/TOOL_SELECTION.md) - Decision tree, when to use each tool
-- [Workflows](docs/WORKFLOWS.md) - Multi-step examples, multi-agent coordination
-- [Tool Reference](docs/TOOL_REFERENCE.md) - Parameters, batch operations, templates
-- [Best Practices](docs/BEST_PRACTICES.md) - Common errors, troubleshooting
-
-**Task System:**
-- [Task Overview](docs/TASK_OVERVIEW.md) - Lifecycle, status transitions
-- [Task Actions](docs/TASK_ACTIONS.md) - All actions with examples
-- [Task Dependencies](docs/TASK_DEPENDENCIES.md) - Blocking relationships
-- [Task Linking](docs/TASK_LINKING.md) - Link to decisions/constraints/files
-- [Task Migration](docs/TASK_MIGRATION.md) - Migrate from decision-based tracking
 
 **Advanced Features:**
-- [Decision Intelligence](docs/DECISION_INTELLIGENCE.md) - Three-tier duplicate detection (v3.9.0)
-- [Decision Context](docs/DECISION_CONTEXT.md) - Rich decision documentation
-- [Auto File Tracking](docs/AUTO_FILE_TRACKING.md) - Zero-token task management
-- [Acceptance Criteria](docs/ACCEPTANCE_CRITERIA.md) - All check types
+- [Hooks Guide](docs/HOOKS_GUIDE.md) - Claude Code Hooks integration
+- [Cross Database](docs/CROSS_DATABASE.md) - Multi-database support
 
 **Reference:**
-- [Shared Concepts](docs/SHARED_CONCEPTS.md) - Layer definitions, enum values
 - [Configuration](docs/CONFIGURATION.md) - Config file setup, all options
-- [Architecture](docs/ARCHITECTURE.md) - Technical architecture
 
 ### Advanced Usage
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
 - [CLI Mode Overview](docs/cli/README.md) - Database migration, export/import commands
-- [Building from Source](docs/ARCHITECTURE.md#development) - Setup instructions
 - [Migration Guides](docs/MIGRATION_v2.md) - Version upgrade guides
 
 ## Use Cases
@@ -416,7 +349,6 @@ All tools support:
 /sqlew plan implementing the PostgreSQL connection pool with pgBouncer
 ```
 
-See [docs/WORKFLOWS.md](docs/WORKFLOWS.md) for detailed multi-step examples.
 
 ## Performance
 
@@ -431,20 +363,25 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **4.0.2**
+Current version: **4.1.0**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
+
+**What's New in v4.1.0:**
+- **Claude Code Hooks Integration** - File Queue Architecture for async decision operations
+- **Hook Commands** - `suggest`, `track-plan`, `save`, `check-completion`, `mark-done`
+- **QueueWatcher** - Monitors `.sqlew/queue/pending.json` for hook operations
+- **PostgreSQL Compatibility** - GROUP_CONCAT → string_agg, GROUP BY strictness fixes
+- **Cross-DB Verified** - SQLite, MySQL, MariaDB, PostgreSQL all tested
+
+**What's New in v4.0.5:**
+- **License Change** - Apache License 2.0 (from AGPL-3.0)
 
 **What's New in v4.0.2:**
 - **Unified CLI Entry Point** - `npx sqlew db:export` works directly (no `npm install` required)
 - **Cross-DB Migration via JSON Only** - SQL dump no longer supports cross-database conversion
 - **Node.js 20+ Required** - Updated minimum version requirement
 
-**What's New in v4.0.0:**
-- **Schema Refactoring** - Unified v4_ table prefix, agent system completely removed
-- **Clean Schema** - No legacy columns, optimized for Decision & Constraint repository
-- **Improved Migration System** - Reorganized v3/v4 directories
-
-See [docs/DECISION_INTELLIGENCE.md](docs/DECISION_INTELLIGENCE.md) for details on the suggest tool.
+See [docs/HOOKS_GUIDE.md](docs/HOOKS_GUIDE.md) for Claude Code Hooks details.
 
 ## License
 
