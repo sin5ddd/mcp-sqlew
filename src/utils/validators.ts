@@ -34,12 +34,12 @@ export function validateRequired(value: any, paramName: string): string {
  * Validates status enum value
  * @throws Error if status is not valid
  */
-export function validateStatus(status: string): 'active' | 'deprecated' | 'draft' {
-  const validStatuses = ['active', 'deprecated', 'draft'];
+export function validateStatus(status: string): 'active' | 'deprecated' | 'draft' | 'in_progress' | 'in_review' | 'implemented' {
+  const validStatuses = ['active', 'deprecated', 'draft', 'in_progress', 'in_review', 'implemented'];
   if (!validStatuses.includes(status)) {
     throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
   }
-  return status as 'active' | 'deprecated' | 'draft';
+  return status as 'active' | 'deprecated' | 'draft' | 'in_progress' | 'in_review' | 'implemented';
 }
 
 /**

@@ -1,5 +1,7 @@
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { join, dirname, resolve } from 'path';
 
 const execAsync = promisify(exec);
 
@@ -61,6 +63,18 @@ export interface VCSAdapter {
    * @returns Project name derived from VCS metadata, or null if unable to detect
    */
   extractProjectName(): Promise<string | null>;
+
+  /**
+   * Check if the current directory is a worktree (v4.1.0+)
+   * @returns true if this is a worktree, false if main repository or not a repository
+   */
+  isWorktree(): Promise<boolean>;
+
+  /**
+   * Get main repository root path if this is a worktree (v4.1.0+)
+   * @returns Absolute path to main repository root, or null if not a worktree
+   */
+  getMainRepositoryRoot(): Promise<string | null>;
 }
 
 /**
@@ -194,6 +208,78 @@ export class GitAdapter implements VCSAdapter {
       return null;
     }
   }
+
+  /**
+   * Check if the current directory is a git worktree (v4.1.0+)
+   *
+   * Detection logic:
+   * - .git is a file → worktree (contains "gitdir: path/to/main/.git/worktrees/name")
+   * - .git is a directory → regular repository
+   * - .git doesn't exist → not a git repository
+   */
+  async isWorktree(): Promise<boolean> {
+    try {
+      const gitPath = join(this.projectRoot, '.git');
+
+      if (!existsSync(gitPath)) {
+        return false;
+      }
+
+      const stat = statSync(gitPath);
+      return stat.isFile();  // If .git is a file, it's a worktree
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get main repository root path if this is a worktree (v4.1.0+)
+   *
+   * Parses the .git file which contains:
+   * "gitdir: /path/to/main/repo/.git/worktrees/worktree-name"
+   *
+   * Returns the main repository root (parent of .git directory).
+   */
+  async getMainRepositoryRoot(): Promise<string | null> {
+    try {
+      const isWt = await this.isWorktree();
+      if (!isWt) {
+        return null;
+      }
+
+      const gitPath = join(this.projectRoot, '.git');
+      const content = readFileSync(gitPath, 'utf-8').trim();
+
+      // Parse "gitdir: /path/to/.git/worktrees/name"
+      const match = content.match(/^gitdir:\s*(.+)$/);
+      if (!match) {
+        return null;
+      }
+
+      const gitDir = match[1].trim();
+
+      // gitDir format: /path/to/main/.git/worktrees/worktree-name
+      // We need: /path/to/main
+      // So we go up 3 levels from gitDir (worktrees/name -> worktrees -> .git -> main)
+
+      // First, resolve to absolute path
+      const absoluteGitDir = resolve(this.projectRoot, gitDir);
+
+      // Navigate up to main repository: .git/worktrees/name -> .git -> main
+      const mainGitDir = dirname(dirname(absoluteGitDir));  // Go up past "worktrees/name" to ".git"
+      const mainRepoRoot = dirname(mainGitDir);  // Go up past ".git" to main repo
+
+      // Verify it's actually a git directory
+      if (existsSync(mainGitDir) && statSync(mainGitDir).isDirectory()) {
+        // Normalize to forward slashes for cross-platform consistency
+        return mainRepoRoot.replace(/\\/g, '/');
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 /**
@@ -298,6 +384,20 @@ export class SVNAdapter implements VCSAdapter {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * SVN does not support worktrees - always returns false
+   */
+  async isWorktree(): Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * SVN does not support worktrees - always returns null
+   */
+  async getMainRepositoryRoot(): Promise<string | null> {
+    return null;
   }
 }
 
@@ -406,6 +506,20 @@ export class MercurialAdapter implements VCSAdapter {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Mercurial does not support worktrees - always returns false
+   */
+  async isWorktree(): Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Mercurial does not support worktrees - always returns null
+   */
+  async getMainRepositoryRoot(): Promise<string | null> {
+    return null;
   }
 }
 

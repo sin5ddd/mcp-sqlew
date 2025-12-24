@@ -45,9 +45,11 @@ export function buildConstraintQuery(
   const { distinct = false } = options;
 
   // Build GROUP_CONCAT for tags (with optional DISTINCT)
+  // PostgreSQL uses string_agg, others use GROUP_CONCAT
+  const isPostgres = (knex.client as any)?.config?.client === 'pg' || (knex.client as any)?.config?.client === 'postgresql';
   const tagConcat = distinct
-    ? knex.raw('GROUP_CONCAT(DISTINCT t.name) as tags')
-    : knex.raw('GROUP_CONCAT(t.name) as tags');
+    ? (isPostgres ? knex.raw("string_agg(DISTINCT t.name, ',') as tags") : knex.raw('GROUP_CONCAT(DISTINCT t.name) as tags'))
+    : (isPostgres ? knex.raw("string_agg(t.name, ',') as tags") : knex.raw('GROUP_CONCAT(t.name) as tags'));
 
   return knex('v4_constraints as c')
     .select(
@@ -65,7 +67,7 @@ export function buildConstraintQuery(
     .leftJoin('v4_tags as t', 'ct.tag_id', 't.id')
     .where('c.project_id', projectId)
     .where('c.active', 1)
-    .groupBy('c.id');
+    .groupBy('c.id', 'c.constraint_text', 'cc.name', 'l.name', 'c.priority', 'c.ts');
 }
 
 /**
@@ -83,6 +85,12 @@ export async function checkExactConstraintMatch(
 ): Promise<ConstraintCandidate | null> {
   const projectId = getProjectContext().getProjectId();
 
+  // PostgreSQL uses string_agg, others use GROUP_CONCAT
+  const isPostgres = (knex.client as any)?.config?.client === 'pg' || (knex.client as any)?.config?.client === 'postgresql';
+  const tagConcat = isPostgres
+    ? knex.raw("string_agg(DISTINCT t.name, ',') as tags")
+    : knex.raw('GROUP_CONCAT(DISTINCT t.name) as tags');
+
   let query = knex('v4_constraints as c')
     .select(
       'c.id as constraint_id',
@@ -91,7 +99,7 @@ export async function checkExactConstraintMatch(
       'l.name as layer',
       'c.priority',
       'c.ts',
-      knex.raw('GROUP_CONCAT(DISTINCT t.name) as tags')
+      tagConcat
     )
     .join('v4_constraint_categories as cc', 'c.category_id', 'cc.id')
     .leftJoin('v4_layers as l', 'c.layer_id', 'l.id')
@@ -100,7 +108,7 @@ export async function checkExactConstraintMatch(
     .where('c.constraint_text', text)
     .where('c.project_id', projectId)
     .where('c.active', 1)
-    .groupBy('c.id');
+    .groupBy('c.id', 'c.constraint_text', 'cc.name', 'l.name', 'c.priority', 'c.ts');
 
   if (category) {
     query = query.where('cc.name', category);

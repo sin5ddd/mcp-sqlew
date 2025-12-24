@@ -1,17 +1,37 @@
 ---
 name: sqlew-plan-guidance
 description: |
-  Quick reference for sqlew MCP tools.
-  Provides usage patterns for Plan mode integration.
+  Quick reference for sqlew integration.
+  Provides usage patterns for Plan mode with Claude Code Hooks automation.
 ---
 
-## Quick Reference
+## Automatic Integration (v4.1.0+)
 
-### Research (Check Existing Context)
+With `sqlew init --hooks`, everything is **automatic**:
+
+| Event | Hook | Action |
+|-------|------|--------|
+| Task tool called | PreToolUse | Auto-suggest related decisions |
+| Plan file written | PreToolUse | Auto-track with plan ID |
+| Code edited | PostToolUse | Auto-save decision (status: draft) |
+| All todos completed | PostToolUse | Auto-update status to active |
+| Git merge/rebase | Git hooks | Auto-mark as implemented |
+
+## Manual Commands (Slash Command)
+
+```bash
+/sqlew                           # Show status
+/sqlew search for <topic>        # Find related decisions
+/sqlew record <decision>         # Record decision
+/sqlew show remaining tasks      # List active tasks
+```
+
+## Direct MCP Tool Usage (Advanced)
+
+### Research
 
 ```typescript
 mcp__sqlew__suggest action="by_tags" tags=["tag"]
-mcp__sqlew__decision action="search_tags" tags=["tag"]
 mcp__sqlew__task action="list" status="in_progress"
 ```
 
@@ -21,35 +41,22 @@ mcp__sqlew__task action="list" status="in_progress"
 mcp__sqlew__decision action="set"
   key="decision-key"
   value="chosen approach"
-  rationale="why this decision was made"
-  alternatives_considered="what other options were evaluated"
-  tradeoffs="benefits and drawbacks"
 ```
 
 ### Task Creation
 
 ```typescript
 mcp__sqlew__task action="create_batch" tasks=[
-  { title: "Task title", layer: "business", priority: 3, file_actions: [...] }
+  { title: "Task title", layer: "business", priority: 3 }
 ]
 ```
 
-### Constraint Management
+## Decision Workflow (Hooks)
 
-```typescript
-mcp__sqlew__constraint action="add"
-  category="architecture"
-  description="rule description"
-  priority=3
 ```
-
-## Tool Selection Guide
-
-| Purpose | Tool | Action |
-|---------|------|--------|
-| Find related decisions | suggest | by_tags, by_key |
-| Check for duplicates | suggest | check_duplicate |
-| Record decision | decision | set |
-| Create tasks | task | create, create_batch |
-| Add constraint | constraint | add |
-| List tasks | task | list |
+Code Edit      All Todos Done    Git Merge
+    │               │                │
+    ▼               ▼                ▼
+ [draft] ──────→ [active] ──────→ [active]
+         (workflow:in_progress)  (workflow:in_review)  (workflow:implemented)
+```

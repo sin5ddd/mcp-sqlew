@@ -10,6 +10,8 @@ import { getProjectContext } from '../../../utils/project-context.js';
 import { setDecision } from '../index.js';
 import type { SetDecisionResponse } from '../types.js';
 
+import type { StatusString } from '../../../types.js';
+
 export interface SetFromPolicyParams {
   policy_name: string;
   key: string;
@@ -18,7 +20,7 @@ export interface SetFromPolicyParams {
   agent?: string;
   layer?: string;
   version?: string;
-  status?: 'active' | 'deprecated' | 'draft';
+  status?: StatusString;
   tags?: string[];
   scopes?: string[];
   // Policy context

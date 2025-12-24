@@ -9,7 +9,7 @@ import { getAdapter, getDecisionWithContext as dbGetDecisionWithContext } from '
 import { getProjectContext } from '../../../utils/project-context.js';
 import { validateActionParams } from '../internal/validation.js';
 import { getTaggedDecisions } from '../../../utils/view-queries.js';
-import type { GetDecisionParams, GetDecisionResponse, TaggedDecision } from '../types.js';
+import type { GetDecisionParams, GetDecisionResponse, TaggedDecision, StatusString } from '../types.js';
 
 /**
  * Get a specific decision by key
@@ -57,7 +57,7 @@ export async function getDecision(
           key: result.key,
           value: result.value,
           version: result.version,
-          status: result.status as 'active' | 'deprecated' | 'draft',
+          status: result.status as StatusString,
           layer: result.layer,
           decided_by: result.decided_by,
           updated: result.updated,

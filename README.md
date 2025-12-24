@@ -466,3 +466,7 @@ Apache License 2.0 - Free for commercial and personal use. See [LICENSE](LICENSE
 Built with [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk), [better-sqlite3](https://github.com/WiseLibs/better-sqlite3), and TypeScript.
 
 **Author**: sin5ddd
+
+---
+
+<!-- Git Hooks Integration Test: 2025-12-22 - This line tests post-merge hook triggering mark-done --auto -->

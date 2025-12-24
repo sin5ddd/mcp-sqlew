@@ -1,12 +1,14 @@
 /**
- * Auto-initialize sqlew skills and CLAUDE.md integration on server startup
- * Copies skills from assets if not present, appends to CLAUDE.md if section missing
+ * Auto-initialize sqlew skills, CLAUDE.md integration, and hooks on server startup
+ * Copies skills from assets if not present, appends to CLAUDE.md if section missing,
+ * and sets up Claude Code hooks in settings.local.json (first time only)
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { debugLog } from './utils/debug-logger.js';
+import { autoInitializeHooks } from './cli/hooks/init-hooks.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -107,7 +109,7 @@ export function initializeClaudeMd(projectRoot: string): void {
 }
 
 /**
- * Initialize all sqlew integrations (skills + CLAUDE.md)
+ * Initialize all sqlew integrations (skills + CLAUDE.md + hooks)
  * Called during server startup
  */
 export function initializeSqlewIntegrations(projectRoot: string): void {
@@ -118,4 +120,10 @@ export function initializeSqlewIntegrations(projectRoot: string): void {
 
   // Initialize CLAUDE.md integration
   initializeClaudeMd(projectRoot);
+
+  // Initialize Claude Code hooks (first time only)
+  const hooksInitialized = autoInitializeHooks(projectRoot);
+  if (hooksInitialized) {
+    debugLog('INFO', 'Claude Code hooks auto-initialized', { projectRoot });
+  }
 }
