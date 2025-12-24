@@ -31,7 +31,7 @@ import type { Knex } from 'knex';
 import { UniversalKnex } from '../../utils/universal-knex.js';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔄 Starting Decision Intelligence System migration v3.9.0...');
+  console.error('🔄 Starting Decision Intelligence System migration v3.9.0...');
 
   const db = new UniversalKnex(knex);
 
@@ -43,13 +43,13 @@ export async function up(knex: Knex): Promise<void> {
   const hasNewTable = await knex.schema.hasTable('t_decision_policies');
 
   if (hasOldTable && !hasNewTable) {
-    console.log('🔄 Renaming t_decision_templates → t_decision_policies...');
+    console.error('🔄 Renaming t_decision_templates → t_decision_policies...');
     await knex.schema.renameTable('t_decision_templates', 't_decision_policies');
-    console.log('✓ Table renamed successfully');
+    console.error('✓ Table renamed successfully');
   } else if (hasNewTable) {
-    console.log('✓ t_decision_policies already exists, skipping rename');
+    console.error('✓ t_decision_policies already exists, skipping rename');
   } else if (!hasOldTable && !hasNewTable) {
-    console.log('⚠️  Neither t_decision_templates nor t_decision_policies exists - will create new table');
+    console.error('⚠️  Neither t_decision_templates nor t_decision_policies exists - will create new table');
 
     // Create new table if neither exists (fresh install scenario)
     await db.createTableSafe('t_decision_policies', (table, helpers) => {
@@ -65,7 +65,7 @@ export async function up(knex: Knex): Promise<void> {
       // UNIQUE constraint on (name, project_id)
       table.unique(['name', 'project_id']);
     });
-    console.log('✓ Created t_decision_policies table');
+    console.error('✓ Created t_decision_policies table');
   }
 
   // ============================================================================
@@ -132,7 +132,7 @@ export async function up(knex: Knex): Promise<void> {
 
   const hasTagIndex = await knex.schema.hasTable('m_tag_index');
   if (!hasTagIndex) {
-    console.log('🔄 Creating m_tag_index table...');
+    console.error('🔄 Creating m_tag_index table...');
 
     await knex.schema.createTable('m_tag_index', (table) => {
       table.text('tag_name').notNullable();
@@ -149,9 +149,9 @@ export async function up(knex: Knex): Promise<void> {
       table.index('decision_id', 'idx_tag_index_decision');
     });
 
-    console.log('✓ Created m_tag_index table (denormalized index)');
+    console.error('✓ Created m_tag_index table (denormalized index)');
   } else {
-    console.log('✓ m_tag_index already exists, skipping');
+    console.error('✓ m_tag_index already exists, skipping');
   }
 
   // ============================================================================
@@ -159,7 +159,7 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   if (!hasTagIndex) {
-    console.log('🔄 Populating m_tag_index from existing tags...');
+    console.error('🔄 Populating m_tag_index from existing tags...');
 
     // Use database-aware INSERT OR IGNORE syntax
     if (db.isSQLite) {
@@ -188,9 +188,9 @@ export async function up(knex: Knex): Promise<void> {
     }
 
     const count = await knex('m_tag_index').count('* as cnt');
-    console.log(`✓ Populated m_tag_index with ${count[0].cnt} tag entries`);
+    console.error(`✓ Populated m_tag_index with ${count[0].cnt} tag entries`);
   } else {
-    console.log('✓ m_tag_index already populated, skipping');
+    console.error('✓ m_tag_index already populated, skipping');
   }
 
   // ============================================================================
@@ -198,7 +198,7 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   if (db.isSQLite) {
-    console.log('🔄 Creating tag index auto-population trigger...');
+    console.error('🔄 Creating tag index auto-population trigger...');
 
     // Check if trigger already exists
     const triggerExists = await knex.raw(`
@@ -217,20 +217,20 @@ export async function up(knex: Knex): Promise<void> {
           FROM m_tags t WHERE t.id = NEW.tag_id;
         END
       `);
-      console.log('✓ Created populate_tag_index trigger');
+      console.error('✓ Created populate_tag_index trigger');
     } else {
-      console.log('✓ populate_tag_index trigger already exists, skipping');
+      console.error('✓ populate_tag_index trigger already exists, skipping');
     }
   } else {
-    console.log('⚠️  Non-SQLite database detected - trigger creation skipped');
-    console.log('   TODO: Add MySQL/PostgreSQL trigger support in future enhancement');
+    console.error('⚠️  Non-SQLite database detected - trigger creation skipped');
+    console.error('   TODO: Add MySQL/PostgreSQL trigger support in future enhancement');
   }
 
   // ============================================================================
   // STEP 6: Update Built-in Policies with Validation Rules
   // ============================================================================
 
-  console.log('🔄 Updating built-in policies with validation rules...');
+  console.error('🔄 Updating built-in policies with validation rules...');
 
   const existingPolicies = await knex('t_decision_policies').select('id', 'name');
 
@@ -250,7 +250,7 @@ export async function up(knex: Knex): Promise<void> {
           suggest_similar: 1,
           category: 'security'
         });
-      console.log('  ✓ Updated security_vulnerability policy');
+      console.error('  ✓ Updated security_vulnerability policy');
     }
 
     // Breaking Change Policy
@@ -268,7 +268,7 @@ export async function up(knex: Knex): Promise<void> {
           suggest_similar: 1,
           category: 'compatibility'
         });
-      console.log('  ✓ Updated breaking_change policy');
+      console.error('  ✓ Updated breaking_change policy');
     }
 
     // Architecture Decision Policy
@@ -283,7 +283,7 @@ export async function up(knex: Knex): Promise<void> {
           suggest_similar: 1,
           category: 'architecture'
         });
-      console.log('  ✓ Updated architecture_decision policy');
+      console.error('  ✓ Updated architecture_decision policy');
     }
 
     // Performance Optimization Policy
@@ -297,7 +297,7 @@ export async function up(knex: Knex): Promise<void> {
           }),
           category: 'performance'
         });
-      console.log('  ✓ Updated performance_optimization policy');
+      console.error('  ✓ Updated performance_optimization policy');
     }
 
     // Deprecation Policy
@@ -311,12 +311,12 @@ export async function up(knex: Knex): Promise<void> {
           }),
           category: 'lifecycle'
         });
-      console.log('  ✓ Updated deprecation policy');
+      console.error('  ✓ Updated deprecation policy');
     }
 
-    console.log(`✓ Updated ${existingPolicies.length} built-in policies`);
+    console.error(`✓ Updated ${existingPolicies.length} built-in policies`);
   } else {
-    console.log('⚠️  No existing policies found - skipping policy updates');
+    console.error('⚠️  No existing policies found - skipping policy updates');
   }
 
   // ============================================================================
@@ -338,32 +338,32 @@ export async function up(knex: Knex): Promise<void> {
     table.index('task_id', 'idx_task_pruned_files_task_id');
   });
 
-  console.log('✅ Decision Intelligence System migration v3.9.0 completed successfully');
+  console.error('✅ Decision Intelligence System migration v3.9.0 completed successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Rolling back Decision Intelligence System migration v3.9.0...');
+  console.error('🔄 Rolling back Decision Intelligence System migration v3.9.0...');
 
   const db = new UniversalKnex(knex);
 
   // Drop t_task_pruned_files table
   await knex.schema.dropTableIfExists('t_task_pruned_files');
-  console.log('✓ Dropped t_task_pruned_files table');
+  console.error('✓ Dropped t_task_pruned_files table');
 
   // Drop trigger (SQLite only)
   if (db.isSQLite) {
     await knex.raw('DROP TRIGGER IF EXISTS populate_tag_index');
-    console.log('✓ Dropped populate_tag_index trigger');
+    console.error('✓ Dropped populate_tag_index trigger');
   }
 
   // Drop tag index table
   await knex.schema.dropTableIfExists('m_tag_index');
-  console.log('✓ Dropped m_tag_index table');
+  console.error('✓ Dropped m_tag_index table');
 
   // Remove new columns from t_decision_policies
   const hasNewTable = await knex.schema.hasTable('t_decision_policies');
   if (hasNewTable) {
-    console.log('🔄 Removing new columns from t_decision_policies...');
+    console.error('🔄 Removing new columns from t_decision_policies...');
 
     // Check columns individually before dropping
     const hasValidationRules = await knex.schema.hasColumn('t_decision_policies', 'validation_rules');
@@ -380,17 +380,17 @@ export async function down(knex: Knex): Promise<void> {
       });
     }
 
-    console.log('✓ Removed new columns');
+    console.error('✓ Removed new columns');
 
     // Rename back to t_decision_templates
     const hasOldTable = await knex.schema.hasTable('t_decision_templates');
     if (!hasOldTable) {
       await knex.schema.renameTable('t_decision_policies', 't_decision_templates');
-      console.log('✓ Renamed t_decision_policies → t_decision_templates');
+      console.error('✓ Renamed t_decision_policies → t_decision_templates');
     } else {
-      console.log('⚠️  t_decision_templates already exists, skipping rename');
+      console.error('⚠️  t_decision_templates already exists, skipping rename');
     }
   }
 
-  console.log('✅ Decision Intelligence System rollback completed');
+  console.error('✅ Decision Intelligence System rollback completed');
 }

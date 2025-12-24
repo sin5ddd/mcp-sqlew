@@ -278,7 +278,7 @@ export async function up(knex: Knex): Promise<void> {
     table.foreign('blocked_task_id').references('t_tasks.id').onDelete('CASCADE');
   });
 
-  console.log('✅ Transaction tables created successfully');
+  console.error('✅ Transaction tables created successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -303,5 +303,5 @@ export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('t_decisions_numeric');
   await knex.schema.dropTableIfExists('t_decisions');
 
-  console.log('✅ Transaction tables dropped successfully');
+  console.error('✅ Transaction tables dropped successfully');
 }

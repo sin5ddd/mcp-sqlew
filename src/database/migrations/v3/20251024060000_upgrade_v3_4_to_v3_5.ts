@@ -17,18 +17,18 @@ export async function up(knex: Knex): Promise<void> {
   const hasPrunedFiles = await knex.schema.hasTable("t_task_pruned_files");
 
   if (hasPrunedFiles) {
-    console.log("✓ t_task_pruned_files already exists, skipping v3.5.0 migration");
+    console.error("✓ t_task_pruned_files already exists, skipping v3.5.0 migration");
     return;
   }
 
   // Check if we have decision context (v3.2.2+)
   const hasDecisionContext = await knex.schema.hasTable("t_decision_context");
   if (!hasDecisionContext) {
-    console.log("✓ No v3.4.x schema detected, skipping v3.5.0 migration");
+    console.error("✓ No v3.4.x schema detected, skipping v3.5.0 migration");
     return;
   }
 
-  console.log("🔄 Migrating v3.4.x → v3.5.0 (adding pruned files tracking)...");
+  console.error("🔄 Migrating v3.4.x → v3.5.0 (adding pruned files tracking)...");
 
   // Create pruned files table
   await db.createTableSafe("t_task_pruned_files", (table, helpers) => {
@@ -45,8 +45,8 @@ export async function up(knex: Knex): Promise<void> {
 
   await db.createIndexSafe("t_task_pruned_files", ["task_id"], "idx_task_pruned_files_task_id");
 
-  console.log("  ✓ Created t_task_pruned_files");
-  console.log("✅ v3.4.x → v3.5.0 migration complete");
+  console.error("  ✓ Created t_task_pruned_files");
+  console.error("✅ v3.4.x → v3.5.0 migration complete");
 }
 
 export async function down(knex: Knex): Promise<void> {

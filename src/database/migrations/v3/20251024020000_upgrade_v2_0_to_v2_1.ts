@@ -19,18 +19,18 @@ export async function up(knex: Knex): Promise<void> {
   const hasActivityLog = await knex.schema.hasTable("t_activity_log");
 
   if (hasActivityLog) {
-    console.log("✓ t_activity_log already exists, skipping v2.1.0 migration");
+    console.error("✓ t_activity_log already exists, skipping v2.1.0 migration");
     return;
   }
 
   // Check if we have prefixed tables (v1.1.0+/v2.0.0)
   const hasPrefixedTables = await knex.schema.hasTable("m_agents");
   if (!hasPrefixedTables) {
-    console.log("✓ No v2.0.0 schema detected, skipping v2.1.0 migration");
+    console.error("✓ No v2.0.0 schema detected, skipping v2.1.0 migration");
     return;
   }
 
-  console.log("🔄 Migrating v2.0.0 → v2.1.0 (adding activity log)...");
+  console.error("🔄 Migrating v2.0.0 → v2.1.0 (adding activity log)...");
 
   // Create activity log table
   await db.createTableSafe("t_activity_log", (table, helpers) => {
@@ -43,8 +43,8 @@ export async function up(knex: Knex): Promise<void> {
   // Create index
   await db.createIndexSafe("t_activity_log", ["ts"], "idx_activity_log_ts");
 
-  console.log("  ✓ Created t_activity_log table");
-  console.log("✅ v2.0.0 → v2.1.0 migration complete");
+  console.error("  ✓ Created t_activity_log table");
+  console.error("✅ v2.0.0 → v2.1.0 migration complete");
 }
 
 export async function down(knex: Knex): Promise<void> {

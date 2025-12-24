@@ -31,11 +31,11 @@ export async function up(knex: Knex): Promise<void> {
   // Wrapper now handles all of this automatically via createIndexSafe().
 
   if (db.isSQLite) {
-    console.log('✓ SQLite: Original index creation works correctly');
+    console.error('✓ SQLite: Original index creation works correctly');
     return;
   }
 
-  console.log(`🔧 Fixing MySQL/PostgreSQL index creation for ${db.isMySQL ? 'MySQL' : 'PostgreSQL'}...`);
+  console.error(`🔧 Fixing MySQL/PostgreSQL index creation for ${db.isMySQL ? 'MySQL' : 'PostgreSQL'}...`);
 
   // Recreate all indexes that failed in the previous migration
   await db.createIndexSafe('t_decisions', ['ts'], 'idx_decisions_ts', { desc: true });
@@ -67,14 +67,14 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('t_tasks', ['created_ts'], 'idx_tasks_created_ts', { desc: true });
   await db.createIndexSafe('t_tasks', ['updated_ts'], 'idx_tasks_updated_ts', { desc: true });
 
-  console.log('✅ MySQL/PostgreSQL indexes created successfully');
+  console.error('✅ MySQL/PostgreSQL indexes created successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
 
   if (db.isSQLite) {
-    console.log('✓ SQLite: No rollback needed');
+    console.error('✓ SQLite: No rollback needed');
     return;
   }
 
@@ -108,5 +108,5 @@ export async function down(knex: Knex): Promise<void> {
     await knex.raw(`DROP INDEX IF EXISTS ${indexName}`);
   }
 
-  console.log('✅ Indexes dropped successfully');
+  console.error('✅ Indexes dropped successfully');
 }

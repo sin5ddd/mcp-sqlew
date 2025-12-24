@@ -17,18 +17,18 @@ export async function up(knex: Knex): Promise<void> {
   const hasDependencies = await knex.schema.hasTable("t_task_dependencies");
 
   if (hasDependencies) {
-    console.log("✓ t_task_dependencies already exists, skipping v3.2.0 migration");
+    console.error("✓ t_task_dependencies already exists, skipping v3.2.0 migration");
     return;
   }
 
   // Check if we have v3.0.x schema (task tables exist)
   const hasTaskTables = await knex.schema.hasTable("t_tasks");
   if (!hasTaskTables) {
-    console.log("✓ No v3.0.x schema detected, skipping v3.2.0 migration");
+    console.error("✓ No v3.0.x schema detected, skipping v3.2.0 migration");
     return;
   }
 
-  console.log("🔄 Migrating v3.0.x → v3.2.0 (adding task dependencies)...");
+  console.error("🔄 Migrating v3.0.x → v3.2.0 (adding task dependencies)...");
 
   // Create task dependencies table
   await db.createTableSafe("t_task_dependencies", (table, helpers) => {
@@ -50,8 +50,8 @@ export async function up(knex: Knex): Promise<void> {
 
   await db.createIndexSafe("t_task_dependencies", ["blocked_task_id"], "idx_task_deps_blocked");
 
-  console.log("  ✓ Created t_task_dependencies");
-  console.log("✅ v3.0.x → v3.2.0 migration complete");
+  console.error("  ✓ Created t_task_dependencies");
+  console.error("✅ v3.0.x → v3.2.0 migration complete");
 }
 
 export async function down(knex: Knex): Promise<void> {

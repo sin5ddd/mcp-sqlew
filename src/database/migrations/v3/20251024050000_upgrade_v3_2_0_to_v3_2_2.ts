@@ -17,18 +17,18 @@ export async function up(knex: Knex): Promise<void> {
   const hasDecisionContext = await knex.schema.hasTable("t_decision_context");
 
   if (hasDecisionContext) {
-    console.log("✓ t_decision_context already exists, skipping v3.2.2 migration");
+    console.error("✓ t_decision_context already exists, skipping v3.2.2 migration");
     return;
   }
 
   // Check if we have v3.2.0 schema (task dependencies exist)
   const hasDependencies = await knex.schema.hasTable("t_task_dependencies");
   if (!hasDependencies) {
-    console.log("✓ No v3.2.0 schema detected, skipping v3.2.2 migration");
+    console.error("✓ No v3.2.0 schema detected, skipping v3.2.2 migration");
     return;
   }
 
-  console.log("🔄 Migrating v3.2.0 → v3.2.2 (adding decision context)...");
+  console.error("🔄 Migrating v3.2.0 → v3.2.2 (adding decision context)...");
 
   // Create decision context table
   await db.createTableSafe("t_decision_context", (table, helpers) => {
@@ -54,8 +54,8 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe("t_decision_context", ["decision_id"], "idx_decision_context_decision_id");
   await db.createIndexSafe("t_decision_context", ["task_id"], "idx_decision_context_task_id");
 
-  console.log("  ✓ Created t_decision_context");
-  console.log("✅ v3.2.0 → v3.2.2 migration complete");
+  console.error("  ✓ Created t_decision_context");
+  console.error("✅ v3.2.0 → v3.2.2 migration complete");
 }
 
 export async function down(knex: Knex): Promise<void> {

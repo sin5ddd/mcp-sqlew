@@ -31,25 +31,25 @@ export async function up(knex: Knex): Promise<void> {
 
   // Skip on SQLite (handled by 20251104000000)
   if (db.isSQLite) {
-    console.log("✓ SQLite database detected, skipping (handled by 20251104000000)");
+    console.error("✓ SQLite database detected, skipping (handled by 20251104000000)");
     return;
   }
 
-  console.log(`🔧 Multi-project cross-database compatibility for ${db.isMySQL ? "MySQL" : "PostgreSQL"}...`);
+  console.error(`🔧 Multi-project cross-database compatibility for ${db.isMySQL ? "MySQL" : "PostgreSQL"}...`);
 
   // Check if already migrated
   const hasProjectsTable = await knex.schema.hasTable("m_projects");
   const hasProjectIdInDecisions = await knex.schema.hasColumn("t_decisions", "project_id");
 
   if (hasProjectsTable && hasProjectIdInDecisions) {
-    console.log("✓ Multi-project schema already migrated, skipping");
+    console.error("✓ Multi-project schema already migrated, skipping");
     return;
   }
 
   // Disable foreign key checks (MySQL only)
   if (db.isMySQL) {
     await knex.raw("SET FOREIGN_KEY_CHECKS=0");
-    console.log("✓ Disabled foreign key constraints (MySQL)");
+    console.error("✓ Disabled foreign key constraints (MySQL)");
   }
 
   // ============================================================================
@@ -83,10 +83,10 @@ export async function up(knex: Knex): Promise<void> {
     });
 
     defaultProjectId = 1;
-    console.log(`✓ Created m_projects table with project "${detected.name}"`);
+    console.error(`✓ Created m_projects table with project "${detected.name}"`);
   } else {
     defaultProjectId = 1;
-    console.log("✓ m_projects table already exists");
+    console.error("✓ m_projects table already exists");
   }
 
   // ============================================================================
@@ -106,11 +106,11 @@ export async function up(knex: Knex): Promise<void> {
   for (const viewName of viewsToDrop) {
     await knex.raw(`DROP VIEW IF EXISTS ${viewName}`);
   }
-  console.log(`✓ Dropped ${viewsToDrop.length} views before table modifications`);
+  console.error(`✓ Dropped ${viewsToDrop.length} views before table modifications`);
 
   // Drop old t_agent_messages table if exists (removed in v3.6.5)
   await knex.schema.dropTableIfExists("t_agent_messages");
-  console.log("✓ t_agent_messages dropped if it existed (removed in v3.6.5)");
+  console.error("✓ t_agent_messages dropped if it existed (removed in v3.6.5)");
 
   // ============================================================================
   // STEP 3: Add project_id to Transaction Tables
@@ -175,7 +175,7 @@ export async function up(knex: Knex): Promise<void> {
     if (decisionsData.length > 0) {
       await knex("t_decisions").insert(decisionsData);
     }
-    console.log(`✓ Recreated t_decisions with composite PRIMARY KEY (${decisionsData.length} rows)`);
+    console.error(`✓ Recreated t_decisions with composite PRIMARY KEY (${decisionsData.length} rows)`);
 
     // Recreate t_decisions_numeric
     const decisionsNumericData = (await knex.schema.hasTable("t_decisions_numeric"))
@@ -205,7 +205,7 @@ export async function up(knex: Knex): Promise<void> {
     if (decisionsNumericData.length > 0) {
       await knex("t_decisions_numeric").insert(decisionsNumericData);
     }
-    console.log(`✓ Recreated t_decisions_numeric with composite PRIMARY KEY (${decisionsNumericData.length} rows)`);
+    console.error(`✓ Recreated t_decisions_numeric with composite PRIMARY KEY (${decisionsNumericData.length} rows)`);
 
     // Recreate t_decision_context
     await knex.schema.createTable("t_decision_context", (table) => {
@@ -242,13 +242,13 @@ export async function up(knex: Knex): Promise<void> {
     await db.createIndexSafe("t_task_file_links", ["project_id", "task_id", "file_id"], "idx_task_file_links_unique", {
       unique: true,
     });
-    console.log("✓ Created UNIQUE constraint on t_task_file_links (project_id, task_id, file_id)");
+    console.error("✓ Created UNIQUE constraint on t_task_file_links (project_id, task_id, file_id)");
   } catch (error: any) {
     if (
       error.message &&
       (error.message.includes("already exists") || error.message.includes("Duplicate key name"))
     ) {
-      console.log("✓ UNIQUE constraint already exists on t_task_file_links");
+      console.error("✓ UNIQUE constraint already exists on t_task_file_links");
     } else {
       throw error;
     }
@@ -304,15 +304,15 @@ export async function up(knex: Knex): Promise<void> {
   `
   );
 
-  console.log("✓ Recreated views with project_id support");
+  console.error("✓ Recreated views with project_id support");
 
   // Re-enable foreign key checks (MySQL)
   if (db.isMySQL) {
     await knex.raw("SET FOREIGN_KEY_CHECKS=1");
-    console.log("✓ Re-enabled foreign key constraints (MySQL)");
+    console.error("✓ Re-enabled foreign key constraints (MySQL)");
   }
 
-  console.log("✅ Multi-project cross-database migration completed successfully");
+  console.error("✅ Multi-project cross-database migration completed successfully");
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -320,10 +320,10 @@ export async function down(knex: Knex): Promise<void> {
 
   // Skip on SQLite
   if (db.isSQLite) {
-    console.log("✓ SQLite database detected, skipping rollback");
+    console.error("✓ SQLite database detected, skipping rollback");
     return;
   }
 
-  console.log("⏪ Rolling back multi-project cross-database migration...");
-  console.log("⚠️  Rollback not implemented - migration is one-way for non-SQLite databases");
+  console.error("⏪ Rolling back multi-project cross-database migration...");
+  console.error("⚠️  Rollback not implemented - migration is one-way for non-SQLite databases");
 }

@@ -21,7 +21,7 @@ export async function up(knex: Knex): Promise<void> {
     return table.integer('related_constraint_id').nullable();
   });
 
-  console.log('✅ Added related_task_id and related_constraint_id to t_decision_context');
+  console.error('✅ Added related_task_id and related_constraint_id to t_decision_context');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -31,5 +31,5 @@ export async function down(knex: Knex): Promise<void> {
     table.dropColumn('related_constraint_id');
   });
 
-  console.log('✅ Removed related_task_id and related_constraint_id from t_decision_context');
+  console.error('✅ Removed related_task_id and related_constraint_id from t_decision_context');
 }

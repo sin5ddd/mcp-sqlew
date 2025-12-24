@@ -31,7 +31,7 @@ export async function up(knex: Knex): Promise<void> {
   // Check if t_decision_context exists
   const hasTable = await knex.schema.hasTable('t_decision_context');
   if (!hasTable) {
-    console.log('  ⏭  t_decision_context does not exist, skipping');
+    console.error('  ⏭  t_decision_context does not exist, skipping');
     return;
   }
 
@@ -40,27 +40,27 @@ export async function up(knex: Knex): Promise<void> {
   const hasAgentId = await knex.schema.hasColumn('t_decision_context', 'agent_id');
 
   if (hasAgentId && !hasDecidedBy) {
-    console.log('  ✓ t_decision_context already has agent_id, skipping');
+    console.error('  ✓ t_decision_context already has agent_id, skipping');
     return;
   }
 
   if (!hasDecidedBy && !hasAgentId) {
-    console.log('  ⚠  t_decision_context missing both decided_by_agent_id and agent_id, adding agent_id');
+    console.error('  ⚠  t_decision_context missing both decided_by_agent_id and agent_id, adding agent_id');
     await knex.schema.alterTable('t_decision_context', (table) => {
       table.integer('agent_id').unsigned().nullable();
       table.foreign('agent_id').references('m_agents.id');
     });
-    console.log('  ✓ Added agent_id column to t_decision_context');
+    console.error('  ✓ Added agent_id column to t_decision_context');
     return;
   }
 
   if (hasDecidedBy) {
-    console.log('  🔄 Renaming t_decision_context.decided_by_agent_id → agent_id');
+    console.error('  🔄 Renaming t_decision_context.decided_by_agent_id → agent_id');
 
     if (client === 'better-sqlite3' || client === 'sqlite3') {
       // SQLite supports RENAME COLUMN in recent versions
       await knex.raw('ALTER TABLE t_decision_context RENAME COLUMN decided_by_agent_id TO agent_id');
-      console.log('  ✓ Renamed decided_by_agent_id → agent_id (SQLite)');
+      console.error('  ✓ Renamed decided_by_agent_id → agent_id (SQLite)');
     } else if (client === 'mysql' || client === 'mysql2') {
       // MySQL requires specifying the full column definition
       await knex.raw(`
@@ -76,20 +76,20 @@ export async function up(knex: Knex): Promise<void> {
         `);
       } catch (err: any) {
         if (err.message && err.message.includes('Duplicate key')) {
-          console.log('  ✓ Foreign key already exists');
+          console.error('  ✓ Foreign key already exists');
         } else {
           throw err;
         }
       }
-      console.log('  ✓ Renamed decided_by_agent_id → agent_id (MySQL)');
+      console.error('  ✓ Renamed decided_by_agent_id → agent_id (MySQL)');
     } else if (client === 'pg' || client === 'postgresql') {
       // PostgreSQL supports RENAME COLUMN
       await knex.raw('ALTER TABLE t_decision_context RENAME COLUMN decided_by_agent_id TO agent_id');
-      console.log('  ✓ Renamed decided_by_agent_id → agent_id (PostgreSQL)');
+      console.error('  ✓ Renamed decided_by_agent_id → agent_id (PostgreSQL)');
     }
   }
 
-  console.log('✅ Migration complete: t_decision_context now uses agent_id');
+  console.error('✅ Migration complete: t_decision_context now uses agent_id');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -98,7 +98,7 @@ export async function down(knex: Knex): Promise<void> {
   // Check if t_decision_context exists
   const hasTable = await knex.schema.hasTable('t_decision_context');
   if (!hasTable) {
-    console.log('  ⏭  t_decision_context does not exist, skipping rollback');
+    console.error('  ⏭  t_decision_context does not exist, skipping rollback');
     return;
   }
 
@@ -107,27 +107,27 @@ export async function down(knex: Knex): Promise<void> {
   const hasDecidedBy = await knex.schema.hasColumn('t_decision_context', 'decided_by_agent_id');
 
   if (hasDecidedBy && !hasAgentId) {
-    console.log('  ✓ t_decision_context already has decided_by_agent_id, rollback not needed');
+    console.error('  ✓ t_decision_context already has decided_by_agent_id, rollback not needed');
     return;
   }
 
   if (hasAgentId) {
-    console.log('  🔄 Rolling back: Renaming t_decision_context.agent_id → decided_by_agent_id');
+    console.error('  🔄 Rolling back: Renaming t_decision_context.agent_id → decided_by_agent_id');
 
     if (client === 'better-sqlite3' || client === 'sqlite3') {
       await knex.raw('ALTER TABLE t_decision_context RENAME COLUMN agent_id TO decided_by_agent_id');
-      console.log('  ✓ Rolled back to decided_by_agent_id (SQLite)');
+      console.error('  ✓ Rolled back to decided_by_agent_id (SQLite)');
     } else if (client === 'mysql' || client === 'mysql2') {
       await knex.raw(`
         ALTER TABLE t_decision_context
         CHANGE COLUMN agent_id decided_by_agent_id INTEGER UNSIGNED NULL
       `);
-      console.log('  ✓ Rolled back to decided_by_agent_id (MySQL)');
+      console.error('  ✓ Rolled back to decided_by_agent_id (MySQL)');
     } else if (client === 'pg' || client === 'postgresql') {
       await knex.raw('ALTER TABLE t_decision_context RENAME COLUMN agent_id TO decided_by_agent_id');
-      console.log('  ✓ Rolled back to decided_by_agent_id (PostgreSQL)');
+      console.error('  ✓ Rolled back to decided_by_agent_id (PostgreSQL)');
     }
   }
 
-  console.log('✅ Rollback complete: t_decision_context reverted to decided_by_agent_id');
+  console.error('✅ Rollback complete: t_decision_context reverted to decided_by_agent_id');
 }

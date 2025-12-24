@@ -24,7 +24,7 @@ import { UniversalKnex } from '../../utils/universal-knex.js';
 
 export async function up(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
-  console.log('🔄 Updating v_tagged_decisions view to support numeric decisions...');
+  console.error('🔄 Updating v_tagged_decisions view to support numeric decisions...');
 
   // Database-specific CAST syntax for numeric to string conversion
   // - PostgreSQL: CAST(... AS TEXT)
@@ -64,12 +64,12 @@ export async function up(knex: Knex): Promise<void> {
     LEFT JOIN t_decisions_numeric dn ON dn.key_id = d.key_id AND dn.project_id = d.project_id
   `);
 
-  console.log('✅ v_tagged_decisions view updated with numeric support');
+  console.error('✅ v_tagged_decisions view updated with numeric support');
 }
 
 export async function down(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
-  console.log('🔄 Reverting v_tagged_decisions view to original...');
+  console.error('🔄 Reverting v_tagged_decisions view to original...');
 
   const stringAgg = db.stringAgg('t2.name', ',');
   const timestampConv = db.dateFunction('d.ts');
@@ -97,5 +97,5 @@ export async function down(knex: Knex): Promise<void> {
     LEFT JOIN m_agents a ON d.agent_id = a.id
   `);
 
-  console.log('✅ v_tagged_decisions view reverted to original');
+  console.error('✅ v_tagged_decisions view reverted to original');
 }

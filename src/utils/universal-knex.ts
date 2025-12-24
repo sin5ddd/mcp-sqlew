@@ -243,7 +243,7 @@ export class UniversalKnex {
           throw error; // Re-throw if not a duplicate error
         }
 
-        console.log(`✓ Index ${name} already exists, skipping`);
+        console.error(`✓ Index ${name} already exists, skipping`);
       }
     }
   }
@@ -317,7 +317,7 @@ export class UniversalKnex {
         callback(table, helpers);
       });
     } else {
-      console.log(`✓ Table ${tableName} already exists, skipping`);
+      console.error(`✓ Table ${tableName} already exists, skipping`);
     }
   }
 
@@ -338,7 +338,7 @@ export class UniversalKnex {
     if (!hasColumn) {
       await this.knex.schema.alterTable(tableName, callback);
     } else {
-      console.log(`✓ Column ${tableName}.${columnName} already exists, skipping`);
+      console.error(`✓ Column ${tableName}.${columnName} already exists, skipping`);
     }
   }
 }

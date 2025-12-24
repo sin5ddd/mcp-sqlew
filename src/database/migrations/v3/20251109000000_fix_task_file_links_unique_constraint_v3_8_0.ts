@@ -24,12 +24,12 @@ import { UniversalKnex } from '../../utils/universal-knex.js';
  */
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔧 Adding UNIQUE constraint to t_task_file_links...');
+  console.error('🔧 Adding UNIQUE constraint to t_task_file_links...');
 
   // Check if project_id column exists (required for this constraint)
   const hasProjectId = await knex.schema.hasColumn('t_task_file_links', 'project_id');
   if (!hasProjectId) {
-    console.log('✓ t_task_file_links.project_id does not exist yet, skipping (will be created later)');
+    console.error('✓ t_task_file_links.project_id does not exist yet, skipping (will be created later)');
     return;
   }
 
@@ -45,7 +45,7 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔧 Removing UNIQUE constraint from t_task_file_links...');
+  console.error('🔧 Removing UNIQUE constraint from t_task_file_links...');
 
   const db = new UniversalKnex(knex);
   const client = knex.client.config.client;
@@ -61,13 +61,13 @@ export async function down(knex: Knex): Promise<void> {
         table.dropUnique(['project_id', 'task_id', 'file_id'], 'idx_task_file_links_unique');
       });
     }
-    console.log('✅ Removed UNIQUE constraint from t_task_file_links');
+    console.error('✅ Removed UNIQUE constraint from t_task_file_links');
   } catch (error: any) {
     if (error.message && (
       error.message.includes('does not exist') ||
       error.message.includes("Can't DROP")
     )) {
-      console.log('✓ UNIQUE constraint does not exist, nothing to remove');
+      console.error('✓ UNIQUE constraint does not exist, nothing to remove');
     } else {
       throw error;
     }

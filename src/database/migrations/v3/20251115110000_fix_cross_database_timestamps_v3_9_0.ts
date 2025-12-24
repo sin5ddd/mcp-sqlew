@@ -28,11 +28,11 @@ export async function up(knex: Knex): Promise<void> {
 
   // Skip on SQLite - original migration works fine there
   if (db.isSQLite) {
-    console.log('✓ SQLite: Original migration already handled timestamps correctly');
+    console.error('✓ SQLite: Original migration already handled timestamps correctly');
     return;
   }
 
-  console.log(`🔧 Fixing cross-database timestamp issues for ${db.isMySQL ? 'MySQL' : 'PostgreSQL'}...`);
+  console.error(`🔧 Fixing cross-database timestamp issues for ${db.isMySQL ? 'MySQL' : 'PostgreSQL'}...`);
 
   // ============================================================================
   // Fix t_decision_policies table
@@ -53,7 +53,7 @@ export async function up(knex: Knex): Promise<void> {
     const hasTs = await knex.schema.hasColumn('t_decision_policies', 'ts');
 
     if (!hasTs) {
-      console.log('  ⏭️  Adding ts column to t_decision_policies...');
+      console.error('  ⏭️  Adding ts column to t_decision_policies...');
 
       await knex.schema.alterTable('t_decision_policies', (table) => {
         table.integer('ts').nullable();
@@ -70,9 +70,9 @@ export async function up(knex: Knex): Promise<void> {
         await knex.raw('ALTER TABLE t_decision_policies ALTER COLUMN ts SET NOT NULL');
       }
 
-      console.log('  ✅ Fixed t_decision_policies columns');
+      console.error('  ✅ Fixed t_decision_policies columns');
     } else {
-      console.log('  ✓ t_decision_policies already has required columns');
+      console.error('  ✓ t_decision_policies already has required columns');
     }
   }
 
@@ -102,22 +102,22 @@ export async function up(knex: Knex): Promise<void> {
     table.integer('total_count').notNullable().defaultTo(0);
   });
 
-  console.log('✅ Cross-database timestamp fixes applied successfully');
+  console.error('✅ Cross-database timestamp fixes applied successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
 
   if (db.isSQLite) {
-    console.log('✓ SQLite: No rollback needed');
+    console.error('✓ SQLite: No rollback needed');
     return;
   }
 
   // This migration is a hotfix, so down() should not break the database
   // We'll just log what we would do but not actually drop columns/tables
-  console.log('⚠️  Hotfix migration rollback: Not dropping columns/tables to preserve data');
-  console.log('   If you need to rollback, manually drop the columns/tables:');
-  console.log('   - t_decision_policies: project_id, created_by, ts');
-  console.log('   - t_decision_pruning_log: entire table');
-  console.log('   - m_tag_index: entire table');
+  console.error('⚠️  Hotfix migration rollback: Not dropping columns/tables to preserve data');
+  console.error('   If you need to rollback, manually drop the columns/tables:');
+  console.error('   - t_decision_policies: project_id, created_by, ts');
+  console.error('   - t_decision_pruning_log: entire table');
+  console.error('   - m_tag_index: entire table');
 }

@@ -18,22 +18,22 @@ export async function up(knex: Knex): Promise<void> {
   const hasHelpSystem = await knex.schema.hasTable("m_help_tools");
 
   if (hasHelpSystem) {
-    console.log("✓ Help system tables already exist, skipping v3.6.0 migration");
+    console.error("✓ Help system tables already exist, skipping v3.6.0 migration");
     return;
   }
 
   // Check if we have pruned files (v3.5.x)
   const hasPrunedFiles = await knex.schema.hasTable("t_task_pruned_files");
   if (!hasPrunedFiles) {
-    console.log("✓ No v3.5.x schema detected, skipping v3.6.0 migration");
+    console.error("✓ No v3.5.x schema detected, skipping v3.6.0 migration");
     return;
   }
 
-  console.log("🔄 Migrating v3.5.x → v3.6.0 (adding help system)...");
-  console.log("  ℹ️  Help system tables will be created by migration 20251025090000");
-  console.log("  ℹ️  This is just a version marker migration");
+  console.error("🔄 Migrating v3.5.x → v3.6.0 (adding help system)...");
+  console.error("  ℹ️  Help system tables will be created by migration 20251025090000");
+  console.error("  ℹ️  This is just a version marker migration");
 
-  console.log("✅ v3.5.x → v3.6.0 migration marker complete");
+  console.error("✅ v3.5.x → v3.6.0 migration marker complete");
 }
 
 export async function down(knex: Knex): Promise<void> {

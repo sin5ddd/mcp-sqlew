@@ -22,18 +22,18 @@ export async function up(knex: Knex): Promise<void> {
   const hasTaskTables = await knex.schema.hasTable("m_task_statuses");
 
   if (hasTaskTables) {
-    console.log("✓ Task tables already exist, skipping v3.0.0 migration");
+    console.error("✓ Task tables already exist, skipping v3.0.0 migration");
     return;
   }
 
   // Check if we have v2.1.x schema (activity log exists)
   const hasActivityLog = await knex.schema.hasTable("t_activity_log");
   if (!hasActivityLog) {
-    console.log("✓ No v2.1.x schema detected, skipping v3.0.0 migration");
+    console.error("✓ No v2.1.x schema detected, skipping v3.0.0 migration");
     return;
   }
 
-  console.log("🔄 Migrating v2.1.x → v3.0.0 (adding task system)...");
+  console.error("🔄 Migrating v2.1.x → v3.0.0 (adding task system)...");
 
   // Create task statuses master table
   await db.createTableSafe("m_task_statuses", (table) => {
@@ -52,7 +52,7 @@ export async function up(knex: Knex): Promise<void> {
     ]);
   }
 
-  console.log("  ✓ Created m_task_statuses");
+  console.error("  ✓ Created m_task_statuses");
 
   // Create tasks table
   await db.createTableSafe("t_tasks", (table, helpers) => {
@@ -71,7 +71,7 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe("t_tasks", ["status_id", "priority"], "idx_tasks_status_priority");
   await db.createIndexSafe("t_tasks", ["created_ts"], "idx_tasks_created_ts");
 
-  console.log("  ✓ Created t_tasks");
+  console.error("  ✓ Created t_tasks");
 
   // Create task tags linking table
   await db.createTableSafe("t_task_tags", (table) => {
@@ -90,7 +90,7 @@ export async function up(knex: Knex): Promise<void> {
     table.primary(["task_id", "tag_id"]);
   });
 
-  console.log("  ✓ Created t_task_tags");
+  console.error("  ✓ Created t_task_tags");
 
   // Create task scopes linking table
   await db.createTableSafe("t_task_scopes", (table) => {
@@ -109,7 +109,7 @@ export async function up(knex: Knex): Promise<void> {
     table.primary(["task_id", "scope_id"]);
   });
 
-  console.log("  ✓ Created t_task_scopes");
+  console.error("  ✓ Created t_task_scopes");
 
   // Create task-decision links
   await db.createTableSafe("t_task_decision_links", (table) => {
@@ -128,9 +128,9 @@ export async function up(knex: Knex): Promise<void> {
     table.primary(["task_id", "decision_id"]);
   });
 
-  console.log("  ✓ Created t_task_decision_links");
+  console.error("  ✓ Created t_task_decision_links");
 
-  console.log("✅ v2.1.x → v3.0.0 migration complete");
+  console.error("✅ v2.1.x → v3.0.0 migration complete");
 }
 
 export async function down(knex: Knex): Promise<void> {

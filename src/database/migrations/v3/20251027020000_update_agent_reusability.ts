@@ -23,7 +23,7 @@ export async function up(knex: Knex): Promise<void> {
   const hasColumn = await knex.schema.hasColumn('m_agents', 'is_reusable');
 
   if (!hasColumn) {
-    console.log('✓ Column is_reusable does not exist, skipping update');
+    console.error('✓ Column is_reusable does not exist, skipping update');
     return;
   }
 
@@ -35,12 +35,12 @@ export async function up(knex: Knex): Promise<void> {
     .whereNotIn('name', systemAgents)
     .update({ is_reusable: true });
 
-  console.log('✅ Updated agents to reusable (except system/migration-manager)');
+  console.error('✅ Updated agents to reusable (except system/migration-manager)');
 }
 
 export async function down(knex: Knex): Promise<void> {
   // Revert: mark all agents as non-reusable
   await knex('m_agents').update({ is_reusable: false });
 
-  console.log('↩️  Reverted all agents to non-reusable');
+  console.error('↩️  Reverted all agents to non-reusable');
 }

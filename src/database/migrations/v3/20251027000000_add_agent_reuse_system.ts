@@ -34,7 +34,7 @@ export async function up(knex: Knex): Promise<void> {
   // Create index for finding inactive reusable agents
   await db.createIndexSafe('m_agents', ['is_reusable', 'in_use', 'last_active_ts'], 'idx_agents_reusable');
 
-  console.log('✓ Added agent reuse columns and index to m_agents');
+  console.error('✓ Added agent reuse columns and index to m_agents');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -48,5 +48,5 @@ export async function down(knex: Knex): Promise<void> {
     table.dropColumn('last_active_ts');
   });
 
-  console.log('✓ Removed agent reuse system');
+  console.error('✓ Removed agent reuse system');
 }

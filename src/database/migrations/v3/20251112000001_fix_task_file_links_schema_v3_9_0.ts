@@ -23,12 +23,12 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔄 Checking t_task_file_links schema...');
+  console.error('🔄 Checking t_task_file_links schema...');
 
   // Check if table exists
   const hasTable = await knex.schema.hasTable('t_task_file_links');
   if (!hasTable) {
-    console.log('⚠️  t_task_file_links does not exist - nothing to fix');
+    console.error('⚠️  t_task_file_links does not exist - nothing to fix');
     return;
   }
 
@@ -37,19 +37,19 @@ export async function up(knex: Knex): Promise<void> {
   const hasLinkedTs = await knex.schema.hasColumn('t_task_file_links', 'linked_ts');
 
   if (hasId && hasLinkedTs) {
-    console.log('✓ t_task_file_links already has id and linked_ts columns, skipping');
+    console.error('✓ t_task_file_links already has id and linked_ts columns, skipping');
     return;
   }
 
-  console.log(`🔄 Adding missing columns to t_task_file_links (id: ${!hasId}, linked_ts: ${!hasLinkedTs})...`);
+  console.error(`🔄 Adding missing columns to t_task_file_links (id: ${!hasId}, linked_ts: ${!hasLinkedTs})...`);
 
   // Step 1: Read existing data
   const existingData = await knex('t_task_file_links').select('*');
-  console.log(`  📊 Backing up ${existingData.length} existing rows...`);
+  console.error(`  📊 Backing up ${existingData.length} existing rows...`);
 
   // Step 2: Drop old table
   await knex.schema.dropTableIfExists('t_task_file_links');
-  console.log('  ✓ Dropped old table');
+  console.error('  ✓ Dropped old table');
 
   // Step 3: Recreate with complete schema
   await knex.schema.createTable('t_task_file_links', (table) => {
@@ -67,7 +67,7 @@ export async function up(knex: Knex): Promise<void> {
     // Unique constraint (prevents duplicate links)
     table.unique(['project_id', 'task_id', 'file_id']);
   });
-  console.log('  ✓ Created new table with id and linked_ts columns');
+  console.error('  ✓ Created new table with id and linked_ts columns');
 
   // Step 4: Restore data with linked_ts = current timestamp
   if (existingData.length > 0) {
@@ -82,25 +82,25 @@ export async function up(knex: Knex): Promise<void> {
     }));
 
     await knex('t_task_file_links').insert(dataToInsert);
-    console.log(`  ✓ Restored ${dataToInsert.length} rows with linked_ts`);
+    console.error(`  ✓ Restored ${dataToInsert.length} rows with linked_ts`);
   }
 
-  console.log('✅ t_task_file_links schema fixed successfully');
+  console.error('✅ t_task_file_links schema fixed successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Reverting t_task_file_links schema fix...');
+  console.error('🔄 Reverting t_task_file_links schema fix...');
 
   // Check if table exists
   const hasTable = await knex.schema.hasTable('t_task_file_links');
   if (!hasTable) {
-    console.log('⚠️  t_task_file_links does not exist - nothing to revert');
+    console.error('⚠️  t_task_file_links does not exist - nothing to revert');
     return;
   }
 
   // Read existing data
   const existingData = await knex('t_task_file_links').select('*');
-  console.log(`  📊 Backing up ${existingData.length} existing rows...`);
+  console.error(`  📊 Backing up ${existingData.length} existing rows...`);
 
   // Drop table
   await knex.schema.dropTableIfExists('t_task_file_links');
@@ -125,8 +125,8 @@ export async function down(knex: Knex): Promise<void> {
     }));
 
     await knex('t_task_file_links').insert(dataToInsert);
-    console.log(`  ✓ Restored ${dataToInsert.length} rows`);
+    console.error(`  ✓ Restored ${dataToInsert.length} rows`);
   }
 
-  console.log('✅ t_task_file_links schema reverted to v3.8.x state');
+  console.error('✅ t_task_file_links schema reverted to v3.8.x state');
 }

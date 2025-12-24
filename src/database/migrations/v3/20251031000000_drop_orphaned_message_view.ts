@@ -36,7 +36,7 @@ export async function down(knex: Knex): Promise<void> {
   }
 
   if (viewExists) {
-    console.log('✓ v_unread_messages_by_priority view already exists, skipping');
+    console.error('✓ v_unread_messages_by_priority view already exists, skipping');
     return;
   }
 

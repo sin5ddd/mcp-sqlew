@@ -64,7 +64,7 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('t_tasks', ['created_ts'], 'idx_tasks_created_ts', { desc: true });
   await db.createIndexSafe('t_tasks', ['updated_ts'], 'idx_tasks_updated_ts', { desc: true });
 
-  console.log('✅ Indexes created successfully');
+  console.error('✅ Indexes created successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -92,5 +92,5 @@ export async function down(knex: Knex): Promise<void> {
   await knex.raw('DROP INDEX IF EXISTS idx_decisions_layer');
   await knex.raw('DROP INDEX IF EXISTS idx_decisions_ts');
 
-  console.log('✅ Indexes dropped successfully');
+  console.error('✅ Indexes dropped successfully');
 }

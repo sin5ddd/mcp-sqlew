@@ -29,7 +29,7 @@ export async function up(knex: Knex): Promise<void> {
   // Check if column already exists
   const hasColumn = await knex.schema.hasColumn('t_constraints', 'constraint_text_hash');
   if (hasColumn) {
-    console.log('  ✓ constraint_text_hash column already exists, skipping');
+    console.error('  ✓ constraint_text_hash column already exists, skipping');
     return;
   }
 
@@ -39,7 +39,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('constraint_text_hash', 64).nullable();
   });
 
-  console.log('  ✓ Added constraint_text_hash column');
+  console.error('  ✓ Added constraint_text_hash column');
 
   // Populate existing records with hash values
   // Using application-level hashing for cross-database compatibility
@@ -58,7 +58,7 @@ export async function up(knex: Knex): Promise<void> {
       .update({ constraint_text_hash: hash });
   }
 
-  console.log(`  ✓ Populated ${constraints.length} existing constraints with hash values`);
+  console.error(`  ✓ Populated ${constraints.length} existing constraints with hash values`);
 
   // Make the column NOT NULL after populating
   // Note: Some databases handle this differently, so we use raw SQL
@@ -70,10 +70,10 @@ export async function up(knex: Knex): Promise<void> {
     await knex.schema.alterTable('t_constraints', (table) => {
       table.string('constraint_text_hash', 64).notNullable().alter();
     });
-    console.log('  ✓ Set constraint_text_hash to NOT NULL');
+    console.error('  ✓ Set constraint_text_hash to NOT NULL');
   } else {
     // SQLite doesn't support ALTER COLUMN, but new inserts will be validated by app
-    console.log('  ⚠  SQLite: constraint_text_hash remains nullable (enforced by app)');
+    console.error('  ⚠  SQLite: constraint_text_hash remains nullable (enforced by app)');
   }
 
   // Create UNIQUE index on (constraint_text_hash, project_id)
@@ -84,7 +84,7 @@ export async function up(knex: Knex): Promise<void> {
     { unique: true }
   );
 
-  console.log('  ✓ Created UNIQUE index on (constraint_text_hash, project_id)');
+  console.error('  ✓ Created UNIQUE index on (constraint_text_hash, project_id)');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -107,7 +107,7 @@ export async function down(knex: Knex): Promise<void> {
     }
   }
 
-  console.log('  ✓ Dropped UNIQUE index');
+  console.error('  ✓ Dropped UNIQUE index');
 
   // Drop the column
   const hasColumn = await knex.schema.hasColumn('t_constraints', 'constraint_text_hash');
@@ -115,6 +115,6 @@ export async function down(knex: Knex): Promise<void> {
     await knex.schema.alterTable('t_constraints', (table) => {
       table.dropColumn('constraint_text_hash');
     });
-    console.log('  ✓ Dropped constraint_text_hash column');
+    console.error('  ✓ Dropped constraint_text_hash column');
   }
 }

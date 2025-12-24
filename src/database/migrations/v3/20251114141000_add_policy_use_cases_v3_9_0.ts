@@ -41,7 +41,7 @@ export async function up(knex: Knex): Promise<void> {
     .where('full_example', 'like', '%create_policy%');
 
   if (existing.length > 0) {
-    console.log('✓ Policy use cases already exist, skipping');
+    console.error('✓ Policy use cases already exist, skipping');
     return;
   }
 
@@ -241,7 +241,7 @@ export async function up(knex: Knex): Promise<void> {
     }
   ]);
 
-  console.log('✓ Added 3 policy use cases (1 basic, 1 intermediate, 1 advanced)');
+  console.error('✓ Added 3 policy use cases (1 basic, 1 intermediate, 1 advanced)');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -251,5 +251,5 @@ export async function down(knex: Knex): Promise<void> {
     .where('full_example', 'like', '%create_policy%')
     .delete();
 
-  console.log('✓ Removed policy use cases');
+  console.error('✓ Removed policy use cases');
 }

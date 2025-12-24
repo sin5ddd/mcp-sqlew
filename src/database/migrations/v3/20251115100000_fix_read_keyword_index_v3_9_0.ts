@@ -27,7 +27,7 @@ export async function up(knex: Knex): Promise<void> {
   // Check if table exists
   const hasTable = await knex.schema.hasTable('t_agent_messages');
   if (!hasTable) {
-    console.log('⏭️  Skipping index fix: t_agent_messages table does not exist');
+    console.error('⏭️  Skipping index fix: t_agent_messages table does not exist');
     return;
   }
 
@@ -39,12 +39,12 @@ export async function up(knex: Knex): Promise<void> {
   const readColumn = db.isMySQL ? '`read`' : '"read"';
   await db.createIndexSafe('t_agent_messages', ['to_agent_id', readColumn], 'idx_messages_to_agent');
 
-  console.log('✅ Fixed idx_messages_to_agent index with quoted column name');
+  console.error('✅ Fixed idx_messages_to_agent index with quoted column name');
 }
 
 export async function down(knex: Knex): Promise<void> {
   // Drop the fixed index
   await knex.raw('DROP INDEX IF EXISTS idx_messages_to_agent');
 
-  console.log('✅ Dropped idx_messages_to_agent index');
+  console.error('✅ Dropped idx_messages_to_agent index');
 }

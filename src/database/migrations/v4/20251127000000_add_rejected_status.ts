@@ -15,7 +15,7 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('Adding rejected status to v4_task_statuses...');
+  console.error('Adding rejected status to v4_task_statuses...');
 
   // Check if rejected status already exists (idempotent)
   const existingStatus = await knex('v4_task_statuses')
@@ -28,16 +28,16 @@ export async function up(knex: Knex): Promise<void> {
       id: 7,
       name: 'rejected'
     });
-    console.log('  ✓ Added rejected status (id=7)');
+    console.error('  ✓ Added rejected status (id=7)');
   } else {
-    console.log('  ℹ rejected status already exists, skipping');
+    console.error('  ℹ rejected status already exists, skipping');
   }
 
-  console.log('✅ Migration completed');
+  console.error('✅ Migration completed');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('Removing rejected status from v4_task_statuses...');
+  console.error('Removing rejected status from v4_task_statuses...');
 
   // Check for tasks using rejected status before removing
   const tasksWithRejected = await knex('v4_tasks')
@@ -56,6 +56,6 @@ export async function down(knex: Knex): Promise<void> {
     .where({ id: 7 })
     .delete();
 
-  console.log('  ✓ Removed rejected status');
-  console.log('✅ Rollback completed');
+  console.error('  ✓ Removed rejected status');
+  console.error('✅ Rollback completed');
 }

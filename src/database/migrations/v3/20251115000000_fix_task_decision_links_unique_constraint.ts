@@ -45,7 +45,7 @@ export async function up(knex: Knex): Promise<void> {
     `);
 
     if (indexes.length > 0) {
-      console.log('✓ UNIQUE constraint already exists on t_task_decision_links, skipping');
+      console.error('✓ UNIQUE constraint already exists on t_task_decision_links, skipping');
       return;
     }
   } else {
@@ -61,20 +61,20 @@ export async function up(knex: Knex): Promise<void> {
     });
 
     if (hasUniqueConstraint) {
-      console.log('✓ UNIQUE constraint already exists on t_task_decision_links, skipping');
+      console.error('✓ UNIQUE constraint already exists on t_task_decision_links, skipping');
       return;
     }
   }
 
-  console.log('🔧 Recreating t_task_decision_links with UNIQUE constraint...');
+  console.error('🔧 Recreating t_task_decision_links with UNIQUE constraint...');
 
   // Step 1: Backup existing data
   const existingData = await knex('t_task_decision_links').select('*');
-  console.log(`   Backed up ${existingData.length} links`);
+  console.error(`   Backed up ${existingData.length} links`);
 
   // Step 2: Drop existing table
   await knex.schema.dropTableIfExists('t_task_decision_links');
-  console.log('   Dropped old table');
+  console.error('   Dropped old table');
 
   // Step 3: Recreate table with UNIQUE constraint
   await knex.schema.createTable('t_task_decision_links', (table) => {
@@ -100,7 +100,7 @@ export async function up(knex: Knex): Promise<void> {
     table.index('decision_key_id', 'idx_task_decision_links_decision');
     table.index(['project_id', 'task_id'], 'idx_task_decision_links_project');
   });
-  console.log('   Created new table with UNIQUE constraint');
+  console.error('   Created new table with UNIQUE constraint');
 
   // Step 4: Restore data (preserving all columns including id)
   if (existingData.length > 0) {
@@ -115,14 +115,14 @@ export async function up(knex: Knex): Promise<void> {
     }));
 
     await knex('t_task_decision_links').insert(dataToRestore);
-    console.log(`   Restored ${dataToRestore.length} links`);
+    console.error(`   Restored ${dataToRestore.length} links`);
   }
 
-  console.log('✅ Successfully fixed t_task_decision_links UNIQUE constraint');
+  console.error('✅ Successfully fixed t_task_decision_links UNIQUE constraint');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Rolling back UNIQUE constraint fix...');
+  console.error('🔄 Rolling back UNIQUE constraint fix...');
 
   // Backup data
   const existingData = await knex('t_task_decision_links').select('*');
@@ -153,5 +153,5 @@ export async function down(knex: Knex): Promise<void> {
     await knex('t_task_decision_links').insert(existingData);
   }
 
-  console.log('✅ Rolled back to schema without UNIQUE constraint');
+  console.error('✅ Rolled back to schema without UNIQUE constraint');
 }

@@ -61,7 +61,7 @@ export async function up(knex: Knex): Promise<void> {
   // **BUG FIX v3.7.5**: This migration is SQLite-specific
   // MySQL/PostgreSQL compatibility handled by 20251109000002_multi_project_cross_db_compat_v3_7_5.ts
   if (!db.isSQLite) {
-    console.log(`✓ Non-SQLite database detected, skipping (handled by 20251109000002)`);
+    console.error(`✓ Non-SQLite database detected, skipping (handled by 20251109000002)`);
     return;
   }
 
@@ -70,22 +70,22 @@ export async function up(knex: Knex): Promise<void> {
   const hasProjectIdInDecisions = await knex.schema.hasColumn("t_decisions", "project_id");
   const hasMigrationMarker = await knex.schema.hasTable("_multi_project_pk_fixed");
 
-  console.log(`🔍 Multi-project migration check:`);
-  console.log(`   - m_projects: ${hasProjectsTable}`);
-  console.log(`   - project_id in t_decisions: ${hasProjectIdInDecisions}`);
-  console.log(`   - migration marker: ${hasMigrationMarker}`);
+  console.error(`🔍 Multi-project migration check:`);
+  console.error(`   - m_projects: ${hasProjectsTable}`);
+  console.error(`   - project_id in t_decisions: ${hasProjectIdInDecisions}`);
+  console.error(`   - migration marker: ${hasMigrationMarker}`);
 
   // If fully migrated, skip
   if (hasProjectsTable && hasProjectIdInDecisions && hasMigrationMarker) {
-    console.log("✓ Multi-project schema already migrated, skipping");
+    console.error("✓ Multi-project schema already migrated, skipping");
     return;
   }
 
-  console.log("🔄 Starting multi-project support migration v3.7.0 (consolidated)...");
+  console.error("🔄 Starting multi-project support migration v3.7.0 (consolidated)...");
 
   // Disable foreign key constraints temporarily for SQLite
   await knex.raw("PRAGMA foreign_keys = OFF");
-  console.log("✓ Disabled foreign key constraints");
+  console.error("✓ Disabled foreign key constraints");
 
   // ============================================================================
   // STEP 1: Create m_projects Master Table
@@ -121,7 +121,7 @@ export async function up(knex: Knex): Promise<void> {
     });
 
     defaultProjectId = 1;
-    console.log(`✓ Created m_projects table with project "${detected.name}" (ID: ${defaultProjectId}, source: ${detected.source})`);
+    console.error(`✓ Created m_projects table with project "${detected.name}" (ID: ${defaultProjectId}, source: ${detected.source})`);
   } else {
     // ========================================================================
     // Data Consolidation Strategy (v3.7.3 fix)
@@ -151,15 +151,15 @@ export async function up(knex: Knex): Promise<void> {
 
     // Perform consolidation ONLY for v3.7.0-v3.7.2 upgrades
     if (isV370UpgradeScenario) {
-      console.log(`🔄 Detected v3.7.0-v3.7.2 upgrade scenario - consolidating projects...`);
-      console.log(`   Project #1: "${existingProject1.name}" (fake name, empty)`);
-      console.log(`   Project #2: "${existingProject2.name}" (real project, has data)`);
-      console.log(`🔄 Consolidating project #2 into project #1...`);
+      console.error(`🔄 Detected v3.7.0-v3.7.2 upgrade scenario - consolidating projects...`);
+      console.error(`   Project #1: "${existingProject1.name}" (fake name, empty)`);
+      console.error(`   Project #2: "${existingProject2.name}" (real project, has data)`);
+      console.error(`🔄 Consolidating project #2 into project #1...`);
 
       // STEP 1: Temporarily rename project #2 to avoid conflict
       const tempName = `temp-${existingProject2.name}-${Date.now()}`;
       await knex("m_projects").where({ id: 2 }).update({ name: tempName });
-      console.log(`  ✓ Temporarily renamed project #2 to "${tempName}"`);
+      console.error(`  ✓ Temporarily renamed project #2 to "${tempName}"`);
 
       // STEP 2: Rename project #1 to real detected name
       await knex("m_projects")
@@ -170,7 +170,7 @@ export async function up(knex: Knex): Promise<void> {
           detection_source: detected.source,
           last_active_ts: Math.floor(Date.now() / 1000),
         });
-      console.log(`  ✓ Renamed project #1 from "${existingProject1.name}" to "${detected.name}"`);
+      console.error(`  ✓ Renamed project #1 from "${existingProject1.name}" to "${detected.name}"`);
 
       // STEP 3: Migrate ALL data from project_id=2 → 1
       const tablesToUpdate = [
@@ -198,7 +198,7 @@ export async function up(knex: Knex): Promise<void> {
           if (hasProjectId) {
             const count = await knex(tableName).where({ project_id: 2 }).update({ project_id: 1 });
             if (count > 0) {
-              console.log(`  ✓ Migrated ${count} rows in ${tableName} (project_id: 2→1)`);
+              console.error(`  ✓ Migrated ${count} rows in ${tableName} (project_id: 2→1)`);
             }
           }
         }
@@ -206,11 +206,11 @@ export async function up(knex: Knex): Promise<void> {
 
       // STEP 4: Delete project #2
       await knex("m_projects").where({ id: 2 }).delete();
-      console.log(`  ✓ Deleted project #2 (data consolidated into project #1)`);
-      console.log(`✅ Consolidation complete - all data now in project #1 "${detected.name}"`);
+      console.error(`  ✓ Deleted project #2 (data consolidated into project #1)`);
+      console.error(`✅ Consolidation complete - all data now in project #1 "${detected.name}"`);
     } else if (existingProject1 && FAKE_NAMES.includes(existingProject1.name)) {
       // No project #2, just rename project #1
-      console.log(`🔄 Renaming project #1 from "${existingProject1.name}" to "${detected.name}"`);
+      console.error(`🔄 Renaming project #1 from "${existingProject1.name}" to "${detected.name}"`);
       await knex("m_projects")
         .where({ id: 1 })
         .update({
@@ -219,10 +219,10 @@ export async function up(knex: Knex): Promise<void> {
           detection_source: detected.source,
           last_active_ts: Math.floor(Date.now() / 1000),
         });
-      console.log(`✓ Project #1 renamed to "${detected.name}" (source: ${detected.source})`);
+      console.error(`✓ Project #1 renamed to "${detected.name}" (source: ${detected.source})`);
     } else if (existingProject1) {
       // User already has real name, don't change it
-      console.log(`✓ Using existing project "${existingProject1.name}" (ID: 1)`);
+      console.error(`✓ Using existing project "${existingProject1.name}" (ID: 1)`);
     }
 
     // Always use project ID 1 after consolidation
@@ -238,18 +238,18 @@ export async function up(knex: Knex): Promise<void> {
   for (const view of views) {
     await knex.raw(`DROP VIEW IF EXISTS ${view.name}`);
   }
-  console.log(`✓ Dropped all ${views.length} views before table modifications`);
+  console.error(`✓ Dropped all ${views.length} views before table modifications`);
 
   // Drop ALL triggers (old schema compatibility)
   const triggers = await knex.raw(`SELECT name FROM sqlite_master WHERE type='trigger'`);
   for (const trigger of triggers) {
     await knex.raw(`DROP TRIGGER IF EXISTS ${trigger.name}`);
   }
-  console.log(`✓ Dropped all ${triggers.length} triggers before table modifications`);
+  console.error(`✓ Dropped all ${triggers.length} triggers before table modifications`);
 
   // Drop old t_agent_messages table if exists (removed in v3.6.5)
   await knex.schema.dropTableIfExists("t_agent_messages");
-  console.log("✓ Dropped t_agent_messages if it existed (removed in v3.6.5)");
+  console.error("✓ Dropped t_agent_messages if it existed (removed in v3.6.5)");
 
   // ============================================================================
   // STEP 3: Add project_id to Transaction Tables
@@ -263,9 +263,9 @@ export async function up(knex: Knex): Promise<void> {
       await knex.raw(`ALTER TABLE ${tableName} ADD COLUMN project_id INTEGER NOT NULL DEFAULT ${defaultProjectId}`);
       // Add foreign key separately
       await db.createIndexSafe(tableName, ['project_id'], `idx_${tableName}_project`);
-      console.log(`✓ Added project_id to ${tableName}`);
+      console.error(`✓ Added project_id to ${tableName}`);
     } else {
-      console.log(`  ⏭  ${tableName} already has project_id, skipping`);
+      console.error(`  ⏭  ${tableName} already has project_id, skipping`);
     }
   }
 
@@ -299,7 +299,7 @@ export async function up(knex: Knex): Promise<void> {
   // to composite (key_id, project_id)
 
   if (!hasMigrationMarker) {
-    console.log("🔄 Fixing PRIMARY KEY constraints for t_decisions tables...");
+    console.error("🔄 Fixing PRIMARY KEY constraints for t_decisions tables...");
 
     // Drop t_decision_context temporarily (has FK to t_decisions)
     let decisionContextData: any[] = [];
@@ -307,7 +307,7 @@ export async function up(knex: Knex): Promise<void> {
     if (hasDecisionContext) {
       decisionContextData = await knex("t_decision_context").select("*");
       await knex.schema.dropTable("t_decision_context");
-      console.log("✓ Temporarily dropped t_decision_context (will recreate)");
+      console.error("✓ Temporarily dropped t_decision_context (will recreate)");
     }
 
     // 4a. t_decisions
@@ -344,7 +344,7 @@ export async function up(knex: Knex): Promise<void> {
       );
     }
 
-    console.log(`✓ Recreated t_decisions with composite PRIMARY KEY (${decisionsData.length} rows)`);
+    console.error(`✓ Recreated t_decisions with composite PRIMARY KEY (${decisionsData.length} rows)`);
 
     // 4b. t_decisions_numeric
     const decisionsNumericData = await knex("t_decisions_numeric").select("*");
@@ -379,7 +379,7 @@ export async function up(knex: Knex): Promise<void> {
       );
     }
 
-    console.log(`✓ Recreated t_decisions_numeric with composite PRIMARY KEY (${decisionsNumericData.length} rows)`);
+    console.error(`✓ Recreated t_decisions_numeric with composite PRIMARY KEY (${decisionsNumericData.length} rows)`);
 
     // Create migration marker
     await knex.schema.createTable("_multi_project_pk_fixed", (table) => {
@@ -390,7 +390,7 @@ export async function up(knex: Knex): Promise<void> {
       applied_ts: Math.floor(Date.now() / 1000),
     });
 
-    console.log("✓ Created migration marker table");
+    console.error("✓ Created migration marker table");
 
     // Recreate t_decision_context if it existed
     if (hasDecisionContext) {
@@ -428,10 +428,10 @@ export async function up(knex: Knex): Promise<void> {
         );
       }
 
-      console.log(`✓ Recreated t_decision_context (${decisionContextData.length} rows)`);
+      console.error(`✓ Recreated t_decision_context (${decisionContextData.length} rows)`);
     }
   } else {
-    console.log("✓ PRIMARY KEY constraints already fixed, skipping");
+    console.error("✓ PRIMARY KEY constraints already fixed, skipping");
   }
 
   // ============================================================================
@@ -452,7 +452,7 @@ export async function up(knex: Knex): Promise<void> {
     });
 
   if (!taskTagsHasCorrectPK) {
-    console.log("🔄 Fixing t_task_tags PRIMARY KEY to include project_id...");
+    console.error("🔄 Fixing t_task_tags PRIMARY KEY to include project_id...");
 
     // Backup existing data
     const taskTagsData = await knex("t_task_tags").select("*");
@@ -483,9 +483,9 @@ export async function up(knex: Knex): Promise<void> {
       );
     }
 
-    console.log(`✓ Recreated t_task_tags with composite PRIMARY KEY (${taskTagsData.length} rows)`);
+    console.error(`✓ Recreated t_task_tags with composite PRIMARY KEY (${taskTagsData.length} rows)`);
   } else {
-    console.log("✓ t_task_tags PRIMARY KEY already correct, skipping");
+    console.error("✓ t_task_tags PRIMARY KEY already correct, skipping");
   }
 
   // STEP 4.6: Fix t_task_dependencies PRIMARY KEY (Constraint #42)
@@ -501,7 +501,7 @@ export async function up(knex: Knex): Promise<void> {
     });
 
   if (!taskDepsHasCorrectPK) {
-    console.log("🔄 Fixing t_task_dependencies PRIMARY KEY to include project_id...");
+    console.error("🔄 Fixing t_task_dependencies PRIMARY KEY to include project_id...");
 
     // Backup existing data
     const taskDepsData = await knex("t_task_dependencies").select("*");
@@ -535,9 +535,9 @@ export async function up(knex: Knex): Promise<void> {
       );
     }
 
-    console.log(`✓ Recreated t_task_dependencies with composite PRIMARY KEY (${taskDepsData.length} rows)`);
+    console.error(`✓ Recreated t_task_dependencies with composite PRIMARY KEY (${taskDepsData.length} rows)`);
   } else {
-    console.log("✓ t_task_dependencies PRIMARY KEY already correct, skipping");
+    console.error("✓ t_task_dependencies PRIMARY KEY already correct, skipping");
   }
 
   // ============================================================================
@@ -547,7 +547,7 @@ export async function up(knex: Knex): Promise<void> {
   const taskDetailsHasProjectId = await knex.schema.hasColumn("t_task_details", "project_id");
 
   if (!taskDetailsHasProjectId) {
-    console.log("🔄 Adding project_id to t_task_details (requires table recreation due to FK)...");
+    console.error("🔄 Adding project_id to t_task_details (requires table recreation due to FK)...");
 
     const taskDetailsExists = await knex.schema.hasTable("t_task_details");
     let taskDetailsData: any[] = [];
@@ -584,9 +584,9 @@ export async function up(knex: Knex): Promise<void> {
       );
     }
 
-    console.log(`✓ Recreated t_task_details with project_id (${taskDetailsData.length} rows)`);
+    console.error(`✓ Recreated t_task_details with project_id (${taskDetailsData.length} rows)`);
   } else {
-    console.log("✓ t_task_details already has project_id, skipping");
+    console.error("✓ t_task_details already has project_id, skipping");
   }
 
   // ============================================================================
@@ -596,7 +596,7 @@ export async function up(knex: Knex): Promise<void> {
   const taskFileLinksHasProjectId = await knex.schema.hasColumn("t_task_file_links", "project_id");
 
   if (!taskFileLinksHasProjectId) {
-    console.log("🔄 Adding project_id to t_task_file_links (requires table recreation due to FK)...");
+    console.error("🔄 Adding project_id to t_task_file_links (requires table recreation due to FK)...");
 
     const taskFileLinksData = await knex("t_task_file_links").select("*");
     await knex.schema.dropTable("t_task_file_links");
@@ -625,9 +625,9 @@ export async function up(knex: Knex): Promise<void> {
       );
     }
 
-    console.log(`✓ Recreated t_task_file_links with project_id (${taskFileLinksData.length} rows)`);
+    console.error(`✓ Recreated t_task_file_links with project_id (${taskFileLinksData.length} rows)`);
   } else {
-    console.log("✓ t_task_file_links already has project_id, skipping");
+    console.error("✓ t_task_file_links already has project_id, skipping");
   }
 
   // ============================================================================
@@ -637,7 +637,7 @@ export async function up(knex: Knex): Promise<void> {
   const taskDecisionLinksHasProjectId = await knex.schema.hasColumn("t_task_decision_links", "project_id");
 
   if (!taskDecisionLinksHasProjectId) {
-    console.log("🔄 Adding project_id to t_task_decision_links (requires table recreation due to FK)...");
+    console.error("🔄 Adding project_id to t_task_decision_links (requires table recreation due to FK)...");
 
     const taskDecisionLinksData = await knex("t_task_decision_links").select("*");
     await knex.schema.dropTable("t_task_decision_links");
@@ -666,16 +666,16 @@ export async function up(knex: Knex): Promise<void> {
       );
     }
 
-    console.log(`✓ Recreated t_task_decision_links with project_id (${taskDecisionLinksData.length} rows)`);
+    console.error(`✓ Recreated t_task_decision_links with project_id (${taskDecisionLinksData.length} rows)`);
   } else {
-    console.log("✓ t_task_decision_links already has project_id, skipping");
+    console.error("✓ t_task_decision_links already has project_id, skipping");
   }
 
   // ============================================================================
   // STEP 5: Recreate m_config Table
   // ============================================================================
 
-  console.log("🔄 Recreating m_config table with project_id and composite PRIMARY KEY...");
+  console.error("🔄 Recreating m_config table with project_id and composite PRIMARY KEY...");
 
   const configData = await knex("m_config").select("*");
   await knex.schema.dropTable("m_config");
@@ -702,13 +702,13 @@ export async function up(knex: Knex): Promise<void> {
     );
   }
 
-  console.log(`✓ Recreated m_config with composite PRIMARY KEY (${configData.length} rows)`);
+  console.error(`✓ Recreated m_config with composite PRIMARY KEY (${configData.length} rows)`);
 
   // ============================================================================
   // STEP 6: Create Composite Indexes (Constraint #39)
   // ============================================================================
 
-  console.log("🔄 Creating composite indexes with project_id first (Constraint #39)...");
+  console.error("🔄 Creating composite indexes with project_id first (Constraint #39)...");
 
   // Create indexes with project_id first for optimal query performance
   await db.createIndexSafe('t_decisions', ['project_id', 'key_id', 'ts DESC'], 'idx_decisions_project_key');
@@ -722,13 +722,13 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('t_task_file_links', ['project_id', 'task_id', 'file_id'], 'idx_task_file_links_project');
   await db.createIndexSafe('t_task_decision_links', ['project_id', 'task_id', 'decision_id'], 'idx_task_decision_links_project');
 
-  console.log("✓ Created composite indexes with project_id first");
+  console.error("✓ Created composite indexes with project_id first");
 
   // ============================================================================
   // STEP 7: Recreate All Views with Multi-Project Support
   // ============================================================================
 
-  console.log("🔄 Recreating all views with project_id support...");
+  console.error("🔄 Recreating all views with project_id support...");
 
   // v_tagged_decisions
   await knex.raw(`
@@ -824,19 +824,19 @@ export async function up(knex: Knex): Promise<void> {
     ORDER BY t.priority DESC, t.created_ts DESC
   `);
 
-  console.log("✓ Recreated all views with project_id support");
+  console.error("✓ Recreated all views with project_id support");
 
   // ============================================================================
   // STEP 8: Re-enable Foreign Key Constraints
   // ============================================================================
 
   await knex.raw("PRAGMA foreign_keys = ON");
-  console.log("✓ Re-enabled foreign key constraints");
+  console.error("✓ Re-enabled foreign key constraints");
 
-  console.log("✅ Multi-project support migration v3.7.0 (consolidated) complete!");
+  console.error("✅ Multi-project support migration v3.7.0 (consolidated) complete!");
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log("⚠️  Rollback not supported for multi-project migration (data migration is one-way)");
-  console.log("   To rollback, restore from backup taken before migration");
+  console.error("⚠️  Rollback not supported for multi-project migration (data migration is one-way)");
+  console.error("   To rollback, restore from backup taken before migration");
 }

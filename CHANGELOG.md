@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.1] - 2025-12-24
+
+### Fixed
+
+**Claude Desktop Compatibility**
+
+- Fixed MCP protocol corruption caused by migration logs going to stdout
+- Changed all `console.log` to `console.error` in migration files (57 files)
+- MCP servers must only output JSON-RPC to stdout; debug logs now go to stderr
+
+---
+
 ## [4.1.0] - 2025-12-24
 
 ### Added

@@ -117,7 +117,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('name', 50).unique().notNullable();
   });
 
-  console.log('✅ Master tables created successfully');
+  console.error('✅ Master tables created successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -133,5 +133,5 @@ export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTableIfExists('m_agents');
   await knex.schema.dropTableIfExists('m_projects');
 
-  console.log('✅ Master tables dropped successfully');
+  console.error('✅ Master tables dropped successfully');
 }
