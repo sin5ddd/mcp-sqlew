@@ -64,7 +64,7 @@ export function buildDecisionQuery(
     })
     .where('d.project_id', projectId)
     .where('d.status', 1)
-    .groupBy('d.key_id');
+    .groupBy('d.key_id', 'ck.key_name', 'l.name', 'd.ts', 'd.value', 'dn.value');
 }
 
 /**
@@ -112,7 +112,7 @@ export function buildTagIndexQuery(
   }
 
   return query
-    .groupBy('d.key_id')
+    .groupBy('d.key_id', 'ck.key_name', 'l.name', 'd.ts', 'd.value', 'dn.value')
     .orderBy('tag_count', 'desc');
 }
 

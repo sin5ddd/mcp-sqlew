@@ -62,6 +62,14 @@ export function parseUserInputTags(tags: string | string[]): string[] {
  * // Returns: knex.raw('GROUP_CONCAT(DISTINCT t.name) as tags')
  */
 export function formatGroupConcatTags(knex: any, distinct = false): any {
+  const client = knex.client?.config?.client || '';
   const distinctClause = distinct ? 'DISTINCT ' : '';
+
+  // PostgreSQL uses string_agg instead of GROUP_CONCAT
+  if (client === 'pg' || client === 'postgresql') {
+    return knex.raw(`string_agg(${distinctClause}t.name, ',') as tags`);
+  }
+
+  // SQLite, MySQL, MariaDB use GROUP_CONCAT
   return knex.raw(`GROUP_CONCAT(${distinctClause}t.name) as tags`);
 }

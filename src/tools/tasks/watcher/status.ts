@@ -116,7 +116,10 @@ export async function watcherStatus(args: any, adapter?: DatabaseAdapter): Promi
         't.title',
         'ts.name as status_name',
         knex.raw('COUNT(DISTINCT tfl.file_id) as file_count'),
-        knex.raw('GROUP_CONCAT(DISTINCT f.path, \', \') as files')
+        // PostgreSQL uses string_agg, others use GROUP_CONCAT
+        ((knex.client as any)?.config?.client === 'pg' || (knex.client as any)?.config?.client === 'postgresql')
+          ? knex.raw("string_agg(DISTINCT f.path, ', ') as files")
+          : knex.raw("GROUP_CONCAT(DISTINCT f.path, ', ') as files")
       )
       .orderBy('t.id') as Array<{ id: number; title: string; status_name: string; file_count: number; files: string }>;
 
