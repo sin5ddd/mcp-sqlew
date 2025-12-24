@@ -7,7 +7,7 @@
  * - Debounce management
  * - Start/stop lifecycle
  *
- * @since v4.1.2
+ * @since v4.1.0
  */
 
 import chokidar, { FSWatcher } from 'chokidar';

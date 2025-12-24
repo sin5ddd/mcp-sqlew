@@ -9,8 +9,8 @@
  *   echo '{"tool_name": "ExitPlanMode"}' | sqlew save
  *
  * @since v4.1.0
- * @updated v4.1.1 - Changed trigger from Edit|Write to ExitPlanMode only (zero delay on code edits)
- * @updated v4.1.2 - File queue architecture (no DB operations in hooks)
+ * @updated v4.1.0 - Changed trigger from Edit|Write to ExitPlanMode only (zero delay on code edits)
+ * @updated v4.1.0 - File queue architecture (no DB operations in hooks)
  */
 
 import { readStdinJson, sendContinue, getProjectPath } from './stdin-parser.js';

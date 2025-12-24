@@ -9,7 +9,7 @@
  * 2. QueueWatcher detects change
  * 3. processHookQueue() registers decisions in DB
  *
- * @since v4.1.2
+ * @since v4.1.0
  */
 
 import { join, dirname } from 'path';

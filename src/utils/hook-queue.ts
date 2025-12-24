@@ -4,7 +4,7 @@
  * File-based queue for async decision operations.
  * Hooks write to queue (fast), MCP server processes on startup.
  *
- * @since v4.1.2
+ * @since v4.1.0
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
