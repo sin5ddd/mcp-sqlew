@@ -23,7 +23,7 @@ export async function up(knex: Knex): Promise<void> {
   // **BUG FIX v3.7.5**: MySQL/PostgreSQL compatibility issue with DEFAULT UNIX_TIMESTAMP()
   // MySQL/PostgreSQL handled by 20251109000003_token_usage_cross_db_compat_v3_7_5.ts
   if (!db.isSQLite) {
-    console.log(`✓ Non-SQLite database detected, skipping (handled by 20251109000003)`);
+    console.error(`✓ Non-SQLite database detected, skipping (handled by 20251109000003)`);
     return;
   }
 
@@ -45,11 +45,11 @@ export async function up(knex: Knex): Promise<void> {
     table.index(['timestamp'], undefined, 'DESC');
   });
 
-  console.log('✓ t_help_token_usage table created');
+  console.error('✓ t_help_token_usage table created');
 }
 
 export async function down(knex: Knex): Promise<void> {
   // Drop table if exists
   await knex.schema.dropTableIfExists('t_help_token_usage');
-  console.log('✓ t_help_token_usage table dropped');
+  console.error('✓ t_help_token_usage table dropped');
 }

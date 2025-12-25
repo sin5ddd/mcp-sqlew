@@ -131,7 +131,7 @@ export async function up(knex: Knex): Promise<void> {
     [6, 'archived']
   ], ['id']);
 
-  console.log('✅ Master data seeded successfully');
+  console.error('✅ Master data seeded successfully');
 }
 
 
@@ -143,5 +143,5 @@ export async function down(knex: Knex): Promise<void> {
   await knex('m_constraint_categories').del();
   await knex('m_layers').del();
 
-  console.log('✅ Master data cleared');
+  console.error('✅ Master data cleared');
 }

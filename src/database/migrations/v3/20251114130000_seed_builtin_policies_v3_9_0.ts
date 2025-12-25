@@ -34,7 +34,7 @@ export async function up(knex: Knex): Promise<void> {
     .select('name');
 
   if (existingPolicies.length > 0) {
-    console.log('✓ Built-in policies already seeded, skipping');
+    console.error('✓ Built-in policies already seeded, skipping');
     return;
   }
 
@@ -164,7 +164,7 @@ export async function up(knex: Knex): Promise<void> {
     }
   ]);
 
-  console.log('✓ Seeded 5 built-in policies (security_vulnerability, breaking_change, architecture_decision, performance_optimization, deprecation)');
+  console.error('✓ Seeded 5 built-in policies (security_vulnerability, breaking_change, architecture_decision, performance_optimization, deprecation)');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -180,5 +180,5 @@ export async function down(knex: Knex): Promise<void> {
     .where('project_id', 1)  // Only remove from default project
     .delete();
 
-  console.log('✓ Removed built-in policies');
+  console.error('✓ Removed built-in policies');
 }

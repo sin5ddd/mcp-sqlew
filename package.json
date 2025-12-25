@@ -1,7 +1,7 @@
 {
   "name": "sqlew",
-  "description": "MCP server that gives AI agents a shared SQL-backed context repository for decisions, constraints, and tasks",
-  "version": "4.1.0",
+  "description": "Automated ADR (Architecture Decision Records) for Claude Code - MCP server with SQL-backed decision repository",
+  "version": "4.1.1",
   "main": "dist/index.js",
   "type": "module",
   "bin": {

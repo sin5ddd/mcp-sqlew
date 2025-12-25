@@ -13,7 +13,7 @@ import type { Knex } from "knex";
 
 export async function up(knex: Knex): Promise<void> {
   // No-op: changes already applied
-  console.log('Stub migration: no changes needed');
+  console.error('Stub migration: no changes needed');
 }
 
 export async function down(knex: Knex): Promise<void> {

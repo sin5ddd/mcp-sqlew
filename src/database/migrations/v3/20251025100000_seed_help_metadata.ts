@@ -23,7 +23,7 @@ export async function up(knex: Knex): Promise<void> {
   const existingTools = await knex('m_help_tools').select('tool_name');
 
   if (existingTools.length > 0) {
-    console.log('✓ Help metadata already seeded, skipping');
+    console.error('✓ Help metadata already seeded, skipping');
     return;
   }
 
@@ -293,7 +293,7 @@ export async function up(knex: Knex): Promise<void> {
 
   await knex('t_help_action_params').insert(parameters);
 
-  console.log(`✅ Seeded ${parameters.length} action parameters`);
+  console.error(`✅ Seeded ${parameters.length} action parameters`);
 }
 
 export async function down(knex: Knex): Promise<void> {

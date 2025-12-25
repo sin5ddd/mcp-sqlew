@@ -37,30 +37,30 @@ const VIEWS_TO_DROP = [
 ];
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔄 Eliminating database views for cross-database compatibility (v3.9.0)...');
+  console.error('🔄 Eliminating database views for cross-database compatibility (v3.9.0)...');
 
   for (const viewName of VIEWS_TO_DROP) {
     try {
       await knex.raw(`DROP VIEW IF EXISTS ${viewName}`);
-      console.log(`  ✓ Dropped view: ${viewName}`);
+      console.error(`  ✓ Dropped view: ${viewName}`);
     } catch (error: any) {
       // Ignore errors if view doesn't exist
       const errorMsg = error.message?.toLowerCase() || '';
       if (errorMsg.includes('does not exist') || errorMsg.includes('unknown')) {
-        console.log(`  ⚠️  View ${viewName} does not exist, skipping`);
+        console.error(`  ⚠️  View ${viewName} does not exist, skipping`);
       } else {
         throw error;
       }
     }
   }
 
-  console.log('✅ All views eliminated successfully');
-  console.log('📝 Tool files now use cross-database query functions from src/utils/view-queries.ts');
+  console.error('✅ All views eliminated successfully');
+  console.error('📝 Tool files now use cross-database query functions from src/utils/view-queries.ts');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('⚠️  WARNING: Cannot recreate views in down() migration');
-  console.log('   Views had database-specific syntax that caused cross-DB issues');
-  console.log('   Use query functions from src/utils/view-queries.ts instead');
-  console.log('   If you absolutely need views, restore from v3.8.x backup');
+  console.error('⚠️  WARNING: Cannot recreate views in down() migration');
+  console.error('   Views had database-specific syntax that caused cross-DB issues');
+  console.error('   Use query functions from src/utils/view-queries.ts instead');
+  console.error('   If you absolutely need views, restore from v3.8.x backup');
 }

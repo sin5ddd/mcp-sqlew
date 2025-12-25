@@ -30,7 +30,7 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔧 Updating help system for v3.8.0 tool cleanup...');
+  console.error('🔧 Updating help system for v3.8.0 tool cleanup...');
 
   // =========================================================================
   // 1. Remove deprecated tools from m_help_tools
@@ -44,9 +44,9 @@ export async function up(knex: Knex): Promise<void> {
 
     if (exists) {
       await knex('m_help_tools').where('tool_name', toolName).del();
-      console.log(`  ✓ Removed ${toolName} tool`);
+      console.error(`  ✓ Removed ${toolName} tool`);
     } else {
-      console.log(`  ✓ ${toolName} tool already removed`);
+      console.error(`  ✓ ${toolName} tool already removed`);
     }
   }
 
@@ -76,9 +76,9 @@ export async function up(knex: Knex): Promise<void> {
 
     if (!exists) {
       await knex('m_help_tools').insert(tool);
-      console.log(`  ✓ Added ${tool.tool_name} tool`);
+      console.error(`  ✓ Added ${tool.tool_name} tool`);
     } else {
-      console.log(`  ✓ ${tool.tool_name} tool already exists`);
+      console.error(`  ✓ ${tool.tool_name} tool already exists`);
     }
   }
 
@@ -96,9 +96,9 @@ export async function up(knex: Knex): Promise<void> {
       .update({
         description: 'File Change Tracking - Track file modifications and database operations (SQLite only). Supports file change recording, history retrieval, lock detection, and WAL flushing for persistence.',
       });
-    console.log('  ✓ Updated file tool description');
+    console.error('  ✓ Updated file tool description');
   } else {
-    console.log('  ⚠ file tool not found, skipping description update');
+    console.error('  ⚠ file tool not found, skipping description update');
   }
 
   // =========================================================================
@@ -115,9 +115,9 @@ export async function up(knex: Knex): Promise<void> {
       .update({
         description: 'Task Management - Create, track, and manage tasks with kanban workflow, layers, and file tracking. Supports batch operations (create_batch), dependencies, file watching, and automatic stale detection.',
       });
-    console.log('  ✓ Updated task tool description');
+    console.error('  ✓ Updated task tool description');
   } else {
-    console.log('  ⚠ task tool not found, skipping description update');
+    console.error('  ⚠ task tool not found, skipping description update');
   }
 
   // =========================================================================
@@ -137,19 +137,19 @@ export async function up(knex: Knex): Promise<void> {
     await knex('m_help_actions')
       .where({ tool_name: 'task', action_name: 'batch_create' })
       .update({ action_name: 'create_batch' });
-    console.log('  ✓ Renamed task.batch_create → task.create_batch');
+    console.error('  ✓ Renamed task.batch_create → task.create_batch');
   } else if (createBatchAction) {
-    console.log('  ✓ task.create_batch already exists');
+    console.error('  ✓ task.create_batch already exists');
 
     // Clean up old batch_create if it still exists
     if (batchCreateAction) {
       await knex('m_help_actions')
         .where({ tool_name: 'task', action_name: 'batch_create' })
         .del();
-      console.log('  ✓ Removed duplicate task.batch_create');
+      console.error('  ✓ Removed duplicate task.batch_create');
     }
   } else {
-    console.log('  ⚠ Neither task.batch_create nor task.create_batch found');
+    console.error('  ⚠ Neither task.batch_create nor task.create_batch found');
   }
 
   // =========================================================================
@@ -166,9 +166,9 @@ export async function up(knex: Knex): Promise<void> {
       action_name: 'sqlite_flush',
       description: 'Flush WAL (Write-Ahead Log) to database file for immediate persistence. SQLite-specific operation ensuring all pending writes are committed to disk. Returns flush status and checkpoint info.',
     });
-    console.log('  ✓ Added file.sqlite_flush action');
+    console.error('  ✓ Added file.sqlite_flush action');
   } else {
-    console.log('  ✓ file.sqlite_flush action already exists');
+    console.error('  ✓ file.sqlite_flush action already exists');
   }
 
   // =========================================================================
@@ -197,9 +197,9 @@ export async function up(knex: Knex): Promise<void> {
             explanation: example.explanation?.replace(/batch_create/g, 'create_batch'),
           });
       }
-      console.log(`  ✓ Updated ${examplesWithBatchCreate.length} examples (batch_create → create_batch)`);
+      console.error(`  ✓ Updated ${examplesWithBatchCreate.length} examples (batch_create → create_batch)`);
     } else {
-      console.log('  ✓ No examples referencing batch_create found');
+      console.error('  ✓ No examples referencing batch_create found');
     }
   }
 
@@ -224,16 +224,16 @@ export async function up(knex: Knex): Promise<void> {
           action_sequence: useCase.action_sequence?.replace(/batch_create/g, 'create_batch'),
         });
     }
-    console.log(`  ✓ Updated ${useCasesWithBatchCreate.length} use cases (batch_create → create_batch)`);
+    console.error(`  ✓ Updated ${useCasesWithBatchCreate.length} use cases (batch_create → create_batch)`);
   } else {
-    console.log('  ✓ No use cases referencing batch_create found');
+    console.error('  ✓ No use cases referencing batch_create found');
   }
 
-  console.log('✅ Tool cleanup migration completed successfully');
+  console.error('✅ Tool cleanup migration completed successfully');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔧 Reverting v3.8.0 tool cleanup...');
+  console.error('🔧 Reverting v3.8.0 tool cleanup...');
 
   // =========================================================================
   // 1. Restore removed tools
@@ -261,9 +261,9 @@ export async function down(knex: Knex): Promise<void> {
 
     if (!exists) {
       await knex('m_help_tools').insert(tool);
-      console.log(`  ✓ Restored ${tool.tool_name} tool`);
+      console.error(`  ✓ Restored ${tool.tool_name} tool`);
     } else {
-      console.log(`  ✓ ${tool.tool_name} tool already exists`);
+      console.error(`  ✓ ${tool.tool_name} tool already exists`);
     }
   }
 
@@ -279,9 +279,9 @@ export async function down(knex: Knex): Promise<void> {
 
     if (exists) {
       await knex('m_help_tools').where('tool_name', toolName).del();
-      console.log(`  ✓ Removed ${toolName} tool`);
+      console.error(`  ✓ Removed ${toolName} tool`);
     } else {
-      console.log(`  ✓ ${toolName} tool already removed`);
+      console.error(`  ✓ ${toolName} tool already removed`);
     }
   }
 
@@ -299,7 +299,7 @@ export async function down(knex: Knex): Promise<void> {
       .update({
         description: 'File Change Tracking - Track file changes with layer classification and lock detection. Maintain change history, prevent concurrent edit conflicts, and associate file modifications with architecture layers.',
       });
-    console.log('  ✓ Restored file tool description');
+    console.error('  ✓ Restored file tool description');
   }
 
   // =========================================================================
@@ -316,7 +316,7 @@ export async function down(knex: Knex): Promise<void> {
       .update({
         description: 'Kanban Task Watcher - AI-optimized task management with auto-stale detection. Create, track, and coordinate development tasks with metadata, dependencies, and automatic file watching. Features status validation and flat hierarchy for AI simplicity.',
       });
-    console.log('  ✓ Restored task tool description');
+    console.error('  ✓ Restored task tool description');
   }
 
   // =========================================================================
@@ -331,7 +331,7 @@ export async function down(knex: Knex): Promise<void> {
     await knex('m_help_actions')
       .where({ tool_name: 'task', action_name: 'create_batch' })
       .update({ action_name: 'batch_create' });
-    console.log('  ✓ Renamed task.create_batch → task.batch_create');
+    console.error('  ✓ Renamed task.create_batch → task.batch_create');
   }
 
   // =========================================================================
@@ -346,7 +346,7 @@ export async function down(knex: Knex): Promise<void> {
     await knex('m_help_actions')
       .where({ tool_name: 'file', action_name: 'sqlite_flush' })
       .del();
-    console.log('  ✓ Removed file.sqlite_flush action');
+    console.error('  ✓ Removed file.sqlite_flush action');
   }
 
   // =========================================================================
@@ -368,7 +368,7 @@ export async function down(knex: Knex): Promise<void> {
           explanation: example.explanation?.replace(/create_batch/g, 'batch_create'),
         });
     }
-    console.log(`  ✓ Restored ${examplesWithCreateBatch.length} examples (create_batch → batch_create)`);
+    console.error(`  ✓ Restored ${examplesWithCreateBatch.length} examples (create_batch → batch_create)`);
   }
 
   // =========================================================================
@@ -392,8 +392,8 @@ export async function down(knex: Knex): Promise<void> {
           action_sequence: useCase.action_sequence?.replace(/create_batch/g, 'batch_create'),
         });
     }
-    console.log(`  ✓ Restored ${useCasesWithCreateBatch.length} use cases (create_batch → batch_create)`);
+    console.error(`  ✓ Restored ${useCasesWithCreateBatch.length} use cases (create_batch → batch_create)`);
   }
 
-  console.log('✅ Tool cleanup revert completed successfully');
+  console.error('✅ Tool cleanup revert completed successfully');
 }

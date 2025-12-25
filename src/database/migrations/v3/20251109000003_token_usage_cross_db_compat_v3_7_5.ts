@@ -30,7 +30,7 @@ export async function up(knex: Knex): Promise<void> {
 
   // Skip on SQLite (handled by 20251105000000)
   if (db.isSQLite) {
-    console.log('✓ SQLite database detected, skipping (handled by 20251105000000)');
+    console.error('✓ SQLite database detected, skipping (handled by 20251105000000)');
     return;
   }
 
@@ -62,17 +62,17 @@ export async function up(knex: Knex): Promise<void> {
     table.index('timestamp'); // Descending handled by query ORDER BY
   });
 
-  console.log('✓ t_help_token_usage table created');
+  console.error('✓ t_help_token_usage table created');
 }
 
 export async function down(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
 
   if (db.isSQLite) {
-    console.log('✓ SQLite database detected, skipping rollback');
+    console.error('✓ SQLite database detected, skipping rollback');
     return;
   }
 
   await knex.schema.dropTableIfExists('t_help_token_usage');
-  console.log('✓ t_help_token_usage table dropped');
+  console.error('✓ t_help_token_usage table dropped');
 }

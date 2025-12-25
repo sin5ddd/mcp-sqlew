@@ -35,7 +35,7 @@ export async function up(knex: Knex): Promise<void> {
   // Check if t_constraints exists
   const hasTable = await knex.schema.hasTable('t_constraints');
   if (!hasTable) {
-    console.log('  ⏭  t_constraints does not exist, skipping');
+    console.error('  ⏭  t_constraints does not exist, skipping');
     return;
   }
 
@@ -44,33 +44,33 @@ export async function up(knex: Knex): Promise<void> {
   const hasAgentId = await knex.schema.hasColumn('t_constraints', 'agent_id');
 
   if (hasAgentId && !hasCreatedBy) {
-    console.log('  ✓ t_constraints already has agent_id, skipping');
+    console.error('  ✓ t_constraints already has agent_id, skipping');
     return;
   }
 
   if (!hasCreatedBy && !hasAgentId) {
-    console.log('  ⚠  t_constraints missing both created_by and agent_id, adding agent_id');
+    console.error('  ⚠  t_constraints missing both created_by and agent_id, adding agent_id');
     await knex.schema.alterTable('t_constraints', (table) => {
       table.integer('agent_id').unsigned().nullable();
       table.foreign('agent_id').references('m_agents.id');
     });
-    console.log('  ✓ Added agent_id column to t_constraints');
+    console.error('  ✓ Added agent_id column to t_constraints');
     return;
   }
 
   if (hasCreatedBy) {
-    console.log('  🔄 Renaming t_constraints.created_by → agent_id');
+    console.error('  🔄 Renaming t_constraints.created_by → agent_id');
 
     // CRITICAL: Drop views that depend on t_constraints before renaming column
     // Old schemas have views that reference c.created_by, which will break after rename
-    console.log('  🔄 Dropping dependent views before column rename...');
+    console.error('  🔄 Dropping dependent views before column rename...');
     await knex.raw('DROP VIEW IF EXISTS v_tagged_constraints');
-    console.log('  ✓ Dropped v_tagged_constraints (will recreate after rename)');
+    console.error('  ✓ Dropped v_tagged_constraints (will recreate after rename)');
 
     if (client === 'better-sqlite3' || client === 'sqlite3') {
       // SQLite doesn't support RENAME COLUMN directly, use ALTER TABLE
       await knex.raw('ALTER TABLE t_constraints RENAME COLUMN created_by TO agent_id');
-      console.log('  ✓ Renamed created_by → agent_id (SQLite)');
+      console.error('  ✓ Renamed created_by → agent_id (SQLite)');
     } else if (client === 'mysql' || client === 'mysql2') {
       // MySQL requires specifying the full column definition
       await knex.raw(`
@@ -86,20 +86,20 @@ export async function up(knex: Knex): Promise<void> {
         `);
       } catch (err: any) {
         if (err.message && err.message.includes('Duplicate key')) {
-          console.log('  ✓ Foreign key already exists');
+          console.error('  ✓ Foreign key already exists');
         } else {
           throw err;
         }
       }
-      console.log('  ✓ Renamed created_by → agent_id (MySQL)');
+      console.error('  ✓ Renamed created_by → agent_id (MySQL)');
     } else if (client === 'pg' || client === 'postgresql') {
       // PostgreSQL supports RENAME COLUMN
       await knex.raw('ALTER TABLE t_constraints RENAME COLUMN created_by TO agent_id');
-      console.log('  ✓ Renamed created_by → agent_id (PostgreSQL)');
+      console.error('  ✓ Renamed created_by → agent_id (PostgreSQL)');
     }
 
     // Recreate the view with updated column name
-    console.log('  🔄 Recreating v_tagged_constraints view...');
+    console.error('  🔄 Recreating v_tagged_constraints view...');
 
     await db.createViewSafe('v_tagged_constraints', `
       SELECT
@@ -120,10 +120,10 @@ export async function up(knex: Knex): Promise<void> {
       WHERE c.active = ${db.boolTrue()}
       ORDER BY c.priority DESC, cc.name, c.ts DESC
     `);
-    console.log('  ✓ Recreated v_tagged_constraints with agent_id reference');
+    console.error('  ✓ Recreated v_tagged_constraints with agent_id reference');
   }
 
-  console.log('✅ Migration complete: t_constraints now uses agent_id');
+  console.error('✅ Migration complete: t_constraints now uses agent_id');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -133,7 +133,7 @@ export async function down(knex: Knex): Promise<void> {
   // Check if t_constraints exists
   const hasTable = await knex.schema.hasTable('t_constraints');
   if (!hasTable) {
-    console.log('  ⏭  t_constraints does not exist, skipping rollback');
+    console.error('  ⏭  t_constraints does not exist, skipping rollback');
     return;
   }
 
@@ -142,33 +142,33 @@ export async function down(knex: Knex): Promise<void> {
   const hasCreatedBy = await knex.schema.hasColumn('t_constraints', 'created_by');
 
   if (hasCreatedBy && !hasAgentId) {
-    console.log('  ✓ t_constraints already has created_by, rollback not needed');
+    console.error('  ✓ t_constraints already has created_by, rollback not needed');
     return;
   }
 
   if (hasAgentId) {
-    console.log('  🔄 Rolling back: Renaming t_constraints.agent_id → created_by');
+    console.error('  🔄 Rolling back: Renaming t_constraints.agent_id → created_by');
 
     // Drop view before column rename
-    console.log('  🔄 Dropping v_tagged_constraints before rollback...');
+    console.error('  🔄 Dropping v_tagged_constraints before rollback...');
     await knex.raw('DROP VIEW IF EXISTS v_tagged_constraints');
 
     if (client === 'better-sqlite3' || client === 'sqlite3') {
       await knex.raw('ALTER TABLE t_constraints RENAME COLUMN agent_id TO created_by');
-      console.log('  ✓ Rolled back to created_by (SQLite)');
+      console.error('  ✓ Rolled back to created_by (SQLite)');
     } else if (client === 'mysql' || client === 'mysql2') {
       await knex.raw(`
         ALTER TABLE t_constraints
         CHANGE COLUMN agent_id created_by INTEGER UNSIGNED NULL
       `);
-      console.log('  ✓ Rolled back to created_by (MySQL)');
+      console.error('  ✓ Rolled back to created_by (MySQL)');
     } else if (client === 'pg' || client === 'postgresql') {
       await knex.raw('ALTER TABLE t_constraints RENAME COLUMN agent_id TO created_by');
-      console.log('  ✓ Rolled back to created_by (PostgreSQL)');
+      console.error('  ✓ Rolled back to created_by (PostgreSQL)');
     }
 
     // Recreate view with old column name (created_by)
-    console.log('  🔄 Recreating v_tagged_constraints with created_by reference...');
+    console.error('  🔄 Recreating v_tagged_constraints with created_by reference...');
 
     await db.createViewSafe('v_tagged_constraints', `
       SELECT
@@ -189,8 +189,8 @@ export async function down(knex: Knex): Promise<void> {
       WHERE c.active = ${db.boolTrue()}
       ORDER BY c.priority DESC, cc.name, c.ts DESC
     `);
-    console.log('  ✓ Recreated v_tagged_constraints with created_by reference');
+    console.error('  ✓ Recreated v_tagged_constraints with created_by reference');
   }
 
-  console.log('✅ Rollback complete: t_constraints reverted to created_by');
+  console.error('✅ Rollback complete: t_constraints reverted to created_by');
 }

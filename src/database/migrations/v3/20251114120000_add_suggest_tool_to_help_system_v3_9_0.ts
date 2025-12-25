@@ -24,7 +24,7 @@ export async function up(knex: Knex): Promise<void> {
     .first();
 
   if (existingSuggestTool) {
-    console.log('✓ Suggest tool already exists in help system, skipping');
+    console.error('✓ Suggest tool already exists in help system, skipping');
     return;
   }
 
@@ -288,7 +288,7 @@ export async function up(knex: Knex): Promise<void> {
     }
   ]);
 
-  console.log('✓ Suggest tool added to help system with 4 actions, 15 parameters, and 8 examples');
+  console.error('✓ Suggest tool added to help system with 4 actions, 15 parameters, and 8 examples');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -297,5 +297,5 @@ export async function down(knex: Knex): Promise<void> {
     .where('tool_name', 'suggest')
     .delete();
 
-  console.log('✓ Suggest tool removed from help system');
+  console.error('✓ Suggest tool removed from help system');
 }

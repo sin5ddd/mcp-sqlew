@@ -11,7 +11,7 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('Updating task.move help data for v4.0 changes...');
+  console.error('Updating task.move help data for v4.0 changes...');
 
   // 1. Get action_id for task:move
   const moveAction = await knex('v4_help_actions')
@@ -20,7 +20,7 @@ export async function up(knex: Knex): Promise<void> {
     .first() as { id: number } | undefined;
 
   if (!moveAction) {
-    console.log('  ℹ task:move action not found in help system, skipping');
+    console.error('  ℹ task:move action not found in help system, skipping');
     return;
   }
 
@@ -32,7 +32,7 @@ export async function up(knex: Knex): Promise<void> {
     .update({
       description: 'Move task to new status with validation. v4.0: Flexible transitions between non-terminal statuses (todo, in_progress, waiting_review, blocked, done). Terminal statuses (archived, rejected) are final. Use rejection_reason when moving to rejected.'
     });
-  console.log('  ✓ Updated move action description');
+  console.error('  ✓ Updated move action description');
 
   // 3. Check if rejection_reason param already exists (idempotent)
   const existingParam = await knex('v4_help_action_params')
@@ -49,16 +49,16 @@ export async function up(knex: Knex): Promise<void> {
       description: 'Optional reason for rejection (stored in task notes). Only applicable when status is "rejected".',
       default_value: null
     });
-    console.log('  ✓ Added rejection_reason parameter');
+    console.error('  ✓ Added rejection_reason parameter');
   } else {
-    console.log('  ℹ rejection_reason parameter already exists, skipping');
+    console.error('  ℹ rejection_reason parameter already exists, skipping');
   }
 
-  console.log('✅ Migration completed');
+  console.error('✅ Migration completed');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('Reverting task.move help data changes...');
+  console.error('Reverting task.move help data changes...');
 
   // 1. Get action_id for task:move
   const moveAction = await knex('v4_help_actions')
@@ -67,7 +67,7 @@ export async function down(knex: Knex): Promise<void> {
     .first() as { id: number } | undefined;
 
   if (!moveAction) {
-    console.log('  ℹ task:move action not found, skipping');
+    console.error('  ℹ task:move action not found, skipping');
     return;
   }
 
@@ -79,13 +79,13 @@ export async function down(knex: Knex): Promise<void> {
     .update({
       description: 'Move task to new status with validation. Enforces state machine transitions (e.g., cannot jump todo → done). Automatically logs status changes and updates timestamps.'
     });
-  console.log('  ✓ Restored original move action description');
+  console.error('  ✓ Restored original move action description');
 
   // 3. Remove rejection_reason parameter
   await knex('v4_help_action_params')
     .where({ action_id: actionId, param_name: 'rejection_reason' })
     .delete();
-  console.log('  ✓ Removed rejection_reason parameter');
+  console.error('  ✓ Removed rejection_reason parameter');
 
-  console.log('✅ Rollback completed');
+  console.error('✅ Rollback completed');
 }

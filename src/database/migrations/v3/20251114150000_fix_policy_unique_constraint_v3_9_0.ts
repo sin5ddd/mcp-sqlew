@@ -27,27 +27,27 @@ export async function up(knex: Knex): Promise<void> {
 
   if (!db.isSQLite) {
     // MySQL/PostgreSQL can drop constraints directly
-    console.log('✓ Non-SQLite database, skipping (constraint handling differs)');
+    console.error('✓ Non-SQLite database, skipping (constraint handling differs)');
     return;
   }
 
   // Check if table exists
   const hasTable = await knex.schema.hasTable('t_decision_policies');
   if (!hasTable) {
-    console.log('✓ t_decision_policies table does not exist, skipping');
+    console.error('✓ t_decision_policies table does not exist, skipping');
     return;
   }
 
   // SQLite: Need to recreate table to remove column constraint
-  console.log('🔄 Fixing t_decision_policies UNIQUE constraint...');
+  console.error('🔄 Fixing t_decision_policies UNIQUE constraint...');
 
   // 1. Backup existing data
   const existingPolicies = await knex('t_decision_policies').select('*');
-  console.log(`  📊 Backing up ${existingPolicies.length} existing policies...`);
+  console.error(`  📊 Backing up ${existingPolicies.length} existing policies...`);
 
   // 2. Drop old table
   await knex.schema.dropTable('t_decision_policies');
-  console.log('  ✓ Dropped old table');
+  console.error('  ✓ Dropped old table');
 
   // 3. Create new table with correct schema
   await knex.schema.createTable('t_decision_policies', (table) => {
@@ -67,17 +67,17 @@ export async function up(knex: Knex): Promise<void> {
     // Composite UNIQUE constraint (allows same name in different projects)
     table.unique(['name', 'project_id']);
   });
-  console.log('  ✓ Created new table with composite UNIQUE only');
+  console.error('  ✓ Created new table with composite UNIQUE only');
 
   // 4. Restore data
   if (existingPolicies.length > 0) {
     await knex('t_decision_policies').insert(existingPolicies);
-    console.log(`  ✓ Restored ${existingPolicies.length} policies`);
+    console.error(`  ✓ Restored ${existingPolicies.length} policies`);
   }
 
-  console.log('✅ t_decision_policies UNIQUE constraint fixed');
+  console.error('✅ t_decision_policies UNIQUE constraint fixed');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('⚠️  No rollback needed - schema remains valid');
+  console.error('⚠️  No rollback needed - schema remains valid');
 }

@@ -41,12 +41,12 @@ const VIEWS_TO_DROP = [
 ];
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔄 Dropping all database views (v4.0.1 - No views policy)...');
+  console.error('🔄 Dropping all database views (v4.0.1 - No views policy)...');
 
   for (const viewName of VIEWS_TO_DROP) {
     try {
       await knex.raw(`DROP VIEW IF EXISTS ${viewName}`);
-      console.log(`  ✓ Dropped view: ${viewName}`);
+      console.error(`  ✓ Dropped view: ${viewName}`);
     } catch (error: any) {
       // Ignore errors if view doesn't exist (different error messages per DB)
       const errorMsg = error.message?.toLowerCase() || '';
@@ -55,19 +55,19 @@ export async function up(knex: Knex): Promise<void> {
         errorMsg.includes('unknown') ||
         errorMsg.includes('no such')
       ) {
-        console.log(`  ⚠️  View ${viewName} does not exist, skipping`);
+        console.error(`  ⚠️  View ${viewName} does not exist, skipping`);
       } else {
         throw error;
       }
     }
   }
 
-  console.log('✅ All views dropped successfully');
-  console.log('📝 Policy: No views in v4+ - use JOIN queries via Knex query builder');
+  console.error('✅ All views dropped successfully');
+  console.error('📝 Policy: No views in v4+ - use JOIN queries via Knex query builder');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('⚠️  WARNING: Views will NOT be recreated');
-  console.log('   v4+ policy: No database views - use JOINs instead');
-  console.log('   Reference: src/utils/view-queries.ts for equivalent queries');
+  console.error('⚠️  WARNING: Views will NOT be recreated');
+  console.error('   v4+ policy: No database views - use JOINs instead');
+  console.error('   Reference: src/utils/view-queries.ts for equivalent queries');
 }

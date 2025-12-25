@@ -25,7 +25,7 @@ import type { Knex } from "knex";
  */
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔧 Adding v3.8.0 planning layers...');
+  console.error('🔧 Adding v3.8.0 planning layers...');
 
   // Check if any of the new layers already exist
   const newLayerNames = ['planning', 'documentation', 'coordination', 'review'];
@@ -34,7 +34,7 @@ export async function up(knex: Knex): Promise<void> {
     .select('name');
 
   if (existingLayers.length > 0) {
-    console.log(`✓ Planning layers already exist (${existingLayers.map(l => l.name).join(', ')}), skipping`);
+    console.error(`✓ Planning layers already exist (${existingLayers.map(l => l.name).join(', ')}), skipping`);
     return;
   }
 
@@ -64,11 +64,11 @@ export async function up(knex: Knex): Promise<void> {
     ]);
   }
 
-  console.log('✅ Added 4 planning layers: planning, documentation, coordination, review');
+  console.error('✅ Added 4 planning layers: planning, documentation, coordination, review');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Removing v3.8.0 planning layers...');
+  console.error('🔄 Removing v3.8.0 planning layers...');
 
   // Check if layers exist before removing
   const layersToRemove = ['planning', 'documentation', 'coordination', 'review'];
@@ -77,7 +77,7 @@ export async function down(knex: Knex): Promise<void> {
     .select('name');
 
   if (existingLayers.length === 0) {
-    console.log('✓ Planning layers already removed, skipping');
+    console.error('✓ Planning layers already removed, skipping');
     return;
   }
 
@@ -86,5 +86,5 @@ export async function down(knex: Knex): Promise<void> {
     .whereIn('name', layersToRemove)
     .delete();
 
-  console.log('✅ Removed planning layers');
+  console.error('✅ Removed planning layers');
 }

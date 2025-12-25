@@ -15,7 +15,7 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🌱 Seeding help system data...');
+  console.error('🌱 Seeding help system data...');
 
   // 1. Seed v4_help_tools (8 tools)
   const existingTools = await knex('v4_help_tools').count('* as count').first();
@@ -54,7 +54,7 @@ export async function up(knex: Knex): Promise<void> {
         description: 'Use Case Catalog - Browse and search complete workflow scenarios. Returns end-to-end workflows with executable code examples.'
       }
     ]);
-    console.log('  ✓ Help tools seeded (8)');
+    console.error('  ✓ Help tools seeded (8)');
   }
 
   // 2. Seed v4_help_actions (68 actions)
@@ -144,7 +144,7 @@ export async function up(knex: Knex): Promise<void> {
       { tool_name: 'use_case', action_name: 'list_all', description: 'List all use cases with filtering' },
       { tool_name: 'use_case', action_name: 'help', description: 'Get use case catalog documentation' }
     ]);
-    console.log('  ✓ Help actions seeded (68)');
+    console.error('  ✓ Help actions seeded (68)');
   }
 
   // 3. Seed v4_help_use_case_cats (6 categories) - upsert to ensure data exists
@@ -165,7 +165,7 @@ export async function up(knex: Knex): Promise<void> {
       await knex('v4_help_use_case_cats').insert(cat);
     }
   }
-  console.log('  ✓ Help use case categories seeded (6)');
+  console.error('  ✓ Help use case categories seeded (6)');
 
   // 4. Seed v4_builtin_policies (5 policies)
   const existingPolicies = await knex('v4_builtin_policies').count('* as count').first();
@@ -212,7 +212,7 @@ export async function up(knex: Knex): Promise<void> {
         category: 'deprecation'
       }
     ]);
-    console.log('  ✓ Built-in policies seeded (5)');
+    console.error('  ✓ Built-in policies seeded (5)');
   }
 
   // 5. Seed v4_help_action_params
@@ -304,7 +304,7 @@ export async function up(knex: Knex): Promise<void> {
 
       if (params.length > 0) {
         await knex('v4_help_action_params').insert(params);
-        console.log(`  ✓ Help action params seeded (${params.length})`);
+        console.error(`  ✓ Help action params seeded (${params.length})`);
       }
     }
   }
@@ -331,14 +331,14 @@ export async function up(knex: Knex): Promise<void> {
       { category_id: catMap['decision_intelligence'], title: 'Check for duplicate decisions', complexity: 'basic', description: 'Prevent duplicate decisions with suggest tool.', workflow: '1. suggest.check_duplicate with proposed key\n2. Review suggestions\n3. Update existing or create new' },
       { category_id: catMap['decision_intelligence'], title: 'Find related decisions', complexity: 'intermediate', description: 'Discover related decisions by context.', workflow: '1. suggest.by_context with key, tags, layer\n2. Review suggestions with scores\n3. Link related decisions' }
     ]);
-    console.log('  ✓ Help use cases seeded (10)');
+    console.error('  ✓ Help use cases seeded (10)');
   }
 
-  console.log('🎉 Help system seed data completed!');
+  console.error('🎉 Help system seed data completed!');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Removing help system seed data...');
+  console.error('🔄 Removing help system seed data...');
 
   // Clear seed data (preserve table structure)
   await knex('v4_help_use_cases').del();
@@ -348,5 +348,5 @@ export async function down(knex: Knex): Promise<void> {
   await knex('v4_help_actions').del();
   await knex('v4_help_tools').del();
 
-  console.log('✅ Help system seed data removed');
+  console.error('✅ Help system seed data removed');
 }

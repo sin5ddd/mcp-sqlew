@@ -39,7 +39,7 @@ export async function up(knex: Knex): Promise<void> {
     .orWhere('full_example', 'like', '%suggest%');
 
   if (existingUseCases.length > 0) {
-    console.log('✓ Suggest use cases already exist, skipping');
+    console.error('✓ Suggest use cases already exist, skipping');
     return;
   }
 
@@ -241,7 +241,7 @@ export async function up(knex: Knex): Promise<void> {
     }
   ]);
 
-  console.log('✓ Added 4 suggest tool use cases (1 basic, 1 intermediate, 1 advanced, 1 cross-tool)');
+  console.error('✓ Added 4 suggest tool use cases (1 basic, 1 intermediate, 1 advanced, 1 cross-tool)');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -253,5 +253,5 @@ export async function down(knex: Knex): Promise<void> {
     .orWhere('title', 'like', '%Context-aware decision%')
     .delete();
 
-  console.log('✓ Removed suggest tool use cases');
+  console.error('✓ Removed suggest tool use cases');
 }

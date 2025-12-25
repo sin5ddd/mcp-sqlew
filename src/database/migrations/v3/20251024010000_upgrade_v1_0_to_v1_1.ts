@@ -21,11 +21,11 @@ export async function up(knex: Knex): Promise<void> {
   const hasUnprefixedAgents = await knex.schema.hasTable("agents");
 
   if (!hasUnprefixedAgents) {
-    console.log("✓ No v1.0.0 schema detected, skipping prefix migration");
+    console.error("✓ No v1.0.0 schema detected, skipping prefix migration");
     return;
   }
 
-  console.log("🔄 Migrating v1.0.0 → v1.1.0 (adding table prefixes)...");
+  console.error("🔄 Migrating v1.0.0 → v1.1.0 (adding table prefixes)...");
 
   // Rename tables to add m_ prefix (master tables)
   const masterTables = [
@@ -42,7 +42,7 @@ export async function up(knex: Knex): Promise<void> {
     const exists = await knex.schema.hasTable(table);
     if (exists) {
       await knex.schema.renameTable(table, `m_${table}`);
-      console.log(`  ✓ Renamed ${table} → m_${table}`);
+      console.error(`  ✓ Renamed ${table} → m_${table}`);
     }
   }
 
@@ -60,11 +60,11 @@ export async function up(knex: Knex): Promise<void> {
     const exists = await knex.schema.hasTable(table);
     if (exists) {
       await knex.schema.renameTable(table, `t_${table}`);
-      console.log(`  ✓ Renamed ${table} → t_${table}`);
+      console.error(`  ✓ Renamed ${table} → t_${table}`);
     }
   }
 
-  console.log("✅ v1.0.0 → v1.1.0 migration complete");
+  console.error("✅ v1.0.0 → v1.1.0 migration complete");
 }
 
 export async function down(knex: Knex): Promise<void> {

@@ -25,11 +25,11 @@ export async function up(knex: Knex): Promise<void> {
 
   // Only run on MySQL/PostgreSQL - let original migration handle SQLite
   if (db.isSQLite) {
-    console.log("✓ SQLite: Skipping pre-emptive fix (original migration works fine)");
+    console.error("✓ SQLite: Skipping pre-emptive fix (original migration works fine)");
     return;
   }
 
-  console.log(`🔧 Pre-emptive cross-database fix for ${db.isMySQL ? "MySQL" : "PostgreSQL"}...`);
+  console.error(`🔧 Pre-emptive cross-database fix for ${db.isMySQL ? "MySQL" : "PostgreSQL"}...`);
 
   // ============================================================================
   // Pre-fix t_decision_policies columns (before 20251112000000 runs)
@@ -38,7 +38,7 @@ export async function up(knex: Knex): Promise<void> {
   const hasPoliciesTable = await knex.schema.hasTable("t_decision_policies");
 
   if (!hasPoliciesTable) {
-    console.log("  ⏭️  Pre-creating t_decision_policies table...");
+    console.error("  ⏭️  Pre-creating t_decision_policies table...");
 
     await db.createTableSafe("t_decision_policies", (table, helpers) => {
       table.increments("id").primary();
@@ -64,14 +64,14 @@ export async function up(knex: Knex): Promise<void> {
       table.unique(["name", "project_id"]);
     });
 
-    console.log("  ✅ Pre-created t_decision_policies table");
+    console.error("  ✅ Pre-created t_decision_policies table");
   } else {
     const hasProjectId = await knex.schema.hasColumn("t_decision_policies", "project_id");
     const hasCreatedBy = await knex.schema.hasColumn("t_decision_policies", "created_by");
     const hasTs = await knex.schema.hasColumn("t_decision_policies", "ts");
 
     if (!hasProjectId || !hasCreatedBy || !hasTs) {
-      console.log("  ⏭️  Pre-adding columns to t_decision_policies...");
+      console.error("  ⏭️  Pre-adding columns to t_decision_policies...");
 
       if (!hasProjectId) {
         await db.addColumnSafe("t_decision_policies", "project_id", (table) =>
@@ -102,9 +102,9 @@ export async function up(knex: Knex): Promise<void> {
         }
       }
 
-      console.log("  ✅ Pre-added columns to t_decision_policies");
+      console.error("  ✅ Pre-added columns to t_decision_policies");
     } else {
-      console.log("  ✓ Columns already exist, skipping");
+      console.error("  ✓ Columns already exist, skipping");
     }
   }
 
@@ -122,7 +122,7 @@ export async function up(knex: Knex): Promise<void> {
     table.primary(["tag_name"]);
   });
 
-  console.log("  ✅ Pre-created m_tag_index table (if it didn't exist)");
+  console.error("  ✅ Pre-created m_tag_index table (if it didn't exist)");
 
   // ============================================================================
   // Pre-create t_decision_pruning_log table
@@ -131,7 +131,7 @@ export async function up(knex: Knex): Promise<void> {
   const hasPruningLog = await knex.schema.hasTable("t_decision_pruning_log");
 
   if (!hasPruningLog) {
-    console.log("  ⏭️  Pre-creating t_decision_pruning_log table...");
+    console.error("  ⏭️  Pre-creating t_decision_pruning_log table...");
 
     await knex.schema.createTable("t_decision_pruning_log", (table) => {
       table.increments("id").primary();
@@ -151,9 +151,9 @@ export async function up(knex: Knex): Promise<void> {
       await knex.raw("ALTER TABLE t_decision_pruning_log ALTER COLUMN pruned_ts SET NOT NULL");
     }
 
-    console.log("  ✅ Pre-created t_decision_pruning_log table");
+    console.error("  ✅ Pre-created t_decision_pruning_log table");
   } else {
-    console.log("  ✓ t_decision_pruning_log already exists");
+    console.error("  ✓ t_decision_pruning_log already exists");
   }
 
   // ============================================================================
@@ -188,7 +188,7 @@ export async function up(knex: Knex): Promise<void> {
     table.unique(["task_id", "file_path"]);
   });
 
-  console.log("  ✅ Pre-created t_task_pruned_files table (if it didn't exist)");
+  console.error("  ✅ Pre-created t_task_pruned_files table (if it didn't exist)");
 
   // ============================================================================
   // Pre-create system agent (to prevent INSERT destructuring error)
@@ -197,31 +197,31 @@ export async function up(knex: Knex): Promise<void> {
   const systemAgent = await knex("m_agents").where("name", "system").first();
 
   if (!systemAgent) {
-    console.log("  ⏭️  Pre-creating system agent...");
+    console.error("  ⏭️  Pre-creating system agent...");
 
     await knex("m_agents").insert({
       name: "system",
       last_active_ts: Math.floor(Date.now() / 1000),
     });
 
-    console.log("  ✅ Pre-created system agent");
+    console.error("  ✅ Pre-created system agent");
   } else {
-    console.log("  ✓ System agent already exists");
+    console.error("  ✓ System agent already exists");
   }
 
-  console.log("✅ Pre-emptive cross-database fix completed successfully");
-  console.log("   Original migration will detect these changes and skip problematic steps");
+  console.error("✅ Pre-emptive cross-database fix completed successfully");
+  console.error("   Original migration will detect these changes and skip problematic steps");
 }
 
 export async function down(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
 
   if (db.isSQLite) {
-    console.log("✓ SQLite: No rollback needed");
+    console.error("✓ SQLite: No rollback needed");
     return;
   }
 
   // This is a pre-emptive hotfix, so down() should not break the database
-  console.log("⚠️  Pre-emptive fix rollback: Not dropping columns/tables to preserve data");
-  console.log("   The original migration owns these structures");
+  console.error("⚠️  Pre-emptive fix rollback: Not dropping columns/tables to preserve data");
+  console.error("   The original migration owns these structures");
 }

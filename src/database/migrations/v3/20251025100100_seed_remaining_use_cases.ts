@@ -274,7 +274,7 @@ export async function up(knex: Knex): Promise<void> {
 
   await knex('t_help_use_cases').insert(advancedUseCases);
 
-  console.log(`✅ Seeded ${intermediateUseCases.length + advancedUseCases.length} additional use-cases (10 intermediate + 6 advanced)`);
+  console.error(`✅ Seeded ${intermediateUseCases.length + advancedUseCases.length} additional use-cases (10 intermediate + 6 advanced)`);
 }
 
 export async function down(knex: Knex): Promise<void> {

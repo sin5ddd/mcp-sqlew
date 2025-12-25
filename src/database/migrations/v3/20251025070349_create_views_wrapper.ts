@@ -19,10 +19,10 @@ export async function up(knex: Knex): Promise<void> {
     // Use wrapper's database-agnostic timestamp helper
     const nowTs = db.nowTimestamp();
 
-    console.log(`✅ Creating views for ${db.isMySQL ? 'MySQL' : db.isPostgreSQL ? 'PostgreSQL' : 'SQLite'}...`);
+    console.error(`✅ Creating views for ${db.isMySQL ? 'MySQL' : db.isPostgreSQL ? 'PostgreSQL' : 'SQLite'}...`);
 
     // Tagged Decisions
-    console.log('Creating v_tagged_decisions...');
+    console.error('Creating v_tagged_decisions...');
     await db.createViewSafe('v_tagged_decisions', `
     SELECT
         k.key,
@@ -152,7 +152,7 @@ export async function up(knex: Knex): Promise<void> {
     LEFT JOIN m_layers l ON t.layer_id = l.id
   `);
 
-    console.log('✅ Views created successfully (will be dropped in v3.9.0 migration)');
+    console.error('✅ Views created successfully (will be dropped in v3.9.0 migration)');
   } catch (error: any) {
     console.error('❌ Migration failed:', error.message);
     console.error('Full error:', error);
@@ -169,5 +169,5 @@ export async function down(knex: Knex): Promise<void> {
   await knex.raw('DROP VIEW IF EXISTS v_active_context');
   await knex.raw('DROP VIEW IF EXISTS v_tagged_decisions');
 
-  console.log('✅ Views dropped successfully');
+  console.error('✅ Views dropped successfully');
 }

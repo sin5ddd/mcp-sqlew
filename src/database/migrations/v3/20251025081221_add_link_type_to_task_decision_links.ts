@@ -22,5 +22,5 @@ export async function down(knex: Knex): Promise<void> {
     table.dropColumn('link_type');
   });
 
-  console.log('✅ Removed link_type column from t_task_decision_links');
+  console.error('✅ Removed link_type column from t_task_decision_links');
 }

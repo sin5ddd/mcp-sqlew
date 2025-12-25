@@ -27,7 +27,7 @@ export async function up(knex: Knex): Promise<void> {
     .select('action_name');
 
   if (existingActions.length > 0) {
-    console.log('✓ Policy help already exists, skipping');
+    console.error('✓ Policy help already exists, skipping');
     return;
   }
 
@@ -237,7 +237,7 @@ export async function up(knex: Knex): Promise<void> {
     }
   ]);
 
-  console.log('✓ Added policy help (3 actions, 15 parameters, 6 examples)');
+  console.error('✓ Added policy help (3 actions, 15 parameters, 6 examples)');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -247,5 +247,5 @@ export async function down(knex: Knex): Promise<void> {
     .whereIn('action_name', ['create_policy', 'list_policies', 'set_from_policy'])
     .delete();
 
-  console.log('✓ Removed policy help');
+  console.error('✓ Removed policy help');
 }

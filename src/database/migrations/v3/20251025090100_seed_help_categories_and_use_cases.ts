@@ -21,7 +21,7 @@ export async function up(knex: Knex): Promise<void> {
   const existingCategories = await knex('m_help_use_case_categories').select('category_name');
 
   if (existingCategories.length > 0) {
-    console.log('✓ Help categories already seeded, skipping');
+    console.error('✓ Help categories already seeded, skipping');
     return;
   }
 

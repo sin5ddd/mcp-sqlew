@@ -29,12 +29,12 @@ export async function up(knex: Knex): Promise<void> {
 
   // Skip on SQLite - all migrations work correctly there
   if (db.isSQLite) {
-    console.log(' SQLite: All migrations completed successfully');
+    console.error(' SQLite: All migrations completed successfully');
     return;
   }
 
   const dbType = db.isMySQL ? 'MySQL' : db.isPostgreSQL ? 'PostgreSQL' : 'Unknown';
-  console.log(`=' Final cross-database safety check for ${dbType}...`);
+  console.error(`=' Final cross-database safety check for ${dbType}...`);
 
   // Verify all critical tables exist
   const criticalTables = [
@@ -47,17 +47,17 @@ export async function up(knex: Knex): Promise<void> {
   for (const tableName of criticalTables) {
     const exists = await knex.schema.hasTable(tableName);
     if (!exists) {
-      console.log(`   WARNING: Table ${tableName} does not exist!`);
-      console.log(`   This suggests a migration failure. Please check migration logs.`);
+      console.error(`   WARNING: Table ${tableName} does not exist!`);
+      console.error(`   This suggests a migration failure. Please check migration logs.`);
     } else {
-      console.log(`   ${tableName} exists`);
+      console.error(`   ${tableName} exists`);
     }
   }
 
-  console.log(' Cross-database compatibility verified');
+  console.error(' Cross-database compatibility verified');
 }
 
 export async function down(knex: Knex): Promise<void> {
   // This is a safety check migration - no rollback needed
-  console.log(' Safety check migration - no rollback actions');
+  console.error(' Safety check migration - no rollback actions');
 }

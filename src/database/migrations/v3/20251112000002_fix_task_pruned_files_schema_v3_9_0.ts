@@ -24,11 +24,11 @@ import { UniversalKnex } from '../../utils/universal-knex.js';
 
 export async function up(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
-  console.log('🔄 Checking t_task_pruned_files schema...');
+  console.error('🔄 Checking t_task_pruned_files schema...');
 
   const hasTable = await knex.schema.hasTable('t_task_pruned_files');
   if (!hasTable) {
-    console.log('⚠️  t_task_pruned_files table does not exist, skipping');
+    console.error('⚠️  t_task_pruned_files table does not exist, skipping');
     return;
   }
 
@@ -37,19 +37,19 @@ export async function up(knex: Knex): Promise<void> {
   const hasLinkedDecision = await knex.schema.hasColumn('t_task_pruned_files', 'linked_decision_key_id');
 
   if (hasProjectId && hasLinkedDecision) {
-    console.log('✓ Both project_id and linked_decision_key_id already exist, skipping');
+    console.error('✓ Both project_id and linked_decision_key_id already exist, skipping');
     return;
   }
 
-  console.log(`🔄 Recreating table to add missing columns with FK constraints (project_id: ${!hasProjectId}, linked_decision: ${!hasLinkedDecision})...`);
+  console.error(`🔄 Recreating table to add missing columns with FK constraints (project_id: ${!hasProjectId}, linked_decision: ${!hasLinkedDecision})...`);
 
   // Step 1: Back up existing data
   const existingData = await knex('t_task_pruned_files').select('*');
-  console.log(`  📊 Backing up ${existingData.length} existing rows...`);
+  console.error(`  📊 Backing up ${existingData.length} existing rows...`);
 
   // Step 2: Drop old table
   await knex.schema.dropTableIfExists('t_task_pruned_files');
-  console.log('  ✓ Dropped old table');
+  console.error('  ✓ Dropped old table');
 
   // Step 3: Recreate with complete schema (matching 20251112000000 migration spec)
   await db.createTableSafe('t_task_pruned_files', (table, helpers) => {
@@ -68,7 +68,7 @@ export async function up(knex: Knex): Promise<void> {
 
     table.index('task_id', 'idx_task_pruned_files_task_id');
   });
-  console.log('  ✓ Created new table with complete schema and FK constraints');
+  console.error('  ✓ Created new table with complete schema and FK constraints');
 
   // Step 4: Restore data with default values for new columns
   if (existingData.length > 0) {
@@ -84,25 +84,25 @@ export async function up(knex: Knex): Promise<void> {
     }));
 
     await knex('t_task_pruned_files').insert(dataToInsert);
-    console.log(`  ✓ Restored ${dataToInsert.length} rows with FK constraints`);
+    console.error(`  ✓ Restored ${dataToInsert.length} rows with FK constraints`);
   }
 
-  console.log('✅ t_task_pruned_files schema fix completed');
+  console.error('✅ t_task_pruned_files schema fix completed');
 }
 
 export async function down(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
-  console.log('🔄 Rolling back t_task_pruned_files schema fix...');
+  console.error('🔄 Rolling back t_task_pruned_files schema fix...');
 
   const hasTable = await knex.schema.hasTable('t_task_pruned_files');
   if (!hasTable) {
-    console.log('⚠️  t_task_pruned_files table does not exist, skipping');
+    console.error('⚠️  t_task_pruned_files table does not exist, skipping');
     return;
   }
 
   // Back up existing data
   const existingData = await knex('t_task_pruned_files').select('*');
-  console.log(`  📊 Backing up ${existingData.length} existing rows...`);
+  console.error(`  📊 Backing up ${existingData.length} existing rows...`);
 
   // Drop table
   await knex.schema.dropTableIfExists('t_task_pruned_files');
@@ -130,8 +130,8 @@ export async function down(knex: Knex): Promise<void> {
     }));
 
     await knex('t_task_pruned_files').insert(dataToInsert);
-    console.log(`  ✓ Restored ${dataToInsert.length} rows`);
+    console.error(`  ✓ Restored ${dataToInsert.length} rows`);
   }
 
-  console.log('✅ t_task_pruned_files schema fix rollback completed');
+  console.error('✅ t_task_pruned_files schema fix rollback completed');
 }

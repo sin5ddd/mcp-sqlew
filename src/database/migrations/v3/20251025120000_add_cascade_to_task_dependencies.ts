@@ -17,7 +17,7 @@ export async function up(knex: Knex): Promise<void> {
   // This migration is SQLite-specific
   // MySQL and PostgreSQL already have CASCADE constraints from the bootstrap migration
   if (client === 'mysql' || client === 'mysql2' || client === 'pg') {
-    console.log('✓ CASCADE constraints already exist in MySQL/PostgreSQL, skipping migration');
+    console.error('✓ CASCADE constraints already exist in MySQL/PostgreSQL, skipping migration');
     return;
   }
 
@@ -38,7 +38,7 @@ export async function up(knex: Knex): Promise<void> {
   const hasCascade = fkInfo.some((fk: any) => fk.on_delete === 'CASCADE');
 
   if (hasCascade) {
-    console.log('✓ CASCADE constraints already exist, skipping migration');
+    console.error('✓ CASCADE constraints already exist, skipping migration');
     return;
   }
 
@@ -67,7 +67,7 @@ export async function up(knex: Knex): Promise<void> {
   // 4. Rename new table to original name
   await knex.schema.renameTable('t_task_dependencies_new', 't_task_dependencies');
 
-  console.log('✅ Added CASCADE deletion to t_task_dependencies foreign keys');
+  console.error('✅ Added CASCADE deletion to t_task_dependencies foreign keys');
 }
 
 export async function down(knex: Knex): Promise<void> {
@@ -90,5 +90,5 @@ export async function down(knex: Knex): Promise<void> {
   await knex.schema.dropTable('t_task_dependencies');
   await knex.schema.renameTable('t_task_dependencies_new', 't_task_dependencies');
 
-  console.log('✅ Reverted CASCADE deletion from t_task_dependencies foreign keys');
+  console.error('✅ Reverted CASCADE deletion from t_task_dependencies foreign keys');
 }

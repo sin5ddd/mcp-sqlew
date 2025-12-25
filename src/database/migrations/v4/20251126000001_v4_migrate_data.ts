@@ -25,13 +25,13 @@ import type { Knex } from 'knex';
 import { createHash } from 'crypto';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔄 Starting v4.0 data migration from v3.x...');
+  console.error('🔄 Starting v4.0 data migration from v3.x...');
 
   // Check if this is an upgrade (v3.x tables exist) or fresh install
   const hasV3Tables = await knex.schema.hasTable('m_agents');
 
   if (!hasV3Tables) {
-    console.log('  ℹ️ No v3.x tables found - this is a fresh install, skipping data migration');
+    console.error('  ℹ️ No v3.x tables found - this is a fresh install, skipping data migration');
     return;
   }
 
@@ -56,7 +56,7 @@ export async function up(knex: Knex): Promise<void> {
   ): Promise<number> {
     const sourceExists = await knex.schema.hasTable(sourceTable);
     if (!sourceExists) {
-      console.log(`  ⚠️ ${sourceTable} does not exist, skipping`);
+      console.error(`  ⚠️ ${sourceTable} does not exist, skipping`);
       return 0;
     }
 
@@ -64,7 +64,7 @@ export async function up(knex: Knex): Promise<void> {
     const hasTargetData = targetCount && Number(targetCount.count) > 0;
 
     if (hasTargetData && !options.upsertKey) {
-      console.log(`  ✓ ${targetTable} already has data, skipping`);
+      console.error(`  ✓ ${targetTable} already has data, skipping`);
       return 0;
     }
 
@@ -80,7 +80,7 @@ export async function up(knex: Knex): Promise<void> {
       effectiveColumns = existingColumns;
 
       if (effectiveColumns.length === 0) {
-        console.log(`  ⚠️ ${sourceTable} has none of the expected columns, skipping`);
+        console.error(`  ⚠️ ${sourceTable} has none of the expected columns, skipping`);
         return 0;
       }
     }
@@ -100,7 +100,7 @@ export async function up(knex: Knex): Promise<void> {
     const sourceData = await query;
 
     if (sourceData.length === 0) {
-      console.log(`  ℹ️ ${sourceTable} is empty, nothing to migrate`);
+      console.error(`  ℹ️ ${sourceTable} is empty, nothing to migrate`);
       return 0;
     }
 
@@ -113,7 +113,7 @@ export async function up(knex: Knex): Promise<void> {
       dataToInsert = sourceData.filter((row: any) => !existingKeys.has(row[options.upsertKey!]));
 
       if (dataToInsert.length === 0) {
-        console.log(`  ✓ ${targetTable} already has all data from ${sourceTable}, skipping`);
+        console.error(`  ✓ ${targetTable} already has all data from ${sourceTable}, skipping`);
         return 0;
       }
     }
@@ -124,7 +124,7 @@ export async function up(knex: Knex): Promise<void> {
       await knex(targetTable).insert(batch);
     }
 
-    console.log(`  ✓ Migrated ${dataToInsert.length} rows: ${sourceTable} → ${targetTable}`);
+    console.error(`  ✓ Migrated ${dataToInsert.length} rows: ${sourceTable} → ${targetTable}`);
     return dataToInsert.length;
   }
 
@@ -134,7 +134,7 @@ export async function up(knex: Knex): Promise<void> {
   // 1. Migrate Master Tables
   // ============================================================================
 
-  console.log('\n📋 Migrating master tables...');
+  console.error('\n📋 Migrating master tables...');
 
   // m_agents migration removed - agent tracking no longer used in v4.0
 
@@ -173,11 +173,11 @@ export async function up(knex: Knex): Promise<void> {
           const batch = sourceData.slice(i, i + batchSize);
           await knex('v4_context_keys').insert(batch);
         }
-        console.log(`  ✓ Migrated ${sourceData.length} rows: m_context_keys → v4_context_keys`);
+        console.error(`  ✓ Migrated ${sourceData.length} rows: m_context_keys → v4_context_keys`);
         totalMigrated += sourceData.length;
       }
     } else {
-      console.log('  ✓ v4_context_keys already has data, skipping');
+      console.error('  ✓ v4_context_keys already has data, skipping');
     }
   }
 
@@ -201,13 +201,13 @@ export async function up(knex: Knex): Promise<void> {
           const batch = filesToInsert.slice(i, i + batchSize);
           await knex('v4_files').insert(batch);
         }
-        console.log(`  ✓ Migrated ${filesToInsert.length} rows: m_files → v4_files`);
+        console.error(`  ✓ Migrated ${filesToInsert.length} rows: m_files → v4_files`);
         totalMigrated += filesToInsert.length;
       } else {
-        console.log('  ℹ️ m_files is empty, nothing to migrate');
+        console.error('  ℹ️ m_files is empty, nothing to migrate');
       }
     } else {
-      console.log('  ✓ v4_files already has data, skipping');
+      console.error('  ✓ v4_files already has data, skipping');
     }
   }
 
@@ -264,14 +264,14 @@ export async function up(knex: Knex): Promise<void> {
     ]);
   }
 
-  console.log('  ℹ️ Skipping m_tag_index migration (incompatible v3 schema)');
-  console.log(`  📊 Master tables: ${totalMigrated} rows migrated`);
+  console.error('  ℹ️ Skipping m_tag_index migration (incompatible v3 schema)');
+  console.error(`  📊 Master tables: ${totalMigrated} rows migrated`);
 
   // ============================================================================
   // 2. Migrate Transaction Tables
   // ============================================================================
 
-  console.log('\n📋 Migrating transaction tables...');
+  console.error('\n📋 Migrating transaction tables...');
   let transactionMigrated = 0;
 
   const hasProjectIdInDecisions = await knex.schema.hasColumn('t_decisions', 'project_id');
@@ -284,13 +284,13 @@ export async function up(knex: Knex): Promise<void> {
     // Legacy v3 schemas: t_decisions に project_id が存在しないため、固定値 1 を付与して移行する
     const hasTDecisions = await knex.schema.hasTable('t_decisions');
     if (!hasTDecisions) {
-      console.log('  ⚠️ t_decisions does not exist, skipping');
+      console.error('  ⚠️ t_decisions does not exist, skipping');
     } else {
       const targetCount = await knex('v4_decisions').count('* as count').first();
       const hasTargetData = targetCount && Number(targetCount.count) > 0;
 
       if (hasTargetData) {
-        console.log('  ✓ v4_decisions already has data, skipping');
+        console.error('  ✓ v4_decisions already has data, skipping');
       } else {
         const sourceRows = await knex('t_decisions').select(
           'key_id',
@@ -302,7 +302,7 @@ export async function up(knex: Knex): Promise<void> {
         );
 
         if (sourceRows.length === 0) {
-          console.log('  ℹ️ t_decisions is empty, nothing to migrate');
+          console.error('  ℹ️ t_decisions is empty, nothing to migrate');
         } else {
           const rowsToInsert = sourceRows.map((row: any) => ({
             key_id: row.key_id,
@@ -320,7 +320,7 @@ export async function up(knex: Knex): Promise<void> {
             await knex('v4_decisions').insert(batch);
           }
 
-          console.log(`  ✓ Migrated ${rowsToInsert.length} rows: t_decisions → v4_decisions`);
+          console.error(`  ✓ Migrated ${rowsToInsert.length} rows: t_decisions → v4_decisions`);
           transactionMigrated += rowsToInsert.length;
         }
       }
@@ -420,10 +420,10 @@ export async function up(knex: Knex): Promise<void> {
 
   const hasTaskPrunedFiles = await knex.schema.hasTable('t_task_pruned_files');
   if (hasTaskPrunedFiles) {
-    console.log('  ℹ️ Skipping t_task_pruned_files migration (schema varies, data regenerable)');
+    console.error('  ℹ️ Skipping t_task_pruned_files migration (schema varies, data regenerable)');
   }
 
-  console.log('  ℹ️ Help system data: v4_bootstrap seeds fresh data (tools, actions, params, use cases, policies)');
+  console.error('  ℹ️ Help system data: v4_bootstrap seeds fresh data (tools, actions, params, use cases, policies)');
 
   const hasTokenUsage = await knex.schema.hasTable('t_token_usage');
   if (hasTokenUsage) {
@@ -432,23 +432,23 @@ export async function up(knex: Knex): Promise<void> {
     ]);
   }
 
-  console.log(`  📊 Transaction tables: ${transactionMigrated} rows migrated`);
+  console.error(`  📊 Transaction tables: ${transactionMigrated} rows migrated`);
 
   // ============================================================================
   // 3. Summary
   // ============================================================================
 
-  console.log('\n🎉 v4.0 data migration completed!');
-  console.log(`   Total rows migrated: ${totalMigrated + transactionMigrated}`);
-  console.log('   ⚠️ Deprecated tables NOT migrated:');
-  console.log('      - m_agents (agent tracking removed in v4.0)');
-  console.log('      - t_agent_messages (messaging removed)');
-  console.log('      - t_activity_log (activity logging removed)');
-  console.log('      - t_decision_templates (merged into v4_decision_policies)');
+  console.error('\n🎉 v4.0 data migration completed!');
+  console.error(`   Total rows migrated: ${totalMigrated + transactionMigrated}`);
+  console.error('   ⚠️ Deprecated tables NOT migrated:');
+  console.error('      - m_agents (agent tracking removed in v4.0)');
+  console.error('      - t_agent_messages (messaging removed)');
+  console.error('      - t_activity_log (activity logging removed)');
+  console.error('      - t_decision_templates (merged into v4_decision_policies)');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Clearing v4.0 migrated data...');
+  console.error('🔄 Clearing v4.0 migrated data...');
 
   const transactionTables = [
     'v4_token_usage',
@@ -468,5 +468,5 @@ export async function down(knex: Knex): Promise<void> {
     }
   }
 
-  console.log('✅ v4.0 migrated data cleared (master table seeds preserved)');
+  console.error('✅ v4.0 migrated data cleared (master table seeds preserved)');
 }

@@ -33,7 +33,7 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔧 Adding missing help actions to m_help_actions...');
+  console.error('🔧 Adding missing help actions to m_help_actions...');
 
   // =========================================================================
   // 1. Add missing decision tool actions
@@ -94,9 +94,9 @@ export async function up(knex: Knex): Promise<void> {
 
     if (!exists) {
       await knex('m_help_actions').insert(action);
-      console.log(`  ✓ Added ${action.tool_name}.${action.action_name}`);
+      console.error(`  ✓ Added ${action.tool_name}.${action.action_name}`);
     } else {
-      console.log(`  ✓ ${action.tool_name}.${action.action_name} already exists`);
+      console.error(`  ✓ ${action.tool_name}.${action.action_name} already exists`);
     }
   }
 
@@ -189,9 +189,9 @@ export async function up(knex: Knex): Promise<void> {
 
     if (!exists) {
       await knex('m_help_actions').insert(action);
-      console.log(`  ✓ Added ${action.tool_name}.${action.action_name}`);
+      console.error(`  ✓ Added ${action.tool_name}.${action.action_name}`);
     } else {
-      console.log(`  ✓ ${action.tool_name}.${action.action_name} already exists`);
+      console.error(`  ✓ ${action.tool_name}.${action.action_name} already exists`);
     }
   }
 
@@ -211,16 +211,16 @@ export async function up(knex: Knex): Promise<void> {
 
   if (!constraintExists) {
     await knex('m_help_actions').insert(constraintAction);
-    console.log(`  ✓ Added ${constraintAction.tool_name}.${constraintAction.action_name}`);
+    console.error(`  ✓ Added ${constraintAction.tool_name}.${constraintAction.action_name}`);
   } else {
-    console.log(`  ✓ ${constraintAction.tool_name}.${constraintAction.action_name} already exists`);
+    console.error(`  ✓ ${constraintAction.tool_name}.${constraintAction.action_name} already exists`);
   }
 
-  console.log('✅ Help actions database synchronized with code');
+  console.error('✅ Help actions database synchronized with code');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Removing added help actions...');
+  console.error('🔄 Removing added help actions...');
 
   // Remove decision actions
   const decisionActions = [
@@ -252,5 +252,5 @@ export async function down(knex: Knex): Promise<void> {
     .where({ tool_name: 'constraint', action_name: 'use_case' })
     .del();
 
-  console.log('✅ Removed added help actions');
+  console.error('✅ Removed added help actions');
 }

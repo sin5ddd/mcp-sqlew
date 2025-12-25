@@ -18,12 +18,12 @@ import { UniversalKnex } from "../../utils/universal-knex.js";
 export async function up(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
 
-  console.log("🔧 Hotfix: Recreating v_tagged_constraints with project_id...");
+  console.error("🔧 Hotfix: Recreating v_tagged_constraints with project_id...");
 
   // Check if t_constraints has project_id (required for this view)
   const hasProjectId = await knex.schema.hasColumn("t_constraints", "project_id");
   if (!hasProjectId) {
-    console.log("✓ t_constraints.project_id does not exist yet, skipping (will be created later)");
+    console.error("✓ t_constraints.project_id does not exist yet, skipping (will be created later)");
     return;
   }
 
@@ -57,13 +57,13 @@ export async function up(knex: Knex): Promise<void> {
   `
   );
 
-  console.log("✅ v_tagged_constraints view recreated with project_id");
+  console.error("✅ v_tagged_constraints view recreated with project_id");
 }
 
 export async function down(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
 
-  console.log("⏪ Rolling back v_tagged_constraints hotfix...");
+  console.error("⏪ Rolling back v_tagged_constraints hotfix...");
 
   // Determine timestamp conversion function
   const timestampFunc = db.isSQLite
@@ -94,5 +94,5 @@ export async function down(knex: Knex): Promise<void> {
   `
   );
 
-  console.log("⏪ Rolled back to original v_tagged_constraints (without project_id)");
+  console.error("⏪ Rolled back to original v_tagged_constraints (without project_id)");
 }

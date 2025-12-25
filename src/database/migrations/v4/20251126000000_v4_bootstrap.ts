@@ -37,7 +37,7 @@ import { UniversalKnex } from '../../../utils/universal-knex.js';
 export async function up(knex: Knex): Promise<void> {
   const db = new UniversalKnex(knex);
 
-  console.log('🚀 Starting v4.0 bootstrap migration...');
+  console.error('🚀 Starting v4.0 bootstrap migration...');
 
   // ============================================================================
   // PART 1: CREATE TABLES (35 tables)
@@ -158,7 +158,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('category', 64).nullable();
   });
 
-  console.log('✅ Master tables created (14 tables)');
+  console.error('✅ Master tables created (14 tables)');
 
   // ---- TRANSACTION TABLES - Decisions (8 tables) ----
 
@@ -268,7 +268,7 @@ export async function up(knex: Knex): Promise<void> {
     table.text('reason').nullable();
   });
 
-  console.log('✅ Decision tables created (8 tables)');
+  console.error('✅ Decision tables created (8 tables)');
 
   // ---- TRANSACTION TABLES - Files & Constraints (3 tables) ----
 
@@ -310,7 +310,7 @@ export async function up(knex: Knex): Promise<void> {
     table.foreign('tag_id').references('v4_tags.id');
   });
 
-  console.log('✅ File & Constraint tables created (3 tables)');
+  console.error('✅ File & Constraint tables created (3 tables)');
 
   // ---- TRANSACTION TABLES - Tasks (8 tables) ----
 
@@ -412,7 +412,7 @@ export async function up(knex: Knex): Promise<void> {
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
   });
 
-  console.log('✅ Task tables created (8 tables)');
+  console.error('✅ Task tables created (8 tables)');
 
   // ---- TRANSACTION TABLES - Help System (4 tables) ----
 
@@ -460,7 +460,7 @@ export async function up(knex: Knex): Promise<void> {
     table.foreign('action_id').references('v4_help_actions.id');
   });
 
-  console.log('✅ Help system tables created (4 tables)');
+  console.error('✅ Help system tables created (4 tables)');
 
   // ---- TRANSACTION TABLES - Utility (1 table) ----
 
@@ -475,14 +475,14 @@ export async function up(knex: Knex): Promise<void> {
     table.foreign('project_id').references('v4_projects.id').onDelete('CASCADE');
   });
 
-  console.log('✅ Utility tables created (1 table)');
-  console.log('🎉 Schema creation completed! (34 tables total)');
+  console.error('✅ Utility tables created (1 table)');
+  console.error('🎉 Schema creation completed! (34 tables total)');
 
   // ============================================================================
   // PART 2: CREATE INDEXES (30 indexes)
   // ============================================================================
 
-  console.log('📇 Creating performance indexes...');
+  console.error('📇 Creating performance indexes...');
 
   // Decision Indexes (8)
   await db.createIndexSafe('v4_decisions', ['project_id', 'ts'], 'idx_v4_decisions_ts', { desc: true });
@@ -493,7 +493,7 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('v4_decision_context', ['related_task_id'], 'idx_v4_decision_context_task');
   await db.createIndexSafe('v4_decision_context', ['related_constraint_id'], 'idx_v4_decision_context_constraint');
   await db.createIndexSafe('v4_decision_policies', ['project_id', 'category'], 'idx_v4_decision_policies_category');
-  console.log('  ✓ Decision indexes (8)');
+  console.error('  ✓ Decision indexes (8)');
 
   // Task Indexes (7)
   await db.createIndexSafe('v4_tasks', ['project_id', 'status_id'], 'idx_v4_tasks_status');
@@ -503,29 +503,29 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('v4_tasks', ['project_id', 'priority'], 'idx_v4_tasks_priority', { desc: true });
   await db.createIndexSafe('v4_task_dependencies', ['project_id', 'blocked_task_id'], 'idx_v4_task_deps_blocked');
   await db.createIndexSafe('v4_task_dependencies', ['project_id', 'blocker_task_id'], 'idx_v4_task_deps_blocker');
-  console.log('  ✓ Task indexes (7)');
+  console.error('  ✓ Task indexes (7)');
 
   // File Change Indexes (3)
   await db.createIndexSafe('v4_file_changes', ['project_id', 'ts'], 'idx_v4_file_changes_ts', { desc: true });
   await db.createIndexSafe('v4_file_changes', ['project_id', 'file_id'], 'idx_v4_file_changes_file');
   await db.createIndexSafe('v4_file_changes', ['project_id', 'layer_id'], 'idx_v4_file_changes_layer');
-  console.log('  ✓ File change indexes (3)');
+  console.error('  ✓ File change indexes (3)');
 
   // Constraint Indexes (3)
   await db.createIndexSafe('v4_constraints', ['project_id', 'active', 'category_id'], 'idx_v4_constraints_active');
   await db.createIndexSafe('v4_constraints', ['project_id', 'priority'], 'idx_v4_constraints_priority', { desc: true });
   await db.createIndexSafe('v4_constraints', ['project_id', 'layer_id'], 'idx_v4_constraints_layer');
-  console.log('  ✓ Constraint indexes (3)');
+  console.error('  ✓ Constraint indexes (3)');
 
   // Tag Index Indexes (2)
   await db.createIndexSafe('v4_tag_index', ['project_id', 'tag'], 'idx_v4_tag_index_tag');
   await db.createIndexSafe('v4_tag_index', ['project_id', 'source_type', 'source_id'], 'idx_v4_tag_index_source');
-  console.log('  ✓ Tag index indexes (2)');
+  console.error('  ✓ Tag index indexes (2)');
 
   // Token Usage Indexes (2)
   await db.createIndexSafe('v4_token_usage', ['project_id', 'ts'], 'idx_v4_token_usage_ts', { desc: true });
   await db.createIndexSafe('v4_token_usage', ['project_id', 'tool_name', 'action_name'], 'idx_v4_token_usage_tool');
-  console.log('  ✓ Token usage indexes (2)');
+  console.error('  ✓ Token usage indexes (2)');
 
   // Help System Indexes (5)
   await db.createIndexSafe('v4_help_actions', ['tool_name'], 'idx_v4_help_actions_tool');
@@ -533,19 +533,19 @@ export async function up(knex: Knex): Promise<void> {
   await db.createIndexSafe('v4_help_action_examples', ['action_id'], 'idx_v4_help_action_examples_action');
   await db.createIndexSafe('v4_help_use_cases', ['category_id'], 'idx_v4_help_use_cases_category');
   await db.createIndexSafe('v4_help_use_cases', ['complexity'], 'idx_v4_help_use_cases_complexity');
-  console.log('  ✓ Help system indexes (5)');
+  console.error('  ✓ Help system indexes (5)');
 
   // Project Indexes (1)
   await db.createIndexSafe('v4_projects', ['last_active_ts'], 'idx_v4_projects_last_active', { desc: true });
-  console.log('  ✓ Project indexes (1)');
+  console.error('  ✓ Project indexes (1)');
 
-  console.log('🎉 Index creation completed! (30 indexes total)');
+  console.error('🎉 Index creation completed! (30 indexes total)');
 
   // ============================================================================
   // PART 3: SEED MASTER DATA
   // ============================================================================
 
-  console.log('🌱 Seeding master data...');
+  console.error('🌱 Seeding master data...');
 
   const insertIgnore = db.isPostgreSQL ? '' : db.isMySQL ? 'IGNORE' : 'OR IGNORE';
 
@@ -566,7 +566,7 @@ export async function up(knex: Knex): Promise<void> {
           (5, 'cross-cutting'), (6, 'documentation'), (7, 'planning'), (8, 'coordination'), (9, 'review')
       `);
     }
-    console.log('  ✓ Layers seeded (9)');
+    console.error('  ✓ Layers seeded (9)');
   }
 
   // 2. Seed v4_constraint_categories
@@ -584,7 +584,7 @@ export async function up(knex: Knex): Promise<void> {
           ('architecture'), ('security'), ('performance'), ('compatibility'), ('maintainability')
       `);
     }
-    console.log('  ✓ Constraint categories seeded (5)');
+    console.error('  ✓ Constraint categories seeded (5)');
   }
 
   // 3. Seed v4_task_statuses (7 statuses including rejected)
@@ -602,7 +602,7 @@ export async function up(knex: Knex): Promise<void> {
           (1, 'todo'), (2, 'in_progress'), (3, 'waiting_review'), (4, 'blocked'), (5, 'done'), (6, 'archived'), (7, 'rejected')
       `);
     }
-    console.log('  ✓ Task statuses seeded (7)');
+    console.error('  ✓ Task statuses seeded (7)');
   }
 
   // 4. Seed v4_projects (default project)
@@ -617,7 +617,7 @@ export async function up(knex: Knex): Promise<void> {
       created_ts: now,
       last_active_ts: now,
     });
-    console.log('  ✓ Default project created');
+    console.error('  ✓ Default project created');
   }
 
   // 5. Seed v4_tags (common development tags)
@@ -637,17 +637,17 @@ export async function up(knex: Knex): Promise<void> {
           (1, 'logging'), (1, 'performance'), (1, 'security'), (1, 'testing')
       `);
     }
-    console.log('  ✓ Common tags seeded (8)');
+    console.error('  ✓ Common tags seeded (8)');
   }
 
   // Note: Configuration is now in-memory (v4.0), no database table needed
   // Note: Help system seed data is in separate migration: 20251127000002_v4_seed_help_system.ts
 
-  console.log('🎉 v4.0 bootstrap migration completed!');
+  console.error('🎉 v4.0 bootstrap migration completed!');
 }
 
 export async function down(knex: Knex): Promise<void> {
-  console.log('🔄 Rolling back v4.0 bootstrap...');
+  console.error('🔄 Rolling back v4.0 bootstrap...');
 
   // Drop in reverse order to handle foreign key constraints
   const tables = [
@@ -667,5 +667,5 @@ export async function down(knex: Knex): Promise<void> {
     await knex.schema.dropTableIfExists(table);
   }
 
-  console.log('✅ v4.0 bootstrap rolled back successfully');
+  console.error('✅ v4.0 bootstrap rolled back successfully');
 }

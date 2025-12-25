@@ -43,7 +43,7 @@ async function batchInsert(knex: Knex, tableName: string, data: any[]): Promise<
 }
 
 export async function up(knex: Knex): Promise<void> {
-  console.log('🔧 Starting v3.7.3 master tables project_id fix...');
+  console.error('🔧 Starting v3.7.3 master tables project_id fix...');
 
   // ============================================================================
   // STEP 1: Data Consolidation (Consolidate project #2 into #1)
@@ -72,17 +72,17 @@ export async function up(knex: Knex): Promise<void> {
 
     // Perform consolidation ONLY for v3.7.0-v3.7.2 upgrades
     if (isV370UpgradeScenario) {
-      console.log(`🔄 Detected v3.7.0-v3.7.2 database - consolidating projects...`);
-      console.log(`   Project #1: "${existingProject1.name}" (fake name, empty)`);
-      console.log(`   Project #2: "${existingProject2.name}" (real project, has data)`);
-      console.log(`🔄 Consolidating project #2 into project #1...`);
+      console.error(`🔄 Detected v3.7.0-v3.7.2 database - consolidating projects...`);
+      console.error(`   Project #1: "${existingProject1.name}" (fake name, empty)`);
+      console.error(`   Project #2: "${existingProject2.name}" (real project, has data)`);
+      console.error(`🔄 Consolidating project #2 into project #1...`);
 
       // STEP 1: Temporarily rename project #2 to avoid conflict
       const tempName = `temp-${existingProject2.name}-${Date.now()}`;
       await knex('m_projects')
         .where({ id: 2 })
         .update({ name: tempName });
-      console.log(`  ✓ Temporarily renamed project #2 to "${tempName}"`);
+      console.error(`  ✓ Temporarily renamed project #2 to "${tempName}"`);
 
       // STEP 2: Rename project #1 to real detected name
       await knex('m_projects')
@@ -93,7 +93,7 @@ export async function up(knex: Knex): Promise<void> {
           detection_source: detected.source,
           last_active_ts: Math.floor(Date.now() / 1000)
         });
-      console.log(`  ✓ Renamed project #1 from "${existingProject1.name}" to "${detected.name}"`);
+      console.error(`  ✓ Renamed project #1 from "${existingProject1.name}" to "${detected.name}"`);
 
       // STEP 3: Migrate ALL data from project_id=2 → 1
       const tablesToUpdate = [
@@ -123,7 +123,7 @@ export async function up(knex: Knex): Promise<void> {
               .where({ project_id: 2 })
               .update({ project_id: 1 });
             if (count > 0) {
-              console.log(`  ✓ Migrated ${count} rows in ${tableName} (project_id: 2→1)`);
+              console.error(`  ✓ Migrated ${count} rows in ${tableName} (project_id: 2→1)`);
             }
           }
         }
@@ -131,12 +131,12 @@ export async function up(knex: Knex): Promise<void> {
 
       // STEP 4: Delete project #2
       await knex('m_projects').where({ id: 2 }).delete();
-      console.log(`  ✓ Deleted project #2 (data consolidated into project #1)`);
-      console.log(`✅ Consolidation complete - all data now in project #1 "${detected.name}"`);
+      console.error(`  ✓ Deleted project #2 (data consolidated into project #1)`);
+      console.error(`✅ Consolidation complete - all data now in project #1 "${detected.name}"`);
 
     } else if (existingProject1 && FAKE_NAMES.includes(existingProject1.name)) {
       // No project #2, just rename project #1
-      console.log(`🔄 Renaming project #1 from "${existingProject1.name}" to "${detected.name}"`);
+      console.error(`🔄 Renaming project #1 from "${existingProject1.name}" to "${detected.name}"`);
       await knex('m_projects')
         .where({ id: 1 })
         .update({
@@ -145,11 +145,11 @@ export async function up(knex: Knex): Promise<void> {
           detection_source: detected.source,
           last_active_ts: Math.floor(Date.now() / 1000)
         });
-      console.log(`✓ Project #1 renamed to "${detected.name}" (source: ${detected.source})`);
+      console.error(`✓ Project #1 renamed to "${detected.name}" (source: ${detected.source})`);
 
     } else if (existingProject1) {
       // User already has real name, don't change it
-      console.log(`✓ Project #1 already has real name: "${existingProject1.name}"`);
+      console.error(`✓ Project #1 already has real name: "${existingProject1.name}"`);
     }
   }
 
@@ -162,7 +162,7 @@ export async function up(knex: Knex): Promise<void> {
   const hasProjectIdInScopes = await knex.schema.hasColumn('m_scopes', 'project_id');
 
   if (hasProjectIdInFiles && hasProjectIdInTags && hasProjectIdInScopes) {
-    console.log('✓ Master tables already have project_id columns (migration previously applied)');
+    console.error('✓ Master tables already have project_id columns (migration previously applied)');
     return;
   }
 
@@ -172,7 +172,7 @@ export async function up(knex: Knex): Promise<void> {
 
   // After consolidation, all data is in project ID 1
   const defaultProjectId = 1;
-  console.log(`📌 Default project_id for master tables: ${defaultProjectId}`);
+  console.error(`📌 Default project_id for master tables: ${defaultProjectId}`);
 
   // ============================================================================
   // STEP 4: Disable Foreign Key Constraints (SQLite only)
@@ -203,7 +203,7 @@ export async function up(knex: Knex): Promise<void> {
       if (viewInfo.length > 0 && viewInfo[0].sql) {
         viewDefinitions[viewName] = viewInfo[0].sql;
         await knex.raw(`DROP VIEW IF EXISTS ${viewName}`);
-        console.log(`  ✓ Temporarily dropped view ${viewName}`);
+        console.error(`  ✓ Temporarily dropped view ${viewName}`);
       }
     }
 
@@ -231,14 +231,14 @@ export async function up(knex: Knex): Promise<void> {
         backupData[tableName] = data;
         // Drop table
         await knex.schema.dropTable(tableName);
-        console.log(`  ✓ Temporarily dropped ${tableName} (${data.length} rows backed up)`);
+        console.error(`  ✓ Temporarily dropped ${tableName} (${data.length} rows backed up)`);
       }
     }
 
     // Store backup data for later restoration
     (knex as any).__masterTableBackup = backupData;
 
-    console.log('✓ Disabled foreign key constraints, backed up views and referencing tables');
+    console.error('✓ Disabled foreign key constraints, backed up views and referencing tables');
   }
 
   // ============================================================================
@@ -246,15 +246,15 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   if (!hasProjectIdInFiles) {
-    console.log('🔧 Fixing m_files table...');
+    console.error('🔧 Fixing m_files table...');
 
     // Backup existing data
     const filesData = await knex('m_files').select('*');
-    console.log(`  Backed up ${filesData.length} rows from m_files`);
+    console.error(`  Backed up ${filesData.length} rows from m_files`);
 
     // Drop old table
     await knex.schema.dropTableIfExists('m_files');
-    console.log('  Dropped old m_files table');
+    console.error('  Dropped old m_files table');
 
     // Recreate with project_id
     const isMySQL = knex.client.config.client === 'mysql2';
@@ -266,7 +266,7 @@ export async function up(knex: Knex): Promise<void> {
       table.string('path', pathLength).notNullable();
       table.unique(['project_id', 'path']); // Composite UNIQUE
     });
-    console.log('  Created new m_files table with project_id');
+    console.error('  Created new m_files table with project_id');
 
     // Restore data with project_id (add foreign key later)
     if (filesData.length > 0) {
@@ -277,10 +277,10 @@ export async function up(knex: Knex): Promise<void> {
       }));
 
       await knex('m_files').insert(restoreData);
-      console.log(`  Restored ${restoreData.length} rows with project_id = ${defaultProjectId}`);
+      console.error(`  Restored ${restoreData.length} rows with project_id = ${defaultProjectId}`);
     }
 
-    console.log('✓ m_files table fixed');
+    console.error('✓ m_files table fixed');
   }
 
   // ============================================================================
@@ -288,15 +288,15 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   if (!hasProjectIdInTags) {
-    console.log('🔧 Fixing m_tags table...');
+    console.error('🔧 Fixing m_tags table...');
 
     // Backup existing data
     const tagsData = await knex('m_tags').select('*');
-    console.log(`  Backed up ${tagsData.length} rows from m_tags`);
+    console.error(`  Backed up ${tagsData.length} rows from m_tags`);
 
     // Drop old table
     await knex.schema.dropTableIfExists('m_tags');
-    console.log('  Dropped old m_tags table');
+    console.error('  Dropped old m_tags table');
 
     // Recreate with project_id
     await knex.schema.createTable('m_tags', (table) => {
@@ -305,7 +305,7 @@ export async function up(knex: Knex): Promise<void> {
       table.string('name', 100).notNullable();
       table.unique(['project_id', 'name']); // Composite UNIQUE
     });
-    console.log('  Created new m_tags table with project_id');
+    console.error('  Created new m_tags table with project_id');
 
     // Restore data with project_id (add foreign key later)
     if (tagsData.length > 0) {
@@ -316,10 +316,10 @@ export async function up(knex: Knex): Promise<void> {
       }));
 
       await knex('m_tags').insert(restoreData);
-      console.log(`  Restored ${restoreData.length} rows with project_id = ${defaultProjectId}`);
+      console.error(`  Restored ${restoreData.length} rows with project_id = ${defaultProjectId}`);
     }
 
-    console.log('✓ m_tags table fixed');
+    console.error('✓ m_tags table fixed');
   }
 
   // ============================================================================
@@ -327,15 +327,15 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   if (!hasProjectIdInScopes) {
-    console.log('🔧 Fixing m_scopes table...');
+    console.error('🔧 Fixing m_scopes table...');
 
     // Backup existing data
     const scopesData = await knex('m_scopes').select('*');
-    console.log(`  Backed up ${scopesData.length} rows from m_scopes`);
+    console.error(`  Backed up ${scopesData.length} rows from m_scopes`);
 
     // Drop old table
     await knex.schema.dropTableIfExists('m_scopes');
-    console.log('  Dropped old m_scopes table');
+    console.error('  Dropped old m_scopes table');
 
     // Recreate with project_id
     await knex.schema.createTable('m_scopes', (table) => {
@@ -344,7 +344,7 @@ export async function up(knex: Knex): Promise<void> {
       table.string('name', 200).notNullable();
       table.unique(['project_id', 'name']); // Composite UNIQUE
     });
-    console.log('  Created new m_scopes table with project_id');
+    console.error('  Created new m_scopes table with project_id');
 
     // Restore data with project_id (add foreign key later)
     if (scopesData.length > 0) {
@@ -355,10 +355,10 @@ export async function up(knex: Knex): Promise<void> {
       }));
 
       await knex('m_scopes').insert(restoreData);
-      console.log(`  Restored ${restoreData.length} rows with project_id = ${defaultProjectId}`);
+      console.error(`  Restored ${restoreData.length} rows with project_id = ${defaultProjectId}`);
     }
 
-    console.log('✓ m_scopes table fixed');
+    console.error('✓ m_scopes table fixed');
   }
 
   // ============================================================================
@@ -366,7 +366,7 @@ export async function up(knex: Knex): Promise<void> {
   // ============================================================================
 
   if (isSQLite && (knex as any).__masterTableBackup) {
-    console.log('🔄 Restoring referencing tables with updated foreign keys...');
+    console.error('🔄 Restoring referencing tables with updated foreign keys...');
     const backupData = (knex as any).__masterTableBackup;
 
     // Restore t_file_changes
@@ -386,7 +386,7 @@ export async function up(knex: Knex): Promise<void> {
         table.foreign('project_id').references('m_projects.id');
       });
       await batchInsert(knex, 't_file_changes', backupData['t_file_changes']);
-      console.log(`  ✓ Restored t_file_changes (${backupData['t_file_changes'].length} rows)`);
+      console.error(`  ✓ Restored t_file_changes (${backupData['t_file_changes'].length} rows)`);
     }
 
     // Restore t_task_file_links
@@ -402,7 +402,7 @@ export async function up(knex: Knex): Promise<void> {
         table.foreign('project_id').references('m_projects.id');
       });
       await batchInsert(knex, 't_task_file_links', backupData['t_task_file_links']);
-      console.log(`  ✓ Restored t_task_file_links (${backupData['t_task_file_links'].length} rows)`);
+      console.error(`  ✓ Restored t_task_file_links (${backupData['t_task_file_links'].length} rows)`);
     }
 
     // Restore t_decision_tags
@@ -415,7 +415,7 @@ export async function up(knex: Knex): Promise<void> {
         table.foreign('tag_id').references('m_tags.id');
       });
       await batchInsert(knex, 't_decision_tags', backupData['t_decision_tags']);
-      console.log(`  ✓ Restored t_decision_tags (${backupData['t_decision_tags'].length} rows)`);
+      console.error(`  ✓ Restored t_decision_tags (${backupData['t_decision_tags'].length} rows)`);
     }
 
     // Restore t_task_tags (filter out orphaned FK references)
@@ -430,7 +430,7 @@ export async function up(knex: Knex): Promise<void> {
 
       const orphanedCount = backupData['t_task_tags'].length - filteredTaskTags.length;
       if (orphanedCount > 0) {
-        console.log(`  ⚠️  Filtered ${orphanedCount} orphaned FK references in t_task_tags`);
+        console.error(`  ⚠️  Filtered ${orphanedCount} orphaned FK references in t_task_tags`);
       }
 
       await knex.schema.createTable('t_task_tags', (table) => {
@@ -442,7 +442,7 @@ export async function up(knex: Knex): Promise<void> {
         table.foreign('task_id').references('t_tasks.id');
       });
       await batchInsert(knex, 't_task_tags', filteredTaskTags);
-      console.log(`  ✓ Restored t_task_tags (${filteredTaskTags.length} rows)`);
+      console.error(`  ✓ Restored t_task_tags (${filteredTaskTags.length} rows)`);
     }
 
     // Restore t_decision_scopes
@@ -455,7 +455,7 @@ export async function up(knex: Knex): Promise<void> {
         table.foreign('scope_id').references('m_scopes.id');
       });
       await batchInsert(knex, 't_decision_scopes', backupData['t_decision_scopes']);
-      console.log(`  ✓ Restored t_decision_scopes (${backupData['t_decision_scopes'].length} rows)`);
+      console.error(`  ✓ Restored t_decision_scopes (${backupData['t_decision_scopes'].length} rows)`);
     }
 
     // Restore t_constraint_tags
@@ -468,7 +468,7 @@ export async function up(knex: Knex): Promise<void> {
         table.foreign('tag_id').references('m_tags.id');
       });
       await batchInsert(knex, 't_constraint_tags', backupData['t_constraint_tags']);
-      console.log(`  ✓ Restored t_constraint_tags (${backupData['t_constraint_tags'].length} rows)`);
+      console.error(`  ✓ Restored t_constraint_tags (${backupData['t_constraint_tags'].length} rows)`);
     }
 
     // Restore t_pruned_files if it existed
@@ -481,20 +481,20 @@ export async function up(knex: Knex): Promise<void> {
         table.foreign('task_id').references('t_tasks.id');
       });
       await batchInsert(knex, 't_pruned_files', backupData['t_pruned_files']);
-      console.log(`  ✓ Restored t_pruned_files (${backupData['t_pruned_files'].length} rows)`);
+      console.error(`  ✓ Restored t_pruned_files (${backupData['t_pruned_files'].length} rows)`);
     }
 
-    console.log('✅ All referencing tables restored with updated foreign keys');
+    console.error('✅ All referencing tables restored with updated foreign keys');
 
     // Restore views
     const viewDefinitions = (knex as any).__viewDefinitions;
     if (viewDefinitions && Object.keys(viewDefinitions).length > 0) {
-      console.log('🔄 Restoring views...');
+      console.error('🔄 Restoring views...');
       for (const [viewName, viewSql] of Object.entries(viewDefinitions)) {
         await knex.raw(viewSql as string);
-        console.log(`  ✓ Restored view ${viewName}`);
+        console.error(`  ✓ Restored view ${viewName}`);
       }
-      console.log('✅ All views restored');
+      console.error('✅ All views restored');
     }
   }
 
@@ -511,7 +511,7 @@ export async function up(knex: Knex): Promise<void> {
   // For MySQL/PostgreSQL, FK constraints can be added via ALTER TABLE safely.
 
   if (hasProjectsTable && !isSQLite) {
-    console.log('🔧 Adding foreign key constraints to master tables...');
+    console.error('🔧 Adding foreign key constraints to master tables...');
 
     // Add foreign key to m_files
     if (!hasProjectIdInFiles) {
@@ -519,12 +519,12 @@ export async function up(knex: Knex): Promise<void> {
         await knex.schema.alterTable('m_files', (table) => {
           table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
         });
-        console.log('  ✓ Added foreign key: m_files.project_id → m_projects.id');
+        console.error('  ✓ Added foreign key: m_files.project_id → m_projects.id');
       } catch (error: any) {
         if (!error.message.includes('already exists')) {
           throw error;
         }
-        console.log('  ✓ Foreign key already exists on m_files');
+        console.error('  ✓ Foreign key already exists on m_files');
       }
     }
 
@@ -534,12 +534,12 @@ export async function up(knex: Knex): Promise<void> {
         await knex.schema.alterTable('m_tags', (table) => {
           table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
         });
-        console.log('  ✓ Added foreign key: m_tags.project_id → m_projects.id');
+        console.error('  ✓ Added foreign key: m_tags.project_id → m_projects.id');
       } catch (error: any) {
         if (!error.message.includes('already exists')) {
           throw error;
         }
-        console.log('  ✓ Foreign key already exists on m_tags');
+        console.error('  ✓ Foreign key already exists on m_tags');
       }
     }
 
@@ -549,18 +549,18 @@ export async function up(knex: Knex): Promise<void> {
         await knex.schema.alterTable('m_scopes', (table) => {
           table.foreign('project_id').references('id').inTable('m_projects').onDelete('CASCADE');
         });
-        console.log('  ✓ Added foreign key: m_scopes.project_id → m_projects.id');
+        console.error('  ✓ Added foreign key: m_scopes.project_id → m_projects.id');
       } catch (error: any) {
         if (!error.message.includes('already exists')) {
           throw error;
         }
-        console.log('  ✓ Foreign key already exists on m_scopes');
+        console.error('  ✓ Foreign key already exists on m_scopes');
       }
     }
 
-    console.log('✅ All foreign key constraints added');
+    console.error('✅ All foreign key constraints added');
   } else if (isSQLite) {
-    console.log('✓ Skipped FK constraints for SQLite (defined during table creation)');
+    console.error('✓ Skipped FK constraints for SQLite (defined during table creation)');
   }
 
   // ============================================================================
@@ -569,10 +569,10 @@ export async function up(knex: Knex): Promise<void> {
 
   if (isSQLite) {
     await knex.raw('PRAGMA foreign_keys = ON');
-    console.log('✓ Re-enabled foreign key constraints');
+    console.error('✓ Re-enabled foreign key constraints');
   }
 
-  console.log('✅ v3.7.3 master tables project_id fix completed successfully');
+  console.error('✅ v3.7.3 master tables project_id fix completed successfully');
 }
 
 /**
@@ -582,13 +582,13 @@ export async function up(knex: Knex): Promise<void> {
  * Data from all projects will be merged (potential conflicts if same path/name exists).
  */
 export async function down(knex: Knex): Promise<void> {
-  console.log('⚠️  Rolling back v3.7.3 master tables fix...');
+  console.error('⚠️  Rolling back v3.7.3 master tables fix...');
 
   // Check if already rolled back
   const hasProjectIdInFiles = await knex.schema.hasColumn('m_files', 'project_id');
 
   if (!hasProjectIdInFiles) {
-    console.log('✓ Already rolled back (no project_id columns found)');
+    console.error('✓ Already rolled back (no project_id columns found)');
     return;
   }
 
@@ -599,7 +599,7 @@ export async function down(knex: Knex): Promise<void> {
   }
 
   // Rollback m_files
-  console.log('🔧 Rolling back m_files...');
+  console.error('🔧 Rolling back m_files...');
   const filesData = await knex('m_files').select('id', 'path');
   await knex.schema.dropTableIfExists('m_files');
 
@@ -617,11 +617,11 @@ export async function down(knex: Knex): Promise<void> {
       new Map(filesData.map(f => [f.path, f])).values()
     );
     await knex('m_files').insert(uniqueFiles);
-    console.log(`  Restored ${uniqueFiles.length} unique files (removed ${filesData.length - uniqueFiles.length} duplicates)`);
+    console.error(`  Restored ${uniqueFiles.length} unique files (removed ${filesData.length - uniqueFiles.length} duplicates)`);
   }
 
   // Rollback m_tags
-  console.log('🔧 Rolling back m_tags...');
+  console.error('🔧 Rolling back m_tags...');
   const tagsData = await knex('m_tags').select('id', 'name');
   await knex.schema.dropTableIfExists('m_tags');
 
@@ -635,11 +635,11 @@ export async function down(knex: Knex): Promise<void> {
       new Map(tagsData.map(t => [t.name, t])).values()
     );
     await knex('m_tags').insert(uniqueTags);
-    console.log(`  Restored ${uniqueTags.length} unique tags (removed ${tagsData.length - uniqueTags.length} duplicates)`);
+    console.error(`  Restored ${uniqueTags.length} unique tags (removed ${tagsData.length - uniqueTags.length} duplicates)`);
   }
 
   // Rollback m_scopes
-  console.log('🔧 Rolling back m_scopes...');
+  console.error('🔧 Rolling back m_scopes...');
   const scopesData = await knex('m_scopes').select('id', 'name');
   await knex.schema.dropTableIfExists('m_scopes');
 
@@ -653,12 +653,12 @@ export async function down(knex: Knex): Promise<void> {
       new Map(scopesData.map(s => [s.name, s])).values()
     );
     await knex('m_scopes').insert(uniqueScopes);
-    console.log(`  Restored ${uniqueScopes.length} unique scopes (removed ${scopesData.length - uniqueScopes.length} duplicates)`);
+    console.error(`  Restored ${uniqueScopes.length} unique scopes (removed ${scopesData.length - uniqueScopes.length} duplicates)`);
   }
 
   if (isSQLite) {
     await knex.raw('PRAGMA foreign_keys = ON');
   }
 
-  console.log('✅ Rollback completed (reverted to v3.7.2 schema)');
+  console.error('✅ Rollback completed (reverted to v3.7.2 schema)');
 }
