@@ -319,17 +319,17 @@ export async function queryHelpTool(adapter: DatabaseAdapter, tool: string): Pro
 export async function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: number): Promise<HelpUseCaseResult | { error: string }> {
   const knex = adapter.getKnex();
   try {
+    // Get use case basic info
     const row = await knex('v4_help_use_cases as uc')
-      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.category_id')
-      .where({ 'uc.use_case_id': use_case_id })
+      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.id')
+      .where({ 'uc.id': use_case_id })
       .select(
-        'uc.use_case_id',
+        'uc.id as use_case_id',
         'cat.category_name as category',
         'uc.title',
         'uc.complexity',
         'uc.description',
-        'uc.full_example',
-        'uc.action_sequence'
+        'uc.workflow'
       )
       .first() as {
       use_case_id: number;
@@ -337,12 +337,35 @@ export async function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: nu
       title: string;
       complexity: string;
       description: string;
-      full_example: string;
-      action_sequence: string;
+      workflow: string | null;
     } | undefined;
 
     if (!row) {
       return { error: `Use-case with ID ${use_case_id} not found` };
+    }
+
+    // Get action sequence from v4_help_action_sequences
+    const sequenceRows = await knex('v4_help_action_sequences as seq')
+      .join('v4_help_actions as act', 'seq.action_id', 'act.id')
+      .where({ 'seq.use_case_id': use_case_id })
+      .orderBy('seq.sequence_order', 'asc')
+      .select('act.tool_name', 'act.action_name') as Array<{
+      tool_name: string;
+      action_name: string;
+    }>;
+
+    // Build action sequence array (e.g., ["decision:set", "task:create"])
+    const actionSequence = sequenceRows.map(s => `${s.tool_name}:${s.action_name}`);
+
+    // Parse workflow as full_example if it's valid JSON, otherwise wrap it
+    let fullExample: any = null;
+    if (row.workflow) {
+      try {
+        fullExample = JSON.parse(row.workflow);
+      } catch {
+        // If not JSON, return as-is (might be plain text workflow description)
+        fullExample = { workflow: row.workflow };
+      }
     }
 
     return {
@@ -351,8 +374,8 @@ export async function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: nu
       title: row.title,
       complexity: row.complexity,
       description: row.description,
-      full_example: JSON.parse(row.full_example),
-      action_sequence: JSON.parse(row.action_sequence)
+      full_example: fullExample,
+      action_sequence: actionSequence
     };
 
   } catch (error) {
@@ -407,7 +430,7 @@ export async function queryHelpListUseCases(
 
     // Build filtered query
     let filteredQuery = knex('v4_help_use_cases as uc')
-      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.category_id');
+      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.id');
 
     if (category) {
       filteredQuery = filteredQuery.where({ 'cat.category_name': category });
@@ -423,7 +446,7 @@ export async function queryHelpListUseCases(
     // Get use-cases
     const rows = await filteredQuery
       .select(
-        'uc.use_case_id',
+        'uc.id as use_case_id',
         'uc.title',
         'uc.complexity',
         'cat.category_name as category'
@@ -435,7 +458,7 @@ export async function queryHelpListUseCases(
           WHEN 'advanced' THEN 3
         END
       `)
-      .orderBy('uc.use_case_id')
+      .orderBy('uc.id')
       .limit(limit)
       .offset(offset) as Array<{
       use_case_id: number;
@@ -482,26 +505,30 @@ export async function queryHelpListUseCases(
 export async function queryHelpNextActions(adapter: DatabaseAdapter, targetTool: string, targetAction: string): Promise<HelpNextActionsResult | { error: string }> {
   const knex = adapter.getKnex();
   try {
-    // Verify tool and action exist
+    // Verify tool and action exist and get action_id
     const actionRow = await knex('v4_help_actions')
       .where({ tool_name: targetTool, action_name: targetAction })
-      .select('action_id')
-      .first();
+      .select('id')
+      .first() as { id: number } | undefined;
 
     if (!actionRow) {
       return { error: `Action "${targetTool}.${targetAction}" not found in help system` };
     }
 
-    // Find use-cases containing this action in their sequence
-    const useCases = await knex('v4_help_use_cases')
-      .where('action_sequence', 'like', `%"${targetAction}"%`)
-      .select('action_sequence', 'title', 'complexity') as Array<{
-      action_sequence: string;
+    const targetActionId = actionRow.id;
+
+    // Find all sequence entries containing this action
+    // Then find the next action in sequence (sequence_order + 1)
+    const sequenceEntries = await knex('v4_help_action_sequences as seq1')
+      .join('v4_help_use_cases as uc', 'seq1.use_case_id', 'uc.id')
+      .where('seq1.action_id', targetActionId)
+      .select('seq1.use_case_id', 'seq1.sequence_order', 'uc.title') as Array<{
+      use_case_id: number;
+      sequence_order: number;
       title: string;
-      complexity: string;
     }>;
 
-    if (useCases.length === 0) {
+    if (sequenceEntries.length === 0) {
       return {
         tool: targetTool,
         action: targetAction,
@@ -509,19 +536,26 @@ export async function queryHelpNextActions(adapter: DatabaseAdapter, targetTool:
       };
     }
 
-    // Analyze sequences to find what typically comes next
+    // For each occurrence, find the next action in sequence
     const nextActionCounts: Map<string, { count: number; contexts: string[] }> = new Map();
 
-    for (const useCase of useCases) {
-      const sequence = JSON.parse(useCase.action_sequence) as string[];
-      const actionIndex = sequence.indexOf(targetAction);
+    for (const entry of sequenceEntries) {
+      // Find the action that comes after this one in the same use case
+      const nextSeqRow = await knex('v4_help_action_sequences as seq')
+        .join('v4_help_actions as act', 'seq.action_id', 'act.id')
+        .where({
+          'seq.use_case_id': entry.use_case_id,
+          'seq.sequence_order': entry.sequence_order + 1
+        })
+        .select('act.tool_name', 'act.action_name')
+        .first() as { tool_name: string; action_name: string } | undefined;
 
-      if (actionIndex >= 0 && actionIndex < sequence.length - 1) {
-        const nextAction = sequence[actionIndex + 1];
+      if (nextSeqRow) {
+        const nextAction = `${nextSeqRow.tool_name}:${nextSeqRow.action_name}`;
         const existing = nextActionCounts.get(nextAction) || { count: 0, contexts: [] };
         existing.count++;
         if (existing.contexts.length < 3) {
-          existing.contexts.push(useCase.title);
+          existing.contexts.push(entry.title);
         }
         nextActionCounts.set(nextAction, existing);
       }
@@ -532,9 +566,9 @@ export async function queryHelpNextActions(adapter: DatabaseAdapter, targetTool:
       .sort((a, b) => b[1].count - a[1].count)
       .slice(0, 5);
 
-    const totalUseCases = useCases.length;
+    const totalOccurrences = sequenceEntries.length;
     const next_actions: HelpNextAction[] = sortedActions.map(([nextAction, data]) => {
-      const percentage = (data.count / totalUseCases) * 100;
+      const percentage = (data.count / totalOccurrences) * 100;
       let frequency: string;
       if (percentage >= 66) frequency = 'very common';
       else if (percentage >= 33) frequency = 'common';

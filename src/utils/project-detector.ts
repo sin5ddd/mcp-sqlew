@@ -145,6 +145,10 @@ async function detectFromVCS(projectRoot: string): Promise<DetectedProject | nul
 /**
  * Detect project name from directory name (fallback)
  *
+ * Skips hidden directories (starting with '.') like .sqlew, .git, etc.
+ * This handles cases where --db-path points to ~/.sqlew/sqlew.db
+ * and we want to use the parent directory name (e.g., 'kitayama').
+ *
  * @param projectRoot - Project root directory
  * @returns Project name from directory
  */
@@ -153,11 +157,21 @@ function detectFromDirectory(projectRoot: string): DetectedProject {
   const pathSeparator = projectRoot.includes('/') ? '/' : sep;
   const dirSegments = projectRoot.split(pathSeparator).filter(s => s.length > 0);
 
-  // Extract last directory name, fallback to 'default' if empty
-  const dirName = dirSegments[dirSegments.length - 1] || 'default';
+  // Find the first non-hidden directory name from the end
+  // Skip directories starting with '.' (e.g., .sqlew, .git)
+  for (let i = dirSegments.length - 1; i >= 0; i--) {
+    const segment = dirSegments[i];
+    if (segment && !segment.startsWith('.')) {
+      return {
+        name: segment,
+        source: 'directory',
+      };
+    }
+  }
 
+  // Fallback to 'default' if all segments are hidden
   return {
-    name: dirName,
+    name: 'default',
     source: 'directory',
   };
 }

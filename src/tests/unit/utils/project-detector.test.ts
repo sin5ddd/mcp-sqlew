@@ -72,6 +72,39 @@ name = "my-test-project"
       assert.strictEqual(result.source, 'directory');
     });
 
+    it('should skip hidden directories like .sqlew', () => {
+      // Path ending with hidden directory (common when using --db-path)
+      const pathWithHidden = '/home/kitayama/.sqlew';
+
+      const result = detectProjectNameSync(pathWithHidden);
+
+      // Should skip .sqlew and use parent directory 'kitayama'
+      assert.strictEqual(result.name, 'kitayama');
+      assert.strictEqual(result.source, 'directory');
+    });
+
+    it('should skip multiple hidden directories', () => {
+      // Multiple hidden directories at the end
+      const pathWithMultipleHidden = '/home/kitayama/.config/.sqlew';
+
+      const result = detectProjectNameSync(pathWithMultipleHidden);
+
+      // Should skip .sqlew and .config, use 'kitayama'
+      assert.strictEqual(result.name, 'kitayama');
+      assert.strictEqual(result.source, 'directory');
+    });
+
+    it('should return default when all segments are hidden', () => {
+      // Only hidden directories
+      const onlyHidden = '/.hidden/.another';
+
+      const result = detectProjectNameSync(onlyHidden);
+
+      // Should fallback to 'default'
+      assert.strictEqual(result.name, 'default');
+      assert.strictEqual(result.source, 'directory');
+    });
+
     it('should handle empty path', () => {
       const result = detectProjectNameSync('');
 

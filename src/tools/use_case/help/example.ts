@@ -49,30 +49,17 @@ export function useCaseExample() {
         description: 'Retrieve a full use case with step-by-step workflow',
         code: `use_case({
   action: "get",
-  use_case_id: 7
+  use_case_id: 8
 })`,
         output: {
-          use_case_id: 7,
-          category: 'task_management',
-          title: 'Multi-Agent Task Coordination',
+          use_case_id: 8,
+          category: 'cross_tool_workflow',
+          title: 'Full feature implementation workflow',
           complexity: 'advanced',
-          description: 'Coordinate tasks across multiple agents with dependencies and decision tracking',
-          action_sequence: ['decision.set', 'task.create', 'task.link', 'task.add_dependency'],
+          description: 'Complete workflow from decision to implementation.',
+          action_sequence: [],  // Populated from v4_help_action_sequences if seeded
           full_example: {
-            workflow: [
-              {
-                step: 1,
-                action: 'decision.set',
-                description: 'Document architecture decision',
-                code: 'decision({ action: "set", key: "api-framework", value: "Express", ... })'
-              },
-              {
-                step: 2,
-                action: 'task.create',
-                description: 'Create implementation task',
-                code: 'task({ action: "create", title: "Implement API", assigned_agent: "backend-dev", ... })'
-              }
-            ]
+            workflow: '1. decision.set for architectural choice\n2. constraint.add for requirements\n3. task.create for implementation\n4. task.link to decision and constraint\n5. file.record for changes\n6. task.move to done'
           }
         }
       },
@@ -131,8 +118,8 @@ export function useCaseExample() {
     tips: [
       'Use search to quickly find scenarios matching your needs',
       'Start with basic complexity and progress to advanced',
-      'Check the action_sequence to understand the order of operations',
-      'The full_example field contains executable code snippets'
+      'Check the workflow field for step-by-step instructions',
+      'The full_example field contains the workflow details'
     ]
   };
 }
