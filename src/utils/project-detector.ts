@@ -154,8 +154,9 @@ async function detectFromVCS(projectRoot: string): Promise<DetectedProject | nul
  */
 function detectFromDirectory(projectRoot: string): DetectedProject {
   // Handle both Unix (/) and Windows (\) path separators
-  const pathSeparator = projectRoot.includes('/') ? '/' : sep;
-  const dirSegments = projectRoot.split(pathSeparator).filter(s => s.length > 0);
+  // Normalize: replace backslashes with forward slashes for consistent cross-platform parsing
+  const normalizedPath = projectRoot.replace(/\\/g, '/');
+  const dirSegments = normalizedPath.split('/').filter(s => s.length > 0);
 
   // Find the first non-hidden directory name from the end
   // Skip directories starting with '.' (e.g., .sqlew, .git)

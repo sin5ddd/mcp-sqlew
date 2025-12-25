@@ -23,7 +23,7 @@ let testDb: DatabaseAdapter;
  */
 async function createTestDatabase(): Promise<DatabaseAdapter> {
   // Use unique temp file for each test run to ensure clean state
-  const tmpDir = path.join(process.cwd(), 'src', '.sqlew', 'tmp');
+  const tmpDir = path.join(process.cwd(), '.sqlew', 'tmp');
   if (!fs.existsSync(tmpDir)) {
     fs.mkdirSync(tmpDir, { recursive: true });
   }

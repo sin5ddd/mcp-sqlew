@@ -84,10 +84,8 @@ function createDatabaseWithOldSchema(version: string, schema: string): string | 
   const dbPath = join(tmpDir, `test-v${version}.db`);
 
   try {
-    // Create temp directory
-    if (!existsSync(tmpDir)) {
-      mkdirSync(tmpDir, { recursive: true });
-    }
+    // Create temp directory (always call to ensure it exists - recursive: true is idempotent)
+    mkdirSync(tmpDir, { recursive: true });
 
     // Create database
     const db = new Database(dbPath);
