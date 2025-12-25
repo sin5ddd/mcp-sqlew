@@ -12,13 +12,13 @@ export function fileExample(): any {
         examples: [
           {
             scenario: 'Record file modification',
-            request: '{ action: "record", file_path: "src/api/users.ts", agent_name: "refactor-agent", change_type: "modified", layer: "business", description: "Added email validation" }',
+            request: '{ action: "record", file_path: "src/api/users.ts", change_type: "modified", layer: "business", description: "Added email validation" }',
             explanation: 'Track changes with layer and description'
           },
           {
-            scenario: 'Get recent changes by agent',
-            request: '{ action: "get", agent_name: "refactor-agent", limit: 10 }',
-            explanation: 'View what an agent has been working on'
+            scenario: 'Get recent changes by layer',
+            request: '{ action: "get", layer: "business", limit: 10 }',
+            explanation: 'View changes in a specific architecture layer'
           },
           {
             scenario: 'Track changes to specific file',
@@ -34,12 +34,12 @@ export function fileExample(): any {
             step: 1,
             action: 'Check if file is locked',
             request: '{ action: "check_lock", file_path: "src/database/schema.sql", lock_duration: 300 }',
-            result: '{ locked: false } or { locked: true, locked_by: "agent-name", locked_at: "timestamp" }'
+            result: '{ locked: false } or { locked: true, locked_at: "timestamp" }'
           },
           {
             step: 2,
             action: 'If not locked, record change (creates lock)',
-            request: '{ action: "record", file_path: "src/database/schema.sql", agent_name: "migration-agent", change_type: "modified" }'
+            request: '{ action: "record", file_path: "src/database/schema.sql", change_type: "modified" }'
           },
           {
             step: 3,
@@ -53,7 +53,7 @@ export function fileExample(): any {
           {
             scenario: 'Get all presentation layer changes',
             request: '{ action: "get", layer: "presentation", limit: 20 }',
-            explanation: 'View frontend/UI changes across agents'
+            explanation: 'View frontend/UI changes'
           },
           {
             scenario: 'Track infrastructure changes',
@@ -67,7 +67,7 @@ export function fileExample(): any {
         examples: [
           {
             scenario: 'Record multiple file changes atomically',
-            request: '{ action: "record_batch", file_changes: [{"file_path": "src/api.ts", "agent_name": "bot1", "change_type": "modified", "layer": "presentation"}, {"file_path": "src/types.ts", "agent_name": "bot1", "change_type": "modified", "layer": "data"}], atomic: true }',
+            request: '{ action: "record_batch", file_changes: [{"file_path": "src/api.ts", "change_type": "modified", "layer": "presentation"}, {"file_path": "src/types.ts", "change_type": "modified", "layer": "data"}], atomic: true }',
             explanation: 'All changes recorded or none (transaction)'
           }
         ]

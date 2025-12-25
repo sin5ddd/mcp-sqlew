@@ -8,6 +8,16 @@
 export function taskHelp(): any {
   return {
     tool: 'task',
+    deprecation: {
+      status: '⚠️ DEPRECATED as of v4.1.0',
+      reason: 'Claude Code now provides native TodoWrite tool and Plan Mode for task management',
+      alternatives: [
+        'Use TodoWrite tool for task tracking',
+        'Use Plan Mode for structured planning workflows'
+      ],
+      documentation: '/docs/TASK_SYSTEM_DEPRECATED.md',
+      note: 'Task tool remains functional for backward compatibility but will not receive new features'
+    },
     description: 'Kanban Task Watcher for managing tasks with AI-optimized lifecycle states',
     note: '💡 TIP: Use action: "example" to see comprehensive usage scenarios and real-world examples for all task actions.',
     important: '🚨 AUTOMATIC FILE WATCHING: Linking files to tasks activates automatic file change monitoring and acceptance criteria validation. You can save 300 tokens per file compared to registering watchers manually. See auto_file_tracking section below.',

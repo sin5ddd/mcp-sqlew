@@ -72,7 +72,7 @@ export function getConstraintSuggestHelp(): any {
           constraint_text: 'Optional: Alias for text parameter',
           tags: 'Optional: Array of tags to match',
           layer: 'Optional: Layer name for filtering and scoring',
-          priority: 'Optional: Priority level (1-4) for scoring',
+          priority: 'Optional: Priority level (low, medium, high, critical) for scoring',
           limit: 'Optional: Max suggestions (default: 5)',
           min_score: 'Optional: Minimum relevance score (default: 30)',
         },
@@ -103,7 +103,7 @@ export function getConstraintSuggestHelp(): any {
       by_tags:
         '{ action: "by_tags", target: "constraint", tags: ["api", "performance"], layer: "business" }',
       by_context:
-        '{ action: "by_context", target: "constraint", text: "database query", tags: ["sql"], layer: "data", priority: 3 }',
+        '{ action: "by_context", target: "constraint", text: "database query", tags: ["sql"], layer: "data", priority: "high" }',
       check_duplicate:
         '{ action: "check_duplicate", target: "constraint", text: "API response time must be under 100ms" }',
     },

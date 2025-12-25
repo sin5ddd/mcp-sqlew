@@ -92,12 +92,12 @@ const missingRequiredTests: ValidationTest[] = [
     expectedError: { missing_params: ['file_path'] }
   },
   {
-    name: 'file.record - missing agent_name and change_type',
+    name: 'file.record - missing change_type',
     tool: 'file',
     action: 'record',
     params: { file_path: '/test/file.ts' },
     shouldFail: true,
-    expectedError: { missing_params: ['agent_name', 'change_type'] }
+    expectedError: { missing_params: ['change_type'] }  // agent_name optional since v4.1.2
   },
   {
     name: 'constraint.add - missing category',
