@@ -33,8 +33,8 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run tests (verbose for debugging)
-        run: npx tsx --test --test-force-exit src/tests/unit/**/*.test.ts src/tests/feature/**/*.test.ts src/tests/database/**/*.test.ts src/tests/integration/**/*.test.ts
+      - name: Run tests
+        run: npm test
         env:
           CI: true
 
