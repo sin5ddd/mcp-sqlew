@@ -22,14 +22,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createHash } from 'crypto';
 import type { Knex } from 'knex';
 import { runTestsOnAllDatabases, assertConstraintActive } from './test-harness.js';
-
-// Helper function to generate SHA256 hash of constraint_text
-function hashConstraintText(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
-}
 
 runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
   let projectId: number;
@@ -49,6 +43,20 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
   let tagApiId: number;
   let tagPerformanceId: number;
   let tagSecurityId: number;
+
+  // ============================================================================
+  // Cross-database compatible insert helper
+  // ============================================================================
+  // PostgreSQL doesn't return insert ID like MySQL/MariaDB, so we query after insert
+  async function insertConstraint(db: Knex, data: Record<string, any>): Promise<number> {
+    const constraintText = data.constraint_text;
+    await db('v4_constraints').insert(data);
+    const inserted = await db('v4_constraints')
+      .where({ constraint_text: constraintText, project_id: data.project_id })
+      .orderBy('id', 'desc')
+      .first();
+    return inserted.id;
+  }
 
   // ============================================================================
   // Setup: Get Master Data IDs
@@ -80,85 +88,25 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
     crossCuttingLayerId = crossCuttingLayer.id;
 
     // Get or create constraint categories
-    const architectureCategory = await db('v4_constraint_categories')
-      .where({ name: 'architecture' })
-      .first();
-    if (!architectureCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'architecture' });
-      categoryArchitectureId = id;
-    } else {
-      categoryArchitectureId = architectureCategory.id;
-    }
+    // Note: Use query-after-insert pattern for cross-database compatibility
+    // (PostgreSQL doesn't return insert ID like MySQL/MariaDB)
+    const getOrCreateCategory = async (name: string): Promise<number> => {
+      let category = await db('v4_constraint_categories').where({ name }).first();
+      if (!category) {
+        await db('v4_constraint_categories').insert({ name });
+        category = await db('v4_constraint_categories').where({ name }).first();
+      }
+      return category.id;
+    };
 
-    const securityCategory = await db('v4_constraint_categories')
-      .where({ name: 'security' })
-      .first();
-    if (!securityCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'security' });
-      categorySecurityId = id;
-    } else {
-      categorySecurityId = securityCategory.id;
-    }
-
-    const testingCategory = await db('v4_constraint_categories')
-      .where({ name: 'testing' })
-      .first();
-    if (!testingCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'testing' });
-      categoryTestingId = id;
-    } else {
-      categoryTestingId = testingCategory.id;
-    }
-
-    const performanceCategory = await db('v4_constraint_categories')
-      .where({ name: 'performance' })
-      .first();
-    if (!performanceCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'performance' });
-      categoryPerformanceId = id;
-    } else {
-      categoryPerformanceId = performanceCategory.id;
-    }
-
-    const styleCategory = await db('v4_constraint_categories')
-      .where({ name: 'style' })
-      .first();
-    if (!styleCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'style' });
-      categoryStyleId = id;
-    } else {
-      categoryStyleId = styleCategory.id;
-    }
-
-    const codeStyleCategory = await db('v4_constraint_categories')
-      .where({ name: 'code-style' })
-      .first();
-    if (!codeStyleCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'code-style' });
-      categoryCodeStyleId = id;
-    } else {
-      categoryCodeStyleId = codeStyleCategory.id;
-    }
-
-    const obsoleteCategory = await db('v4_constraint_categories')
-      .where({ name: 'obsolete' })
-      .first();
-    if (!obsoleteCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'obsolete' });
-      categoryObsoleteId = id;
-    } else {
-      categoryObsoleteId = obsoleteCategory.id;
-    }
-
-    const criticalCategory = await db('v4_constraint_categories')
-      .where({ name: 'critical' })
-      .first();
-    if (!criticalCategory) {
-      const [id] = await db('v4_constraint_categories').insert({ name: 'critical' });
-      categoryTestId = id;
-    } else {
-      categoryTestId = criticalCategory.id;
-    }
+    categoryArchitectureId = await getOrCreateCategory('architecture');
+    categorySecurityId = await getOrCreateCategory('security');
+    categoryTestingId = await getOrCreateCategory('testing');
+    categoryPerformanceId = await getOrCreateCategory('performance');
+    categoryStyleId = await getOrCreateCategory('style');
+    categoryCodeStyleId = await getOrCreateCategory('code-style');
+    categoryObsoleteId = await getOrCreateCategory('obsolete');
+    categoryTestId = await getOrCreateCategory('critical');
 
     // Get tag IDs
     const testTag = await db('v4_tags').where({ name: 'test', project_id: projectId }).first();
@@ -187,9 +135,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const db = getDb();
 
       const constraintText1 = 'All API endpoints must use async/await';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintText1,
-        constraint_text_hash: hashConstraintText(constraintText1),
         category_id: categoryCodeStyleId,
         priority: 3, // high
         layer_id: businessLayerId,
@@ -214,9 +161,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const db = getDb();
 
       const constraintTextDb = 'Database queries must use parameterized statements';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintTextDb,
-        constraint_text_hash: hashConstraintText(constraintTextDb),
         category_id: categorySecurityId,
         priority: 4, // critical
         layer_id: dataLayerId,
@@ -240,9 +186,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Priority 1 (low)
       const constraintTextLow = 'Low priority rule';
-      const [p1Id] = await db('v4_constraints').insert({
+      const p1Id = await insertConstraint(db, {
         constraint_text: constraintTextLow,
-        constraint_text_hash: hashConstraintText(constraintTextLow),
         category_id: categoryStyleId,
         priority: 1,
         layer_id: presentationLayerId,
@@ -253,9 +198,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Priority 4 (critical)
       const constraintTextCritical = 'Critical security rule';
-      const [p4Id] = await db('v4_constraints').insert({
+      const p4Id = await insertConstraint(db, {
         constraint_text: constraintTextCritical,
-        constraint_text_hash: hashConstraintText(constraintTextCritical),
         category_id: categorySecurityId,
         priority: 4,
         layer_id: businessLayerId,
@@ -290,9 +234,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Insert constraint
       const constraintTextUnitTests = 'All components must have unit tests';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintTextUnitTests,
-        constraint_text_hash: hashConstraintText(constraintTextUnitTests),
         category_id: categoryTestingId,
         priority: 3,
         layer_id: crossCuttingLayerId,
@@ -302,19 +245,20 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       });
 
       // Associate with tags
-      await db('t_constraint_tags').insert([
+      await db('v4_constraint_tags').insert([
         { constraint_id: constraintId, tag_id: tagTestId },
         { constraint_id: constraintId, tag_id: tagPerformanceId },
       ]);
 
       // Verify tag associations
-      const tagAssociations = await db('t_constraint_tags')
+      const tagAssociations = await db('v4_constraint_tags')
         .where({ constraint_id: constraintId })
         .count('* as count')
         .first();
 
       assert.ok(tagAssociations, 'Tag associations query should return result');
-      assert.strictEqual(tagAssociations.count, 2, 'Should have 2 tag associations');
+      // Note: PostgreSQL returns count as BigInt (string), MySQL returns number
+      assert.strictEqual(Number(tagAssociations.count), 2, 'Should have 2 tag associations');
     });
   });
 
@@ -330,7 +274,7 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const constraintTextBusiness = 'Business layer rule';
       await db('v4_constraints').insert({
         constraint_text: constraintTextBusiness,
-        constraint_text_hash: hashConstraintText(constraintTextBusiness),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: categoryArchitectureId,
         priority: 3,
         layer_id: businessLayerId,
@@ -342,7 +286,7 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const constraintTextData = 'Data layer rule';
       await db('v4_constraints').insert({
         constraint_text: constraintTextData,
-        constraint_text_hash: hashConstraintText(constraintTextData),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: categoryArchitectureId,
         priority: 3,
         layer_id: dataLayerId,
@@ -366,7 +310,7 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const constraintTextSecurity = 'Security constraint';
       await db('v4_constraints').insert({
         constraint_text: constraintTextSecurity,
-        constraint_text_hash: hashConstraintText(constraintTextSecurity),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: categorySecurityId,
         priority: 4,
         layer_id: businessLayerId,
@@ -378,7 +322,7 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const constraintTextPerformance = 'Performance constraint';
       await db('v4_constraints').insert({
         constraint_text: constraintTextPerformance,
-        constraint_text_hash: hashConstraintText(constraintTextPerformance),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: categoryPerformanceId,
         priority: 3,
         layer_id: businessLayerId,
@@ -402,7 +346,7 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const constraintTextHighPriority = 'High priority constraint';
       await db('v4_constraints').insert({
         constraint_text: constraintTextHighPriority,
-        constraint_text_hash: hashConstraintText(constraintTextHighPriority),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: categoryTestId,
         priority: 4,
         layer_id: businessLayerId,
@@ -414,7 +358,7 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const constraintTextLowPriority = 'Low priority constraint';
       await db('v4_constraints').insert({
         constraint_text: constraintTextLowPriority,
-        constraint_text_hash: hashConstraintText(constraintTextLowPriority),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: categoryStyleId,
         priority: 1,
         layer_id: presentationLayerId,
@@ -437,9 +381,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Insert constraint
       const constraintTextTagged = 'Tagged constraint 1';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintTextTagged,
-        constraint_text_hash: hashConstraintText(constraintTextTagged),
         category_id: categoryTestingId,
         priority: 2,
         layer_id: businessLayerId,
@@ -449,20 +392,20 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       });
 
       // Associate with tags
-      await db('t_constraint_tags').insert([
+      await db('v4_constraint_tags').insert([
         { constraint_id: constraintId, tag_id: tagApiId },
         { constraint_id: constraintId, tag_id: tagTestId },
       ]);
 
       // Filter by api tag
       const apiTaggedConstraints = await db('v4_constraints')
-        .join('t_constraint_tags', 't_constraints.id', 't_constraint_tags.constraint_id')
+        .join('v4_constraint_tags', 'v4_constraints.id', 'v4_constraint_tags.constraint_id')
         .where({
-          't_constraint_tags.tag_id': tagApiId,
-          't_constraints.active': 1,
-          't_constraints.project_id': projectId,
+          'v4_constraint_tags.tag_id': tagApiId,
+          'v4_constraints.active': 1,
+          'v4_constraints.project_id': projectId,
         })
-        .select('t_constraints.*');
+        .select('v4_constraints.*');
 
       const apiConstraint = apiTaggedConstraints.find(c => c.constraint_text === 'Tagged constraint 1');
       assert.ok(apiConstraint, 'Should find api-tagged constraint');
@@ -473,9 +416,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Add and immediately deactivate a constraint
       const constraintTextDeactivated = 'Deactivated constraint';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintTextDeactivated,
-        constraint_text_hash: hashConstraintText(constraintTextDeactivated),
         category_id: categoryObsoleteId,
         priority: 2,
         layer_id: businessLayerId,
@@ -509,9 +451,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Add constraint
       const constraintTextToDeactivate = 'Constraint to deactivate';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintTextToDeactivate,
-        constraint_text_hash: hashConstraintText(constraintTextToDeactivate),
         category_id: categoryTestingId,
         priority: 2,
         layer_id: businessLayerId,
@@ -540,9 +481,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Add and deactivate
       const constraintTextReDeactivate = 'Re-deactivate test';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintTextReDeactivate,
-        constraint_text_hash: hashConstraintText(constraintTextReDeactivate),
         category_id: categoryTestingId,
         priority: 2,
         layer_id: businessLayerId,
@@ -576,7 +516,7 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const constraintTextFkCategory = 'Test constraint';
       const insertPromise = db('v4_constraints').insert({
         constraint_text: constraintTextFkCategory,
-        constraint_text_hash: hashConstraintText(constraintTextFkCategory),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: 99999, // Non-existent category
         priority: 2,
         layer_id: businessLayerId,
@@ -598,15 +538,18 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       );
     });
 
-    it('should enforce UNIQUE constraint on (constraint_text, project_id)', async () => {
+    // NOTE: v4 schema intentionally does NOT have UNIQUE constraint on (constraint_text, project_id)
+    // In v3, uniqueness was enforced via constraint_text_hash column (SHA-256 hash of TEXT)
+    // v4 relies on application-level duplicate detection via the suggest tool (check_duplicate action)
+    // This test verifies that duplicate constraint texts ARE allowed at the database level
+    it('should allow duplicate constraint_text in v4 schema (uniqueness via app layer)', async () => {
       const db = getDb();
 
-      const constraintTextValue = `Unique constraint test ${Date.now()}`;
+      const constraintTextValue = `Duplicate allowed test ${Date.now()}`;
 
       // Insert first constraint
       await db('v4_constraints').insert({
         constraint_text: constraintTextValue,
-        constraint_text_hash: hashConstraintText(constraintTextValue),
         category_id: categoryTestingId,
         priority: 3,
         layer_id: businessLayerId,
@@ -615,10 +558,9 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         ts: Math.floor(Date.now() / 1000),
       });
 
-      // Try to insert duplicate
-      const duplicatePromise = db('v4_constraints').insert({
+      // Insert "duplicate" - should succeed in v4
+      await db('v4_constraints').insert({
         constraint_text: constraintTextValue, // Same constraint_text
-        constraint_text_hash: hashConstraintText(constraintTextValue),
         category_id: categoryTestingId,
         priority: 3,
         layer_id: businessLayerId,
@@ -627,14 +569,12 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
         ts: Math.floor(Date.now() / 1000),
       });
 
-      await assert.rejects(
-        duplicatePromise,
-        (error: any) => {
-          const msg = error.message.toLowerCase();
-          return msg.includes('unique') || msg.includes('duplicate');
-        },
-        'Should throw UNIQUE constraint error'
-      );
+      // Verify both were inserted
+      const constraints = await db('v4_constraints')
+        .where({ constraint_text: constraintTextValue, project_id: projectId })
+        .select('id');
+
+      assert.strictEqual(constraints.length, 2, 'Should allow duplicate constraint_text in v4 schema');
     });
   });
 
@@ -647,9 +587,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const db = getDb();
       const longRule = 'A'.repeat(500) + ' - This is a very long constraint rule';
 
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: longRule,
-        constraint_text_hash: hashConstraintText(longRule),
         category_id: categoryTestingId,
         priority: 2,
         layer_id: businessLayerId,
@@ -671,9 +610,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const db = getDb();
       const specialRule = "Rule with 'quotes', \"double quotes\", and \\backslashes";
 
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: specialRule,
-        constraint_text_hash: hashConstraintText(specialRule),
         category_id: categoryTestingId,
         priority: 2,
         layer_id: businessLayerId,
@@ -695,9 +633,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
       const db = getDb();
       const unicodeText = '日本語のルール: Unicode support test 🎯';
 
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: unicodeText,
-        constraint_text_hash: hashConstraintText(unicodeText),
         category_id: categoryTestingId,
         priority: 2,
         layer_id: businessLayerId,
@@ -734,9 +671,8 @@ runTestsOnAllDatabases('Constraint Operations', (getDb, dbType) => {
 
       // Insert test constraint
       const constraintTextViewTest = 'View test constraint';
-      const [constraintId] = await db('v4_constraints').insert({
+      const constraintId = await insertConstraint(db, {
         constraint_text: constraintTextViewTest,
-        constraint_text_hash: hashConstraintText(constraintTextViewTest),
         category_id: categoryArchitectureId,
         priority: 3,
         layer_id: businessLayerId,

@@ -387,20 +387,16 @@ describe('Comprehensive Batch Validation Test Suite', () => {
       );
     });
 
-    it('should reject batch with missing agent_name', async () => {
+    // agent_name is optional since v4.1.2 (legacy sub-agent system removed)
+    it('should accept batch without agent_name (optional since v4.1.2)', async () => {
       const file_changes = [
-        { file_path: 'src/test.ts', change_type: 'created' as const } as any, // Missing agent_name
+        { file_path: 'src/optional-agent-test.ts', change_type: 'created' as const },
       ];
 
-      await assert.rejects(
-        async () => await recordFileChangeBatch({ file_changes }, adapter),
-        (error: Error) => {
-          assert.ok(error.message.includes('Batch validation failed'));
-          assert.ok(error.message.includes('agent_name'));
-          assert.ok(error.message.includes('required') || error.message.includes('missing'));
-          return true;
-        }
-      );
+      // Should NOT reject - agent_name is now optional
+      const result = await recordFileChangeBatch({ file_changes }, adapter);
+      assert.ok(result.success, 'Batch should succeed without agent_name');
+      assert.strictEqual(result.inserted, 1, 'Should insert 1 file change');
     });
 
     it('should reject batch with missing change_type', async () => {

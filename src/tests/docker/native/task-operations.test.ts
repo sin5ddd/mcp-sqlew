@@ -16,19 +16,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import type { Knex } from 'knex';
-import { createHash } from 'crypto';
 import { runTestsOnAllDatabases, getLayerId, getTagId } from './test-harness.js';
-
-// ============================================================================
-// Hash Helper
-// ============================================================================
-
-/**
- * Generate SHA256 hash for constraint text (used for UNIQUE constraint)
- */
-function hashConstraintText(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
-}
 
 // ============================================================================
 // Test Helpers
@@ -750,13 +738,13 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       // Create a decision
       const layerId = await getLayerId(db, 'business');
 
-      // m_context_keys has no project_id column
+      // v4_context_keys has no project_id column
       await db('v4_context_keys').insert({
-        key: 'test/link-decision',
+        key_name: 'test/link-decision',
       });
 
       const contextKey = await db('v4_context_keys')
-        .where({ key: 'test/link-decision' })
+        .where({ key_name: 'test/link-decision' })
         .first();
 
       await db('v4_decisions').insert({
@@ -850,7 +838,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const constraintText = 'Test constraint for linking';
       await db('v4_constraints').insert({
         constraint_text: constraintText,
-        constraint_text_hash: hashConstraintText(constraintText),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: category.id,
         priority: 2,
         project_id: 1,
@@ -864,13 +852,13 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         .first();
 
       // Link task to constraint
-      await db('t_task_constraint_links').insert({
+      await db('v4_task_constraint_links').insert({
         task_id: taskId,
         constraint_id: constraint.id,
       });
 
       // Verify link
-      const link = await db('t_task_constraint_links')
+      const link = await db('v4_task_constraint_links')
         .where({ task_id: taskId, constraint_id: constraint.id })
         .first();
 
@@ -891,7 +879,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       const constraintText = 'Cascade test constraint';
       await db('v4_constraints').insert({
         constraint_text: constraintText,
-        constraint_text_hash: hashConstraintText(constraintText),
+        // Note: v4 schema does not have constraint_text_hash column
         category_id: category.id,
         priority: 2,
         project_id: 1,
@@ -904,7 +892,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
         .where({ constraint_text: constraintText, project_id: 1 })
         .first();
 
-      await db('t_task_constraint_links').insert({
+      await db('v4_task_constraint_links').insert({
         task_id: taskId,
         constraint_id: constraint.id,
       });
@@ -913,7 +901,7 @@ runTestsOnAllDatabases('Task Operations', (getDb, dbType) => {
       await db('v4_tasks').where({ id: taskId }).delete();
 
       // Verify links were cascade deleted
-      const links = await db('t_task_constraint_links').where({ task_id: taskId });
+      const links = await db('v4_task_constraint_links').where({ task_id: taskId });
       assert.strictEqual(links.length, 0, 'Task-constraint links should be cascade deleted');
     });
   });
