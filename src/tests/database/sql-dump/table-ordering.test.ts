@@ -24,8 +24,9 @@
  * - End-to-end test: Validate with full production schema (requires maintenance)
  */
 
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, afterEach, before } from 'node:test';
 import assert from 'node:assert';
+import { mkdirSync } from 'node:fs';
 import { getTableDependencies, topologicalSort } from '../../../utils/sql-dump/index.js';
 import { connectDb, disconnectDb, getDbConfig, dropAllTables } from '../../utils/test-helpers.js';
 import { Knex } from 'knex';
@@ -33,6 +34,11 @@ import { Knex } from 'knex';
 describe('Topological Sort Unit Tests', () => {
   // Generate unique database path for this test suite to avoid conflicts
   const TEST_DB_PATH = `.tmp-test/table-ordering-${Date.now()}.db`;
+
+  // Ensure test directory exists
+  before(() => {
+    mkdirSync('.tmp-test', { recursive: true });
+  });
 
   describe('topologicalSort() - Pure Algorithm Tests', () => {
     it('should handle empty table list', () => {
