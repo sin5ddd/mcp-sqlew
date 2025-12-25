@@ -320,7 +320,7 @@ export async function queryHelpUseCase(adapter: DatabaseAdapter, use_case_id: nu
   const knex = adapter.getKnex();
   try {
     const row = await knex('v4_help_use_cases as uc')
-      .join('v4_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id')
+      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.category_id')
       .where({ 'uc.use_case_id': use_case_id })
       .select(
         'uc.use_case_id',
@@ -380,13 +380,13 @@ export async function queryHelpListUseCases(
 
     if (category) {
       // Verify category exists
-      const categoryExists = await knex('v4_help_use_case_categories')
+      const categoryExists = await knex('v4_help_use_case_cats')
         .where({ category_name: category })
         .select('category_name')
         .first();
 
       if (!categoryExists) {
-        const availableCategories = await knex('v4_help_use_case_categories')
+        const availableCategories = await knex('v4_help_use_case_cats')
           .select('category_name')
           .orderBy('category_name')
           .then(rows => rows.map((row: any) => row.category_name));
@@ -407,7 +407,7 @@ export async function queryHelpListUseCases(
 
     // Build filtered query
     let filteredQuery = knex('v4_help_use_cases as uc')
-      .join('v4_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id');
+      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.category_id');
 
     if (category) {
       filteredQuery = filteredQuery.where({ 'cat.category_name': category });
@@ -459,7 +459,7 @@ export async function queryHelpListUseCases(
 
     // Add available categories if no category filter
     if (!category) {
-      const categories = await knex('v4_help_use_case_categories')
+      const categories = await knex('v4_help_use_case_cats')
         .select('category_name')
         .orderBy('category_name')
         .then(rows => rows.map((row: any) => row.category_name));

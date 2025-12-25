@@ -42,7 +42,56 @@ export async function aggregateNumericDecisions(
 ): Promise<AggregationResult & { aggregation: AggregationType; pattern: string }> {
   const projectId = getProjectContext().getProjectId();
 
-  // Build base query
+  // For 'count' aggregation, include both numeric and text decisions
+  // This provides more intuitive behavior when users want to count all decisions
+  if (aggregation === 'count') {
+    // Build query for v4_decisions (text decisions only)
+    // Note: v4_decisions may have rows for numeric decisions with empty value
+    // so we filter to only count non-empty text values
+    let textQuery = knex('v4_decisions as d')
+      .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
+      .where('ck.key_name', 'like', keyPattern)
+      .where('d.status', 1)
+      .where('d.project_id', projectId)
+      .whereNotNull('d.value')
+      .where('d.value', '!=', '');
+
+    // Build query for v4_decisions_numeric (numeric decisions)
+    let numericQuery = knex('v4_decisions_numeric as dn')
+      .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+      .where('ck.key_name', 'like', keyPattern)
+      .where('dn.status', 1)
+      .where('dn.project_id', projectId);
+
+    // Add layer filter if provided
+    if (layer) {
+      textQuery = textQuery
+        .join('v4_layers as l', 'd.layer_id', 'l.id')
+        .where('l.name', layer);
+      numericQuery = numericQuery
+        .join('v4_layers as l', 'dn.layer_id', 'l.id')
+        .where('l.name', layer);
+    }
+
+    const [textResult, numericResult] = await Promise.all([
+      textQuery.count('* as count').first(),
+      numericQuery.count('* as count').first(),
+    ]) as [{ count: number | string } | undefined, { count: number | string } | undefined];
+
+    const totalCount = Number(textResult?.count ?? 0) + Number(numericResult?.count ?? 0);
+
+    return {
+      pattern: keyPattern,
+      aggregation,
+      count: totalCount,
+      min_value: null,
+      max_value: null,
+      avg_value: null,
+      sum_value: null,
+    };
+  }
+
+  // For other aggregations (avg, sum, min, max), use numeric decisions only
   let query = knex('v4_decisions_numeric as dn')
     .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
     .where('ck.key_name', 'like', keyPattern)

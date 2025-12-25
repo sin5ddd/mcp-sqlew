@@ -97,6 +97,12 @@ function calculateKeySimilarity(key1: string, key2: string): number {
   // Exact match
   if (key1 === key2) return 20;
 
+  // Hierarchical prefix match (e.g., "yurika" matches "yurika/xxx")
+  // Important for category-style searches where users search by namespace
+  if (key2.startsWith(key1 + '/') || key1.startsWith(key2 + '/')) {
+    return 20; // Strong match - treat as near-exact match
+  }
+
   // Common prefix (e.g., "security/jwt" vs "security/oauth")
   const prefix = commonPrefix(key1, key2);
   const prefixScore = Math.min(prefix.length * 2, 10);
