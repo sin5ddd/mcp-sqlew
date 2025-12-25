@@ -24,9 +24,7 @@ let testDb: DatabaseAdapter;
 async function createTestDatabase(): Promise<DatabaseAdapter> {
   // Use unique temp file for each test run to ensure clean state
   const tmpDir = path.join(process.cwd(), '.sqlew', 'tmp');
-  if (!fs.existsSync(tmpDir)) {
-    fs.mkdirSync(tmpDir, { recursive: true });
-  }
+  fs.mkdirSync(tmpDir, { recursive: true }); // recursive: true is idempotent
   const dbPath = path.join(tmpDir, `test-auto-pruning-${Date.now()}.db`);
 
   const adapter = await initializeDatabase({

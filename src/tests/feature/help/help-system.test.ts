@@ -19,6 +19,8 @@ import {
   queryHelpNextActions
 } from '../../../tools/help-queries.js';
 import { estimateTokens } from '../../../utils/token-estimation.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Test configuration
 const TEST_TOOLS = ['decision', 'task', 'message', 'file', 'constraint', 'config'];
@@ -45,7 +47,9 @@ export async function runHelpSystemTests(): Promise<{
   let failed = 0;
 
   // Initialize database
-  const dbPath = process.env.DB_PATH || 'src/.sqlew/tmp/test-knex.db';
+  const dbPath = process.env.DB_PATH || '.sqlew/tmp/test-knex.db';
+  const dbDir = path.dirname(dbPath);
+  fs.mkdirSync(dbDir, { recursive: true }); // recursive: true is idempotent
   await initializeDatabase({
     databaseType: 'sqlite',
     connection: { filename: dbPath }

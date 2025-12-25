@@ -39,9 +39,7 @@ describe('Modular Context Implementation Tests', () => {
   before(async () => {
     // Clean up test database
     const dbDir = path.dirname(TEST_DB_PATH);
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
+    fs.mkdirSync(dbDir, { recursive: true }); // recursive: true is idempotent
     if (fs.existsSync(TEST_DB_PATH)) {
       fs.unlinkSync(TEST_DB_PATH);
     }

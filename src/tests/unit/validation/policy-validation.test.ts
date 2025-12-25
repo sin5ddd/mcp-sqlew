@@ -30,10 +30,7 @@ describe('Policy Validation Tests', () => {
   before(async () => {
     // Create temporary test database
     const testDbDir = path.dirname(TEST_DB_PATH);
-
-    if (!fs.existsSync(testDbDir)) {
-      fs.mkdirSync(testDbDir, { recursive: true });
-    }
+    fs.mkdirSync(testDbDir, { recursive: true }); // recursive: true is idempotent
 
     // Remove existing test database
     if (fs.existsSync(TEST_DB_PATH)) {
