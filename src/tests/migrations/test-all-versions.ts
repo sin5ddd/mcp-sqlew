@@ -97,10 +97,8 @@ function extractSchemaFromTag(version: string): string | null {
   const tmpDir = join(process.cwd(), '.sqlew', 'tmp', 'schema-extraction');
 
   try {
-    // Create temp directory
-    if (!existsSync(tmpDir)) {
-      mkdirSync(tmpDir, { recursive: true });
-    }
+    // Create temp directory (always call - recursive: true is idempotent)
+    mkdirSync(tmpDir, { recursive: true });
 
     // Try to extract schema.sql from the tag
     try {
@@ -145,9 +143,7 @@ function createDatabaseForVersion(version: string): { db: DatabaseType; dbPath: 
 
   // Create temporary file database (not in-memory) so Knex can access it
   const tmpDir = join(process.cwd(), '.sqlew', 'tmp', 'migration-tests');
-  if (!existsSync(tmpDir)) {
-    mkdirSync(tmpDir, { recursive: true });
-  }
+  mkdirSync(tmpDir, { recursive: true }); // Always call - recursive: true is idempotent
   const dbPath = join(tmpDir, `test-v${version}-${Date.now()}.db`);
 
   // For testing, we'll create databases based on version detection logic

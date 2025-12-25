@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
 import { UniversalKnex, TableHelpers } from '../../utils/universal-knex.js';
 import { getDbConfig, connectDb, disconnectDb } from '../utils/test-helpers.js';
 import type { Knex } from 'knex';
@@ -9,6 +10,8 @@ describe('UniversalKnex', () => {
   let sqliteWrapper: UniversalKnex;
 
   before(async () => {
+    // Ensure .sqlew directory exists for SQLite database
+    mkdirSync('.sqlew', { recursive: true });
     const config = getDbConfig('sqlite');
     sqliteDb = await connectDb(config);
     sqliteWrapper = new UniversalKnex(sqliteDb);

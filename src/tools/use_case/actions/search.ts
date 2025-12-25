@@ -22,13 +22,13 @@ export async function searchUseCases(
 
     if (category) {
       // Verify category exists
-      const categoryExists = await knex('v4_help_use_case_categories')
+      const categoryExists = await knex('v4_help_use_case_cats')
         .where({ category_name: category })
         .select('category_name')
         .first();
 
       if (!categoryExists) {
-        const availableCategories = await knex('v4_help_use_case_categories')
+        const availableCategories = await knex('v4_help_use_case_cats')
           .select('category_name')
           .orderBy('category_name')
           .then(rows => rows.map((row: any) => row.category_name));
@@ -47,7 +47,7 @@ export async function searchUseCases(
 
     // Build query with JOIN
     let query = knex('v4_help_use_cases as uc')
-      .join('v4_help_use_case_categories as cat', 'uc.category_id', 'cat.category_id');
+      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.id');
 
     // Apply WHERE conditions
     query = query.where((builder) => {
@@ -64,7 +64,7 @@ export async function searchUseCases(
 
     // Get matching use cases (limit to 10 for search results)
     const rows = await query
-      .select('uc.use_case_id', 'uc.title', 'uc.complexity', 'cat.category_name as category', 'uc.description')
+      .select('uc.id as use_case_id', 'uc.title', 'uc.complexity', 'cat.category_name as category', 'uc.description')
       .orderByRaw(`
         CASE uc.complexity
           WHEN 'basic' THEN 1
@@ -72,7 +72,7 @@ export async function searchUseCases(
           WHEN 'advanced' THEN 3
         END
       `)
-      .orderBy('uc.use_case_id')
+      .orderBy('uc.id')
       .limit(10) as Array<{
       use_case_id: number;
       title: string;

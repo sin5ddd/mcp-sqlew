@@ -46,8 +46,7 @@ export async function validateFileChangeItem(
   // Required: file_path
   validateRequiredField(item.file_path, 'file_path', index, identifier, errors);
 
-  // Required: agent_name
-  validateRequiredField(item.agent_name, 'agent_name', index, identifier, errors);
+  // Optional: agent_name (legacy sub-agent system removed in v4.1.2)
 
   // Required: change_type
   validateRequiredField(item.change_type, 'change_type', index, identifier, errors);

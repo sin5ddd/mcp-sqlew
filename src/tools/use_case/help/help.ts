@@ -103,7 +103,7 @@ export function useCaseHelp() {
       '1. Start with list_all to see available categories',
       '2. Use search to find relevant scenarios',
       '3. Use get to retrieve complete workflow details',
-      '4. Follow the action_sequence in the workflow steps'
+      '4. Follow the workflow steps in full_example'
     ]
   };
 }

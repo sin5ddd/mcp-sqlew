@@ -33,8 +33,11 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run comprehensive feature tests (all tools)
-        run: npm run test:all-features
+      - name: Run tests
+        run: |
+          shopt -s globstar
+          node --test --test-force-exit --import tsx src/tests/unit/**/*.test.ts src/tests/feature/**/*.test.ts src/tests/database/**/*.test.ts src/tests/integration/**/*.test.ts
+        shell: bash
         env:
           CI: true
 

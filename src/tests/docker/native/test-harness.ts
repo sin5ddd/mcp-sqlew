@@ -172,8 +172,8 @@ export async function cleanupTestData(db: Knex): Promise<void> {
   await db('v4_file_changes').where('project_id', 1).del();
   await db('v4_files').where('project_id', 1).del();
 
-  // m_tag_index has (tag_name, decision_count, ..., total_count) - NO project_id
-  await db('m_tag_index').del();
+  // v4_tag_index has (tag, source_type, source_id, project_id, created_ts) - polymorphic design
+  await db('v4_tag_index').where('project_id', 1).del();
 }
 
 // ============================================================================
@@ -288,9 +288,10 @@ export async function assertTagIndexPopulated(
 
   assert.ok(contextKey, `Decision key "${key}" should exist`);
 
-  const indexEntries = await db('m_tag_index')
-    .where({ decision_key_id: contextKey.id, project_id: 1 })
-    .pluck('tag_name');
+  // v4_tag_index uses polymorphic design: source_type + source_id + tag
+  const indexEntries = await db('v4_tag_index')
+    .where({ source_type: 'decision', source_id: contextKey.id, project_id: 1 })
+    .pluck('tag');
 
   assert.strictEqual(indexEntries.length, expectedTags.length, `Tag index should have ${expectedTags.length} entries`);
 

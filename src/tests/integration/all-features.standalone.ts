@@ -366,9 +366,7 @@ async function runAllTests() {
 
   // Ensure test directory exists
   const testDir = path.dirname(TEST_DB_PATH);
-  if (!fs.existsSync(testDir)) {
-    fs.mkdirSync(testDir, { recursive: true });
-  }
+  fs.mkdirSync(testDir, { recursive: true }); // recursive: true is idempotent
 
   // Remove old test database if exists
   if (fs.existsSync(TEST_DB_PATH)) {

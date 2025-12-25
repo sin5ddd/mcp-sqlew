@@ -9,12 +9,11 @@ import { ActionSpec } from './types.js';
 
 export const FILE_ACTION_SPECS: Record<string, ActionSpec> = {
   record: {
-    required: ['file_path', 'agent_name', 'change_type'],
-    optional: ['layer', 'description'],
+    required: ['file_path', 'change_type'],
+    optional: ['layer', 'description', 'agent_name'],  // agent_name optional since v4.1.2
     example: {
       action: 'record',
       file_path: 'src/api/auth.ts',
-      agent_name: 'refactor-agent',
       change_type: 'modified',
       layer: 'business',
       description: 'Added JWT validation'
@@ -27,7 +26,6 @@ export const FILE_ACTION_SPECS: Record<string, ActionSpec> = {
     optional: ['file_path', 'agent_name', 'layer', 'change_type', 'since', 'limit'],
     example: {
       action: 'get',
-      agent_name: 'refactor-agent',
       layer: 'business',
       limit: 10
     },
@@ -51,8 +49,8 @@ export const FILE_ACTION_SPECS: Record<string, ActionSpec> = {
     example: {
       action: 'record_batch',
       file_changes: [
-        { file_path: 'src/api.ts', agent_name: 'bot1', change_type: 'modified', layer: 'presentation' },
-        { file_path: 'src/types.ts', agent_name: 'bot1', change_type: 'modified', layer: 'data' }
+        { file_path: 'src/api.ts', change_type: 'modified', layer: 'presentation' },
+        { file_path: 'src/types.ts', change_type: 'modified', layer: 'data' }
       ],
       atomic: false
     },

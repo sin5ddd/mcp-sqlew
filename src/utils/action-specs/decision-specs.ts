@@ -124,11 +124,10 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
   },
 
   has_updates: {
-    required: ['agent_name', 'since_timestamp'],
-    optional: [],
+    required: ['since_timestamp'],
+    optional: ['agent_name'],  // Legacy parameter, not used in v4
     example: {
       action: 'has_updates',
-      agent_name: 'my-agent',
       since_timestamp: '2025-10-14T08:00:00Z'
     },
     hint: "Lightweight polling mechanism (~5-10 tokens per check). Use ISO 8601 timestamp format."

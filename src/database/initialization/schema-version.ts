@@ -207,5 +207,5 @@ export const TableNames = {
   helpActionParams: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_action_params' : 'm_help_action_params',
   helpActionExamples: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_action_examples' : 'm_help_action_examples',
   helpUseCases: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_use_cases' : 'm_help_use_cases',
-  helpUseCaseCategories: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_use_case_categories' : 'v4_help_use_case_categories',
+  helpUseCaseCategories: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_use_case_cats' : 'v4_help_use_case_cats',
 };

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.2] - 2025-12-25
+
+### Fixed
+
+**Help System & Clean Install**
+
+- Fixed help system seeding with correct FK constraints
+- Added seed migration for missing help system data (action params, examples)
+- Fixed `file.record` action no longer requiring `agent_name` parameter
+- Resolved clean install issues reported from Claude Desktop
+
+---
+
 ## [4.1.1] - 2025-12-24
 
 ### Fixed

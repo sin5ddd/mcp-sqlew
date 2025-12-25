@@ -30,6 +30,33 @@ import { initializeSqlewIntegrations } from '../init-skills.js';
 import { loadGlobalConfig } from '../config/global-config.js';
 
 /**
+ * Extract project name from a path, skipping hidden directories.
+ *
+ * This handles cases where --db-path points to ~/.sqlew/sqlew.db
+ * and we want to use the parent directory name (e.g., 'kitayama')
+ * instead of '.sqlew'.
+ *
+ * @param projectPath - Absolute path to extract project name from
+ * @returns Project name (non-hidden directory name)
+ */
+function extractProjectNameFromPath(projectPath: string): string {
+  // Split by forward slash (paths are normalized to forward slashes)
+  const dirSegments = projectPath.split('/').filter(s => s.length > 0);
+
+  // Find the first non-hidden directory name from the end
+  // Skip directories starting with '.' (e.g., .sqlew, .git)
+  for (let i = dirSegments.length - 1; i >= 0; i--) {
+    const segment = dirSegments[i];
+    if (segment && !segment.startsWith('.')) {
+      return segment;
+    }
+  }
+
+  // Fallback to 'default' if all segments are hidden
+  return 'default';
+}
+
+/**
  * Config source type for priority tracking
  */
 type ConfigSource = 'worktree-parent' | 'local' | 'global' | 'default';
@@ -284,16 +311,14 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
         detectionSource = 'git';
         debugLog('INFO', 'Project name detected from VCS', { projectName, vcs: vcsAdapter.getVCSType() });
       } else {
-        // Fallback to directory name
-        const dirSegments = finalProjectRoot.split('/').filter(s => s.length > 0);
-        projectName = dirSegments[dirSegments.length - 1] || 'default';
+        // Fallback to directory name (skip hidden directories like .sqlew)
+        projectName = extractProjectNameFromPath(finalProjectRoot);
         detectionSource = 'directory';
         debugLog('INFO', 'Project name from directory', { projectName });
       }
     } else {
-      // No VCS detected, use directory name
-      const dirSegments = finalProjectRoot.split('/').filter(s => s.length > 0);
-      projectName = dirSegments[dirSegments.length - 1] || 'default';
+      // No VCS detected, use directory name (skip hidden directories like .sqlew)
+      projectName = extractProjectNameFromPath(finalProjectRoot);
       detectionSource = 'directory';
       debugLog('INFO', 'Project name from directory (no VCS)', { projectName });
     }

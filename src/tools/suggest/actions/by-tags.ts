@@ -56,7 +56,9 @@ export async function suggestByTags(params: ByTagsParams): Promise<SuggestRespon
   };
 
   let suggestions = scoreAndRankSuggestions(context, parsed);
-  suggestions = filterByThreshold(suggestions, params.min_score ?? 30);
+  // Lower default min_score for tag searches - tag matches are inherently valuable
+  // since we're filtering by v4_tag_index first
+  suggestions = filterByThreshold(suggestions, params.min_score ?? 15);
   suggestions = limitSuggestions(suggestions, params.limit ?? 5);
 
   return {

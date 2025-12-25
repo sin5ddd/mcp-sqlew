@@ -363,7 +363,7 @@ export interface SearchAdvancedParams {
 }
 
 export interface HasUpdatesParams {
-  agent_name: string;
+  agent_name?: string;  // Optional since v4.1.2 (legacy sub-agent system removed)
   since_timestamp: string;  // ISO 8601 timestamp
 }
 
@@ -391,7 +391,7 @@ export interface MarkReadParams {
 
 export interface RecordFileChangeParams {
   file_path: string;
-  agent_name: string;
+  agent_name?: string;  // Optional since v4.1.2 (legacy sub-agent system removed)
   change_type: 'created' | 'modified' | 'deleted';
   layer?: string;
   description?: string;

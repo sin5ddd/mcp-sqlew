@@ -8,6 +8,16 @@
 export function taskExample(): any {
   return {
     tool: 'task',
+    deprecation: {
+      status: '⚠️ DEPRECATED as of v4.1.0',
+      reason: 'Claude Code now provides native TodoWrite tool and Plan Mode for task management',
+      alternatives: [
+        'Use TodoWrite tool for task tracking',
+        'Use Plan Mode for structured planning workflows'
+      ],
+      documentation: '/docs/TASK_SYSTEM_DEPRECATED.md',
+      note: 'Task tool remains functional for backward compatibility but will not receive new features'
+    },
     description: 'Comprehensive task management examples for Kanban-style workflow',
     scenarios: {
       basic_task_management: {
