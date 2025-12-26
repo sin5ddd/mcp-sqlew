@@ -42,5 +42,14 @@ export const CONSTRAINT_ACTION_SPECS: Record<string, ActionSpec> = {
       constraint_id: 5
     },
     hint: "Soft delete - constraint remains in database but marked inactive"
+  },
+
+  suggest_pending: {
+    required: [],
+    optional: ['project_path'],
+    example: {
+      action: 'suggest_pending'
+    },
+    hint: "Returns pending constraint candidates from plan TOML cache. No DB access - reads from session cache only."
   }
 };

@@ -14,12 +14,14 @@ export function constraintHelp(): any {
     actions: {
       add: 'Add constraint. Params: category (required), constraint_text (required), priority, layer, tags, created_by',
       get: 'Get constraints. Params: category, layer, priority, tags, active_only, limit',
-      deactivate: 'Deactivate constraint. Params: constraint_id (required)'
+      deactivate: 'Deactivate constraint. Params: constraint_id (required)',
+      suggest_pending: 'Get pending constraint candidates from plan TOML cache. Params: project_path (optional). Returns constraints defined in plan file that haven\'t been registered yet.'
     },
     examples: {
       add: '{ action: "add", category: "performance", constraint_text: "API response time <100ms", priority: "high", tags: ["api"] }',
       get: '{ action: "get", category: "performance", active_only: true }',
-      deactivate: '{ action: "deactivate", constraint_id: 5 }'
+      deactivate: '{ action: "deactivate", constraint_id: 5 }',
+      suggest_pending: '{ action: "suggest_pending" }'
     },
     documentation: {
     }

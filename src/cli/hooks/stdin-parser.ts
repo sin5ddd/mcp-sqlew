@@ -66,7 +66,7 @@ export interface HookInput {
   /** Current working directory */
   cwd?: string;
   /** Hook event name */
-  hook_event_name?: 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'SessionEnd' | 'Stop' | 'SubagentStop';
+  hook_event_name?: 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'SessionEnd' | 'Stop' | 'SubagentStop' | 'Notification' | 'PreCompact' | 'UserPromptSubmit';
   /** Tool name being called */
   tool_name?: string;
   /** Tool input parameters */
@@ -77,6 +77,23 @@ export interface HookInput {
   transcript_path?: string;
   /** Permission mode */
   permission_mode?: string;
+  /** Stop hook active flag (for Stop/SubagentStop - prevents infinite loops) */
+  stop_hook_active?: boolean;
+}
+
+/**
+ * Hook-specific output for PreToolUse (v4.2.0+)
+ * Used for permission decisions and input modification
+ */
+export interface PreToolUseHookOutput {
+  /** Hook event name */
+  hookEventName: 'PreToolUse';
+  /** Permission decision */
+  permissionDecision?: 'allow' | 'deny' | 'ask';
+  /** Reason for the decision */
+  permissionDecisionReason?: string;
+  /** Updated tool input - modifies the tool's input before execution */
+  updatedInput?: ToolInput;
 }
 
 /**
@@ -87,12 +104,16 @@ export interface HookOutput {
   continue?: boolean;
   /** Reason for stopping (if continue=false) */
   stopReason?: string;
-  /** Additional context to inject */
+  /** Additional context to inject (PostToolUse, UserPromptSubmit, SessionStart only) */
   additionalContext?: string;
   /** System message to add */
   systemMessage?: string;
   /** Whether to suppress output */
   suppressOutput?: boolean;
+  /** Hook-specific output (PreToolUse, PermissionRequest) - v4.2.0+ */
+  hookSpecificOutput?: PreToolUseHookOutput;
+  /** @deprecated Use hookSpecificOutput.updatedInput instead */
+  updatedInput?: ToolInput;
 }
 
 // ============================================================================
@@ -182,6 +203,28 @@ export function sendBlock(reason: string): void {
   process.exit(2);
 }
 
+/**
+ * Send an updatedInput response (PreToolUse only)
+ *
+ * Modifies the tool's input before execution.
+ * Use this to inject context into Task tool prompts.
+ *
+ * NOTE: Uses root-level updatedInput format (not hookSpecificOutput) because
+ * that's what Claude Code actually processes. Verified in debug logs from
+ * 2025-12-26 where TOML template injection worked correctly.
+ *
+ * @param originalInput - Original tool input
+ * @param modifications - Fields to modify/add
+ */
+export function sendUpdatedInput(originalInput: ToolInput, modifications: Partial<ToolInput>): void {
+  const updatedInput = { ...originalInput, ...modifications };
+  const output: HookOutput = {
+    continue: true,
+    updatedInput,
+  };
+  writeHookOutput(output);
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -227,4 +270,14 @@ export function areAllTodosCompleted(input: HookInput): boolean {
  */
 export function getProjectPath(input: HookInput): string | undefined {
   return input.cwd || process.env.CLAUDE_PROJECT_DIR;
+}
+
+/**
+ * Check if the hook input is for a Plan agent
+ *
+ * @param input - Hook input
+ * @returns true if subagent_type is 'Plan'
+ */
+export function isPlanAgent(input: HookInput): boolean {
+  return input.tool_input?.subagent_type === 'Plan';
 }

@@ -10,88 +10,46 @@
  * @since v4.1.0
  */
 
-import { readStdinJson, sendContinue, getProjectPath, type HookInput } from './stdin-parser.js';
-import { initializeDatabase } from '../../database.js';
-import { suggestByContext } from '../../tools/suggest/actions/by-context.js';
-import { join } from 'path';
+import { readStdinJson, sendContinue, sendUpdatedInput, isPlanAgent, getProjectPath } from './stdin-parser.js';
+import { clearPlanTomlCache, clearCurrentPlan } from '../../config/global-config.js';
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-/** Minimum keyword length to use for search */
-const MIN_KEYWORD_LENGTH = 3;
-
-/** Default limit for suggestions */
-const DEFAULT_LIMIT = 5;
-
-/** Minimum score for suggestions */
-const MIN_SCORE = 30;
-
-// ============================================================================
-// Keyword Extraction
+// Plan TOML Template (v4.2.0+)
 // ============================================================================
 
 /**
- * Extract meaningful keywords from text
- *
- * Removes common stop words and short words.
- *
- * @param text - Text to extract keywords from
- * @returns Array of keywords
+ * TOML template for Plan agent
+ * Injected when Plan agent is invoked to guide structured decision/constraint documentation
  */
-function extractKeywords(text: string): string[] {
-  // Common stop words to filter out
-  const stopWords = new Set([
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-    'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-    'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'this', 'that',
-    'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what',
-    'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every',
-    'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not',
-    'only', 'same', 'so', 'than', 'too', 'very', 'just', 'also', 'now',
-    'use', 'using', 'implement', 'create', 'add', 'update', 'fix', 'make',
-    'get', 'set', 'new', 'file', 'code', 'function', 'method', 'class',
-  ]);
+const PLAN_TOML_TEMPLATE = `
+## Architectural Decisions & Constraints
 
-  // Split on word boundaries and filter
-  const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-_]/g, ' ')
-    .split(/\s+/)
-    .filter(word =>
-      word.length >= MIN_KEYWORD_LENGTH &&
-      !stopWords.has(word) &&
-      !/^\d+$/.test(word)  // Filter out pure numbers
-    );
+When making architectural choices in this plan, document them using TOML format:
 
-  // Deduplicate while preserving order
-  return [...new Set(words)];
-}
+\`\`\`toml
+# Record key decisions made during planning
+[[decision]]
+key = "component/topic"           # Required: hierarchical key
+value = "What was decided"        # Required: the decision
+status = "active"                 # active|deprecated|draft
+layer = "business"                # presentation|business|data|infrastructure|cross-cutting
+tags = ["tag1", "tag2"]
+rationale = "Why this choice"
+alternatives = ["Option B", "Option C"]
+tradeoffs = "Gains vs sacrifices"
 
-/**
- * Extract search context from hook input
- *
- * Combines description and prompt from Task tool input.
- *
- * @param input - Hook input
- * @returns Combined search text
- */
-function extractSearchContext(input: HookInput): string {
-  const parts: string[] = [];
+# Define constraints to enforce decisions
+[[constraint]]
+constraint_text = "Rule description"  # Required: what must be done/avoided
+category = "security"             # Required: architecture|security|code-style|performance
+priority = "high"                 # critical|high|medium|low
+layer = "business"
+tags = ["tag1"]
+rationale = "Why this rule exists"
+\`\`\`
 
-  // Task tool uses description and prompt
-  if (input.tool_input?.description) {
-    parts.push(input.tool_input.description);
-  }
-
-  if (input.tool_input?.prompt) {
-    parts.push(input.tool_input.prompt);
-  }
-
-  return parts.join(' ');
-}
+Note: Decisions will be auto-registered on task completion. Constraints will prompt for confirmation.
+`.trim();
 
 // ============================================================================
 // Main Entry Point
@@ -107,71 +65,35 @@ export async function suggestCommand(): Promise<void> {
   try {
     const input = await readStdinJson();
 
-    // Only process Task tool
+    // Only process Task tool (PreToolUse hook)
     if (input.tool_name !== 'Task') {
       sendContinue();
       return;
     }
 
-    const projectPath = getProjectPath(input);
-    if (!projectPath) {
-      sendContinue();
-      return;
-    }
-
-    // Extract search context
-    const searchText = extractSearchContext(input);
-    if (!searchText.trim()) {
-      sendContinue();
-      return;
-    }
-
-    // Extract keywords for search
-    const keywords = extractKeywords(searchText);
-    if (keywords.length === 0) {
-      sendContinue();
-      return;
-    }
-
-    // Initialize database
-    const dbPath = join(projectPath, '.sqlew', 'sqlew.db');
-    try {
-      await initializeDatabase({ configPath: dbPath });
-    } catch {
-      // Database not initialized - continue without suggestions
-      sendContinue();
-      return;
-    }
-
-    // Build search key from keywords
-    const searchKey = keywords.slice(0, 5).join(' ');
-
-    // Find related decisions
-    const result = await suggestByContext({
-      key: searchKey,
-      limit: DEFAULT_LIMIT,
-      min_score: MIN_SCORE,
-    });
-
-    if (result.suggestions.length === 0) {
-      sendContinue();
-      return;
-    }
-
-    // Format suggestions as context
-    const contextLines: string[] = [
-      '[sqlew] Related decisions found:',
-      '',
-    ];
-
-    for (const suggestion of result.suggestions) {
-      contextLines.push(`- **${suggestion.key}**: ${suggestion.value}`);
-      if (suggestion.reason) {
-        contextLines.push(`  (${suggestion.reason})`);
+    // Check if this is a Plan agent via Task tool - inject TOML template via updatedInput
+    // This modifies the Task tool's prompt to include the TOML template
+    if (isPlanAgent(input)) {
+      // Clear stale caches from previous sessions (v4.2.0+)
+      // This prevents false positives in on-subagent-stop hook
+      const projectPath = getProjectPath(input);
+      if (projectPath) {
+        clearCurrentPlan(projectPath);
+        clearPlanTomlCache(projectPath);
       }
+
+      const originalPrompt = input.tool_input?.prompt || '';
+      const enrichedPrompt = `${originalPrompt}\n\n---\n\n${PLAN_TOML_TEMPLATE}`;
+
+      sendUpdatedInput(input.tool_input || {}, {
+        prompt: enrichedPrompt,
+      });
+      return;
     }
 
-    sendContinue(contextLines.join('\n'));
+    // Non-Plan agents (Explore, etc.) - skip DB connection for performance (v4.2.0+)
+    // Only Plan agents need sqlew context injection
+    sendContinue();
   } catch (error) {
     // On error, log to stderr but continue execution
     const message = error instanceof Error ? error.message : String(error);

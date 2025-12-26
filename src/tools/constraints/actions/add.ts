@@ -44,8 +44,15 @@ export async function addConstraint(
       // Fail-fast project_id validation (Constraint #29)
       const projectId = getProjectContext().getProjectId();
 
+      // Normalize alias: text → constraint_text (common AI mistake from TOML template)
+      const normalizedParams = { ...params };
+      if (!normalizedParams.constraint_text && (normalizedParams as any).text) {
+        normalizedParams.constraint_text = (normalizedParams as any).text;
+        delete (normalizedParams as any).text;
+      }
+
       // Validate parameters
-      validateActionParams('constraint', 'add', params);
+      validateActionParams('constraint', 'add', normalizedParams);
 
       // Validate category
       validateCategory(params.category);
@@ -81,7 +88,7 @@ export async function addConstraint(
         const [constraintId] = await trx('v4_constraints').insert({
           category_id: categoryId,
           layer_id: layerId,
-          constraint_text: params.constraint_text,
+          constraint_text: normalizedParams.constraint_text,
           priority: priority,
           active: SQLITE_TRUE,
           ts: ts,

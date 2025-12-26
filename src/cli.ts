@@ -17,6 +17,9 @@ import { saveCommand } from './cli/hooks/save.js';
 import { checkCompletionCommand } from './cli/hooks/check-completion.js';
 import { markDoneCommand } from './cli/hooks/mark-done.js';
 import { initHooksCommand } from './cli/hooks/init-hooks.js';
+import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
+import { onStopCommand } from './cli/hooks/on-stop.js';
+import { onExitPlanCommand } from './cli/hooks/on-exit-plan.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
@@ -317,6 +320,24 @@ export async function runCli(rawArgs: string[]): Promise<void> {
     return;
   }
 
+  // SubagentStop hook (v4.2.0+)
+  if (args.command === 'on-subagent-stop') {
+    await onSubagentStopCommand();
+    return;
+  }
+
+  // Stop hook (v4.2.0+)
+  if (args.command === 'on-stop') {
+    await onStopCommand();
+    return;
+  }
+
+  // ExitPlanMode hook (v4.2.0+)
+  if (args.command === 'on-exit-plan') {
+    await onExitPlanCommand();
+    return;
+  }
+
   // init --hooks command
   if (args.command === 'init' && rawArgs.includes('--hooks')) {
     await initHooksCommand(rawArgs.slice(1));
@@ -371,6 +392,8 @@ export function isCliCommand(command: string): boolean {
     'db:dump', 'db:export', 'db:import', 'query',
     // Claude Code Hooks commands (v4.1.0+)
     'suggest', 'track-plan', 'save', 'check-completion', 'mark-done', 'init',
+    // New hook events (v4.2.0+)
+    'on-subagent-stop', 'on-stop', 'on-exit-plan',
   ];
   return cliCommands.includes(command);
 }

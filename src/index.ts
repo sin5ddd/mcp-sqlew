@@ -17,7 +17,9 @@ const firstArg = rawArgs[0] || '';
 // Check if this is a CLI command
 const cliCommands = [
   'db:dump', 'db:export', 'db:import', 'query',
-  'suggest', 'track-plan', 'save', 'check-completion', 'mark-done', 'init'
+  'suggest', 'track-plan', 'save', 'check-completion', 'mark-done', 'init',
+  // New hook events (v4.2.0+)
+  'on-subagent-stop', 'on-stop', 'on-exit-plan',
 ];
 const isCliCommand = cliCommands.includes(firstArg);
 
@@ -67,7 +69,7 @@ async function startMcpServer(): Promise<void> {
   const server = new Server(
     {
       name: 'mcp-sqlew',
-      version: '4.0.4',
+      version: '4.2.0',
     },
     {
       capabilities: {

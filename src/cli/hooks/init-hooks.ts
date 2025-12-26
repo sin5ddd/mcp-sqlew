@@ -31,6 +31,8 @@ import { isGitHooksEnabled } from '../../config/global-config.js';
 interface RequiredHooks {
   PreToolUse: HookConfig[];
   PostToolUse: HookConfig[];
+  SubagentStop: HookConfigNoMatcher[];
+  Stop: HookConfigNoMatcher[];
 }
 
 /**
@@ -40,15 +42,24 @@ interface ClaudeSettings {
   hooks?: {
     PreToolUse?: HookConfig[];
     PostToolUse?: HookConfig[];
+    SubagentStop?: HookConfigNoMatcher[];
+    Stop?: HookConfigNoMatcher[];
   };
   [key: string]: unknown;
 }
 
 /**
- * Hook configuration
+ * Hook configuration (with matcher for PreToolUse/PostToolUse)
  */
 interface HookConfig {
   matcher: string;
+  hooks: HookCommand[];
+}
+
+/**
+ * Hook configuration without matcher (for SubagentStop/Stop/etc.)
+ */
+interface HookConfigNoMatcher {
   hooks: HookCommand[];
 }
 
@@ -64,7 +75,17 @@ interface HookCommand {
 // Constants
 // ============================================================================
 
-/** Claude Code hooks to install */
+/**
+ * Claude Code hooks to install
+ *
+ * IMPORTANT: Valid PreToolUse/PostToolUse matchers include:
+ * Task, Bash, Glob, Grep, Read, Edit, Write, WebFetch, WebSearch, TodoWrite
+ *
+ * Note: TodoWrite works even though not in official docs (verified v4.1.2)
+ * ExitPlanMode, EnterPlanMode are INVALID matchers!
+ *
+ * @since v4.2.0 - Restored PostToolUse hooks + SubagentStop/Stop events
+ */
 const CLAUDE_HOOKS: RequiredHooks = {
   PreToolUse: [
     {
@@ -84,6 +105,24 @@ const CLAUDE_HOOKS: RequiredHooks = {
     {
       matcher: 'TodoWrite',
       hooks: [{ type: 'command', command: 'sqlew check-completion' }],
+    },
+    {
+      // ExitPlanMode - prompt TOML documentation after plan approval
+      // Note: May not be a valid matcher, but testing anyway
+      matcher: 'ExitPlanMode',
+      hooks: [{ type: 'command', command: 'sqlew on-exit-plan' }],
+    },
+  ],
+  SubagentStop: [
+    // Fires when any subagent (Plan, Explore, etc.) completes
+    {
+      hooks: [{ type: 'command', command: 'sqlew on-subagent-stop' }],
+    },
+  ],
+  Stop: [
+    // Fires when main agent response completes
+    {
+      hooks: [{ type: 'command', command: 'sqlew on-stop' }],
     },
   ],
 };
@@ -154,7 +193,7 @@ function saveSettings(settingsPath: string, settings: ClaudeSettings): void {
 }
 
 /**
- * Merge hook configurations
+ * Merge hook configurations (with matcher)
  *
  * Adds new hooks without duplicating existing ones.
  *
@@ -187,6 +226,68 @@ function mergeHooks(existing: HookConfig[] | undefined, newHooks: HookConfig[]):
   }
 
   return result;
+}
+
+/**
+ * Merge hook configurations (without matcher)
+ *
+ * For SubagentStop, Stop, and other events that don't use matchers.
+ *
+ * @param existing - Existing hook configs
+ * @param newHooks - New hooks to add
+ * @returns Merged hook configs
+ */
+function mergeHooksNoMatcher(
+  existing: HookConfigNoMatcher[] | undefined,
+  newHooks: HookConfigNoMatcher[]
+): HookConfigNoMatcher[] {
+  const result = [...(existing || [])];
+
+  for (const newHook of newHooks) {
+    for (const cmd of newHook.hooks) {
+      // Check if command already exists in any existing hook
+      const cmdExists = result.some(h =>
+        h.hooks.some(c => c.type === cmd.type && c.command === cmd.command)
+      );
+
+      if (!cmdExists) {
+        // Add to first hook or create new one
+        if (result.length > 0) {
+          result[0].hooks.push(cmd);
+        } else {
+          result.push({ hooks: [cmd] });
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Remove invalid hooks from previous versions
+ *
+ * Cleans up hooks that used invalid matchers like ExitPlanMode or TodoWrite.
+ *
+ * @param settings - Claude settings to clean up
+ */
+function removeInvalidHooks(settings: ClaudeSettings): void {
+  // Invalid matchers that should be removed
+  // Note: TodoWrite works even though not in official docs (verified v4.1.2)
+  // Note: Testing ExitPlanMode - may or may not work (v4.2.0)
+  const invalidMatchers = ['EnterPlanMode', 'SubagentStart'];
+
+  if (settings.hooks?.PostToolUse) {
+    settings.hooks.PostToolUse = settings.hooks.PostToolUse.filter(
+      h => !invalidMatchers.includes(h.matcher)
+    );
+  }
+
+  if (settings.hooks?.PreToolUse) {
+    settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(
+      h => !invalidMatchers.includes(h.matcher)
+    );
+  }
 }
 
 // ============================================================================
@@ -321,6 +422,11 @@ export async function initHooksCommand(args: string[] = []): Promise<void> {
     settings.hooks = settings.hooks || {};
     settings.hooks.PreToolUse = mergeHooks(settings.hooks.PreToolUse, CLAUDE_HOOKS.PreToolUse);
     settings.hooks.PostToolUse = mergeHooks(settings.hooks.PostToolUse, CLAUDE_HOOKS.PostToolUse);
+    settings.hooks.SubagentStop = mergeHooksNoMatcher(settings.hooks.SubagentStop, CLAUDE_HOOKS.SubagentStop);
+    settings.hooks.Stop = mergeHooksNoMatcher(settings.hooks.Stop, CLAUDE_HOOKS.Stop);
+
+    // Remove invalid hooks that might exist from previous versions
+    removeInvalidHooks(settings);
 
     // Save settings
     saveSettings(settingsPath, settings);
@@ -367,15 +473,21 @@ function hasHooksConfigured(projectPath: string): boolean {
   try {
     const settings = loadSettings(settingsPath);
 
-    // Check if sqlew hooks exist
+    // Check if sqlew hooks exist in any event type
     const hasPreToolUse = settings.hooks?.PreToolUse?.some(
       h => h.hooks?.some(cmd => cmd.command?.startsWith('sqlew '))
     );
     const hasPostToolUse = settings.hooks?.PostToolUse?.some(
       h => h.hooks?.some(cmd => cmd.command?.startsWith('sqlew '))
     );
+    const hasSubagentStop = settings.hooks?.SubagentStop?.some(
+      h => h.hooks?.some(cmd => cmd.command?.startsWith('sqlew '))
+    );
+    const hasStop = settings.hooks?.Stop?.some(
+      h => h.hooks?.some(cmd => cmd.command?.startsWith('sqlew '))
+    );
 
-    return !!(hasPreToolUse || hasPostToolUse);
+    return !!(hasPreToolUse || hasPostToolUse || hasSubagentStop || hasStop);
   } catch {
     return false;
   }
@@ -406,6 +518,11 @@ export function autoInitializeHooks(projectPath: string): boolean {
     settings.hooks = settings.hooks || {};
     settings.hooks.PreToolUse = mergeHooks(settings.hooks.PreToolUse, CLAUDE_HOOKS.PreToolUse);
     settings.hooks.PostToolUse = mergeHooks(settings.hooks.PostToolUse, CLAUDE_HOOKS.PostToolUse);
+    settings.hooks.SubagentStop = mergeHooksNoMatcher(settings.hooks.SubagentStop, CLAUDE_HOOKS.SubagentStop);
+    settings.hooks.Stop = mergeHooksNoMatcher(settings.hooks.Stop, CLAUDE_HOOKS.Stop);
+
+    // Remove invalid hooks that might exist from previous versions
+    removeInvalidHooks(settings);
 
     // Save settings
     saveSettings(settingsPath, settings);

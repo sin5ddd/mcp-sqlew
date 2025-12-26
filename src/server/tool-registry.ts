@@ -52,7 +52,7 @@ export function getToolRegistry(): Tool[] {
           action: {
             type: 'string',
             description: 'Action',
-            enum: ['add', 'get', 'deactivate', 'help', 'example', 'use_case']
+            enum: ['add', 'get', 'deactivate', 'suggest_pending', 'help', 'example', 'use_case']
           }
         },
         required: ['action'],

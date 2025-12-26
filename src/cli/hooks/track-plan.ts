@@ -14,9 +14,18 @@
 
 import { readStdinJson, sendContinue, isPlanFile, getProjectPath } from './stdin-parser.js';
 import { ensurePlanId, extractPlanFileName, getPlanId, parseFrontmatter, generatePlanId } from './plan-id-utils.js';
-import { saveCurrentPlan, loadCurrentPlan, type CurrentPlanInfo } from '../../config/global-config.js';
+import { parsePlanToml } from './plan-toml-parser.js';
+import {
+  saveCurrentPlan,
+  loadCurrentPlan,
+  savePlanTomlCache,
+  loadPlanTomlCache,
+  clearPlanTomlCache,
+  type CurrentPlanInfo,
+  type PlanTomlCache,
+} from '../../config/global-config.js';
 import { enqueueDecisionCreate } from '../../utils/hook-queue.js';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 // ============================================================================
@@ -88,6 +97,12 @@ export async function trackPlanCommand(): Promise<void> {
 
       const planFileName = extractPlanFileName(absolutePath);
 
+      // Clear old plan-toml cache if switching to a different plan (v4.2.0+)
+      const oldTomlCache = loadPlanTomlCache(projectPath);
+      if (oldTomlCache && oldTomlCache.plan_id !== planId) {
+        clearPlanTomlCache(projectPath);
+      }
+
       // Save current plan info to session cache
       const planInfo: CurrentPlanInfo = {
         plan_id: planId,
@@ -98,6 +113,20 @@ export async function trackPlanCommand(): Promise<void> {
       };
 
       saveCurrentPlan(projectPath, planInfo);
+
+      // Parse TOML blocks for decisions and constraints (v4.2.0+)
+      const { decisions, constraints } = parsePlanToml(content);
+      if (decisions.length > 0 || constraints.length > 0) {
+        const tomlCache: PlanTomlCache = {
+          plan_id: planId,
+          decisions,
+          constraints,
+          updated_at: new Date().toISOString(),
+          decisions_registered: false,
+          constraints_prompted: false,
+        };
+        savePlanTomlCache(projectPath, tomlCache);
+      }
 
       // Enqueue draft decision for later processing by MCP server
       const decisionKey = `${PLAN_DECISION_PREFIX}/${planFileName.replace(/\.md$/, '')}`;
@@ -124,6 +153,14 @@ export async function trackPlanCommand(): Promise<void> {
     const existingPlan = loadCurrentPlan(projectPath);
     const isNewPlan = !existingPlan || existingPlan.plan_id !== planId;
 
+    // Clear old plan-toml cache if switching to a different plan (v4.2.0+)
+    if (isNewPlan) {
+      const oldTomlCache = loadPlanTomlCache(projectPath);
+      if (oldTomlCache && oldTomlCache.plan_id !== planId) {
+        clearPlanTomlCache(projectPath);
+      }
+    }
+
     // Save current plan info to session cache
     const planInfo: CurrentPlanInfo = {
       plan_id: planId,
@@ -134,6 +171,21 @@ export async function trackPlanCommand(): Promise<void> {
     };
 
     saveCurrentPlan(projectPath, planInfo);
+
+    // Parse TOML blocks for decisions and constraints (v4.2.0+)
+    const planContent = readFileSync(absolutePath, 'utf-8');
+    const { decisions, constraints } = parsePlanToml(planContent);
+    if (decisions.length > 0 || constraints.length > 0) {
+      const tomlCache: PlanTomlCache = {
+        plan_id: planId,
+        decisions,
+        constraints,
+        updated_at: new Date().toISOString(),
+        decisions_registered: false,
+        constraints_prompted: false,
+      };
+      savePlanTomlCache(projectPath, tomlCache);
+    }
 
     // Enqueue draft decision for new plans
     if (isNewPlan) {
@@ -147,10 +199,14 @@ export async function trackPlanCommand(): Promise<void> {
       });
     }
 
+    // Build context message
+    let contextMsg = `[sqlew] Tracking plan: ${planFileName} (ID: ${planId.slice(0, 8)}...)`;
+    if (decisions.length > 0 || constraints.length > 0) {
+      contextMsg += ` | Parsed: ${decisions.length} decision(s), ${constraints.length} constraint(s)`;
+    }
+
     // Continue with context about the tracked plan
-    sendContinue(
-      `[sqlew] Tracking plan: ${planFileName} (ID: ${planId.slice(0, 8)}...)`
-    );
+    sendContinue(contextMsg);
   } catch (error) {
     // On error, log to stderr but continue execution
     const message = error instanceof Error ? error.message : String(error);
