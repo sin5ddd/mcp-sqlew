@@ -111,10 +111,15 @@ export class FileWatcher {
 
       // Initialize chokidar v4 with debouncing and gitignore support
       // NOTE: Chokidar v4 automatically detects and handles WSL without manual polling configuration
+      // Windows: awaitWriteFinish causes file handle locking - use app-level debounce instead
+      const isWindows = process.platform === 'win32';
+
       this.watcher = chokidar.watch(this.projectRoot, {
         persistent: true,
         ignoreInitial: true, // Don't trigger on startup
-        awaitWriteFinish: {
+        // Windows: disable awaitWriteFinish to prevent file handle locking
+        // Other platforms: use chokidar's built-in write stabilization
+        awaitWriteFinish: isWindows ? false : {
           stabilityThreshold: this.DEBOUNCE_MS,
           pollInterval: 100
         },
