@@ -18,7 +18,7 @@ export const FILE_ACTION_SPECS: Record<string, ActionSpec> = {
       layer: 'business',
       description: 'Added JWT validation'
     },
-    hint: "Valid change_type: created, modified, deleted"
+    hint: "Valid change_type: created, modified, deleted. Aliases: path→file_path, type→change_type"
   },
 
   get: {
@@ -29,7 +29,7 @@ export const FILE_ACTION_SPECS: Record<string, ActionSpec> = {
       layer: 'business',
       limit: 10
     },
-    hint: "Use 'since' with ISO 8601 timestamp for time-based filtering"
+    hint: "Use 'since' with ISO 8601 timestamp for time-based filtering. Alias: path→file_path"
   },
 
   check_lock: {
@@ -40,7 +40,7 @@ export const FILE_ACTION_SPECS: Record<string, ActionSpec> = {
       file_path: 'src/database/schema.sql',
       lock_duration: 300
     },
-    hint: "Default lock_duration is 300 seconds (5 minutes). Prevents concurrent edits."
+    hint: "Default lock_duration is 300 seconds (5 minutes). Aliases: path→file_path, duration→lock_duration"
   },
 
   record_batch: {
@@ -54,6 +54,6 @@ export const FILE_ACTION_SPECS: Record<string, ActionSpec> = {
       ],
       atomic: false
     },
-    hint: "Max 50 file changes per batch. Use atomic:false for best-effort recording."
+    hint: "Max 50 file changes per batch. Use atomic:false for best-effort recording. Alias: changes→file_changes"
   }
 };

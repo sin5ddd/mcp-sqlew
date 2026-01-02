@@ -10,6 +10,7 @@ import { validateBatchParams, validateFileChangeItem } from '../internal/validat
 import { recordFileChangeInternal } from '../internal/queries.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import { validateBatch, formatBatchValidationError } from '../../../utils/batch-validation.js';
+import { normalizeParams } from '../../../utils/param-normalizer.js';
 import type {
   RecordFileChangeBatchParams,
   RecordFileChangeBatchResponse
@@ -30,10 +31,15 @@ export async function recordFileChangeBatch(
 ): Promise<RecordFileChangeBatchResponse> {
   const actualAdapter = adapter ?? getAdapter();
 
-  // Validate batch parameters
-  validateBatchParams('file', 'file_changes', params.file_changes, 'record', 50);
+  // Normalize aliases: changes → file_changes
+  const normalizedParams = normalizeParams(params, {
+    changes: 'file_changes'
+  }) as RecordFileChangeBatchParams;
 
-  if (params.file_changes.length === 0) {
+  // Validate batch parameters
+  validateBatchParams('file', 'file_changes', normalizedParams.file_changes, 'record', 50);
+
+  if (normalizedParams.file_changes.length === 0) {
     return {
       success: true,
       inserted: 0,
@@ -44,7 +50,7 @@ export async function recordFileChangeBatch(
 
   // Pre-validate all items before transaction
   const validationResult = await validateBatch(
-    params.file_changes,
+    normalizedParams.file_changes,
     validateFileChangeItem,
     actualAdapter
   );
@@ -56,7 +62,7 @@ export async function recordFileChangeBatch(
   // Fail-fast: Validate project context is initialized (Constraint #29)
   const projectId = getProjectContext().getProjectId();
 
-  const atomic = params.atomic !== undefined ? params.atomic : true;
+  const atomic = normalizedParams.atomic !== undefined ? normalizedParams.atomic : true;
 
   try {
     if (atomic) {
@@ -64,7 +70,7 @@ export async function recordFileChangeBatch(
       const results = await actualAdapter.transaction(async (trx) => {
         const processedResults = [];
 
-        for (const fileChange of params.file_changes) {
+        for (const fileChange of normalizedParams.file_changes) {
           try {
             const result = await recordFileChangeInternal(fileChange, actualAdapter, projectId, trx);
             processedResults.push({
@@ -95,7 +101,7 @@ export async function recordFileChangeBatch(
       let inserted = 0;
       let failed = 0;
 
-      for (const fileChange of params.file_changes) {
+      for (const fileChange of normalizedParams.file_changes) {
         try {
           const result = await actualAdapter.transaction(async (trx) => {
             return await recordFileChangeInternal(fileChange, actualAdapter, projectId, trx);

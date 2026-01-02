@@ -15,6 +15,7 @@ import {
 import { validateChangeType } from '../../../utils/validators.js';
 import { validateActionParams } from '../internal/validation.js';
 import { UniversalKnex } from '../../../utils/universal-knex.js';
+import { normalizeParams } from '../../../utils/param-normalizer.js';
 import { convertChangeTypeArray } from '../../../utils/enum-converter.js';
 import type {
   GetFileChangesParams,
@@ -36,18 +37,23 @@ export async function getFileChanges(
 ): Promise<GetFileChangesResponse> {
   const actualAdapter = adapter ?? getAdapter();
 
+  // Normalize aliases: path → file_path
+  const normalizedParams = normalizeParams(params, {
+    path: 'file_path'
+  }) as GetFileChangesParams;
+
   try {
     // Fail-fast: Validate project context is initialized (Constraint #29)
     const projectId = getProjectContext().getProjectId();
 
     // Validate parameters
-    validateActionParams('file', 'get', params);
+    validateActionParams('file', 'get', normalizedParams);
 
     // Execute with connection retry
     return await connectionManager.executeWithRetry(async () => {
       const knex = actualAdapter.getKnex();
       const db = new UniversalKnex(knex);
-      const limit = params.limit || DEFAULT_QUERY_LIMIT;
+      const limit = normalizedParams.limit || DEFAULT_QUERY_LIMIT;
 
       // Build query using JOINs (no views - cross-DB compatible)
       // Note: Agent tracking removed in v4.0 - changed_by field removed
@@ -57,31 +63,31 @@ export async function getFileChanges(
         .where('fc.project_id', projectId);
 
       // Apply filter conditions
-      if (params.file_path) {
-        query = query.where('f.path', params.file_path);
+      if (normalizedParams.file_path) {
+        query = query.where('f.path', normalizedParams.file_path);
       }
 
       // Note: agent_name filter removed in v4.0 (agent tracking removed)
 
-      if (params.layer) {
+      if (normalizedParams.layer) {
         // Validate layer
-        if (!STANDARD_LAYERS.includes(params.layer as any)) {
+        if (!STANDARD_LAYERS.includes(normalizedParams.layer as any)) {
           throw new Error(
-            `Invalid layer: ${params.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
+            `Invalid layer: ${normalizedParams.layer}. Must be one of: ${STANDARD_LAYERS.join(', ')}`
           );
         }
-        query = query.where('l.name', params.layer);
+        query = query.where('l.name', normalizedParams.layer);
       }
 
-      if (params.change_type) {
-        validateChangeType(params.change_type);
-        const changeTypeInt = STRING_TO_CHANGE_TYPE[params.change_type];
+      if (normalizedParams.change_type) {
+        validateChangeType(normalizedParams.change_type);
+        const changeTypeInt = STRING_TO_CHANGE_TYPE[normalizedParams.change_type];
         query = query.where('fc.change_type', changeTypeInt);
       }
 
-      if (params.since) {
+      if (normalizedParams.since) {
         // Convert ISO 8601 to Unix epoch
-        const sinceEpoch = Math.floor(new Date(params.since).getTime() / 1000);
+        const sinceEpoch = Math.floor(new Date(normalizedParams.since).getTime() / 1000);
         query = query.where('fc.ts', '>=', sinceEpoch);
       }
 

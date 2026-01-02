@@ -106,7 +106,7 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
       sort_order: 'desc',
       limit: 20
     },
-    hint: "Use tags_all for AND logic (must have ALL tags), tags_any for OR logic (must have ANY tag)"
+    hint: "Use tags_all for AND logic, tags_any for OR logic. Aliases: after→updated_after, before→updated_before"
   },
 
   set_batch: {
@@ -194,7 +194,7 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
       },
       decided_by: 'architecture-team'
     },
-    hint: "Add rich context explaining WHY decisions were made, not just WHAT was decided"
+    hint: "Add rich context explaining WHY decisions were made. Aliases: alternatives→alternatives_considered, task_id→related_task_id, constraint_id→related_constraint_id"
   },
 
   list_decision_contexts: {
@@ -205,6 +205,6 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
       decision_key: 'database/postgresql-choice',
       limit: 50
     },
-    hint: "Query decision contexts with optional filters for traceability"
+    hint: "Query decision contexts with optional filters for traceability. Alias: key→decision_key"
   }
 };
