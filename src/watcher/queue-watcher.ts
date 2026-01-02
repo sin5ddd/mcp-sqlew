@@ -15,9 +15,11 @@
 import { join, dirname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { BaseWatcher } from './base-watcher.js';
-import { getQueuePath, hasQueueItems, processQueue, DecisionQueueItem } from '../utils/hook-queue.js';
+import { getQueuePath, hasQueueItems, processQueue, type QueueItem, type DecisionQueueItem, type ConstraintQueueItem } from '../utils/hook-queue.js';
 import { quickSetDecision } from '../tools/context/actions/quick-set.js';
 import { setDecision } from '../tools/context/actions/set.js';
+import { addConstraint } from '../tools/constraints/actions/add.js';
+import { activateConstraintsByTag } from '../tools/constraints/actions/activate.js';
 import { debugLog } from '../utils/debug-logger.js';
 import type { StatusString } from '../types.js';
 
@@ -148,12 +150,24 @@ export class QueueWatcher extends BaseWatcher {
   }
 
   /**
-   * Process a single queue item
+   * Process a single queue item (decision or constraint)
+   * @since v4.2.1 - Added constraint support
    */
-  private async processItem(item: DecisionQueueItem): Promise<void> {
+  private async processItem(item: QueueItem): Promise<void> {
+    if (item.type === 'decision') {
+      await this.processDecisionItem(item as DecisionQueueItem);
+    } else if (item.type === 'constraint') {
+      await this.processConstraintItem(item as ConstraintQueueItem);
+    }
+  }
+
+  /**
+   * Process a decision queue item
+   */
+  private async processDecisionItem(item: DecisionQueueItem): Promise<void> {
     const { action, data } = item;
 
-    debugLog('INFO', `${this.watcherName}: Processing ${action}`, { key: data.key });
+    debugLog('INFO', `${this.watcherName}: Processing decision ${action}`, { key: data.key });
 
     if (action === 'create') {
       await quickSetDecision({
@@ -171,6 +185,35 @@ export class QueueWatcher extends BaseWatcher {
         layer: data.layer,
         tags: data.tags,
       });
+    }
+  }
+
+  /**
+   * Process a constraint queue item
+   * @since v4.2.1
+   */
+  private async processConstraintItem(item: ConstraintQueueItem): Promise<void> {
+    const { action, data } = item;
+
+    debugLog('INFO', `${this.watcherName}: Processing constraint ${action}`, { text: data.text?.slice(0, 50) });
+
+    if (action === 'create') {
+      const priority = data.priority as 'low' | 'medium' | 'high' | 'critical' | undefined;
+      await addConstraint({
+        constraint_text: data.text,
+        category: data.category || 'architecture',
+        priority: priority || 'medium',
+        layer: data.layer,
+        tags: data.tags,
+        active: data.active ?? true,
+      });
+    } else if (action === 'activate') {
+      // Activate constraints by plan_id tag
+      if (data.plan_id) {
+        const tag = data.plan_id.slice(0, 8); // Short form of plan_id
+        const result = await activateConstraintsByTag(tag);
+        debugLog('INFO', `${this.watcherName}: Activated ${result.activated_count} constraints for plan ${tag}`);
+      }
     }
   }
 

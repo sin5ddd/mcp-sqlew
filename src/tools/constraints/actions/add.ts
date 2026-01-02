@@ -85,12 +85,14 @@ export async function addConstraint(
         const ts = Math.floor(Date.now() / 1000);
 
         // Insert constraint with project_id (agent_id removed in v4.0)
+        // v4.2.1: Support active parameter for plan-based workflow
+        const activeValue = params.active === false ? 0 : SQLITE_TRUE;
         const [constraintId] = await trx('v4_constraints').insert({
           category_id: categoryId,
           layer_id: layerId,
           constraint_text: normalizedParams.constraint_text,
           priority: priority,
-          active: SQLITE_TRUE,
+          active: activeValue,
           ts: ts,
           project_id: projectId
         });

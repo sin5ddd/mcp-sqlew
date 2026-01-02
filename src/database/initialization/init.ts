@@ -74,10 +74,10 @@ export async function initializeDatabase(
   try {
     const hasKnexMigrations = await knex.schema.hasTable('knex_migrations');
     if (hasKnexMigrations) {
-      // Delete all v3 migration records (those not starting with v4 prefix)
-      // v4 migrations start with 20251126 timestamp
+      // Delete only v3 migration records (timestamps before 20251126)
+      // v4 migrations: 20251126 and later (20251127, 20260102, etc.)
       const deleted = await knex('knex_migrations')
-        .whereNot('name', 'like', '20251126%')
+        .where('name', '<', '20251126')
         .delete();
       if (deleted > 0) {
         debugLog('INFO', `Cleared ${deleted} obsolete v3 migration records from knex_migrations`);

@@ -66,3 +66,8 @@ docker/data/*/
 # testing directories
 test-two-step-git/
 test-vcs-staging/
+
+# sqlew auto-generated files
+.claude/skills/sqlew-decision-format/
+.claude/skills/sqlew-plan-guidance/
+.claude/commands/sqlew.md

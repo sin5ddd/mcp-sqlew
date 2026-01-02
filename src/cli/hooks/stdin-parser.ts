@@ -97,6 +97,17 @@ export interface PreToolUseHookOutput {
 }
 
 /**
+ * Hook-specific output for PostToolUse (v4.2.0+)
+ * Used for injecting context after tool execution
+ */
+export interface PostToolUseHookOutput {
+  /** Hook event name */
+  hookEventName: 'PostToolUse';
+  /** Additional context to inject into Claude's context */
+  additionalContext?: string;
+}
+
+/**
  * Hook output to Claude Code
  */
 export interface HookOutput {
@@ -110,8 +121,8 @@ export interface HookOutput {
   systemMessage?: string;
   /** Whether to suppress output */
   suppressOutput?: boolean;
-  /** Hook-specific output (PreToolUse, PermissionRequest) - v4.2.0+ */
-  hookSpecificOutput?: PreToolUseHookOutput;
+  /** Hook-specific output (PreToolUse, PostToolUse) - v4.2.0+ */
+  hookSpecificOutput?: PreToolUseHookOutput | PostToolUseHookOutput;
   /** @deprecated Use hookSpecificOutput.updatedInput instead */
   updatedInput?: ToolInput;
 }
@@ -194,6 +205,25 @@ export function sendContinue(additionalContext?: string, systemMessage?: string)
 }
 
 /**
+ * Send a continue response with context for PostToolUse
+ *
+ * Uses hookSpecificOutput format which is required for PostToolUse hooks
+ * to properly inject context into Claude's conversation.
+ *
+ * @param additionalContext - Context to inject after tool execution
+ */
+export function sendPostToolUseContext(additionalContext: string): void {
+  const output: HookOutput = {
+    continue: true,
+    hookSpecificOutput: {
+      hookEventName: 'PostToolUse',
+      additionalContext,
+    },
+  };
+  writeHookOutput(output);
+}
+
+/**
  * Send a block response (exit code 2)
  *
  * @param reason - Reason for blocking
@@ -232,6 +262,10 @@ export function sendUpdatedInput(originalInput: ToolInput, modifications: Partia
 /**
  * Check if the hook input is for a plan file
  *
+ * Plan files can be in:
+ * - Global: ~/.claude/plans/*.md (e.g., C:/Users/xxx/.claude/plans/my-plan.md)
+ * - Project: .claude/plans/*.md (relative path)
+ *
  * @param input - Hook input
  * @returns true if the tool is operating on a plan file
  */
@@ -241,9 +275,13 @@ export function isPlanFile(input: HookInput): boolean {
     return false;
   }
 
-  // Check if the path matches .claude/plans/*.md pattern
+  // Normalize path separators for cross-platform support
   const normalizedPath = filePath.replace(/\\/g, '/');
-  return /\.claude\/plans\/[^/]+\.md$/.test(normalizedPath);
+
+  // Match both global and project-local plan paths:
+  // - Global: /Users/xxx/.claude/plans/foo.md, C:/Users/xxx/.claude/plans/foo.md
+  // - Project: .claude/plans/foo.md
+  return /[/\\]?\.claude\/plans\/[^/]+\.md$/.test(normalizedPath);
 }
 
 /**

@@ -43,7 +43,7 @@ export type FileAction =
  * Provides compile-time type checking for action parameters
  */
 export type ConstraintAction =
-  | 'add' | 'get' | 'deactivate' | 'suggest_pending'
+  | 'add' | 'get' | 'activate' | 'deactivate' | 'suggest_pending'
   | 'help' | 'example' | 'use_case';
 
 /**

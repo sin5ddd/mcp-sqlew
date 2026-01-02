@@ -1,55 +1,21 @@
 /**
  * Suggest Hook Command
  *
- * PreToolUse hook for Task tool - suggests related decisions.
- * Extracts keywords from task description/prompt and finds related decisions.
+ * PreToolUse hook for Task tool - manages Plan agent sessions.
+ * Clears stale caches when a new Plan agent starts.
+ *
+ * NOTE: Template injection removed in v4.2.2 - didn't work reliably.
+ * Using Skills-based template injection instead.
  *
  * Usage:
- *   echo '{"tool_input": {"description": "implement auth"}}' | sqlew suggest
+ *   echo '{"tool_input": {"subagent_type": "Plan"}}' | sqlew suggest
  *
  * @since v4.1.0
+ * @modified v4.2.2 - Removed template injection, simplified to cache management
  */
 
-import { readStdinJson, sendContinue, sendUpdatedInput, isPlanAgent, getProjectPath } from './stdin-parser.js';
+import { readStdinJson, sendContinue, isPlanAgent, getProjectPath } from './stdin-parser.js';
 import { clearPlanTomlCache, clearCurrentPlan } from '../../config/global-config.js';
-
-// ============================================================================
-// Plan TOML Template (v4.2.0+)
-// ============================================================================
-
-/**
- * TOML template for Plan agent
- * Injected when Plan agent is invoked to guide structured decision/constraint documentation
- */
-const PLAN_TOML_TEMPLATE = `
-## Architectural Decisions & Constraints
-
-When making architectural choices in this plan, document them using TOML format:
-
-\`\`\`toml
-# Record key decisions made during planning
-[[decision]]
-key = "component/topic"           # Required: hierarchical key
-value = "What was decided"        # Required: the decision
-status = "active"                 # active|deprecated|draft
-layer = "business"                # presentation|business|data|infrastructure|cross-cutting
-tags = ["tag1", "tag2"]
-rationale = "Why this choice"
-alternatives = ["Option B", "Option C"]
-tradeoffs = "Gains vs sacrifices"
-
-# Define constraints to enforce decisions
-[[constraint]]
-constraint_text = "Rule description"  # Required: what must be done/avoided
-category = "security"             # Required: architecture|security|code-style|performance
-priority = "high"                 # critical|high|medium|low
-layer = "business"
-tags = ["tag1"]
-rationale = "Why this rule exists"
-\`\`\`
-
-Note: Decisions will be auto-registered on task completion. Constraints will prompt for confirmation.
-`.trim();
 
 // ============================================================================
 // Main Entry Point
@@ -59,7 +25,7 @@ Note: Decisions will be auto-registered on task completion. Constraints will pro
  * Main suggest command entry point
  *
  * Called as PreToolUse hook when Task tool is invoked.
- * Finds related decisions and injects them as context.
+ * For Plan agents: clears stale caches from previous sessions.
  */
 export async function suggestCommand(): Promise<void> {
   try {
@@ -71,28 +37,18 @@ export async function suggestCommand(): Promise<void> {
       return;
     }
 
-    // Check if this is a Plan agent via Task tool - inject TOML template via updatedInput
-    // This modifies the Task tool's prompt to include the TOML template
+    // Check if this is a Plan agent - clear stale caches
     if (isPlanAgent(input)) {
-      // Clear stale caches from previous sessions (v4.2.0+)
-      // This prevents false positives in on-subagent-stop hook
       const projectPath = getProjectPath(input);
       if (projectPath) {
+        // Clear stale caches from previous sessions (v4.2.0+)
+        // This prevents false positives in on-subagent-stop hook
         clearCurrentPlan(projectPath);
         clearPlanTomlCache(projectPath);
       }
-
-      const originalPrompt = input.tool_input?.prompt || '';
-      const enrichedPrompt = `${originalPrompt}\n\n---\n\n${PLAN_TOML_TEMPLATE}`;
-
-      sendUpdatedInput(input.tool_input || {}, {
-        prompt: enrichedPrompt,
-      });
-      return;
     }
 
-    // Non-Plan agents (Explore, etc.) - skip DB connection for performance (v4.2.0+)
-    // Only Plan agents need sqlew context injection
+    // Continue without modification
     sendContinue();
   } catch (error) {
     // On error, log to stderr but continue execution

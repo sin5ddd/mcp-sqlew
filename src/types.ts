@@ -418,6 +418,8 @@ export interface AddConstraintParams {
   layer?: string;
   tags?: string[];
   created_by?: string;
+  /** @since v4.2.1 - Set to false to create inactive constraint (for plan-based workflow) */
+  active?: boolean;
 }
 
 export interface GetConstraintsParams {
@@ -425,7 +427,7 @@ export interface GetConstraintsParams {
   layer?: string;
   priority?: 'low' | 'medium' | 'high' | 'critical';
   tags?: string[];
-  active_only?: boolean;
+  include_inactive?: boolean;
   limit?: number;
 }
 
@@ -935,7 +937,7 @@ export type FileAction =
  * Provides compile-time type checking for action parameters
  */
 export type ConstraintAction =
-  | 'add' | 'get' | 'deactivate' | 'suggest_pending'
+  | 'add' | 'get' | 'activate' | 'deactivate' | 'suggest_pending'
   | 'help' | 'example' | 'use_case';
 
 /**

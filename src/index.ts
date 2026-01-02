@@ -14,14 +14,16 @@
 const rawArgs = process.argv.slice(2);
 const firstArg = rawArgs[0] || '';
 
-// Check if this is a CLI command
+// Check if this is a CLI command or flag
 const cliCommands = [
   'db:dump', 'db:export', 'db:import', 'query',
   'suggest', 'track-plan', 'save', 'check-completion', 'mark-done', 'init',
   // New hook events (v4.2.0+)
   'on-subagent-stop', 'on-stop', 'on-exit-plan',
 ];
-const isCliCommand = cliCommands.includes(firstArg);
+// CLI flags that should route to CLI (not MCP server)
+const cliFlags = ['--init', '--help', '--version'];
+const isCliCommand = cliCommands.includes(firstArg) || cliFlags.includes(firstArg);
 
 if (isCliCommand) {
   // Delegate to CLI module

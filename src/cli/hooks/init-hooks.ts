@@ -84,7 +84,7 @@ interface HookCommand {
  * Note: TodoWrite works even though not in official docs (verified v4.1.2)
  * ExitPlanMode, EnterPlanMode are INVALID matchers!
  *
- * @since v4.2.0 - Restored PostToolUse hooks + SubagentStop/Stop events
+ * @since v4.2.0 - Restored PostToolUse hooks + SubagentStop/Stop events + EnterPlanMode
  */
 const CLAUDE_HOOKS: RequiredHooks = {
   PreToolUse: [
@@ -105,6 +105,12 @@ const CLAUDE_HOOKS: RequiredHooks = {
     {
       matcher: 'TodoWrite',
       hooks: [{ type: 'command', command: 'sqlew check-completion' }],
+    },
+    {
+      // EnterPlanMode - inject TOML template after plan mode starts
+      // Note: May not be a valid matcher, but testing anyway (like ExitPlanMode)
+      matcher: 'EnterPlanMode',
+      hooks: [{ type: 'command', command: 'sqlew on-enter-plan' }],
     },
     {
       // ExitPlanMode - prompt TOML documentation after plan approval

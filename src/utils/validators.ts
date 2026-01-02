@@ -114,12 +114,12 @@ export function validateChangeType(changeType: string): 'created' | 'modified' |
  * Validates category enum
  * @throws Error if category is invalid
  */
-export function validateCategory(category: string): 'performance' | 'architecture' | 'security' {
-  const validCategories = ['performance', 'architecture', 'security'];
+export function validateCategory(category: string): 'performance' | 'architecture' | 'security' | 'code-style' {
+  const validCategories = ['performance', 'architecture', 'security', 'code-style'];
   if (!validCategories.includes(category)) {
     throw new Error(`Invalid category. Must be one of: ${validCategories.join(', ')}`);
   }
-  return category as 'performance' | 'architecture' | 'security';
+  return category as 'performance' | 'architecture' | 'security' | 'code-style';
 }
 
 /**

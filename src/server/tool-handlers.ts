@@ -15,7 +15,7 @@ import {
   recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch, sqliteFlush, fileHelp, fileExample
 } from '../tools/files/index.js';
 import {
-  addConstraint, getConstraints, deactivateConstraint, suggestPendingConstraints,
+  addConstraint, getConstraints, activateConstraint, deactivateConstraint, suggestPendingConstraints,
   constraintHelp, constraintExample
 } from '../tools/constraints/index.js';
 import {
@@ -184,6 +184,7 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
         switch (action) {
           case 'add': result = await addConstraint(params); break;
           case 'get': result = await getConstraints(params); break;
+          case 'activate': result = await activateConstraint(params); break;
           case 'deactivate': result = await deactivateConstraint(params); break;
           case 'suggest_pending': result = await suggestPendingConstraints(params); break;
           case 'help':

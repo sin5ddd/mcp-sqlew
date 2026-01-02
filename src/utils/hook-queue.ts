@@ -15,7 +15,7 @@ import { join, dirname } from 'path';
 // ============================================================================
 
 /** Queue item action type */
-export type QueueAction = 'create' | 'update';
+export type QueueAction = 'create' | 'update' | 'activate';
 
 /** Queue item for decision operations */
 export interface DecisionQueueItem {
@@ -31,9 +31,28 @@ export interface DecisionQueueItem {
   };
 }
 
+/** Queue item for constraint operations */
+export interface ConstraintQueueItem {
+  type: 'constraint';
+  action: QueueAction;
+  timestamp: string;
+  data: {
+    text: string;
+    category?: string;
+    priority?: string;
+    layer?: string;
+    tags?: string[];
+    active?: boolean;
+    plan_id?: string;
+  };
+}
+
+/** Union type for all queue items */
+export type QueueItem = DecisionQueueItem | ConstraintQueueItem;
+
 /** Queue file structure */
 export interface QueueFile {
-  items: DecisionQueueItem[];
+  items: QueueItem[];
 }
 
 // ============================================================================
@@ -167,7 +186,7 @@ export function enqueueDecisionUpdate(
  */
 export async function processQueue(
   projectPath: string,
-  processor: (item: DecisionQueueItem) => Promise<void>
+  processor: (item: QueueItem) => Promise<void>
 ): Promise<number> {
   const queue = readQueue(projectPath);
   if (queue.items.length === 0) {
@@ -175,7 +194,7 @@ export async function processQueue(
   }
 
   let processed = 0;
-  const errors: Array<{ item: DecisionQueueItem; error: string }> = [];
+  const errors: Array<{ item: QueueItem; error: string }> = [];
 
   for (const item of queue.items) {
     try {
@@ -216,4 +235,62 @@ export function clearQueue(projectPath: string): void {
 export function hasQueueItems(projectPath: string): boolean {
   const queue = readQueue(projectPath);
   return queue.items.length > 0;
+}
+
+// ============================================================================
+// Constraint Queue Operations (v4.2.1+)
+// ============================================================================
+
+/**
+ * Enqueue a constraint creation
+ *
+ * @param projectPath - Project root path
+ * @param data - Constraint data
+ */
+export function enqueueConstraintCreate(
+  projectPath: string,
+  data: {
+    text: string;
+    category?: string;
+    priority?: string;
+    layer?: string;
+    tags?: string[];
+    active?: boolean;
+    plan_id?: string;
+  }
+): void {
+  const queue = readQueue(projectPath);
+  const item: ConstraintQueueItem = {
+    type: 'constraint',
+    action: 'create',
+    timestamp: new Date().toISOString(),
+    data,
+  };
+  queue.items.push(item);
+  writeQueue(projectPath, queue);
+}
+
+/**
+ * Enqueue constraint activation (set active=1)
+ *
+ * @param projectPath - Project root path
+ * @param planId - Plan ID to match constraints
+ */
+export function enqueueConstraintActivate(
+  projectPath: string,
+  planId: string
+): void {
+  const queue = readQueue(projectPath);
+  const item: ConstraintQueueItem = {
+    type: 'constraint',
+    action: 'activate',
+    timestamp: new Date().toISOString(),
+    data: {
+      text: '', // Not used for activate action
+      plan_id: planId,
+      active: true,
+    },
+  };
+  queue.items.push(item);
+  writeQueue(projectPath, queue);
 }

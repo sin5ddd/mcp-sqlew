@@ -1,31 +1,54 @@
 /**
  * Save Hook Command
  *
- * PostToolUse hook for ExitPlanMode - enqueues decision status update.
- * When plan mode exits, enqueues update from draft to in_progress.
- * Actual DB operations happen when MCP server processes the queue.
+ * PostToolUse hook for Edit|Write - promotes decisions/constraints when implementation starts.
+ * When non-markdown files are modified, promotes draft decisions to in_progress
+ * and activates inactive constraints.
  *
  * Usage:
- *   echo '{"tool_name": "ExitPlanMode"}' | sqlew save
+ *   echo '{"tool_name": "Write", "tool_input": {"file_path": "src/foo.ts"}}' | sqlew save
  *
  * @since v4.1.0
- * @updated v4.1.0 - Changed trigger from Edit|Write to ExitPlanMode only (zero delay on code edits)
- * @updated v4.1.0 - File queue architecture (no DB operations in hooks)
+ * @updated v4.2.1 - Changed to detect implementation files (NOT *.md) and promote decisions/constraints
  */
 
 import { readStdinJson, sendContinue, getProjectPath } from './stdin-parser.js';
 import { loadCurrentPlan, saveCurrentPlan, type CurrentPlanInfo } from '../../config/global-config.js';
-import { enqueueDecisionUpdate } from '../../utils/hook-queue.js';
+import { enqueueDecisionUpdate, enqueueConstraintActivate } from '../../utils/hook-queue.js';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-/** Decision key prefix for plan-based decisions */
-const PLAN_DECISION_PREFIX = 'plan/implementation';
-
 /** Status for in-progress decisions */
 const IN_PROGRESS_STATUS = 'in_progress' as const;
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Check if a file path is an implementation file (not a markdown or plan file)
+ */
+function isImplementationFile(filePath: string | undefined): boolean {
+  if (!filePath) return false;
+
+  const normalized = filePath.replace(/\\/g, '/').toLowerCase();
+
+  // Exclude markdown files
+  if (normalized.endsWith('.md')) return false;
+
+  // Exclude plan files explicitly
+  if (normalized.includes('.claude/plans/')) return false;
+
+  // Exclude documentation directories
+  if (normalized.includes('/docs/')) return false;
+
+  // Exclude config files that aren't really implementation
+  if (normalized.endsWith('.json') && !normalized.includes('/src/')) return false;
+
+  return true;
+}
 
 // ============================================================================
 // Main Entry Point
@@ -34,23 +57,31 @@ const IN_PROGRESS_STATUS = 'in_progress' as const;
 /**
  * Main save command entry point
  *
- * Called as PostToolUse hook when ExitPlanMode completes.
- * Enqueues decision status update if a plan is being tracked.
- * No DB operations - fast execution (<100ms).
+ * Called as PostToolUse hook when Edit|Write completes.
+ * When implementation files are modified, promotes decisions and activates constraints.
  */
 export async function saveCommand(): Promise<void> {
   try {
     const input = await readStdinJson();
 
-    // Only process ExitPlanMode tool
+    // Only process Edit and Write tools
     const toolName = input.tool_name;
-    if (toolName !== 'ExitPlanMode') {
+    if (toolName !== 'Edit' && toolName !== 'Write') {
       sendContinue();
       return;
     }
 
     const projectPath = getProjectPath(input);
     if (!projectPath) {
+      sendContinue();
+      return;
+    }
+
+    // Get file path from tool input
+    const filePath = input.tool_input?.file_path as string | undefined;
+
+    // Only process implementation files
+    if (!isImplementationFile(filePath)) {
       sendContinue();
       return;
     }
@@ -70,20 +101,18 @@ export async function saveCommand(): Promise<void> {
       return;
     }
 
-    // Build decision key from plan file name
-    const planName = planInfo.plan_file.replace(/\.md$/, '');
-    const decisionKey = `${PLAN_DECISION_PREFIX}/${planName}`;
-
-    // Enqueue status update (no DB operations here)
+    // Enqueue decision status update: draft → in_progress
+    // This will update all decisions with the plan_id tag
     enqueueDecisionUpdate(projectPath, {
-      key: decisionKey,
-      value: `Implementation in progress for plan: ${planInfo.plan_file}`,
+      key: `plan/${planInfo.plan_file.replace(/\.md$/, '')}`,
       status: IN_PROGRESS_STATUS,
-      layer: 'cross-cutting',
-      tags: ['plan', 'implementation', 'active', planInfo.plan_id.slice(0, 8)],
+      tags: ['plan', planInfo.plan_id.slice(0, 8)],
     });
 
-    // Mark plan as recorded
+    // Enqueue constraint activation: active=0 → active=1
+    enqueueConstraintActivate(projectPath, planInfo.plan_id);
+
+    // Mark plan as recorded (implementation started)
     const updatedInfo: CurrentPlanInfo = {
       ...planInfo,
       recorded: true,
@@ -93,10 +122,10 @@ export async function saveCommand(): Promise<void> {
     saveCurrentPlan(projectPath, updatedInfo);
 
     sendContinue(
-      `[sqlew] Queued decision update for plan: ${planInfo.plan_file} (will process on MCP startup)`
+      `[sqlew] Implementation started for plan: ${planInfo.plan_file} | ` +
+      `Queued: decisions → in_progress, constraints → active`
     );
   } catch (error) {
-    // On error, log to stderr but continue execution
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[sqlew save] Error: ${message}`);
     sendContinue();

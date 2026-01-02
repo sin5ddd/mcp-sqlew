@@ -14,7 +14,7 @@
 import { existsSync } from 'fs';
 import { resolve, isAbsolute } from 'path';
 import { DatabaseAdapter, initializeDatabase, setConfigValue, getAllConfig, getAdapter } from '../database.js';
-import { CONFIG_KEYS } from '../constants.js';
+import { CONFIG_KEYS, DEFAULT_DB_PATH } from '../constants.js';
 import { loadConfigFile, DEFAULT_CONFIG_PATH } from '../config/loader.js';
 import type { SqlewConfig } from '../config/types.js';
 import { ensureProjectConfig } from '../config/writer.js';
@@ -260,10 +260,10 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
       throw new Error(`Database connection failed: ${error.message}`);
     }
   } else {
-    // SQLite (default or explicit) - backwards compatible behavior
-    const config = dbPath
-      ? { connection: { filename: dbPath } }
-      : undefined;
+    // SQLite (default or explicit) - always resolve DB path from project root
+    // This ensures migrations run on the correct database (not the package's DB)
+    const resolvedDbPath = dbPath || resolve(finalProjectRoot, DEFAULT_DB_PATH);
+    const config = { connection: { filename: resolvedDbPath } };
     db = await initializeDatabase(config);
   }
 
