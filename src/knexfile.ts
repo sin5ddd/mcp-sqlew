@@ -9,11 +9,16 @@ import { parse as parseTOML } from 'smol-toml';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Project root is one level up from src/ (where this file lives)
+// This ensures migrations always target the correct database regardless of cwd
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+
 // Read database path from config.toml (same as MCP server does)
 // Priority: Environment variable > config.toml > default
 let configDbPath: string | undefined;
-const projectRoot = path.resolve(__dirname, '..');
-const configPath = path.join(projectRoot, '.sqlew/config.toml');
+// Use PROJECT_ROOT for config lookup (not process.cwd())
+// This ensures consistent DB path resolution regardless of where npm command is run
+const configPath = path.join(PROJECT_ROOT, '.sqlew/config.toml');
 
 if (existsSync(configPath)) {
   try {
@@ -32,18 +37,18 @@ const config: { [key: string]: Knex.Config } = {
     client: 'better-sqlite3',
     connection: {
       // Development uses project root relative path
-      filename: path.resolve(process.cwd(), DEFAULT_DB_PATH),
+      filename: path.resolve(PROJECT_ROOT, DEFAULT_DB_PATH),
     },
     useNullAsDefault: true,
     migrations: {
       directory: path.join(__dirname, 'database/migrations/v4'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production (tsx still loads .ts via loadExtensions)
       tableName: 'knex_migrations',
       loadExtensions: ['.ts'],
     },
     seeds: {
       directory: path.join(__dirname, 'seeds'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production
       loadExtensions: ['.ts'],
     },
     // Enable better-sqlite3 pragmas for performance
@@ -66,12 +71,12 @@ const config: { [key: string]: Knex.Config } = {
     useNullAsDefault: true,
     migrations: {
       directory: path.join(__dirname, 'database/migrations/v4'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production
       loadExtensions: ['.ts'],
     },
     seeds: {
       directory: path.join(__dirname, 'seeds'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production
       loadExtensions: ['.ts'],
     },
   },
@@ -80,7 +85,7 @@ const config: { [key: string]: Knex.Config } = {
     client: 'better-sqlite3',
     connection: {
       // Production uses project root relative path
-      filename: path.resolve(process.cwd(), DEFAULT_DB_PATH),
+      filename: path.resolve(PROJECT_ROOT, DEFAULT_DB_PATH),
     },
     useNullAsDefault: true,
     migrations: {
@@ -117,13 +122,13 @@ const config: { [key: string]: Knex.Config } = {
     },
     migrations: {
       directory: path.join(__dirname, 'database/migrations/v4'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production
       tableName: 'knex_migrations',
       loadExtensions: ['.ts'],
     },
     seeds: {
       directory: path.join(__dirname, 'seeds'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production
       loadExtensions: ['.ts'],
     },
     pool: {
@@ -144,13 +149,13 @@ const config: { [key: string]: Knex.Config } = {
     },
     migrations: {
       directory: path.join(__dirname, 'database/migrations/v4'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production
       tableName: 'knex_migrations',
       loadExtensions: ['.ts'],
     },
     seeds: {
       directory: path.join(__dirname, 'seeds'),
-      extension: 'ts',
+      extension: 'js',  // Use .js to match production
       loadExtensions: ['.ts'],
     },
     pool: {

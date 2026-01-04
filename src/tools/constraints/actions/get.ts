@@ -48,7 +48,12 @@ export async function getConstraints(
         .join('v4_constraint_categories as cat', 'c.category_id', 'cat.id')
         .leftJoin('v4_layers as l', 'c.layer_id', 'l.id')
         .where('c.project_id', projectId)
-        .where('c.active', db.boolTrue());
+        ;
+
+      // Filter by active status (default: active only, unless include_inactive=true)
+      if (!params.include_inactive) {
+        query = query.where('c.active', db.boolTrue());
+      }
 
       // Filter by category
       if (params.category) {

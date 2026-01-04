@@ -9,6 +9,7 @@ import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
 import { CHANGE_TYPE_TO_STRING } from '../../../constants.js';
 import { validateActionParams } from '../internal/validation.js';
+import { normalizeParams } from '../../../utils/param-normalizer.js';
 import type { CheckFileLockParams, CheckFileLockResponse } from '../types.js';
 
 /**
@@ -25,17 +26,23 @@ export async function checkFileLock(
 ): Promise<CheckFileLockResponse> {
   const actualAdapter = adapter ?? getAdapter();
 
+  // Normalize aliases: path → file_path, duration → lock_duration
+  const normalizedParams = normalizeParams(params, {
+    path: 'file_path',
+    duration: 'lock_duration'
+  }) as CheckFileLockParams;
+
   try {
     // Fail-fast: Validate project context is initialized (Constraint #29)
     const projectId = getProjectContext().getProjectId();
 
     // Validate parameters
-    validateActionParams('file', 'check_lock', params);
+    validateActionParams('file', 'check_lock', normalizedParams);
 
     // Execute with connection retry
     return await connectionManager.executeWithRetry(async () => {
       const knex = actualAdapter.getKnex();
-      const lockDuration = params.lock_duration || 300; // Default 5 minutes
+      const lockDuration = normalizedParams.lock_duration || 300; // Default 5 minutes
       const currentTime = Math.floor(Date.now() / 1000);
       const lockThreshold = currentTime - lockDuration;
 
@@ -43,7 +50,7 @@ export async function checkFileLock(
       // Note: Agent tracking removed in v4.0 - last_agent field removed
       const result = await knex('v4_file_changes as fc')
         .join('v4_files as f', 'fc.file_id', 'f.id')
-        .where('f.path', params.file_path)
+        .where('f.path', normalizedParams.file_path)
         .where('fc.project_id', projectId)
         .select('fc.change_type', 'fc.ts')
         .orderBy('fc.ts', 'desc')

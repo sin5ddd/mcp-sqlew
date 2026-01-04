@@ -6,6 +6,7 @@
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter, addDecisionContext as dbAddDecisionContext } from '../../../database.js';
 import { validateActionParams } from '../internal/validation.js';
+import { normalizeParams } from '../../../utils/param-normalizer.js';
 
 /**
  * Add decision context
@@ -18,15 +19,22 @@ export async function addDecisionContextAction(
   params: any,
   adapter?: DatabaseAdapter
 ): Promise<any> {
+  // Normalize aliases: alternatives → alternatives_considered, etc.
+  const normalizedParams = normalizeParams(params, {
+    alternatives: 'alternatives_considered',
+    task_id: 'related_task_id',
+    constraint_id: 'related_constraint_id'
+  });
+
   // Validate parameters
-  validateActionParams('decision', 'add_decision_context', params);
+  validateActionParams('decision', 'add_decision_context', normalizedParams);
 
   const actualAdapter = adapter ?? getAdapter();
 
   try {
     // Parse JSON if provided as strings
-    let alternatives = params.alternatives_considered || null;
-    let tradeoffs = params.tradeoffs || null;
+    let alternatives = normalizedParams.alternatives_considered || null;
+    let tradeoffs = normalizedParams.tradeoffs || null;
 
     // Convert to JSON strings
     if (alternatives !== null) {
@@ -55,20 +63,20 @@ export async function addDecisionContextAction(
 
     const contextId = await dbAddDecisionContext(
       actualAdapter,
-      params.key,
-      params.rationale,
+      normalizedParams.key,
+      normalizedParams.rationale,
       alternatives,
       tradeoffs,
-      params.decided_by || null,
-      params.related_task_id || null,
-      params.related_constraint_id || null
+      normalizedParams.decided_by || null,
+      normalizedParams.related_task_id || null,
+      normalizedParams.related_constraint_id || null
     );
 
     return {
       success: true,
       context_id: contextId,
-      decision_key: params.key,
-      message: `Decision context added successfully to "${params.key}"`
+      decision_key: normalizedParams.key,
+      message: `Decision context added successfully to "${normalizedParams.key}"`
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -66,7 +66,7 @@ export interface HookInput {
   /** Current working directory */
   cwd?: string;
   /** Hook event name */
-  hook_event_name?: 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'SessionEnd' | 'Stop' | 'SubagentStop';
+  hook_event_name?: 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'SessionEnd' | 'Stop' | 'SubagentStop' | 'Notification' | 'PreCompact' | 'UserPromptSubmit';
   /** Tool name being called */
   tool_name?: string;
   /** Tool input parameters */
@@ -77,6 +77,34 @@ export interface HookInput {
   transcript_path?: string;
   /** Permission mode */
   permission_mode?: string;
+  /** Stop hook active flag (for Stop/SubagentStop - prevents infinite loops) */
+  stop_hook_active?: boolean;
+}
+
+/**
+ * Hook-specific output for PreToolUse (v4.2.0+)
+ * Used for permission decisions and input modification
+ */
+export interface PreToolUseHookOutput {
+  /** Hook event name */
+  hookEventName: 'PreToolUse';
+  /** Permission decision */
+  permissionDecision?: 'allow' | 'deny' | 'ask';
+  /** Reason for the decision */
+  permissionDecisionReason?: string;
+  /** Updated tool input - modifies the tool's input before execution */
+  updatedInput?: ToolInput;
+}
+
+/**
+ * Hook-specific output for PostToolUse (v4.2.0+)
+ * Used for injecting context after tool execution
+ */
+export interface PostToolUseHookOutput {
+  /** Hook event name */
+  hookEventName: 'PostToolUse';
+  /** Additional context to inject into Claude's context */
+  additionalContext?: string;
 }
 
 /**
@@ -87,12 +115,16 @@ export interface HookOutput {
   continue?: boolean;
   /** Reason for stopping (if continue=false) */
   stopReason?: string;
-  /** Additional context to inject */
+  /** Additional context to inject (PostToolUse, UserPromptSubmit, SessionStart only) */
   additionalContext?: string;
   /** System message to add */
   systemMessage?: string;
   /** Whether to suppress output */
   suppressOutput?: boolean;
+  /** Hook-specific output (PreToolUse, PostToolUse) - v4.2.0+ */
+  hookSpecificOutput?: PreToolUseHookOutput | PostToolUseHookOutput;
+  /** @deprecated Use hookSpecificOutput.updatedInput instead */
+  updatedInput?: ToolInput;
 }
 
 // ============================================================================
@@ -173,6 +205,25 @@ export function sendContinue(additionalContext?: string, systemMessage?: string)
 }
 
 /**
+ * Send a continue response with context for PostToolUse
+ *
+ * Uses hookSpecificOutput format which is required for PostToolUse hooks
+ * to properly inject context into Claude's conversation.
+ *
+ * @param additionalContext - Context to inject after tool execution
+ */
+export function sendPostToolUseContext(additionalContext: string): void {
+  const output: HookOutput = {
+    continue: true,
+    hookSpecificOutput: {
+      hookEventName: 'PostToolUse',
+      additionalContext,
+    },
+  };
+  writeHookOutput(output);
+}
+
+/**
  * Send a block response (exit code 2)
  *
  * @param reason - Reason for blocking
@@ -182,12 +233,38 @@ export function sendBlock(reason: string): void {
   process.exit(2);
 }
 
+/**
+ * Send an updatedInput response (PreToolUse only)
+ *
+ * Modifies the tool's input before execution.
+ * Use this to inject context into Task tool prompts.
+ *
+ * NOTE: Uses root-level updatedInput format (not hookSpecificOutput) because
+ * that's what Claude Code actually processes. Verified in debug logs from
+ * 2025-12-26 where TOML template injection worked correctly.
+ *
+ * @param originalInput - Original tool input
+ * @param modifications - Fields to modify/add
+ */
+export function sendUpdatedInput(originalInput: ToolInput, modifications: Partial<ToolInput>): void {
+  const updatedInput = { ...originalInput, ...modifications };
+  const output: HookOutput = {
+    continue: true,
+    updatedInput,
+  };
+  writeHookOutput(output);
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
 
 /**
  * Check if the hook input is for a plan file
+ *
+ * Plan files can be in:
+ * - Global: ~/.claude/plans/*.md (e.g., C:/Users/xxx/.claude/plans/my-plan.md)
+ * - Project: .claude/plans/*.md (relative path)
  *
  * @param input - Hook input
  * @returns true if the tool is operating on a plan file
@@ -198,9 +275,13 @@ export function isPlanFile(input: HookInput): boolean {
     return false;
   }
 
-  // Check if the path matches .claude/plans/*.md pattern
+  // Normalize path separators for cross-platform support
   const normalizedPath = filePath.replace(/\\/g, '/');
-  return /\.claude\/plans\/[^/]+\.md$/.test(normalizedPath);
+
+  // Match both global and project-local plan paths:
+  // - Global: /Users/xxx/.claude/plans/foo.md, C:/Users/xxx/.claude/plans/foo.md
+  // - Project: .claude/plans/foo.md
+  return /[/\\]?\.claude\/plans\/[^/]+\.md$/.test(normalizedPath);
 }
 
 /**
@@ -227,4 +308,14 @@ export function areAllTodosCompleted(input: HookInput): boolean {
  */
 export function getProjectPath(input: HookInput): string | undefined {
   return input.cwd || process.env.CLAUDE_PROJECT_DIR;
+}
+
+/**
+ * Check if the hook input is for a Plan agent
+ *
+ * @param input - Hook input
+ * @returns true if subagent_type is 'Plan'
+ */
+export function isPlanAgent(input: HookInput): boolean {
+  return input.tool_input?.subagent_type === 'Plan';
 }

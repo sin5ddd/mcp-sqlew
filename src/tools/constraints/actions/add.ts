@@ -18,6 +18,7 @@ import {
 } from '../../../constants.js';
 import { validateCategory, validatePriority } from '../../../utils/validators.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
+import { normalizeParams, CONSTRAINT_ALIASES } from '../../../utils/param-normalizer.js';
 import { parseStringArray } from '../../../utils/param-parser.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
@@ -39,38 +40,53 @@ export async function addConstraint(
 ): Promise<AddConstraintResponse> {
   const actualAdapter = adapter ?? getAdapter();
 
+  // Normalize aliases: text → constraint_text
+  const normalizedParams = normalizeParams(params, CONSTRAINT_ALIASES) as AddConstraintParams;
+
   try {
     return await connectionManager.executeWithRetry(async () => {
       // Fail-fast project_id validation (Constraint #29)
       const projectId = getProjectContext().getProjectId();
 
       // Validate parameters
-      validateActionParams('constraint', 'add', params);
+      validateActionParams('constraint', 'add', normalizedParams);
 
       // Validate category
-      validateCategory(params.category);
+      validateCategory(normalizedParams.category);
 
       // Validate priority if provided
-      const priorityStr = params.priority || 'medium';
+      const priorityStr = normalizedParams.priority || 'medium';
       validatePriority(priorityStr);
       const priority = STRING_TO_PRIORITY[priorityStr] || DEFAULT_PRIORITY;
 
       // Validate and get layer ID if provided
       let layerId: number | null = null;
-      if (params.layer) {
-        if (!STANDARD_LAYERS.includes(params.layer as any)) {
+      if (normalizedParams.layer) {
+        if (!STANDARD_LAYERS.includes(normalizedParams.layer as any)) {
           throw new Error(`Invalid layer. Must be one of: ${STANDARD_LAYERS.join(', ')}`);
         }
-        layerId = await getLayerId(actualAdapter, params.layer);
+        layerId = await getLayerId(actualAdapter, normalizedParams.layer);
         if (!layerId) {
-          throw new Error(`Layer not found: ${params.layer}`);
+          throw new Error(`Layer not found: ${normalizedParams.layer}`);
         }
       }
 
       // Use transaction for multi-table insert
       const result = await actualAdapter.transaction(async (trx) => {
         // Get or create category
-        const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
+        const categoryId = await getOrCreateCategoryId(actualAdapter, normalizedParams.category, trx);
+
+        // Duplicate check: skip if same text + category already exists
+        const existing = await trx('v4_constraints')
+          .where({
+            constraint_text: normalizedParams.constraint_text,
+            category_id: categoryId,
+            project_id: projectId
+          })
+          .first();
+        if (existing) {
+          return { constraintId: existing.id, alreadyExists: true };
+        }
 
         // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 
@@ -78,20 +94,22 @@ export async function addConstraint(
         const ts = Math.floor(Date.now() / 1000);
 
         // Insert constraint with project_id (agent_id removed in v4.0)
+        // v4.2.1: Support active parameter for plan-based workflow
+        const activeValue = normalizedParams.active === false ? 0 : SQLITE_TRUE;
         const [constraintId] = await trx('v4_constraints').insert({
           category_id: categoryId,
           layer_id: layerId,
-          constraint_text: params.constraint_text,
+          constraint_text: normalizedParams.constraint_text,
           priority: priority,
-          active: SQLITE_TRUE,
+          active: activeValue,
           ts: ts,
           project_id: projectId
         });
 
         // Insert m_tags if provided
-        if (params.tags && params.tags.length > 0) {
+        if (normalizedParams.tags && normalizedParams.tags.length > 0) {
           // Parse tags (handles both arrays and JSON strings from MCP)
-          const tags = parseStringArray(params.tags);
+          const tags = parseStringArray(normalizedParams.tags);
           for (const tagName of tags) {
             const tagId = await getOrCreateTag(actualAdapter, projectId, tagName, trx);  // v3.7.3: pass projectId
             await trx('v4_constraint_tags').insert({
@@ -101,12 +119,13 @@ export async function addConstraint(
           }
         }
 
-        return { constraintId: Number(constraintId) };
+        return { constraintId: Number(constraintId), alreadyExists: false };
       });
 
       return {
         success: true,
         constraint_id: result.constraintId,
+        already_exists: result.alreadyExists,
       };
     });
   } catch (error) {

@@ -1,30 +1,57 @@
 /**
  * Track Plan Hook Command
  *
- * PreToolUse hook for Write tool - tracks plan files.
+ * PreToolUse hook for Write tool - tracks plan files and injects templates.
  * When a .claude/plans/*.md file is being written:
  * 1. Ensures plan has sqlew-plan-id in YAML frontmatter
  * 2. Saves current plan info to session cache
+ * 3. Injects Decision/Constraint template on new plan creation
+ *
+ * Decision/constraint extraction happens in on-exit-plan.ts using pattern matching.
  *
  * Usage:
  *   echo '{"tool_input": {"file_path": ".claude/plans/my-plan.md"}}' | sqlew track-plan
  *
  * @since v4.1.0
+ * @modified v4.2.2 - Removed LLM extraction, simplified to plan tracking only
+ * @modified v4.2.3 - Added template injection on new plan creation
  */
 
 import { readStdinJson, sendContinue, isPlanFile, getProjectPath } from './stdin-parser.js';
-import { ensurePlanId, extractPlanFileName, getPlanId, parseFrontmatter, generatePlanId } from './plan-id-utils.js';
-import { saveCurrentPlan, loadCurrentPlan, type CurrentPlanInfo } from '../../config/global-config.js';
-import { enqueueDecisionCreate } from '../../utils/hook-queue.js';
-import { existsSync } from 'fs';
+import { extractPlanFileName, parseFrontmatter, generatePlanId, getPlanId } from './plan-id-utils.js';
+import {
+  saveCurrentPlan,
+  loadCurrentPlan,
+  clearPlanTomlCache,
+  type CurrentPlanInfo,
+} from '../../config/global-config.js';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 // ============================================================================
-// Constants
+// Template Constants
 // ============================================================================
 
-/** Decision key prefix for plan-based decisions */
-const PLAN_DECISION_PREFIX = 'plan/implementation';
+/**
+ * Decision/Constraint template to inject on new plan creation
+ * Compact format for context window efficiency
+ */
+const PLAN_TEMPLATE = `
+---
+## 📝 Decision/Constraint Recording (auto-detected on ExitPlanMode)
+
+### 📌 Decision: [key/path]
+- **Value**: Description
+- **Layer**: presentation | business | data | infrastructure | cross-cutting
+- **Rationale**: Why this decision was made
+
+### 🚫 Constraint: [category]
+- **Rule**: Description (category: architecture | security | code-style | performance)
+- **Priority**: critical | high | medium | low
+- **Tags**: comma-separated tags
+
+---
+`.trim();
 
 // ============================================================================
 // Main Entry Point
@@ -35,21 +62,27 @@ const PLAN_DECISION_PREFIX = 'plan/implementation';
  *
  * Called as PreToolUse hook when Write tool is invoked.
  * Only processes .claude/plans/*.md files.
+ *
+ * v4.2.2: Simplified to plan tracking only. Pattern extraction happens in on-exit-plan.
  */
 export async function trackPlanCommand(): Promise<void> {
   try {
     const input = await readStdinJson();
 
-    // Only process plan files
+    // Handle EnterPlanMode - prepare for plan tracking
+    if (input.tool_name === 'EnterPlanMode') {
+      sendContinue('[sqlew] Plan mode entered. Waiting for plan file...');
+      return;
+    }
+
+    // Only process plan files for Write tool
     if (!isPlanFile(input)) {
-      // Not a plan file - continue without action
       sendContinue();
       return;
     }
 
     const projectPath = getProjectPath(input);
     if (!projectPath) {
-      // No project path - continue without action
       sendContinue();
       return;
     }
@@ -63,96 +96,55 @@ export async function trackPlanCommand(): Promise<void> {
     // Resolve absolute path
     const absolutePath = resolve(projectPath, filePath);
 
-    // Check if file exists (it might be a new file being created)
+    // Parse frontmatter for plan ID (from tool_input content if available)
+    let content: string | undefined;
     if (!existsSync(absolutePath)) {
-      // File doesn't exist yet - this is PreToolUse for new file creation
-      // Try to extract plan_id from the content being written (tool_input.content)
-      const content = input.tool_input?.content as string | undefined;
-      if (!content) {
-        // No content to parse - continue without action
-        sendContinue(
-          `[sqlew] New plan file detected: ${extractPlanFileName(absolutePath)}. ` +
-          `No content provided, skipping tracking.`
-        );
-        return;
-      }
-
-      // Parse frontmatter from content being written
-      const frontmatter = parseFrontmatter(content);
-      let planId = frontmatter.data['sqlew-plan-id'];
-
-      // Generate new plan ID if not present in content
-      if (!planId) {
-        planId = generatePlanId();
-      }
-
-      const planFileName = extractPlanFileName(absolutePath);
-
-      // Save current plan info to session cache
-      const planInfo: CurrentPlanInfo = {
-        plan_id: planId,
-        plan_file: planFileName,
-        plan_updated_at: new Date().toISOString(),
-        recorded: false,
-        decision_pending: true,
-      };
-
-      saveCurrentPlan(projectPath, planInfo);
-
-      // Enqueue draft decision for later processing by MCP server
-      const decisionKey = `${PLAN_DECISION_PREFIX}/${planFileName.replace(/\.md$/, '')}`;
-      enqueueDecisionCreate(projectPath, {
-        key: decisionKey,
-        value: `Plan created: ${planFileName}`,
-        status: 'draft',
-        layer: 'cross-cutting',
-        tags: ['plan', 'draft', planId.slice(0, 8)],
-      });
-
-      // Continue with context about the tracked plan
-      sendContinue(
-        `[sqlew] Tracking new plan: ${planFileName} (ID: ${planId.slice(0, 8)}...)`
-      );
-      return;
+      content = input.tool_input?.content as string | undefined;
+    } else {
+      content = (input.tool_input?.content as string | undefined) || readFileSync(absolutePath, 'utf-8');
     }
 
-    // Ensure plan has an ID (creates one if missing)
-    const planId = ensurePlanId(absolutePath);
+    // Get or generate plan ID
+    let planId: string;
+    if (content) {
+      const frontmatter = parseFrontmatter(content);
+      planId = frontmatter.data['sqlew-plan-id'] || generatePlanId();
+    } else {
+      planId = generatePlanId();
+    }
+
     const planFileName = extractPlanFileName(absolutePath);
 
     // Check if we already have cached info for this plan
     const existingPlan = loadCurrentPlan(projectPath);
     const isNewPlan = !existingPlan || existingPlan.plan_id !== planId;
 
-    // Save current plan info to session cache
+    // Clear old cache if switching plans
+    if (isNewPlan) {
+      clearPlanTomlCache(projectPath);
+    }
+
+    // Save current plan info to cache
+    // CRITICAL: Reset recorded flag on new plan to allow pattern extraction
     const planInfo: CurrentPlanInfo = {
       plan_id: planId,
       plan_file: planFileName,
       plan_updated_at: new Date().toISOString(),
-      recorded: existingPlan?.recorded ?? false,
+      recorded: isNewPlan ? false : (existingPlan?.recorded ?? false),
       decision_pending: isNewPlan ? true : (existingPlan?.decision_pending ?? false),
     };
-
     saveCurrentPlan(projectPath, planInfo);
 
-    // Enqueue draft decision for new plans
+    // Build context message
+    let contextMsg = `[sqlew] Tracking plan: ${planFileName} (ID: ${planId.slice(0, 8)}...)`;
+
+    // Inject template on new plan creation
     if (isNewPlan) {
-      const decisionKey = `${PLAN_DECISION_PREFIX}/${planFileName.replace(/\.md$/, '')}`;
-      enqueueDecisionCreate(projectPath, {
-        key: decisionKey,
-        value: `Plan created: ${planFileName}`,
-        status: 'draft',
-        layer: 'cross-cutting',
-        tags: ['plan', 'draft', planId.slice(0, 8)],
-      });
+      contextMsg += `\n\n${PLAN_TEMPLATE}`;
     }
 
-    // Continue with context about the tracked plan
-    sendContinue(
-      `[sqlew] Tracking plan: ${planFileName} (ID: ${planId.slice(0, 8)}...)`
-    );
+    sendContinue(contextMsg);
   } catch (error) {
-    // On error, log to stderr but continue execution
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[sqlew track-plan] Error: ${message}`);
     sendContinue();
@@ -166,7 +158,6 @@ export async function trackPlanCommand(): Promise<void> {
  * @returns Current plan info or null
  */
 export function getCurrentTrackedPlan(projectPath: string): CurrentPlanInfo | null {
-  const { loadCurrentPlan } = require('../../config/global-config.js');
   return loadCurrentPlan(projectPath);
 }
 

@@ -70,16 +70,78 @@ export function constraintExample(): any {
             rationale: 'Prevents injection attacks (SQL, XSS, etc.)'
           }
         ]
+      },
+      'code-style': {
+        description: 'Code style constraints for naming conventions, formatting, documentation',
+        examples: [
+          {
+            scenario: 'Naming Convention',
+            example: '{ action: "add", category: "code-style", constraint_text: "All public functions must use camelCase naming", priority: "medium", layer: "cross-cutting", tags: ["naming", "convention"] }',
+            rationale: 'Ensures consistent code readability across the codebase'
+          },
+          {
+            scenario: 'Documentation Required',
+            example: '{ action: "add", category: "code-style", constraint_text: "All public APIs must have JSDoc comments", priority: "medium", layer: "documentation", tags: ["jsdoc", "api"] }',
+            rationale: 'Improves maintainability and developer experience'
+          }
+        ]
+      }
+    },
+    management: {
+      activate: {
+        description: 'Reactivate a previously deactivated constraint',
+        examples: [
+          {
+            scenario: 'Reactivate Constraint',
+            example: '{ action: "activate", constraint_id: 5 }',
+            rationale: 'Use when a temporarily deactivated constraint should be enforced again'
+          }
+        ]
+      },
+      deactivate: {
+        description: 'Deactivate a constraint without deleting it',
+        examples: [
+          {
+            scenario: 'Temporarily Disable Constraint',
+            example: '{ action: "deactivate", constraint_id: 5 }',
+            rationale: 'Useful for temporary exceptions or during refactoring'
+          }
+        ]
+      },
+      get_with_inactive: {
+        description: 'Retrieve all constraints including inactive ones',
+        examples: [
+          {
+            scenario: 'List All Constraints',
+            example: '{ action: "get", include_inactive: true }',
+            rationale: 'Review all constraints including deactivated ones for audit or reactivation'
+          },
+          {
+            scenario: 'Filter by Category with Inactive',
+            example: '{ action: "get", category: "security", include_inactive: true }',
+            rationale: 'See all security constraints to identify ones that might need reactivation'
+          }
+        ]
       }
     },
     workflows: {
+      constraint_lifecycle: {
+        description: 'Full lifecycle of a constraint from creation to deactivation/reactivation',
+        steps: [
+          { step: 1, action: 'Add new constraint', example: '{ action: "add", category: "security", constraint_text: "All passwords must be hashed with bcrypt", priority: "critical" }' },
+          { step: 2, action: 'Retrieve active constraints', example: '{ action: "get", category: "security" }' },
+          { step: 3, action: 'Temporarily deactivate during migration', example: '{ action: "deactivate", constraint_id: 5 }' },
+          { step: 4, action: 'List all including inactive for review', example: '{ action: "get", include_inactive: true }' },
+          { step: 5, action: 'Reactivate after migration complete', example: '{ action: "activate", constraint_id: 5 }' }
+        ]
+      },
       constraint_validation: {
         description: 'Workflow for validating code against constraints',
         steps: [
           {
             step: 1,
             action: 'Retrieve active constraints for layer',
-            example: '{ action: "get", layer: "business", active_only: true }'
+            example: '{ action: "get", layer: "business" }'
           },
           {
             step: 2,
@@ -134,6 +196,8 @@ export function constraintExample(): any {
       ],
       managing_constraints: [
         'Review constraints regularly and deactivate outdated ones',
+        'Use activate/deactivate for temporary exceptions instead of deleting',
+        'Periodically review inactive constraints with include_inactive: true',
         'Link constraints to related decisions and tasks',
         'Use constraints for both technical and business requirements',
         'Validate code changes against active constraints',

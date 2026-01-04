@@ -4,7 +4,7 @@ Integration guide for sqlew with Claude Code hooks.
 
 ## Overview
 
-sqlew integrates with Claude Code through PreToolUse and PostToolUse hooks, enabling automatic decision tracking during AI-assisted development.
+sqlew integrates with Claude Code through PreToolUse and PostToolUse hooks, enabling **Plan-to-ADR** (v4.3.0+): automatic Architecture Decision Record generation during AI-assisted development.
 
 ## Architecture
 

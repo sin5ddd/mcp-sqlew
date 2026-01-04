@@ -82,11 +82,12 @@ export abstract class BaseWatcher {
       persistent: true,
       ignoreInitial: options.ignoreInitial ?? true,
       awaitWriteFinish: {
-        stabilityThreshold: options.debounceMs ?? this.debounceMs,
-        pollInterval: 100,
+        // Wait longer for file writes to stabilize (especially for rapid sequential writes)
+        stabilityThreshold: Math.max(options.debounceMs ?? this.debounceMs, 1000),
+        pollInterval: 500,  // Reduced polling frequency to avoid duplicate events
       },
       usePolling: options.usePolling ?? false,
-      interval: options.pollInterval ?? 100,
+      interval: options.pollInterval ?? 500,  // Match polling interval
     };
 
     if (options.ignored && watcherConfig) {

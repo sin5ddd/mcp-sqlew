@@ -15,9 +15,11 @@
 import { join, dirname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { BaseWatcher } from './base-watcher.js';
-import { getQueuePath, hasQueueItems, processQueue, DecisionQueueItem } from '../utils/hook-queue.js';
+import { getQueuePath, hasQueueItems, processQueue, type QueueItem, type DecisionQueueItem, type ConstraintQueueItem } from '../utils/hook-queue.js';
 import { quickSetDecision } from '../tools/context/actions/quick-set.js';
 import { setDecision } from '../tools/context/actions/set.js';
+import { addConstraint } from '../tools/constraints/actions/add.js';
+import { activateConstraintsByTag } from '../tools/constraints/actions/activate.js';
 import { debugLog } from '../utils/debug-logger.js';
 import type { StatusString } from '../types.js';
 
@@ -28,6 +30,7 @@ export class QueueWatcher extends BaseWatcher {
   private static instance: QueueWatcher | null = null;
   private projectRoot: string;
   private processing: boolean = false;
+  private currentCallId: string = '';
 
   private constructor(projectRoot: string) {
     super('QueueWatcher', 500); // 500ms debounce for queue changes
@@ -113,10 +116,16 @@ export class QueueWatcher extends BaseWatcher {
       return;
     }
 
-    debugLog('INFO', `${this.watcherName}: Queue file changed`);
+    const eventId = Math.random().toString(36).slice(2, 6);
+    debugLog('INFO', `${this.watcherName}: Queue file changed`, {
+      eventId,
+      path,
+      hasDebounceTimer: this.debounceTimers.has('queue-process'),
+    });
 
     // Debounce to avoid processing during rapid writes
     this.debounce('queue-process', async () => {
+      debugLog('INFO', `${this.watcherName}: Debounce callback fired`, { eventId });
       await this.processQueueIfNeeded();
     });
   }
@@ -125,35 +134,61 @@ export class QueueWatcher extends BaseWatcher {
    * Process queue if items exist
    */
   private async processQueueIfNeeded(): Promise<void> {
-    // Prevent concurrent processing
+    const callId = Math.random().toString(36).slice(2, 8);
+    this.currentCallId = callId;  // Store for use in item processors
+
+    // CRITICAL: Set processing flag IMMEDIATELY to prevent race conditions
+    // Multiple calls can arrive before the first one finishes checking hasQueueItems
     if (this.processing) {
+      debugLog('WARN', `${this.watcherName}: Skipping - already processing`, { callId });
       return;
     }
+    this.processing = true;  // SET IMMEDIATELY after check!
 
-    if (!hasQueueItems(this.projectRoot)) {
-      return;
-    }
+    debugLog('INFO', `${this.watcherName}: processQueueIfNeeded called`, {
+      callId,
+      processing: true,
+    });
 
-    this.processing = true;
     try {
-      const count = await processQueue(this.projectRoot, this.processItem.bind(this));
-      if (count > 0) {
-        debugLog('INFO', `${this.watcherName}: Processed ${count} queue items`);
+      if (!hasQueueItems(this.projectRoot)) {
+        debugLog('INFO', `${this.watcherName}: Queue is empty, nothing to process`, { callId });
+        return;
       }
+
+      debugLog('INFO', `${this.watcherName}: Starting queue processing`, { callId });
+      const count = await processQueue(this.projectRoot, this.processItem.bind(this), callId);
+      debugLog('INFO', `${this.watcherName}: Processed ${count} queue items`, { callId });
     } catch (error) {
-      debugLog('ERROR', `${this.watcherName}: Error processing queue`, { error });
+      debugLog('ERROR', `${this.watcherName}: Error processing queue`, { callId, error });
     } finally {
       this.processing = false;
+      debugLog('INFO', `${this.watcherName}: Processing flag reset`, { callId });
     }
   }
 
   /**
-   * Process a single queue item
+   * Process a single queue item (decision or constraint)
+   * @since v4.2.1 - Added constraint support
    */
-  private async processItem(item: DecisionQueueItem): Promise<void> {
+  private async processItem(item: QueueItem): Promise<void> {
+    if (item.type === 'decision') {
+      await this.processDecisionItem(item as DecisionQueueItem);
+    } else if (item.type === 'constraint') {
+      await this.processConstraintItem(item as ConstraintQueueItem);
+    }
+  }
+
+  /**
+   * Process a decision queue item
+   */
+  private async processDecisionItem(item: DecisionQueueItem): Promise<void> {
     const { action, data } = item;
 
-    debugLog('INFO', `${this.watcherName}: Processing ${action}`, { key: data.key });
+    debugLog('INFO', `${this.watcherName}: Processing decision ${action}`, {
+      callId: this.currentCallId,
+      key: data.key,
+    });
 
     if (action === 'create') {
       await quickSetDecision({
@@ -171,6 +206,55 @@ export class QueueWatcher extends BaseWatcher {
         layer: data.layer,
         tags: data.tags,
       });
+    }
+  }
+
+  /**
+   * Process a constraint queue item
+   * @since v4.2.1
+   */
+  private async processConstraintItem(item: ConstraintQueueItem): Promise<void> {
+    const { action, data } = item;
+
+    debugLog('INFO', `${this.watcherName}: Processing constraint ${action}`, {
+      callId: this.currentCallId,
+      text: data.text?.slice(0, 50),
+      category: data.category,
+      timestamp: item.timestamp,
+    });
+
+    if (action === 'create') {
+      const priority = data.priority as 'low' | 'medium' | 'high' | 'critical' | undefined;
+      debugLog('INFO', `${this.watcherName}: Calling addConstraint`, {
+        callId: this.currentCallId,
+        text: data.text?.slice(0, 30),
+        category: data.category || 'architecture',
+        priority: priority || 'medium',
+      });
+      const result = await addConstraint({
+        constraint_text: data.text,
+        category: data.category || 'architecture',
+        priority: priority || 'medium',
+        layer: data.layer,
+        tags: data.tags,
+        active: data.active ?? true,
+      });
+      debugLog('INFO', `${this.watcherName}: addConstraint returned`, {
+        callId: this.currentCallId,
+        success: result.success,
+        constraint_id: result.constraint_id,
+      });
+    } else if (action === 'activate') {
+      // Activate constraints by plan_id tag
+      if (data.plan_id) {
+        const tag = data.plan_id.slice(0, 8); // Short form of plan_id
+        const result = await activateConstraintsByTag(tag);
+        debugLog('INFO', `${this.watcherName}: Activated constraints`, {
+          callId: this.currentCallId,
+          activated_count: result.activated_count,
+          plan_tag: tag,
+        });
+      }
     }
   }
 

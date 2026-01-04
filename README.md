@@ -28,11 +28,17 @@ Add to `.mcp.json` in your project root:
 }
 ```
 
-### 3. Initialize hooks
+### 3. Initialize project
 
 ```bash
-sqlew init --hooks
+sqlew --init
 ```
+
+This one-shot command sets up:
+- Claude Code Skills
+- CLAUDE.md integration hints
+- Plan-to-ADR hooks
+- .gitignore entries
 
 ### 4. Just use Plan Mode!
 
@@ -99,7 +105,7 @@ AI agents automatically accumulate project knowledge through Plan Mode. Decision
 
 ---
 
-**Technical Features**: 7 MCP tools (4 core: decision, constraint, file, suggest + 3 utility: help, example, use_case), three-tier similarity detection (0-100 point scoring), ACID transaction support, multi-database backend (SQLite/PostgreSQL/MySQL), metadata-driven organization with layers and tags
+**Technical Features**: 6 MCP tools (3 core: decision, constraint, suggest + 3 utility: help, example, use_case), three-tier similarity detection (0-100 point scoring), ACID transaction support, multi-database backend (SQLite/PostgreSQL/MySQL), metadata-driven organization with layers and tags
 
 
 ## Installation
@@ -128,18 +134,9 @@ Then add to `.mcp.json` in your project root:
 }
 ```
 
-### Alternative: npx (No Install)
+### Alternative: npx (Not Recommended)
 
-```json
-{
-  "mcpServers": {
-    "sqlew": {
-      "command": "npx",
-      "args": ["sqlew"]
-    }
-  }
-}
-```
+**⚠️ Not recommended**: npx usage prevents Claude Code Hooks from working, disabling Plan-to-ADR automatic decision capture. Use global install instead.
 
 **Note**: First run initializes the database. Restart Claude Code to load the MCP server.
 
@@ -148,147 +145,19 @@ Each project maintains its own context database in `.sqlew/sqlew.db`.
 **Custom database path:** Add path as argument: `"args": ["sqlew", "/path/to/db.db"]`
 **Default location:** `.sqlew/sqlew.db`
 
-**⚠️ Not Supported:** Junie AI cannot use relative paths in MCP server configurations, which makes it incompatible with sqlew's project-based database model. Each project requires its own isolated database at `.sqlew/sqlew.db`, but Junie AI's global MCP configuration cannot handle per-project database paths.
-
 ## Configuration
 
-### Database Support
+sqlew supports multiple database backends:
 
-sqlew supports multiple database backends for different deployment scenarios:
+| Database | Use Case | Status |
+|----------|----------|--------|
+| **SQLite** | Personal/small projects | ✅ Default |
+| **MySQL 8.0+ / MariaDB 10+** | Production, team sharing | ✅ Supported |
+| **PostgreSQL 12+** | Production, team sharing | ✅ Supported |
 
-| Database | Use Case                                     | Status      |
-|----------|----------------------------------------------|-------------|
-| **SQLite** | Personal or small projects                   | ✅ Default   |
-| **MySQL 8.0 / MariaDB 10+** | Production, shared environments, remote work | ✅ Supported |
-| **PostgreSQL 12+** | Production, shared environments, remote work | ✅ Supported |
+Configuration is managed via `.sqlew/config.toml` file and CLI arguments.
 
-Of course, it also works with Docker RDB instances.
-
-### Optional Config File
-
-On first run, `.sqlew/config.toml` will be created for persistent settings:
-
-**SQLite (Default):**
-```toml
-[database]
-path = ".sqlew/custom.db"
-
-[autodelete]
-ignore_weekend = true
-message_hours = 48
-```
-
-**PostgreSQL:**
-```toml
-[database]
-type = "postgres"
-
-[database.connection]
-host = "localhost"
-port = 5432
-database = "sqlew_db"
-
-[database.auth]
-type = "direct"
-user = "sqlew_user"
-password = "secret"
-```
-
-**MySQL/MariaDB:**
-```toml
-[database]
-type = "mysql"
-
-[database.connection]
-host = "localhost"
-port = 3306
-database = "sqlew_db"
-
-[database.auth]
-type = "direct"
-user = "sqlew_user"
-password = "secret"
-```
-
-Also `.sqlew/config.example.toml` is created for reference.
-
-**Settings Priority:** CLI args > config.toml > database defaults
-
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all options and validation rules.
-
-### CLI Configuration (Recommended)
-
-Configuration is managed via **`.sqlew/config.toml`** file and **CLI arguments only**. The MCP `config` tool has been removed for simplicity.
-
-**Why CLI-only configuration?**
-- **No drift:** Single source of truth (config file)
-- **Version control:** Commit config to git, share with team
-- **Clear documentation:** Config file documents project requirements
-- **Type safety:** TOML validation catches errors at startup
-
-**Common CLI arguments:**
-```bash
-# Custom database path
-npx sqlew /path/to/database.db
-
-# Auto-deletion settings
-npx sqlew --autodelete-message-hours=48
-npx sqlew --autodelete-file-history-days=30
-npx sqlew --autodelete-ignore-weekend
-
-# Custom config file
-npx sqlew --config-path=.sqlew/custom.toml
-```
-
-For persistent settings, edit `.sqlew/config.toml` instead of using CLI arguments.
-
-## Quick Start
-
-install it, launch claude, exit claude and launch Claude again.
-
-### Basic Usage
-
-You'll never need to call it manually, I recommend to call this tool via prompt.
-
-```
-read sqlew usecases, and plan implementation of feature X using sqlew.
-```
-
-or invoke Specialized Agent
-
-```
-/sqw-plan implementation of feature X .
-```
-
-Specialized Agents use sqlew more efficiently.
-
----
-
-**Note**: The `/sqlew` command supersedes the previous multi-command system (`/sqw-plan`, `/sqw-scrum`, etc.). All functionality is now available through the unified `/sqlew` interface with automatic intent detection.
-
-### Advanced: Direct MCP Tool Access
-
-Power users can still call MCP tools directly. See [Available Tools](#available-tools) section below.
-
-### Available Tools
-
-#### Core ADR Tools
-
-| Tool | Purpose | Example Use |
-|------|---------|------------|
-| **decision** | Record architectural decisions with context | "We chose PostgreSQL over MongoDB (ACID requirement)" |
-| **constraint** | Define architectural rules and principles | "All API endpoints must use /v2/ prefix" |
-| **file** | Track code changes linked to decisions | "Modified auth.ts per security ADR" |
-| **suggest** | Find similar decisions, prevent duplicates | Duplicate detection, similarity search |
-
-#### Utility Tools
-
-| Tool | Purpose | Example Use |
-|------|---------|------------|
-| **help** | Query action documentation and parameters | Get decision.set parameters |
-| **example** | Browse code examples by tool/action | Find task.create examples |
-| **use_case** | Complete workflow scenarios | Multi-step ADR workflows |
-
+→ **[Full Configuration Guide](docs/CONFIGURATION.md)** - All options, database setup, validation rules
 
 ## Documentation
 
@@ -363,23 +232,14 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **4.1.0**
+Current version: **4.3.0**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-**What's New in v4.1.0:**
-- **Claude Code Hooks Integration** - File Queue Architecture for async decision operations
-- **Hook Commands** - `suggest`, `track-plan`, `save`, `check-completion`, `mark-done`
-- **QueueWatcher** - Monitors `.sqlew/queue/pending.json` for hook operations
-- **PostgreSQL Compatibility** - GROUP_CONCAT → string_agg, GROUP BY strictness fixes
-- **Cross-DB Verified** - SQLite, MySQL, MariaDB, PostgreSQL all tested
-
-**What's New in v4.0.5:**
-- **License Change** - Apache License 2.0 (from AGPL-3.0)
-
-**What's New in v4.0.2:**
-- **Unified CLI Entry Point** - `npx sqlew db:export` works directly (no `npm install` required)
-- **Cross-DB Migration via JSON Only** - SQL dump no longer supports cross-database conversion
-- **Node.js 20+ Required** - Updated minimum version requirement
+**What's New in v4.3.0:**
+- **Plan-to-ADR** - Automatic Architecture Decision Records from Claude Code Plan Mode
+- **Markdown Pattern Extraction** - 📌 Decision / 🚫 Constraint markers auto-detected
+- **One-shot Setup** - `sqlew --init` initializes everything (Skills, Hooks, gitignore)
+- **Parameter Aliases** - Simplified tool usage with intuitive parameter names
 
 See [docs/HOOKS_GUIDE.md](docs/HOOKS_GUIDE.md) for Claude Code Hooks details.
 

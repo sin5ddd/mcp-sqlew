@@ -7,7 +7,9 @@
 // Action exports
 export { addConstraint } from './actions/add.js';
 export { getConstraints } from './actions/get.js';
+export { activateConstraint } from './actions/activate.js';
 export { deactivateConstraint } from './actions/deactivate.js';
+export { suggestPendingConstraints } from './actions/suggest-pending.js';
 
 // Help exports
 export { constraintHelp } from './help/help.js';

@@ -12,6 +12,7 @@ import { validateActionParams } from '../internal/validation.js';
 import { getTaggedDecisions } from '../../../utils/view-queries.js';
 import { UniversalKnex } from '../../../utils/universal-knex.js';
 import { convertStatusArray } from '../../../utils/enum-converter.js';
+import { truncateValue } from '../../../utils/text-truncate.js';
 import type { SearchByLayerParams, SearchByLayerResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -140,6 +141,14 @@ export async function searchByLayer(
       // Union both queries
       const rawRows = await stringDecisions.union([numericDecisions]).orderBy('updated', 'desc');
       rows = convertStatusArray(rawRows) as TaggedDecision[];
+    }
+
+    // Truncate values (default: 30 chars) unless full_value is requested
+    if (!params.full_value) {
+      rows = rows.map(row => ({
+        ...row,
+        value: truncateValue(row.value)
+      }));
     }
 
     return {

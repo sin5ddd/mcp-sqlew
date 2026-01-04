@@ -50,6 +50,8 @@ const COMMON_ABBREVIATIONS: Record<string, string[]> = {
   ref: ['reference'],
   ctx: ['context'],
   db: ['database'],
+  // Alias: text → constraint_text (common AI mistake from TOML template)
+  text: ['constraint_text'],
 };
 
 /**

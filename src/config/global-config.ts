@@ -5,7 +5,7 @@
  * @since v4.1.0
  */
 
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { parse as parseTOML, stringify as stringifyTOML } from 'smol-toml';
@@ -347,5 +347,164 @@ export function markPlanAsRecorded(projectPath: string): void {
   if (info) {
     info.recorded = true;
     saveCurrentPlan(projectPath, info);
+  }
+}
+
+/**
+ * Clear current plan info for a project
+ * Used when starting a new Plan agent session to prevent stale cache issues
+ *
+ * @param projectPath - Project root path
+ */
+export function clearCurrentPlan(projectPath: string): void {
+  const cachePath = getSessionCachePath(projectPath);
+  if (existsSync(cachePath)) {
+    try {
+      unlinkSync(cachePath);
+    } catch {
+      // Ignore errors - file might not exist or be locked
+    }
+  }
+}
+
+// ============================================================================
+// Plan TOML Cache (v4.2.0+)
+// ============================================================================
+
+/**
+ * Decision candidate from TOML template
+ */
+export interface DecisionCandidate {
+  /** Required: hierarchical key (e.g., "api/auth/method") */
+  key: string;
+  /** Required: what was decided */
+  value: string;
+  /** Status: active|deprecated|draft (default: active) */
+  status?: string;
+  /** Layer: presentation|business|data|infrastructure|cross-cutting */
+  layer?: string;
+  /** Tags for categorization */
+  tags?: string[];
+  /** Why this choice was made */
+  rationale?: string;
+  /** Other options considered */
+  alternatives?: string[];
+  /** Gains vs sacrifices */
+  tradeoffs?: string;
+}
+
+/**
+ * Constraint candidate from TOML template
+ */
+export interface ConstraintCandidate {
+  /** Required: rule description */
+  text: string;
+  /** Required: architecture|security|code-style|performance */
+  category: string;
+  /** Priority: critical|high|medium|low (default: medium) */
+  priority?: string;
+  /** Layer: presentation|business|data|infrastructure|cross-cutting */
+  layer?: string;
+  /** Tags for categorization */
+  tags?: string[];
+  /** Why this rule exists */
+  rationale?: string;
+}
+
+/**
+ * Unified cache for plan TOML data
+ * Stores parsed decisions and constraints from plan file
+ */
+export interface PlanTomlCache {
+  /** Plan ID this cache is associated with */
+  plan_id: string;
+  /** Extracted decisions from TOML */
+  decisions: DecisionCandidate[];
+  /** Extracted constraints from TOML */
+  constraints: ConstraintCandidate[];
+  /** Last updated timestamp (ISO 8601) */
+  updated_at: string;
+  /** Whether decisions have been queued for registration */
+  decisions_registered: boolean;
+  /** Whether user has been prompted about constraints */
+  constraints_prompted: boolean;
+}
+
+/**
+ * Get the plan TOML cache file path for a project
+ *
+ * @param projectPath - Project root path
+ * @returns Absolute path to plan-toml cache file
+ */
+export function getPlanTomlCachePath(projectPath: string): string {
+  ensureGlobalConfigDir();
+  const cacheDir = getSessionCacheDir();
+  if (!existsSync(cacheDir)) {
+    mkdirSync(cacheDir, { recursive: true });
+  }
+
+  // Use same normalization as getSessionCachePath
+  let normalizedPath = projectPath;
+
+  if (process.platform === 'win32' && /^\/[a-zA-Z]\//.test(normalizedPath)) {
+    const driveLetter = normalizedPath[1].toUpperCase();
+    normalizedPath = driveLetter + ':' + normalizedPath.slice(2).replace(/\//g, '\\');
+  }
+
+  normalizedPath = resolve(normalizedPath);
+
+  if (process.platform === 'win32' && /^[A-Z]:/.test(normalizedPath)) {
+    normalizedPath = normalizedPath[0].toLowerCase() + normalizedPath.slice(1);
+  }
+
+  const safeName = normalizedPath
+    .replace(/[^a-zA-Z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(-100);
+
+  return join(cacheDir, `${safeName}_plan-toml.json`);
+}
+
+/**
+ * Load plan TOML cache for a project
+ *
+ * @param projectPath - Project root path
+ * @returns Plan TOML cache or null if not found
+ */
+export function loadPlanTomlCache(projectPath: string): PlanTomlCache | null {
+  const cachePath = getPlanTomlCachePath(projectPath);
+
+  if (!existsSync(cachePath)) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(cachePath, 'utf-8');
+    return JSON.parse(content) as PlanTomlCache;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save plan TOML cache for a project
+ *
+ * @param projectPath - Project root path
+ * @param cache - Cache data to save
+ */
+export function savePlanTomlCache(projectPath: string, cache: PlanTomlCache): void {
+  const cachePath = getPlanTomlCachePath(projectPath);
+  writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf-8');
+}
+
+/**
+ * Clear plan TOML cache for a project
+ *
+ * @param projectPath - Project root path
+ */
+export function clearPlanTomlCache(projectPath: string): void {
+  const cachePath = getPlanTomlCachePath(projectPath);
+  if (existsSync(cachePath)) {
+    writeFileSync(cachePath, JSON.stringify({ decisions: [], constraints: [] }, null, 2), 'utf-8');
   }
 }

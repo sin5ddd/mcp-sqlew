@@ -316,6 +316,7 @@ export interface GetContextParams {
   status?: StatusString;
   scope?: string;
   tag_match?: 'AND' | 'OR';
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
   _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
@@ -332,6 +333,7 @@ export interface SearchByTagsParams {
   match_mode?: 'AND' | 'OR';
   status?: StatusString;
   layer?: string;
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
 }
 
 export interface GetVersionsParams {
@@ -342,6 +344,7 @@ export interface SearchByLayerParams {
   layer: string;
   status?: StatusString;
   include_tags?: boolean;
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
   _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
@@ -360,6 +363,7 @@ export interface SearchAdvancedParams {
   sort_order?: 'asc' | 'desc';
   limit?: number;  // Max results (default: 20)
   offset?: number;  // For pagination (default: 0)
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
 }
 
 export interface HasUpdatesParams {
@@ -418,6 +422,8 @@ export interface AddConstraintParams {
   layer?: string;
   tags?: string[];
   created_by?: string;
+  /** @since v4.2.1 - Set to false to create inactive constraint (for plan-based workflow) */
+  active?: boolean;
 }
 
 export interface GetConstraintsParams {
@@ -425,7 +431,7 @@ export interface GetConstraintsParams {
   layer?: string;
   priority?: 'low' | 'medium' | 'high' | 'critical';
   tags?: string[];
-  active_only?: boolean;
+  include_inactive?: boolean;
   limit?: number;
 }
 
@@ -696,6 +702,7 @@ export interface CheckFileLockResponse {
 export interface AddConstraintResponse {
   success: boolean;
   constraint_id: number;
+  already_exists?: boolean;
 }
 
 export interface GetConstraintsResponse {
@@ -935,7 +942,7 @@ export type FileAction =
  * Provides compile-time type checking for action parameters
  */
 export type ConstraintAction =
-  | 'add' | 'get' | 'deactivate'
+  | 'add' | 'get' | 'activate' | 'deactivate' | 'suggest_pending'
   | 'help' | 'example' | 'use_case';
 
 /**

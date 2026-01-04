@@ -17,6 +17,11 @@ import { saveCommand } from './cli/hooks/save.js';
 import { checkCompletionCommand } from './cli/hooks/check-completion.js';
 import { markDoneCommand } from './cli/hooks/mark-done.js';
 import { initHooksCommand } from './cli/hooks/init-hooks.js';
+import { initializeSkills, initializeClaudeMd, initializeGitignore } from './init-skills.js';
+import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
+import { onStopCommand } from './cli/hooks/on-stop.js';
+import { onEnterPlanCommand } from './cli/hooks/on-enter-plan.js';
+import { onExitPlanCommand } from './cli/hooks/on-exit-plan.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
@@ -41,6 +46,7 @@ interface CLIArgs {
   limit?: number;
   'db-path'?: string;
   help?: boolean;
+  init?: boolean;
 }
 
 // ============================================================================
@@ -64,6 +70,8 @@ function parseArgs(args: string[]): CLIArgs {
         parsed.unread = true;
       } else if (key === 'help') {
         parsed.help = true;
+      } else if (key === 'init') {
+        parsed.init = true;
       } else if (value && !value.startsWith('--')) {
         // Handle different key types
         if (key === 'limit') {
@@ -140,8 +148,13 @@ sqlew CLI - Query and database migration tool for mcp-sqlew
 
 USAGE:
   sqlew <command> [options]
+  sqlew --init              # One-shot project setup (recommended)
 
 COMMANDS:
+  Setup:
+    --init           One-shot initialization (Skills + CLAUDE.md + Hooks + gitignore)
+    init --hooks     Initialize Claude Code and Git hooks only
+
   Database:
     db:dump    Generate SQL dump for database migration (schema + data)
     db:export  Export project data to JSON format (data-only, for append-import)
@@ -153,20 +166,26 @@ COMMANDS:
     save             Save decisions on code edit (PostToolUse hook for Edit|Write)
     check-completion Check task completion (PostToolUse hook for TodoWrite)
     mark-done        Mark decisions as implemented (Git hooks or manual)
-    init --hooks     Initialize Claude Code and Git hooks
+
+  Plan Mode Hooks (v4.2.0+):
+    on-enter-plan    Inject TOML template (PostToolUse hook for EnterPlanMode)
+    on-exit-plan     Prompt TOML documentation (PostToolUse hook for ExitPlanMode)
+    on-subagent-stop Process Plan agent completion (SubagentStop hook)
+    on-stop          Process main agent stop (Stop hook)
 
 OPTIONS:
+  --init                   Initialize all sqlew integrations
   --help                   Show this help message
 
 EXAMPLES:
-  # Initialize hooks for Claude Code integration
+  # Full project setup (Skills, CLAUDE.md, Hooks, gitignore)
+  sqlew --init
+
+  # Initialize only hooks
   sqlew init --hooks
 
   # Generate MySQL dump for database migration
   npm run db:dump -- mysql -o dump-mysql.sql
-
-  # Test hook commands manually
-  echo '{"tool_input": {"description": "auth"}}' | sqlew suggest
 
 For more information on commands, run:
   npm run db:dump -- --help
@@ -262,6 +281,65 @@ async function queryFiles(args: CLIArgs): Promise<void> {
 }
 
 // ============================================================================
+// Initialization Commands
+// ============================================================================
+
+/**
+ * Comprehensive project initialization
+ * Sets up Skills, CLAUDE.md integration, Hooks, and gitignore in one command
+ */
+async function initAllCommand(): Promise<void> {
+  const { determineProjectRoot } = await import('./utils/project-root.js');
+  const projectPath = determineProjectRoot();
+
+  console.log('[sqlew --init] Starting comprehensive initialization...');
+  console.log(`[sqlew --init] Project root: ${projectPath}`);
+  console.log('');
+
+  // 1. Initialize Skills
+  console.log('[1/4] Initializing Skills...');
+  try {
+    initializeSkills(projectPath);
+    console.log('      ✓ Skills initialized');
+  } catch (error) {
+    console.log(`      ✗ Skills failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // 2. Initialize CLAUDE.md
+  console.log('[2/4] Updating CLAUDE.md...');
+  try {
+    initializeClaudeMd(projectPath);
+    console.log('      ✓ CLAUDE.md updated');
+  } catch (error) {
+    console.log(`      ✗ CLAUDE.md failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // 3. Initialize Hooks
+  console.log('[3/4] Setting up Claude Code Hooks...');
+  try {
+    await initHooksCommand([]);
+  } catch (error) {
+    console.log(`      ✗ Hooks failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // 4. Initialize gitignore
+  console.log('[4/4] Updating .gitignore...');
+  try {
+    initializeGitignore(projectPath);
+    console.log('      ✓ .gitignore updated');
+  } catch (error) {
+    console.log(`      ✗ .gitignore failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  console.log('');
+  console.log('[sqlew --init] Initialization complete!');
+  console.log('');
+  console.log('Next steps:');
+  console.log('  1. Restart Claude Code for hooks to take effect');
+  console.log('  2. Run "/sqlew" to start using sqlew context management');
+}
+
+// ============================================================================
 // Main Entry Point
 // ============================================================================
 
@@ -317,7 +395,37 @@ export async function runCli(rawArgs: string[]): Promise<void> {
     return;
   }
 
-  // init --hooks command
+  // SubagentStop hook (v4.2.0+)
+  if (args.command === 'on-subagent-stop') {
+    await onSubagentStopCommand();
+    return;
+  }
+
+  // Stop hook (v4.2.0+)
+  if (args.command === 'on-stop') {
+    await onStopCommand();
+    return;
+  }
+
+  // EnterPlanMode hook (v4.2.0+)
+  if (args.command === 'on-enter-plan') {
+    await onEnterPlanCommand();
+    return;
+  }
+
+  // ExitPlanMode hook (v4.2.0+)
+  if (args.command === 'on-exit-plan') {
+    await onExitPlanCommand();
+    return;
+  }
+
+  // --init flag: comprehensive initialization (Skills + CLAUDE.md + Hooks + gitignore)
+  if (args.init) {
+    await initAllCommand();
+    return;
+  }
+
+  // init --hooks command (hooks only)
   if (args.command === 'init' && rawArgs.includes('--hooks')) {
     await initHooksCommand(rawArgs.slice(1));
     return;
@@ -371,6 +479,8 @@ export function isCliCommand(command: string): boolean {
     'db:dump', 'db:export', 'db:import', 'query',
     // Claude Code Hooks commands (v4.1.0+)
     'suggest', 'track-plan', 'save', 'check-completion', 'mark-done', 'init',
+    // New hook events (v4.2.0+)
+    'on-subagent-stop', 'on-stop', 'on-enter-plan', 'on-exit-plan',
   ];
   return cliCommands.includes(command);
 }
