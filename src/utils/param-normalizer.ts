@@ -72,5 +72,7 @@ export const FILE_ALIASES = {
 
 export const CONSTRAINT_ALIASES = {
   // add
-  text: 'constraint_text'
+  text: 'constraint_text',
+  // deactivate, activate
+  id: 'constraint_id'
 } as const;

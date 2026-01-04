@@ -6,6 +6,7 @@
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter } from '../../../database.js';
 import { validateActionParams } from '../../../utils/parameter-validator.js';
+import { normalizeParams, CONSTRAINT_ALIASES } from '../../../utils/param-normalizer.js';
 import { getProjectContext } from '../../../utils/project-context.js';
 import connectionManager from '../../../utils/connection-manager.js';
 import { SQLITE_FALSE } from '../../../constants.js';
@@ -29,27 +30,30 @@ export async function deactivateConstraint(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Normalize aliases: id → constraint_id
+  const normalizedParams = normalizeParams(params, CONSTRAINT_ALIASES) as DeactivateConstraintParams;
+
   try {
     return await connectionManager.executeWithRetry(async () => {
       // Fail-fast project_id validation (Constraint #29)
       const projectId = getProjectContext().getProjectId();
 
       // Validate parameters
-      validateActionParams('constraint', 'deactivate', params);
+      validateActionParams('constraint', 'deactivate', normalizedParams);
 
       // Check if constraint exists in current project
       const constraint = await knex('v4_constraints')
-        .where({ id: params.constraint_id, project_id: projectId })
+        .where({ id: normalizedParams.constraint_id, project_id: projectId })
         .select('id', 'active')
         .first() as { id: number; active: number } | undefined;
 
       if (!constraint) {
-        throw new Error(`Constraint not found: ${params.constraint_id}`);
+        throw new Error(`Constraint not found: ${normalizedParams.constraint_id}`);
       }
 
       // Update constraint to inactive (idempotent) with project_id filter
       await knex('v4_constraints')
-        .where({ id: params.constraint_id, project_id: projectId })
+        .where({ id: normalizedParams.constraint_id, project_id: projectId })
         .update({ active: SQLITE_FALSE });
 
       return {

@@ -10,6 +10,7 @@
 import { DatabaseAdapter } from '../../../adapters/index.js';
 import { getAdapter } from '../../../database.js';
 import { getProjectContext } from '../../../utils/project-context.js';
+import { normalizeParams, CONSTRAINT_ALIASES } from '../../../utils/param-normalizer.js';
 import connectionManager from '../../../utils/connection-manager.js';
 import { SQLITE_TRUE } from '../../../constants.js';
 
@@ -96,37 +97,40 @@ export async function activateConstraint(
   const actualAdapter = adapter ?? getAdapter();
   const knex = actualAdapter.getKnex();
 
+  // Normalize aliases: id → constraint_id
+  const normalizedParams = normalizeParams(params, CONSTRAINT_ALIASES) as { constraint_id: number };
+
   try {
     return await connectionManager.executeWithRetry(async () => {
       const projectId = getProjectContext().getProjectId();
 
       // Check if constraint exists
       const constraint = await knex('v4_constraints')
-        .where('id', params.constraint_id)
+        .where('id', normalizedParams.constraint_id)
         .where('project_id', projectId)
         .first();
 
       if (!constraint) {
-        throw new Error(`Constraint not found: ${params.constraint_id}`);
+        throw new Error(`Constraint not found: ${normalizedParams.constraint_id}`);
       }
 
       if (constraint.active === 1) {
         return {
           success: true,
-          constraint_id: params.constraint_id,
+          constraint_id: normalizedParams.constraint_id,
           message: 'Constraint already active',
         };
       }
 
       // Activate the constraint
       await knex('v4_constraints')
-        .where('id', params.constraint_id)
+        .where('id', normalizedParams.constraint_id)
         .where('project_id', projectId)
         .update({ active: SQLITE_TRUE });
 
       return {
         success: true,
-        constraint_id: params.constraint_id,
+        constraint_id: normalizedParams.constraint_id,
         message: 'Constraint activated',
       };
     });
