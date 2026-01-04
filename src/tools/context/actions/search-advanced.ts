@@ -15,6 +15,7 @@ import {
 } from '../internal/validation.js';
 import { normalizeParams } from '../../../utils/param-normalizer.js';
 import { getTaggedDecisions } from '../../../utils/view-queries.js';
+import { truncateValue } from '../../../utils/text-truncate.js';
 import type { SearchAdvancedParams, SearchAdvancedResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -179,6 +180,14 @@ export async function searchAdvanced(
     validatePaginationParams(limit, offset);
 
     rows = rows.slice(offset, offset + limit);
+
+    // Truncate values (default: 30 chars) unless full_value is requested
+    if (!normalizedParams.full_value) {
+      rows = rows.map(row => ({
+        ...row,
+        value: truncateValue(row.value)
+      }));
+    }
 
     return {
       decisions: rows,

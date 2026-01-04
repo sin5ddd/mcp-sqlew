@@ -11,6 +11,7 @@ import { debugLog } from '../../../utils/debug-logger.js';
 import { STRING_TO_STATUS } from '../../../constants.js';
 import { validateActionParams } from '../internal/validation.js';
 import { getTaggedDecisions } from '../../../utils/view-queries.js';
+import { truncateValue } from '../../../utils/text-truncate.js';
 import type { GetContextParams, GetContextResponse, TaggedDecision } from '../types.js';
 
 /**
@@ -108,6 +109,14 @@ export async function getContext(
       const dateB = new Date(b.updated).getTime();
       return dateB - dateA; // desc
     });
+
+    // Truncate values (default: 30 chars) unless full_value is requested
+    if (!params.full_value) {
+      rows = rows.map(row => ({
+        ...row,
+        value: truncateValue(row.value)
+      }));
+    }
 
     return {
       decisions: rows,

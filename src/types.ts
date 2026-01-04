@@ -316,6 +316,7 @@ export interface GetContextParams {
   status?: StatusString;
   scope?: string;
   tag_match?: 'AND' | 'OR';
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
   _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
@@ -332,6 +333,7 @@ export interface SearchByTagsParams {
   match_mode?: 'AND' | 'OR';
   status?: StatusString;
   layer?: string;
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
 }
 
 export interface GetVersionsParams {
@@ -342,6 +344,7 @@ export interface SearchByLayerParams {
   layer: string;
   status?: StatusString;
   include_tags?: boolean;
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
   _reference_project?: string;  // Cross-project query: project name to query instead of current project
 }
 
@@ -360,6 +363,7 @@ export interface SearchAdvancedParams {
   sort_order?: 'asc' | 'desc';
   limit?: number;  // Max results (default: 20)
   offset?: number;  // For pagination (default: 0)
+  full_value?: boolean;  // Return full value without truncation (default: false = 30 chars)
 }
 
 export interface HasUpdatesParams {

@@ -36,37 +36,38 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
 
   list: {
     required: [],
-    optional: ['status', 'layer', 'tags', 'scope', 'tag_match', 'limit', 'offset', '_reference_project'],
+    optional: ['status', 'layer', 'tags', 'scope', 'tag_match', 'limit', 'offset', 'full_value', '_reference_project'],
     example: {
       action: 'list',
       status: 'active',
       layer: 'business',
       limit: 20
-    }
+    },
+    hint: "Values are truncated to 30 chars by default. Use full_value=true for complete text."
   },
 
   search_tags: {
     required: ['tags'],
-    optional: ['match_mode', 'status', 'layer'],
+    optional: ['match_mode', 'status', 'layer', 'full_value'],
     example: {
       action: 'search_tags',
       tags: ['security', 'authentication'],
       match_mode: 'AND',
       status: 'active'
     },
-    hint: "Use match_mode='AND' to find decisions with ALL tags, 'OR' for ANY tag"
+    hint: "Use match_mode='AND' to find decisions with ALL tags, 'OR' for ANY tag. Values truncated to 30 chars; use full_value=true for complete text."
   },
 
   search_layer: {
     required: ['layer'],
-    optional: ['status', 'include_tags', '_reference_project'],
+    optional: ['status', 'include_tags', 'full_value', '_reference_project'],
     example: {
       action: 'search_layer',
       layer: 'business',
       status: 'active',
       include_tags: true
     },
-    hint: "Valid layers: presentation, business, data, infrastructure, cross-cutting"
+    hint: "Valid layers: presentation, business, data, infrastructure, cross-cutting. Values truncated to 30 chars; use full_value=true for complete text."
   },
 
   versions: {
@@ -95,7 +96,7 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
     optional: [
       'layers', 'tags_all', 'tags_any', 'exclude_tags', 'scopes',
       'updated_after', 'updated_before', 'decided_by', 'statuses',
-      'search_text', 'sort_by', 'sort_order', 'limit', 'offset'
+      'search_text', 'sort_by', 'sort_order', 'limit', 'offset', 'full_value'
     ],
     example: {
       action: 'search_advanced',
@@ -106,7 +107,7 @@ export const DECISION_ACTION_SPECS: Record<string, ActionSpec> = {
       sort_order: 'desc',
       limit: 20
     },
-    hint: "Use tags_all for AND logic, tags_any for OR logic. Aliases: after→updated_after, before→updated_before"
+    hint: "Use tags_all for AND logic, tags_any for OR logic. Values truncated to 30 chars; use full_value=true for complete text. Aliases: after→updated_after, before→updated_before"
   },
 
   set_batch: {
