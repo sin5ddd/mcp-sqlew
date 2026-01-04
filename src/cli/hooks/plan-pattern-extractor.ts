@@ -17,7 +17,12 @@
  * - **Tags**: Why this constraint exists
  *
  * @since v4.2.2
+ * @modified v4.2.3 - Added resolvePlanPath and buildConfirmationMessage
  */
+
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 // ============================================================================
 // Types
@@ -73,6 +78,9 @@ const VALID_CATEGORIES = ['architecture', 'security', 'code-style', 'performance
 
 /** Valid priority values */
 const VALID_PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
+/** User's global plans directory */
+const GLOBAL_PLANS_DIR = join(homedir(), '.claude', 'plans');
 
 // ============================================================================
 // Main Extraction Function
@@ -151,8 +159,9 @@ export function extractPatternsFromPlan(content: string): ExtractionResult {
  */
 function extractField(body: string, fieldName: string): string {
   // Match: - **FieldName**: value (until newline or end)
+  // Double backslashes needed in template literals for regex escapes
   const regex = new RegExp(
-    `-\s*\*\*${fieldName}\*\*:\s*(.+?)(?=\n-\s*\*\*|\n\n|$)`,
+    `-\\s*\\*\\*${fieldName}\\*\\*:\\s*(.+?)(?=\\n-\\s*\\*\\*|\\n\\n|$)`,
     'is'
   );
   const match = body.match(regex);
@@ -217,4 +226,65 @@ function normalizePriority(priority: string | undefined): string {
  */
 export function hasPatterns(content: string): boolean {
   return /#{2,3}\s*📌\s*Decision:/i.test(content) || /#{2,3}\s*🚫\s*Constraint:/i.test(content);
+}
+
+// ============================================================================
+// Path Resolution
+// ============================================================================
+
+/**
+ * Resolve plan file path
+ * Plans are stored in user's global ~/.claude/plans/ directory
+ *
+ * @param planFileName - Plan file name (e.g., "my-plan.md")
+ * @returns Full path to plan file, or null if not found
+ */
+export function resolvePlanPath(planFileName: string): string | null {
+  const globalPath = join(GLOBAL_PLANS_DIR, planFileName);
+  if (existsSync(globalPath)) {
+    return globalPath;
+  }
+  return null;
+}
+
+// ============================================================================
+// Message Formatting
+// ============================================================================
+
+/**
+ * Build confirmation message for user after pattern extraction
+ *
+ * @param extracted - Extraction result
+ * @param planFile - Plan file name
+ * @returns Formatted confirmation message
+ */
+export function buildConfirmationMessage(extracted: ExtractionResult, planFile: string): string {
+  const lines: string[] = [
+    '',
+    `📋 **Extracted from plan "${planFile}"**`,
+    '',
+  ];
+
+  if (extracted.decisions.length > 0) {
+    lines.push(`### ✅ Decisions (${extracted.decisions.length}) → auto-registered as draft`);
+    for (const d of extracted.decisions) {
+      lines.push(`- **${d.key}**: ${d.value}`);
+      if (d.layer) lines.push(`  - Layer: ${d.layer}`);
+    }
+    lines.push('');
+  }
+
+  if (extracted.constraints.length > 0) {
+    lines.push(`### ✅ Constraints (${extracted.constraints.length}) → auto-registered as active`);
+    for (const c of extracted.constraints) {
+      lines.push(`- **[${c.category}]** ${c.rule} (${c.priority || 'medium'})`);
+    }
+    lines.push('');
+  }
+
+  lines.push('---');
+  lines.push('💡 Decisions will be promoted to active when implementation files are edited.');
+  lines.push('Check manually: `mcp__sqlew__decision({ action: "list", status: "draft" })`');
+
+  return lines.join('\n');
 }

@@ -30,6 +30,7 @@ export class QueueWatcher extends BaseWatcher {
   private static instance: QueueWatcher | null = null;
   private projectRoot: string;
   private processing: boolean = false;
+  private currentCallId: string = '';
 
   private constructor(projectRoot: string) {
     super('QueueWatcher', 500); // 500ms debounce for queue changes
@@ -115,10 +116,16 @@ export class QueueWatcher extends BaseWatcher {
       return;
     }
 
-    debugLog('INFO', `${this.watcherName}: Queue file changed`);
+    const eventId = Math.random().toString(36).slice(2, 6);
+    debugLog('INFO', `${this.watcherName}: Queue file changed`, {
+      eventId,
+      path,
+      hasDebounceTimer: this.debounceTimers.has('queue-process'),
+    });
 
     // Debounce to avoid processing during rapid writes
     this.debounce('queue-process', async () => {
+      debugLog('INFO', `${this.watcherName}: Debounce callback fired`, { eventId });
       await this.processQueueIfNeeded();
     });
   }
@@ -127,25 +134,36 @@ export class QueueWatcher extends BaseWatcher {
    * Process queue if items exist
    */
   private async processQueueIfNeeded(): Promise<void> {
-    // Prevent concurrent processing
+    const callId = Math.random().toString(36).slice(2, 8);
+    this.currentCallId = callId;  // Store for use in item processors
+
+    // CRITICAL: Set processing flag IMMEDIATELY to prevent race conditions
+    // Multiple calls can arrive before the first one finishes checking hasQueueItems
     if (this.processing) {
+      debugLog('WARN', `${this.watcherName}: Skipping - already processing`, { callId });
       return;
     }
+    this.processing = true;  // SET IMMEDIATELY after check!
 
-    if (!hasQueueItems(this.projectRoot)) {
-      return;
-    }
+    debugLog('INFO', `${this.watcherName}: processQueueIfNeeded called`, {
+      callId,
+      processing: true,
+    });
 
-    this.processing = true;
     try {
-      const count = await processQueue(this.projectRoot, this.processItem.bind(this));
-      if (count > 0) {
-        debugLog('INFO', `${this.watcherName}: Processed ${count} queue items`);
+      if (!hasQueueItems(this.projectRoot)) {
+        debugLog('INFO', `${this.watcherName}: Queue is empty, nothing to process`, { callId });
+        return;
       }
+
+      debugLog('INFO', `${this.watcherName}: Starting queue processing`, { callId });
+      const count = await processQueue(this.projectRoot, this.processItem.bind(this), callId);
+      debugLog('INFO', `${this.watcherName}: Processed ${count} queue items`, { callId });
     } catch (error) {
-      debugLog('ERROR', `${this.watcherName}: Error processing queue`, { error });
+      debugLog('ERROR', `${this.watcherName}: Error processing queue`, { callId, error });
     } finally {
       this.processing = false;
+      debugLog('INFO', `${this.watcherName}: Processing flag reset`, { callId });
     }
   }
 
@@ -167,7 +185,10 @@ export class QueueWatcher extends BaseWatcher {
   private async processDecisionItem(item: DecisionQueueItem): Promise<void> {
     const { action, data } = item;
 
-    debugLog('INFO', `${this.watcherName}: Processing decision ${action}`, { key: data.key });
+    debugLog('INFO', `${this.watcherName}: Processing decision ${action}`, {
+      callId: this.currentCallId,
+      key: data.key,
+    });
 
     if (action === 'create') {
       await quickSetDecision({
@@ -195,11 +216,22 @@ export class QueueWatcher extends BaseWatcher {
   private async processConstraintItem(item: ConstraintQueueItem): Promise<void> {
     const { action, data } = item;
 
-    debugLog('INFO', `${this.watcherName}: Processing constraint ${action}`, { text: data.text?.slice(0, 50) });
+    debugLog('INFO', `${this.watcherName}: Processing constraint ${action}`, {
+      callId: this.currentCallId,
+      text: data.text?.slice(0, 50),
+      category: data.category,
+      timestamp: item.timestamp,
+    });
 
     if (action === 'create') {
       const priority = data.priority as 'low' | 'medium' | 'high' | 'critical' | undefined;
-      await addConstraint({
+      debugLog('INFO', `${this.watcherName}: Calling addConstraint`, {
+        callId: this.currentCallId,
+        text: data.text?.slice(0, 30),
+        category: data.category || 'architecture',
+        priority: priority || 'medium',
+      });
+      const result = await addConstraint({
         constraint_text: data.text,
         category: data.category || 'architecture',
         priority: priority || 'medium',
@@ -207,12 +239,21 @@ export class QueueWatcher extends BaseWatcher {
         tags: data.tags,
         active: data.active ?? true,
       });
+      debugLog('INFO', `${this.watcherName}: addConstraint returned`, {
+        callId: this.currentCallId,
+        success: result.success,
+        constraint_id: result.constraint_id,
+      });
     } else if (action === 'activate') {
       // Activate constraints by plan_id tag
       if (data.plan_id) {
         const tag = data.plan_id.slice(0, 8); // Short form of plan_id
         const result = await activateConstraintsByTag(tag);
-        debugLog('INFO', `${this.watcherName}: Activated ${result.activated_count} constraints for plan ${tag}`);
+        debugLog('INFO', `${this.watcherName}: Activated constraints`, {
+          callId: this.currentCallId,
+          activated_count: result.activated_count,
+          plan_tag: tag,
+        });
       }
     }
   }

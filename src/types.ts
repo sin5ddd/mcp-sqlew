@@ -698,6 +698,7 @@ export interface CheckFileLockResponse {
 export interface AddConstraintResponse {
   success: boolean;
   constraint_id: number;
+  already_exists?: boolean;
 }
 
 export interface GetConstraintsResponse {

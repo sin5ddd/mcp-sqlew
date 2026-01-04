@@ -82,9 +82,16 @@ interface HookCommand {
  * Task, Bash, Glob, Grep, Read, Edit, Write, WebFetch, WebSearch, TodoWrite
  *
  * Note: TodoWrite works even though not in official docs (verified v4.1.2)
- * ExitPlanMode, EnterPlanMode are INVALID matchers!
  *
- * @since v4.2.0 - Restored PostToolUse hooks + SubagentStop/Stop events + EnterPlanMode
+ * INVALID matchers (do not work):
+ * - SubagentStart: Not supported
+ *
+ * Testing matchers (may or may not work):
+ * - EnterPlanMode: Seems to work for plan mode entry detection (v4.2.4)
+ * - ExitPlanMode: Testing - may or may not work
+ *
+ * @since v4.2.0 - Restored PostToolUse hooks + SubagentStop/Stop events
+ * @modified v4.2.4 - Re-added EnterPlanMode to track-plan matcher for plan entry detection
  */
 const CLAUDE_HOOKS: RequiredHooks = {
   PreToolUse: [
@@ -93,7 +100,7 @@ const CLAUDE_HOOKS: RequiredHooks = {
       hooks: [{ type: 'command', command: 'sqlew suggest' }],
     },
     {
-      matcher: 'Write',
+      matcher: 'Write|EnterPlanMode',
       hooks: [{ type: 'command', command: 'sqlew track-plan' }],
     },
   ],
@@ -107,14 +114,8 @@ const CLAUDE_HOOKS: RequiredHooks = {
       hooks: [{ type: 'command', command: 'sqlew check-completion' }],
     },
     {
-      // EnterPlanMode - inject TOML template after plan mode starts
-      // Note: May not be a valid matcher, but testing anyway (like ExitPlanMode)
-      matcher: 'EnterPlanMode',
-      hooks: [{ type: 'command', command: 'sqlew on-enter-plan' }],
-    },
-    {
-      // ExitPlanMode - prompt TOML documentation after plan approval
-      // Note: May not be a valid matcher, but testing anyway
+      // ExitPlanMode - extract decisions/constraints after plan approval
+      // Note: Testing - may or may not work as a valid matcher
       matcher: 'ExitPlanMode',
       hooks: [{ type: 'command', command: 'sqlew on-exit-plan' }],
     },
@@ -280,8 +281,8 @@ function mergeHooksNoMatcher(
 function removeInvalidHooks(settings: ClaudeSettings): void {
   // Invalid matchers that should be removed
   // Note: TodoWrite works even though not in official docs (verified v4.1.2)
-  // Note: Testing ExitPlanMode - may or may not work (v4.2.0)
-  const invalidMatchers = ['EnterPlanMode', 'SubagentStart'];
+  // Note: Testing ExitPlanMode and EnterPlanMode - may or may not work (v4.2.4)
+  const invalidMatchers = ['SubagentStart'];
 
   if (settings.hooks?.PostToolUse) {
     settings.hooks.PostToolUse = settings.hooks.PostToolUse.filter(

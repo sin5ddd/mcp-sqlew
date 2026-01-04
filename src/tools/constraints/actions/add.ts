@@ -79,6 +79,18 @@ export async function addConstraint(
         // Get or create category
         const categoryId = await getOrCreateCategoryId(actualAdapter, params.category, trx);
 
+        // Duplicate check: skip if same text + category already exists
+        const existing = await trx('v4_constraints')
+          .where({
+            constraint_text: normalizedParams.constraint_text,
+            category_id: categoryId,
+            project_id: projectId
+          })
+          .first();
+        if (existing) {
+          return { constraintId: existing.id, alreadyExists: true };
+        }
+
         // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
 
         // Calculate timestamp
@@ -110,12 +122,13 @@ export async function addConstraint(
           }
         }
 
-        return { constraintId: Number(constraintId) };
+        return { constraintId: Number(constraintId), alreadyExists: false };
       });
 
       return {
         success: true,
         constraint_id: result.constraintId,
+        already_exists: result.alreadyExists,
       };
     });
   } catch (error) {
