@@ -2,6 +2,10 @@
 
 **Architecture Decision Records (ADR)** document the architectural decisions made on a project, including context, consequences, and alternatives considered. sqlew extends this proven pattern to AI agents.
 
+## Plan-to-ADR (v4.3.0+)
+
+**Plan-to-ADR** is sqlew's automatic ADR generation feature. Write decisions in your plan files using Markdown patterns (`📌 Decision` / `🚫 Constraint`), and they're automatically extracted and registered as structured ADR entries.
+
 ## How It Works
 
 ```mermaid

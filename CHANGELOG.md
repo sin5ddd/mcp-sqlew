@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.3.0] - 2026-01-04
+
+### Added
+
+**Plan-to-ADR: Automatic Architecture Decision Records**
+
+- Automatic ADR generation from Claude Code Plan Mode
+- Markdown pattern extraction (📌 Decision / 🚫 Constraint markers)
+- File Queue Architecture for async decision processing
+- SubagentStop event integration for reliable pattern detection
+- Parameter aliases for simplified tool usage (`path` → `file_path`, etc.)
+
+### Changed
+
+- Documentation: Removed TOML format references (Markdown-only implementation)
+- Unified feature branding as "Plan-to-ADR"
+- Quick Start: `sqlew --init` as recommended one-shot setup
+- Skills: Updated sqlew-decision-format and sqlew-plan-guidance
+
+### Deprecated
+
+- **`task` tool**: Will be removed in v5.0. Use Claude Code's native TodoWrite instead
+- **`file` tool**: Will be removed in v5.0. File tracking was primarily used with task system
+
+### Fixed
+
+- Version alignment across package.json, README.md, CLAUDE.md
+- Constraints duplication on automation
+- Windows file locking issues with chokidar
+
+---
+
 ## [4.1.2] - 2025-12-25
 
 ### Fixed
