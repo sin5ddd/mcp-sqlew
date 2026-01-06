@@ -8,16 +8,13 @@
 import { getAdapter } from '../../../database/index.js';
 import {
   buildConstraintQuery,
-  parseConstraintTags,
   type ConstraintCandidate as QueryConstraintCandidate,
 } from '../internal/constraint-queries.js';
-import {
-  scoreConstraints,
-  filterByThreshold,
-  limitSuggestions,
-  type ConstraintScoringContext,
-  type ScoredConstraint,
-  type ScoreBreakdown,
+import { transformAndScoreConstraints } from '../../../utils/suggest-helpers.js';
+import type {
+  ConstraintScoringContext,
+  ScoreBreakdown,
+  ScoredConstraint,
 } from '../../../utils/constraint-scorer.js';
 
 /**
@@ -81,17 +78,6 @@ export async function constraintByText(
 
   const candidates = (await query) as QueryConstraintCandidate[];
 
-  // Transform candidates for scorer (parse tags from GROUP_CONCAT)
-  const parsed = candidates.map((c) => ({
-    id: c.constraint_id,
-    constraint_text: c.constraint_text,
-    category: c.category,
-    tags: parseConstraintTags(c.tags),
-    layer: c.layer,
-    priority: c.priority,
-    ts: c.ts,
-  }));
-
   // Score constraints based on text similarity
   const context: ConstraintScoringContext = {
     text: params.text,
@@ -99,9 +85,10 @@ export async function constraintByText(
     layer: params.layer,
   };
 
-  let suggestions = scoreConstraints(parsed, context);
-  suggestions = filterByThreshold(suggestions, params.min_score ?? 30);
-  suggestions = limitSuggestions(suggestions, params.limit ?? 5);
+  const suggestions = transformAndScoreConstraints(candidates, context, {
+    minScore: params.min_score,
+    limit: params.limit,
+  });
 
   return {
     query_text: params.text,

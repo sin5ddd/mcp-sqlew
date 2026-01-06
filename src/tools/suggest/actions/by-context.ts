@@ -7,8 +7,8 @@
 
 import type { Knex } from 'knex';
 import { getAdapter } from '../../../database/index.js';
-import { parseGroupConcatTags } from '../../../utils/tag-parser.js';
-import { scoreAndRankSuggestions, filterByThreshold, limitSuggestions, type SuggestionContext } from '../../../utils/suggestion-scorer.js';
+import { transformAndScoreDecisions } from '../../../utils/suggest-helpers.js';
+import type { SuggestionContext } from '../../../utils/suggestion-scorer.js';
 import { buildContextQuery } from '../internal/queries.js';
 import type { SuggestResponse, DecisionCandidate } from '../types.js';
 
@@ -42,17 +42,6 @@ export async function suggestByContext(params: ByContextParams): Promise<Suggest
   // Build and execute context query (exclude current key to prevent self-suggestion)
   const candidates = await buildContextQuery(knex, params.tags, params.key) as DecisionCandidate[];
 
-  // Parse tags from GROUP_CONCAT and add defaults for scorer
-  const parsed = candidates.map((c: DecisionCandidate) => ({
-    key_id: c.key_id,
-    key: c.key,
-    value: String(c.value),  // Convert to string for scorer
-    tags: parseGroupConcatTags(c.tags),
-    layer: c.layer,
-    priority: 0,  // Default priority (not stored in DB)
-    updated_ts: c.ts,  // Rename ts to updated_ts for scorer
-  }));
-
   // Score and rank with full context
   const context: SuggestionContext = {
     key: params.key,
@@ -61,9 +50,10 @@ export async function suggestByContext(params: ByContextParams): Promise<Suggest
     priority: params.priority,
   };
 
-  let suggestions = scoreAndRankSuggestions(context, parsed);
-  suggestions = filterByThreshold(suggestions, params.min_score ?? 30);
-  suggestions = limitSuggestions(suggestions, params.limit ?? 5);
+  const suggestions = transformAndScoreDecisions(candidates, context, {
+    minScore: params.min_score,
+    limit: params.limit,
+  });
 
   return {
     query: {
