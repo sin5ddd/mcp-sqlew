@@ -1,11 +1,18 @@
 ## Plan Mode Integration
 
-### Decision & Constraint Recording Format
+### REQUIRED: Decision & Constraint Recording
 
-When writing plans, use these formats to record decisions and constraints.
-They will be **auto-detected on ExitPlanMode** and registered as draft in sqlew.
+**When writing plans, you MUST include the following sections:**
 
-**Decision format:**
+1. **📌 Decisions** - Technology choices, architecture patterns, implementation approaches
+2. **🚫 Constraints** - Rules, restrictions, limitations, prohibited patterns from user requirements
+
+**IMPORTANT**: If the user mentions any restrictions, prohibitions, or "don't use X", these MUST be recorded as 🚫 Constraints.
+
+---
+
+**Decision format (REQUIRED for any technical choice):**
+
 ```markdown
 ### 📌 Decision: [key/path]
 - **Value**: Description of the decision
@@ -13,7 +20,8 @@ They will be **auto-detected on ExitPlanMode** and registered as draft in sqlew.
 - **Tags**: tag1, tag2 (optional)
 ```
 
-**Constraint format:**
+**Constraint format (REQUIRED when user specifies restrictions):**
+
 ```markdown
 ### 🚫 Constraint: [category]
 - **Rule**: Description of the constraint
@@ -23,26 +31,20 @@ They will be **auto-detected on ExitPlanMode** and registered as draft in sqlew.
 
 Category options: `architecture` | `security` | `code-style` | `performance`
 
+---
+
 ### With Claude Code Hooks (Recommended)
 
-If you've run `sqlew init --hooks`, sqlew integration is **fully automatic**:
+If you've run `sqlew --hooks`, sqlew integration is **fully automatic**:
+
+- 📌/🚫 patterns are auto-detected and registered as draft on ExitPlanMode
 - Related decisions are auto-suggested before Task execution
-- Plan files are auto-tracked with unique IDs
-- 📌/🚫 patterns are auto-detected and registered as draft
 - Decisions are auto-saved when code is edited
-- Status updates to `in_review` when all tasks complete
-- Status updates to `implemented` after git merge/rebase
 
 ### Manual Usage (Without Hooks)
 
-When `<system-reminder>Plan mode is active</system-reminder>` appears:
-
 **Research Phase:**
 - `/sqlew search for <topic>` - find related decisions
-- `/sqlew show remaining tasks` - check active tasks
 
 **Final Plan Phase:**
 - `/sqlew record <decision>` - record key architectural decisions
-- `/sqlew create task <description>` - create implementation tasks
-
-**Quick Reference**: `.claude/skills/sqlew-decision-format/SKILL.md`

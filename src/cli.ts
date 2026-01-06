@@ -17,7 +17,7 @@ import { saveCommand } from './cli/hooks/save.js';
 import { checkCompletionCommand } from './cli/hooks/check-completion.js';
 import { markDoneCommand } from './cli/hooks/mark-done.js';
 import { initHooksCommand } from './cli/hooks/init-hooks.js';
-import { initializeSkills, initializeClaudeMd, initializeGitignore } from './init-skills.js';
+import { initializeSkills, initializeRules, initializeGitignore } from './init-skills.js';
 import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
 import { onStopCommand } from './cli/hooks/on-stop.js';
 import { onEnterPlanCommand } from './cli/hooks/on-enter-plan.js';
@@ -305,13 +305,13 @@ async function initAllCommand(): Promise<void> {
     console.log(`      ✗ Skills failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 2. Initialize CLAUDE.md
-  console.log('[2/4] Updating CLAUDE.md...');
+  // 2. Initialize .claude/rules/
+  console.log('[2/4] Setting up .claude/rules/...');
   try {
-    initializeClaudeMd(projectPath);
-    console.log('      ✓ CLAUDE.md updated');
+    initializeRules(projectPath);
+    console.log('      ✓ Plan mode integration rule installed');
   } catch (error) {
-    console.log(`      ✗ CLAUDE.md failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.log(`      ✗ Rules setup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   // 3. Initialize Hooks
