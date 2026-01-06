@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.3.1] - 2026-01-06
+
+### Added
+
+- **`.claude/rules/` integration**: Plan mode templates now installed to `.claude/rules/plan-mode-integration.md` instead of modifying CLAUDE.md directly
+- Incremental `.gitignore` updates: Missing sqlew entries are now added even if sqlew section already exists
+- Deprecation notices added to `file` tool help (matching `task` tool)
+
+### Changed
+
+- **BREAKING**: `sqlew --init` no longer edits CLAUDE.md - uses `.claude/rules/` directory instead
+- Plan mode template enhanced with stronger MUST/REQUIRED language for constraints
+- DRY improvements: Common suggest tool logic extracted to `suggest-helpers.ts`
+
+### Deprecated
+
+- **Specialized agents** (`scrum_master`, `researcher`, `architect`): No longer needed with Claude Opus 4.5's improved capabilities. Disabled by default, will be removed in v5.0
+
+### Removed
+
+- Obsolete types from `types.ts` (duplicate JSON Import types, deprecated message system types)
+- Unused `messagesCount` from `has-updates` action response
+- `[tasks]` and `[vcs]` sections from config.example.toml (task system deprecated in v4.3.0)
+- SSH tunnel configuration from config.example.toml (unsupported)
+
+---
+
 ## [4.3.0] - 2026-01-04
 
 ### Added
