@@ -148,19 +148,18 @@ const SQLEW_GITIGNORE_MARKER = '# sqlew auto-generated files';
 
 /**
  * Initialize .gitignore with sqlew auto-generated file entries
- * Adds missing entries even if sqlew section already exists
+ * Creates .gitignore if it doesn't exist, adds missing entries if sqlew section exists
  */
 export function initializeGitignore(projectRoot: string): void {
   const gitignorePath = path.join(projectRoot, '.gitignore');
 
-  // Check if .gitignore exists
-  if (!fs.existsSync(gitignorePath)) {
-    debugLog('DEBUG', '.gitignore not found, skipping gitignore update', { projectRoot });
-    return;
+  // Read current .gitignore content (or empty string if doesn't exist)
+  let content = '';
+  if (fs.existsSync(gitignorePath)) {
+    content = fs.readFileSync(gitignorePath, 'utf-8');
+  } else {
+    debugLog('INFO', '.gitignore not found, creating new file', { gitignorePath });
   }
-
-  // Read current .gitignore content
-  let content = fs.readFileSync(gitignorePath, 'utf-8');
 
   // Check if sqlew section already exists
   if (content.includes(SQLEW_GITIGNORE_MARKER)) {
