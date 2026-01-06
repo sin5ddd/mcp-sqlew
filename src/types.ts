@@ -371,28 +371,6 @@ export interface HasUpdatesParams {
   since_timestamp: string;  // ISO 8601 timestamp
 }
 
-export interface SendMessageParams {
-  from_agent: string;
-  to_agent?: string | null;  // undefined or null = broadcast
-  msg_type: 'decision' | 'warning' | 'request' | 'info';
-  message: string;  // The message content
-  priority?: 'low' | 'medium' | 'high' | 'critical';
-  payload?: any;  // Will be JSON.stringify'd
-}
-
-export interface GetMessagesParams {
-  agent_name: string;
-  unread_only?: boolean;
-  priority_filter?: 'low' | 'medium' | 'high' | 'critical';
-  msg_type_filter?: 'decision' | 'warning' | 'request' | 'info';
-  limit?: number;
-}
-
-export interface MarkReadParams {
-  message_ids: number[];
-  agent_name: string;
-}
-
 export interface RecordFileChangeParams {
   file_path: string;
   agent_name?: string;  // Optional since v4.1.2 (legacy sub-agent system removed)
@@ -439,26 +417,6 @@ export interface DeactivateConstraintParams {
   constraint_id: number;
 }
 
-export interface GetLayerSummaryParams {
-  // No parameters - returns all layers
-}
-
-export interface ClearOldDataParams {
-  messages_older_than_hours?: number;
-  file_changes_older_than_days?: number;
-}
-
-export interface GetStatsParams {
-  // No parameters - returns overall stats
-}
-
-export interface GetActivityLogParams {
-  since?: string;  // ISO timestamp or relative like "5m", "1h", "2h", "1d"
-  agent_names?: string[];  // Filter by agents (or ["*"] for all)
-  actions?: string[];  // Filter by action types
-  limit?: number;  // Max results (default: 100)
-}
-
 // ============================================================================
 // Task Acceptance Criteria Types (v3.0.2 - File Watcher)
 // ============================================================================
@@ -486,11 +444,6 @@ export interface AcceptanceCheck {
 
 export interface SetDecisionBatchParams {
   decisions: SetDecisionParams[];
-  atomic?: boolean;  // Default: true (all succeed or all fail)
-}
-
-export interface SendMessageBatchParams {
-  messages: SendMessageParams[];
   atomic?: boolean;  // Default: true (all succeed or all fail)
 }
 
@@ -654,31 +607,8 @@ export interface HasUpdatesResponse {
   has_updates: boolean;
   counts: {
     decisions: number;
-    messages: number;
     files: number;
   };
-}
-
-export interface SendMessageResponse {
-  success: boolean;
-  message_id: number;
-}
-
-export interface GetMessagesResponse {
-  messages: Array<{
-    id: number;
-    from_agent: string;
-    msg_type: string;
-    priority: string;
-    payload: any;
-    timestamp: string;
-    read: boolean;
-  }>;
-  count: number;
-}
-
-export interface MarkReadResponse {
-  success: boolean;
 }
 
 export interface RecordFileChangeResponse {
@@ -712,18 +642,6 @@ export interface GetConstraintsResponse {
 
 export interface DeactivateConstraintResponse {
   success: boolean;
-}
-
-export interface GetLayerSummaryResponse {
-  summary: LayerSummary[];
-}
-
-export interface ClearOldDataResponse {
-  success: boolean;
-  messages_deleted: number;
-  file_changes_deleted: number;
-  activity_logs_deleted: number;
-  agents_released: number;
 }
 
 export interface GetStatsResponse {
@@ -779,11 +697,6 @@ export interface ActivityLogEntry {
   details: any;  // Parsed JSON
 }
 
-export interface GetActivityLogResponse {
-  activities: ActivityLogEntry[];
-  count: number;
-}
-
 // ============================================================================
 // Batch Operation Response Types (FR-005)
 // ============================================================================
@@ -796,20 +709,6 @@ export interface SetDecisionBatchResponse {
     key: string;
     key_id?: number;
     version?: string;
-    success: boolean;
-    error?: string;
-  }>;
-}
-
-export interface SendMessageBatchResponse {
-  success: boolean;
-  inserted: number;
-  failed: number;
-  results: Array<{
-    from_agent: string;
-    to_agent: string | null;
-    message_id?: number;
-    timestamp?: string;
     success: boolean;
     error?: string;
   }>;
@@ -870,22 +769,6 @@ export interface ListTemplatesResponse {
 // ============================================================================
 
 // Note: ValidationError interface is defined at the top of this file (lines 58-71)
-
-/**
- * Batch validation error for batch operations (legacy)
- * @deprecated Use BatchValidationError from batch-validation.ts instead
- * Reports validation failures across multiple items
- */
-export interface LegacyBatchValidationError {
-  error: string;
-  batch_param: string;
-  item_errors: Array<{
-    index: number;
-    error: string | ValidationError;
-  }>;
-  total_items: number;
-  failed_items: number;
-}
 
 /**
  * Action not found error
@@ -960,147 +843,6 @@ export type ConfigAction =
 export type ExampleAction =
   | 'get' | 'search' | 'list_all'
   | 'help' | 'example';
-
-/**
- * Message tool actions
- * @deprecated Messaging system removed in v3.8.0. Message tool has been completely removed.
- * This type is kept only for backward compatibility with existing code references.
- */
-export type MessageAction = never;
-
-// ============================================================================
-// JSON Import System Types (v3.7.3)
-// ============================================================================
-
-/**
- * Options for JSON import operation
- */
-export interface JsonImportOptions {
-  /** Optional: Target project name (if not provided, uses name from JSON) */
-  targetProjectName?: string;
-  /** Optional: Skip import if project already exists (default: true) */
-  skipIfExists?: boolean;
-  /** Optional: Dry run mode - validate only, don't import (default: false) */
-  dryRun?: boolean;
-}
-
-/**
- * JSON import validation result
- */
-export interface ImportValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-  schema_version?: number;
-  sqlew_version?: string;
-  export_mode?: 'single_project' | 'all_projects';
-}
-
-/**
- * ID mapping for a single master table
- * Maps old IDs (from export) to new IDs (in target database)
- */
-export interface IdMapping extends Map<number, number> {}
-
-/**
- * Complete ID mapping context for all master tables
- * Note: agents removed in v4.0 (agent system deleted)
- */
-export interface ImportIdMappings {
-  projects: IdMapping;
-  files: IdMapping;
-  context_keys: IdMapping;
-  tags: IdMapping;
-  scopes: IdMapping;
-  constraint_categories: IdMapping;
-  layers: IdMapping;
-  task_statuses: IdMapping;
-  tasks: IdMapping;  // Transaction table, but needed for dependencies
-  decision_policies: IdMapping;  // v4.0+ table
-}
-
-/**
- * Import context - holds all state during import operation
- */
-export interface ImportContext {
-  /** Knex instance for database operations */
-  knex: any;
-  /** ID mappings for all tables */
-  mappings: ImportIdMappings;
-  /** Target project ID (created during import) */
-  projectId: number;
-  /** Source JSON data */
-  jsonData: any;
-  /** Import options */
-  options: JsonImportOptions;
-  /** Statistics (updated during import) */
-  stats: ImportStats;
-}
-
-/**
- * Import statistics
- * Note: agents_created, activity_log_created removed in v4.0
- */
-export interface ImportStats {
-  project_created: boolean;
-  master_tables: {
-    files_created: number;
-    files_reused: number;
-    context_keys_created: number;
-    tags_created: number;
-    tags_reused: number;
-    scopes_created: number;
-    scopes_reused: number;
-  };
-  transaction_tables: {
-    decisions_created: number;
-    decisions_numeric_created: number;
-    decision_history_created: number;
-    decision_context_created: number;
-    file_changes_created: number;
-    constraints_created: number;
-    tasks_created: number;
-    task_details_created: number;
-    decision_policies_created: number;  // v4.0+ table
-    tag_index_created: number;  // v4.0+ table
-  };
-  junction_tables: {
-    decision_tags_created: number;
-    decision_scopes_created: number;
-    constraint_tags_created: number;
-    task_tags_created: number;
-    task_file_links_created: number;
-    task_decision_links_created: number;
-    task_dependencies_created: number;
-  };
-}
-
-/**
- * Task dependency graph for topological sorting
- */
-export interface TaskDependencyGraph {
-  /** Task IDs with no dependencies (roots) */
-  roots: number[];
-  /** Map from blocker_task_id to array of blocked_task_ids */
-  children: Map<number, number[]>;
-  /** Map from blocked_task_id to array of blocker_task_ids */
-  parents: Map<number, number[]>;
-  /** All task IDs in the graph */
-  allTaskIds: Set<number>;
-}
-
-/**
- * JSON import result
- */
-export interface JsonImportResult {
-  success: boolean;
-  project_id?: number;
-  project_name?: string;
-  stats?: ImportStats;
-  error?: string;
-  skipped?: boolean;
-  skip_reason?: string;
-}
 
 // ============================================================================
 // JSON Import System Types (v3.7.3)

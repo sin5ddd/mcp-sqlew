@@ -9,16 +9,16 @@ import type { Knex } from 'knex';
 import { getAdapter } from '../../../database/index.js';
 import {
   buildConstraintQuery,
-  parseConstraintTags,
   type ConstraintCandidate as QueryConstraintCandidate,
 } from '../internal/constraint-queries.js';
 import {
-  scoreConstraints,
-  filterByThreshold,
-  limitSuggestions,
-  type ConstraintScoringContext,
-  type ScoredConstraint,
-  type ScoreBreakdown,
+  transformAndScoreConstraints,
+  parseConstraintTags,
+} from '../../../utils/suggest-helpers.js';
+import type {
+  ConstraintScoringContext,
+  ScoreBreakdown,
+  ScoredConstraint,
 } from '../../../utils/constraint-scorer.js';
 
 /**
@@ -101,17 +101,6 @@ export async function constraintByContext(
 
   const candidates = (await query) as QueryConstraintCandidate[];
 
-  // Transform candidates for scorer (parse tags from GROUP_CONCAT)
-  const parsed = candidates.map((c) => ({
-    id: c.constraint_id,
-    constraint_text: c.constraint_text,
-    category: c.category,
-    tags: parseConstraintTags(c.tags),
-    layer: c.layer,
-    priority: c.priority,
-    ts: c.ts,
-  }));
-
   // Score constraints with full context
   const context: ConstraintScoringContext = {
     text: params.text ?? '',
@@ -120,9 +109,13 @@ export async function constraintByContext(
     priority: params.priority,
   };
 
-  let suggestions = scoreConstraints(parsed, context);
-  suggestions = filterByThreshold(suggestions, params.min_score ?? 30);
-  suggestions = limitSuggestions(suggestions, params.limit ?? 5);
+  const suggestions = transformAndScoreConstraints(candidates, context, {
+    minScore: params.min_score,
+    limit: params.limit,
+  });
+
+  // Map to include ts from original candidates
+  const candidateMap = new Map(candidates.map(c => [c.constraint_id, c.ts]));
 
   return {
     query: {
@@ -141,7 +134,7 @@ export async function constraintByContext(
       score_breakdown: s.score_breakdown,
       layer: s.layer,
       tags: s.tags,
-      ts: parsed.find((p) => p.id === s.id)?.ts,
+      ts: candidateMap.get(s.id),
     })),
   };
 }

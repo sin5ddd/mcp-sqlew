@@ -68,48 +68,49 @@ export function initializeSkills(projectRoot: string): void {
 }
 
 /**
- * Append Plan Mode Integration section to CLAUDE.md if not present
+ * Initialize Plan Mode Integration rule in .claude/rules/ directory
+ * This approach is safer than editing CLAUDE.md directly:
+ * - Files in .claude/rules/ are auto-loaded with same priority as CLAUDE.md
+ * - No risk of corrupting user's CLAUDE.md content
+ * - Simple file copy/overwrite for updates
  */
-export function initializeClaudeMd(projectRoot: string): void {
-  const claudeMdPath = path.join(projectRoot, 'CLAUDE.md');
+export function initializeRules(projectRoot: string): void {
   const snippetPath = path.join(getAssetsPath(), 'claude-md-snippets', 'plan-mode-integration.md');
+  const rulesDir = path.join(projectRoot, '.claude', 'rules');
+  const targetPath = path.join(rulesDir, 'plan-mode-integration.md');
 
   // Check if snippet source exists
   if (!fs.existsSync(snippetPath)) {
-    debugLog('WARN', 'CLAUDE.md snippet not found', { snippetPath });
+    debugLog('WARN', 'Plan mode integration snippet not found', { snippetPath });
     return;
-}
-
-  // Check if CLAUDE.md exists
-  if (!fs.existsSync(claudeMdPath)) {
-    debugLog('INFO', 'CLAUDE.md not found, skipping integration', { claudeMdPath });
-    return;
-}
-
-  // Read current CLAUDE.md content
-  const currentContent = fs.readFileSync(claudeMdPath, 'utf-8');
-
-  // Check if Plan Mode Integration section already exists
-  if (currentContent.includes('## Plan Mode Integration')) {
-    debugLog('DEBUG', 'Plan Mode Integration section already present in CLAUDE.md');
-    return;
-}
+  }
 
   // Read snippet content
   const snippetContent = fs.readFileSync(snippetPath, 'utf-8');
 
-  // Append snippet to CLAUDE.md
+  // Check if target already exists and is up-to-date
+  if (fs.existsSync(targetPath)) {
+    const currentContent = fs.readFileSync(targetPath, 'utf-8');
+    if (currentContent === snippetContent) {
+      debugLog('DEBUG', 'Plan mode integration rule is already up-to-date');
+      return;
+    }
+  }
+
+  // Create rules directory if needed
   try {
-    const newContent = currentContent.trimEnd() + '\n\n' + snippetContent;
-    fs.writeFileSync(claudeMdPath, newContent, 'utf-8');
-    debugLog('INFO', 'Plan Mode Integration section added to CLAUDE.md', { claudeMdPath });
+    fs.mkdirSync(rulesDir, { recursive: true });
+
+    // Copy/update the rule file
+    fs.writeFileSync(targetPath, snippetContent, 'utf-8');
+    debugLog('INFO', 'Plan mode integration rule initialized', { targetPath });
   } catch (error) {
-    debugLog('WARN', 'Failed to update CLAUDE.md', { error });
-}
+    debugLog('WARN', 'Failed to initialize plan mode integration rule', { error });
+  }
 }
 
 /**
- * Initialize all sqlew integrations (skills + CLAUDE.md + hooks + gitignore)
+ * Initialize all sqlew integrations (skills + rules + hooks + gitignore)
  * Called during server startup
  */
 export function initializeSqlewIntegrations(projectRoot: string): void {
@@ -118,8 +119,8 @@ export function initializeSqlewIntegrations(projectRoot: string): void {
   // Initialize skills
   initializeSkills(projectRoot);
 
-  // Initialize CLAUDE.md integration
-  initializeClaudeMd(projectRoot);
+  // Initialize .claude/rules/ for Plan Mode Integration
+  initializeRules(projectRoot);
 
   // Initialize Claude Code hooks (first time only)
   const hooksInitialized = autoInitializeHooks(projectRoot);
@@ -138,6 +139,7 @@ export function initializeSqlewIntegrations(projectRoot: string): void {
 const SQLEW_GITIGNORE_ENTRIES = [
   '.claude/skills/sqlew-decision-format/',
   '.claude/skills/sqlew-plan-guidance/',
+  '.claude/rules/plan-mode-integration.md',
   '.claude/commands/sqlew.md',
 ];
 
@@ -146,7 +148,7 @@ const SQLEW_GITIGNORE_MARKER = '# sqlew auto-generated files';
 
 /**
  * Initialize .gitignore with sqlew auto-generated file entries
- * Only adds entries if not already present
+ * Adds missing entries even if sqlew section already exists
  */
 export function initializeGitignore(projectRoot: string): void {
   const gitignorePath = path.join(projectRoot, '.gitignore');
@@ -155,18 +157,40 @@ export function initializeGitignore(projectRoot: string): void {
   if (!fs.existsSync(gitignorePath)) {
     debugLog('DEBUG', '.gitignore not found, skipping gitignore update', { projectRoot });
     return;
-}
+  }
 
   // Read current .gitignore content
   let content = fs.readFileSync(gitignorePath, 'utf-8');
 
   // Check if sqlew section already exists
   if (content.includes(SQLEW_GITIGNORE_MARKER)) {
-    debugLog('DEBUG', 'sqlew gitignore section already present');
-    return;
-}
+    // Find missing entries
+    const missingEntries = SQLEW_GITIGNORE_ENTRIES.filter(entry => !content.includes(entry));
 
-  // Build section to add
+    if (missingEntries.length === 0) {
+      debugLog('DEBUG', 'sqlew gitignore section is up-to-date');
+      return;
+    }
+
+    // Append missing entries after the marker
+    try {
+      const markerIndex = content.indexOf(SQLEW_GITIGNORE_MARKER);
+      const afterMarker = markerIndex + SQLEW_GITIGNORE_MARKER.length;
+      const newContent =
+        content.slice(0, afterMarker) +
+        '\n' + missingEntries.join('\n') +
+        content.slice(afterMarker);
+      fs.writeFileSync(gitignorePath, newContent, 'utf-8');
+      debugLog('INFO', 'Added missing sqlew entries to .gitignore', {
+        entries: missingEntries
+      });
+    } catch (error) {
+      debugLog('WARN', 'Failed to update .gitignore', { error });
+    }
+    return;
+  }
+
+  // Build section to add (fresh install)
   const sectionLines = [
     '',
     SQLEW_GITIGNORE_MARKER,
@@ -177,10 +201,10 @@ export function initializeGitignore(projectRoot: string): void {
   try {
     const newContent = content.trimEnd() + '\n' + sectionLines.join('\n') + '\n';
     fs.writeFileSync(gitignorePath, newContent, 'utf-8');
-    debugLog('INFO', 'Added sqlew entries to .gitignore', { 
-      entries: SQLEW_GITIGNORE_ENTRIES.length 
+    debugLog('INFO', 'Added sqlew entries to .gitignore', {
+      entries: SQLEW_GITIGNORE_ENTRIES.length
     });
   } catch (error) {
     debugLog('WARN', 'Failed to update .gitignore', { error });
-}
+  }
 }

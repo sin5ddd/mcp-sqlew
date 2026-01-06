@@ -8,16 +8,17 @@
 import { getAdapter } from '../../../database/index.js';
 import {
   buildConstraintQuery,
-  parseConstraintTags,
   type ConstraintCandidate as QueryConstraintCandidate,
 } from '../internal/constraint-queries.js';
 import {
-  scoreConstraints,
-  filterByThreshold,
-  limitSuggestions,
-  type ConstraintScoringContext,
-  type ScoredConstraint,
-  type ScoreBreakdown,
+  transformAndScoreConstraints,
+  parseConstraintTags,
+  type QueryConstraintCandidate as TransformCandidate,
+} from '../../../utils/suggest-helpers.js';
+import type {
+  ConstraintScoringContext,
+  ScoreBreakdown,
+  ScoredConstraint,
 } from '../../../utils/constraint-scorer.js';
 
 /**
@@ -82,21 +83,11 @@ export async function constraintByTags(
 
   const candidates = (await query) as QueryConstraintCandidate[];
 
-  // Transform candidates for scorer (parse tags from GROUP_CONCAT)
-  const parsed = candidates.map((c) => ({
-    id: c.constraint_id,
-    constraint_text: c.constraint_text,
-    category: c.category,
-    tags: parseConstraintTags(c.tags),
-    layer: c.layer,
-    priority: c.priority,
-    ts: c.ts,
-  }));
-
-  // Filter to only constraints that have at least one matching tag
-  const filteredParsed = parsed.filter((c) =>
-    c.tags.some((tag) => params.tags.includes(tag))
-  );
+  // Pre-filter to only constraints that have at least one matching tag
+  const filteredCandidates = candidates.filter((c) => {
+    const tags = parseConstraintTags(c.tags);
+    return tags.some((tag) => params.tags.includes(tag));
+  });
 
   // Score constraints based on tag overlap
   const context: ConstraintScoringContext = {
@@ -105,9 +96,14 @@ export async function constraintByTags(
     layer: params.layer,
   };
 
-  let suggestions = scoreConstraints(filteredParsed, context);
-  suggestions = filterByThreshold(suggestions, params.min_score ?? 30);
-  suggestions = limitSuggestions(suggestions, params.limit ?? 5);
+  const suggestions = transformAndScoreConstraints(
+    filteredCandidates as TransformCandidate[],
+    context,
+    {
+      minScore: params.min_score,
+      limit: params.limit,
+    }
+  );
 
   return {
     query_tags: params.tags,
