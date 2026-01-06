@@ -53,10 +53,6 @@ export async function hasUpdates(
 
     const decisionsCount = (decisionCount1?.count || 0) + (decisionCount2?.count || 0);
 
-    // v3.6.5: t_agent_messages table removed - messaging system deprecated
-    // Messages count always 0
-    const messagesCount = 0;
-
     // Count file changes since timestamp (project-scoped)
     const fileResult = await knex('v4_file_changes')
       .where({ project_id: projectId })
@@ -72,7 +68,6 @@ export async function hasUpdates(
       has_updates: hasUpdatesFlag,
       counts: {
         decisions: decisionsCount,
-        messages: messagesCount,
         files: filesCount
       }
     };
