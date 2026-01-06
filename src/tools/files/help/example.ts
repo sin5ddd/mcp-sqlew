@@ -5,6 +5,17 @@
 export function fileExample(): any {
   return {
     tool: 'file',
+    deprecation: {
+      status: '⚠️ DEPRECATED as of v4.3.0',
+      reason: 'Claude Code provides native file change tracking through its built-in tools and Plan Mode',
+      alternatives: [
+        'Use Claude Code native tools for file operations',
+        'Use decision tool to record file-related architectural decisions',
+        'Use Plan Mode for structured workflows involving file changes'
+      ],
+      documentation: '/docs/TASK_SYSTEM_DEPRECATED.md',
+      note: 'File tool remains functional for backward compatibility but will be removed in v5.0'
+    },
     description: 'Comprehensive file tracking examples for multi-agent coordination',
     scenarios: {
       basic_tracking: {

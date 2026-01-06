@@ -232,14 +232,13 @@ Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) -
 
 ## Version
 
-Current version: **4.3.0**
+Current version: **4.3.1**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-**What's New in v4.3.0:**
-- **Plan-to-ADR** - Automatic Architecture Decision Records from Claude Code Plan Mode
-- **Markdown Pattern Extraction** - 📌 Decision / 🚫 Constraint markers auto-detected
-- **One-shot Setup** - `sqlew --init` initializes everything (Skills, Hooks, gitignore)
-- **Parameter Aliases** - Simplified tool usage with intuitive parameter names
+**What's New in v4.3.1:**
+- **`.claude/rules/` Integration** - Safer installation without modifying CLAUDE.md
+- **Incremental gitignore** - Missing entries added even if sqlew section exists
+- **Code Quality** - DRY improvements, obsolete code cleanup
 
 See [docs/HOOKS_GUIDE.md](docs/HOOKS_GUIDE.md) for Claude Code Hooks details.
 

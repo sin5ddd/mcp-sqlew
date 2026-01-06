@@ -6,8 +6,8 @@
  */
 
 import { getAdapter } from '../../../database/index.js';
-import { parseGroupConcatTags } from '../../../utils/tag-parser.js';
-import { scoreAndRankSuggestions, filterByThreshold, limitSuggestions, type SuggestionContext } from '../../../utils/suggestion-scorer.js';
+import { transformAndScoreDecisions } from '../../../utils/suggest-helpers.js';
+import type { SuggestionContext } from '../../../utils/suggestion-scorer.js';
 import { buildDecisionQuery } from '../internal/queries.js';
 import type { SuggestResponse, DecisionCandidate } from '../types.js';
 
@@ -34,26 +34,16 @@ export async function suggestByKey(params: ByKeyParams): Promise<SuggestResponse
   // Fetch candidate decisions (all active decisions)
   const candidates = await buildDecisionQuery(knex) as DecisionCandidate[];
 
-  // Parse tags from GROUP_CONCAT and add defaults for scorer
-  const parsed = candidates.map((c: DecisionCandidate) => ({
-    key_id: c.key_id,
-    key: c.key,
-    value: String(c.value),  // Convert to string for scorer
-    tags: parseGroupConcatTags(c.tags),
-    layer: c.layer,
-    priority: 0,  // Default priority (not stored in DB)
-    updated_ts: c.ts,  // Rename ts to updated_ts for scorer
-  }));
-
   // Score and rank based on key similarity
   const context: SuggestionContext = {
     key: params.key,
     tags: [],
   };
 
-  let suggestions = scoreAndRankSuggestions(context, parsed);
-  suggestions = filterByThreshold(suggestions, params.min_score ?? 30);
-  suggestions = limitSuggestions(suggestions, params.limit ?? 5);
+  const suggestions = transformAndScoreDecisions(candidates, context, {
+    minScore: params.min_score,
+    limit: params.limit,
+  });
 
   return {
     query_key: params.key,

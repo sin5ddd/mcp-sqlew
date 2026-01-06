@@ -6,8 +6,8 @@
  */
 
 import { getAdapter } from '../../../database/index.js';
-import { parseGroupConcatTags } from '../../../utils/tag-parser.js';
-import { scoreAndRankSuggestions, filterByThreshold, limitSuggestions, type SuggestionContext } from '../../../utils/suggestion-scorer.js';
+import { transformAndScoreDecisions } from '../../../utils/suggest-helpers.js';
+import type { SuggestionContext } from '../../../utils/suggestion-scorer.js';
 import { buildTagIndexQuery } from '../internal/queries.js';
 import type { SuggestResponse, DecisionCandidate } from '../types.js';
 
@@ -37,17 +37,6 @@ export async function suggestByTags(params: ByTagsParams): Promise<SuggestRespon
   // Build and execute tag index query
   const candidates = await buildTagIndexQuery(knex, params.tags, params.layer) as DecisionCandidate[];
 
-  // Parse tags from GROUP_CONCAT and add defaults for scorer
-  const parsed = candidates.map((c: DecisionCandidate) => ({
-    key_id: c.key_id,
-    key: c.key,
-    value: String(c.value),  // Convert to string for scorer
-    tags: parseGroupConcatTags(c.tags),
-    layer: c.layer,
-    priority: 0,  // Default priority (not stored in DB)
-    updated_ts: c.ts,  // Rename ts to updated_ts for scorer
-  }));
-
   // Score and rank based on tag overlap
   const context: SuggestionContext = {
     key: '',
@@ -55,11 +44,12 @@ export async function suggestByTags(params: ByTagsParams): Promise<SuggestRespon
     layer: params.layer,
   };
 
-  let suggestions = scoreAndRankSuggestions(context, parsed);
   // Lower default min_score for tag searches - tag matches are inherently valuable
   // since we're filtering by v4_tag_index first
-  suggestions = filterByThreshold(suggestions, params.min_score ?? 15);
-  suggestions = limitSuggestions(suggestions, params.limit ?? 5);
+  const suggestions = transformAndScoreDecisions(candidates, context, {
+    minScore: params.min_score ?? 15,  // Lower threshold for tag-based searches
+    limit: params.limit,
+  });
 
   return {
     query_tags: params.tags,
