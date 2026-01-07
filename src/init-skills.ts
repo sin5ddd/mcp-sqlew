@@ -141,6 +141,8 @@ const SQLEW_GITIGNORE_ENTRIES = [
   '.claude/skills/sqlew-plan-guidance/',
   '.claude/rules/plan-mode-integration.md',
   '.claude/commands/sqlew.md',
+  '.sqlew/queue/',
+  '.sqlew/tmp/',
 ];
 
 /** Marker comment for sqlew section in gitignore */
