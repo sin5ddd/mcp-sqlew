@@ -2,10 +2,11 @@
  * Master Table Import with Smart Merge
  *
  * Handles importing master tables with intelligent ID remapping:
- * - Project-scoped tables (m_files, m_tags, m_scopes): Smart merge on UNIQUE (project_id, name/path)
+ * - Project-scoped tables (m_tags, m_scopes): Smart merge on UNIQUE (project_id, name)
  * - Global tables (m_context_keys, etc.): Always create new IDs
  *
  * Note: Agent system removed in v4.0 - no agent imports
+ * Note: Files, task_statuses removed in v5.0
  *
  * Architectural Decision: Decision #253 - Smart merge for project-scoped master tables
  */
@@ -24,55 +25,15 @@ export async function importMasterTables(ctx: ImportContext): Promise<ImportCont
 
   // Import order: no dependencies between master tables
   // Note: importAgents removed in v4.0 (agent system deleted)
-  await importFiles(ctx);
+  // Note: importFiles, importTaskStatuses removed in v5.0
   await importContextKeys(ctx);
   await importTags(ctx);
   await importScopes(ctx);
   await importConstraintCategories(ctx);
   await importLayers(ctx);
-  await importTaskStatuses(ctx);
 
   console.error(`  ✓ Master tables imported (${getTotalMappings(ctx)} ID mappings created)`);
   return ctx;
-}
-
-// Note: importAgents function removed in v4.0 (agent system deleted)
-
-/**
- * Import v4_files (project-scoped, smart merge)
- */
-async function importFiles(ctx: ImportContext): Promise<void> {
-  const files = ctx.jsonData.master_tables.files || [];
-  let created = 0;
-  let reused = 0;
-
-  for (const file of files) {
-    // Check if file already exists in target project
-    const existing = await ctx.knex('v4_files')
-      .where({
-        project_id: ctx.projectId,
-        path: file.path
-      })
-      .first();
-
-    if (existing) {
-      // Reuse existing ID
-      ctx.mappings.files.set(file.id, existing.id);
-      reused++;
-    } else {
-      // Create new file entry
-      const [newId] = await ctx.knex('v4_files').insert({
-        project_id: ctx.projectId,
-        path: file.path
-      });
-
-      ctx.mappings.files.set(file.id, newId);
-      created++;
-    }
-  }
-
-  ctx.stats.master_tables.files_created = created;
-  ctx.stats.master_tables.files_reused = reused;
 }
 
 /**
@@ -225,43 +186,15 @@ async function importLayers(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_task_statuses (global, create or reuse by name)
- */
-async function importTaskStatuses(ctx: ImportContext): Promise<void> {
-  const statuses = ctx.jsonData.master_tables.task_statuses || [];
-
-  for (const status of statuses) {
-    // Check if status exists by name (global lookup)
-    const existing = await ctx.knex('v4_task_statuses')
-      .where({ name: status.name })
-      .first();
-
-    if (existing) {
-      // Reuse existing global status
-      ctx.mappings.task_statuses.set(status.id, existing.id);
-    } else {
-      // Create new status
-      const [newId] = await ctx.knex('v4_task_statuses').insert({
-        name: status.name
-      });
-
-      ctx.mappings.task_statuses.set(status.id, newId);
-    }
-  }
-}
-
-/**
  * Get total number of ID mappings created
- * Note: agents removed in v4.0
+ * Note: agents removed in v4.0, files/task_statuses removed in v5.0
  */
 function getTotalMappings(ctx: ImportContext): number {
   return (
-    ctx.mappings.files.size +
     ctx.mappings.context_keys.size +
     ctx.mappings.tags.size +
     ctx.mappings.scopes.size +
     ctx.mappings.constraint_categories.size +
-    ctx.mappings.layers.size +
-    ctx.mappings.task_statuses.size
+    ctx.mappings.layers.size
   );
 }

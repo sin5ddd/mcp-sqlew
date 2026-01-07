@@ -6,7 +6,6 @@
 
 import { initializeDatabase } from './database.js';
 import { getContext, searchAdvanced } from './tools/context/index.js';
-import { getFileChanges } from './tools/files/index.js';
 import { dbDumpCommand } from './cli/db-dump.js';
 import { dbExportCommand } from './cli/db-export.js';
 import { dbImportCommand } from './cli/db-import.js';
@@ -26,7 +25,6 @@ import { installSaasCommand, showInstallSaasHelp } from './cli/install-saas.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
-  GetFileChangesParams,
 } from './types.js';
 
 // ============================================================================
@@ -254,38 +252,12 @@ async function queryMessages(args: CLIArgs): Promise<void> {
 
 /**
  * Query files command
+ * @deprecated File tracking system removed in v5.0.0
  */
-async function queryFiles(args: CLIArgs): Promise<void> {
-  const outputFormat = args.output || 'json';
-
-  // Build query params
-  const params: GetFileChangesParams = {};
-
-  if (args.since) {
-    params.since = args.since;
-  }
-
-  if (args.layer) {
-    params.layer = args.layer;
-  }
-
-  if (args.agent) {
-    params.agent_name = args.agent;
-  }
-
-  if (args.limit) {
-    params.limit = args.limit;
-  }
-
-  // Execute query
-  const result = await getFileChanges(params);
-
-  // Output results
-  if (outputFormat === 'json') {
-    formatJSON(result);
-  } else {
-    formatTable(result.changes, ['path', 'changed_by', 'change_type', 'layer', 'changed_at']);
-  }
+async function queryFiles(_args: CLIArgs): Promise<void> {
+  console.error('Error: The file tracking system has been removed in v5.0.0.');
+  console.error('The "files" query command is no longer available.');
+  process.exit(1);
 }
 
 // ============================================================================

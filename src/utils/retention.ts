@@ -23,34 +23,6 @@ export async function calculateMessageCutoff(adapter: DatabaseAdapter): Promise<
 }
 
 /**
- * Calculate cutoff timestamp for file change retention
- * Respects weekend-awareness configuration
- *
- * @param adapter - Database adapter instance
- * @returns Unix timestamp (seconds) for cutoff
- */
-export async function calculateFileChangeCutoff(adapter: DatabaseAdapter): Promise<number> {
-  const ignoreWeekends = await getConfigBool(adapter, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
-  const retentionDays = await getConfigInt(adapter, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, 7);
-
-  return calculateCutoffTimestamp(retentionDays, ignoreWeekends, 'days');
-}
-
-/**
- * Calculate cutoff timestamp for task archive (done → archived)
- * Respects weekend-awareness configuration
- *
- * @param adapter - Database adapter instance
- * @returns Unix timestamp (seconds) for cutoff
- */
-export async function calculateTaskArchiveCutoff(adapter: DatabaseAdapter): Promise<number> {
-  const ignoreWeekends = await getConfigBool(adapter, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, false);
-  const retentionDays = await getConfigInt(adapter, CONFIG_KEYS.AUTO_ARCHIVE_DONE_DAYS, 2); // Default: 2 days (48 hours)
-
-  return calculateCutoffTimestamp(retentionDays, ignoreWeekends, 'days');
-}
-
-/**
  * Calculate cutoff timestamp with optional weekend-awareness
  *
  * @param retention - Retention period (hours or days)

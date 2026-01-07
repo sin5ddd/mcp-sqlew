@@ -20,7 +20,6 @@ import type { SqlewConfig } from '../config/types.js';
 import { ensureProjectConfig } from '../config/writer.js';
 import { ProjectContext } from '../utils/project-context.js';
 import { detectVCS, GitAdapter } from '../utils/vcs-adapter.js';
-import { FileWatcher } from '../watcher/index.js';
 import { startQueueWatcher } from '../watcher/queue-watcher.js';
 import { initDebugLogger, debugLog } from '../utils/debug-logger.js';
 import { ensureSqlewDirectory } from '../config/example-generator.js';
@@ -163,7 +162,6 @@ export interface SetupResult {
   configValues: {
     ignoreWeekend: boolean;
     messageHours: string;
-    fileHistoryDays: string;
   };
   detectionSource: 'cli' | 'config' | 'git' | 'metadata' | 'directory';
 }
@@ -274,15 +272,11 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
   if (parsedArgs.autodeleteMessageHours !== undefined) {
     await setConfigValue(db, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, String(parsedArgs.autodeleteMessageHours));
   }
-  if (parsedArgs.autodeleteFileHistoryDays !== undefined) {
-    await setConfigValue(db, CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS, String(parsedArgs.autodeleteFileHistoryDays));
-  }
 
   // 6. Read config values for diagnostics (SILENT)
   const configValues = await getAllConfig(db);
   const ignoreWeekend = configValues[CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND] === '1';
   const messageHours = configValues[CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS];
-  const fileHistoryDays = configValues[CONFIG_KEYS.AUTODELETE_FILE_HISTORY_DAYS];
 
   // 7. Initialize ProjectContext (v3.7.0+ multi-project support)
   const knex = getAdapter().getKnex();
@@ -355,7 +349,7 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
     dbPath,
     projectId: projectContext.getProjectId(),
     projectName: projectContext.getProjectName(),
-    autoDeleteConfig: { messageHours, fileHistoryDays, ignoreWeekend },
+    autoDeleteConfig: { messageHours, ignoreWeekend },
     debugLogLevel: debugLogLevel
   });
 
@@ -383,16 +377,7 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
     fileConfig,
     projectRoot: finalProjectRoot,
     projectContext,
-    configValues: { ignoreWeekend, messageHours, fileHistoryDays },
+    configValues: { ignoreWeekend, messageHours },
     detectionSource,
   };
-}
-
-/**
- * Start file watcher for auto-task-tracking
- * Called after server is connected and ready
- */
-export async function startFileWatcher(): Promise<void> {
-  const watcher = FileWatcher.getInstance();
-  await watcher.start();
 }

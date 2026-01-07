@@ -9,6 +9,8 @@
  * - Database-agnostic assertion helpers
  * - Minimal test data seeding
  * - Automatic cleanup
+ *
+ * Note: Task and file tables removed in v5.0 (deprecated)
  */
 
 import { describe, before, after } from 'node:test';
@@ -121,18 +123,7 @@ export async function seedTestData(db: Knex): Promise<void> {
     }
   }
 
-  // Task statuses (should exist from migrations, but verify)
-  const statusCount = await db('v4_task_statuses').count('* as count').first();
-  if (!statusCount || statusCount.count === 0) {
-    await db('v4_task_statuses').insert([
-      { name: 'todo' },
-      { name: 'in_progress' },
-      { name: 'waiting_review' },
-      { name: 'blocked' },
-      { name: 'done' },
-      { name: 'archived' },
-    ]);
-  }
+  // Note: Task statuses (v4_task_statuses) removed in v5.0
 }
 
 /**
@@ -162,15 +153,7 @@ export async function cleanupTestData(db: Knex): Promise<void> {
 
   await db('v4_constraints').where('project_id', 1).del();
 
-  await db('v4_task_dependencies').del();
-  await db('v4_task_tags').where('project_id', 1).del();
-  await db('v4_task_decision_links').del();
-  await db('v4_task_constraint_links').del();
-  await db('v4_task_file_links').del();
-  await db('v4_tasks').where('project_id', 1).del();
-
-  await db('v4_file_changes').where('project_id', 1).del();
-  await db('v4_files').where('project_id', 1).del();
+  // Note: Task and file tables removed in v5.0
 
   // v4_tag_index has (tag, source_type, source_id, project_id, created_ts) - polymorphic design
   await db('v4_tag_index').where('project_id', 1).del();
@@ -220,25 +203,7 @@ export async function assertConstraintActive(db: Knex, rule: string): Promise<vo
   assert.ok(constraint, `Constraint "${rule}" should be active`);
 }
 
-/**
- * Assert that a task has the expected status
- *
- * @param db - Knex database connection
- * @param taskId - Task ID to check
- * @param expectedStatus - Expected task status
- */
-export async function assertTaskStatus(
-  db: Knex,
-  taskId: number,
-  expectedStatus: string
-): Promise<void> {
-  const task = await db('v4_tasks')
-    .where({ id: taskId })
-    .first();
-
-  assert.ok(task, `Task ${taskId} should exist`);
-  assert.strictEqual(task.status, expectedStatus, `Task ${taskId} status should be ${expectedStatus}`);
-}
+// Note: assertTaskStatus() removed in v5.0 (task system deprecated)
 
 /**
  * Assert that a decision has specific tags
@@ -372,11 +337,11 @@ export type CrossDbTargetFormat = DatabaseFormat;
  * Seed rich test data covering all v4 tables for migration testing
  *
  * Creates comprehensive test data including:
- * - Master tables: layers, tags, scopes, task_statuses
- * - Decisions with tags and scopes
- * - Tasks with dependencies
+ * - Master tables: layers, tags, scopes
+ * - Decisions with tags
  * - Constraints
- * - File changes
+ *
+ * Note: Task and file tables removed in v5.0 (deprecated)
  *
  * @param db - Knex database connection
  * @param projectId - Project ID to use (default: 1)
@@ -431,56 +396,7 @@ export async function seedRichTestData(db: Knex, projectId: number = 1): Promise
     });
   }
 
-  // 3. Create tasks with dependencies
-  const statusTodo = await db('v4_task_statuses').where({ name: 'todo' }).first();
-  const taskIds: number[] = [];
-
-  for (let i = 0; i < 3; i++) {
-    const taskTitle = `Migration test task ${i + 1}`;
-    // Note: v4 schema has description in v4_task_details, not v4_tasks
-    await db('v4_tasks').insert({
-      title: taskTitle,
-      project_id: projectId,
-      status_id: statusTodo.id,
-      priority: 2,
-      layer_id: 1,
-      created_ts: now,
-      updated_ts: now,
-    });
-
-    // Query to get the inserted ID (works across all DB types)
-    const lastTask = await db('v4_tasks')
-      .where({ title: taskTitle, project_id: projectId })
-      .first();
-    taskIds.push(lastTask.id);
-  }
-
-  // Create task dependency: task 2 depends on task 1
-  if (taskIds.length >= 2) {
-    await db('v4_task_dependencies').insert({
-      blocker_task_id: taskIds[0],
-      blocked_task_id: taskIds[1],
-    }).catch(() => {}); // Ignore if exists
-  }
-
-  // 4. Create file change record
-  const filePath = '/test/migration-test.ts';
-  let existingFile = await db('v4_files').where({ path: filePath, project_id: projectId }).first();
-  if (!existingFile) {
-    await db('v4_files').insert({
-      path: filePath,
-      project_id: projectId,
-    });
-    existingFile = await db('v4_files').where({ path: filePath, project_id: projectId }).first();
-  }
-  const fileId = existingFile.id;
-
-  await db('v4_file_changes').insert({
-    file_id: fileId,
-    project_id: projectId,
-    change_type: 1, // ChangeType.CREATE = 1
-    ts: now,
-  });
+  // Note: Task and file table seeding removed in v5.0 (deprecated)
 }
 
 /**
@@ -521,7 +437,7 @@ export async function verifySqlewAccess(
   const errors: string[] = [];
   const tables: Record<string, { count: number; expected?: number; match: boolean }> = {};
 
-  // Core v4 tables to verify
+  // Core v4 tables to verify (task/file tables removed in v5.0)
   const tablesToCheck = [
     'v4_projects',
     'v4_layers',
@@ -530,10 +446,6 @@ export async function verifySqlewAccess(
     'v4_decisions',
     'v4_decision_tags',
     'v4_constraints',
-    'v4_tasks',
-    'v4_task_dependencies',
-    'v4_files',
-    'v4_file_changes',
   ];
 
   for (const table of tablesToCheck) {
@@ -583,6 +495,7 @@ export async function verifySqlewAccess(
  */
 export async function getTableCounts(db: Knex): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
+  // Task and file tables removed in v5.0
   const tables = [
     'v4_projects',
     'v4_layers',
@@ -593,12 +506,6 @@ export async function getTableCounts(db: Knex): Promise<Record<string, number>> 
     'v4_decision_tags',
     'v4_decision_scopes',
     'v4_constraints',
-    'v4_tasks',
-    'v4_task_statuses',
-    'v4_task_dependencies',
-    'v4_task_tags',
-    'v4_files',
-    'v4_file_changes',
   ];
 
   for (const table of tables) {

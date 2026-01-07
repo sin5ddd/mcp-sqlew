@@ -339,10 +339,10 @@ describe('Topological Sort Unit Tests', () => {
       // ⚠️ ADD NEW ASSERTIONS HERE when adding tables with FK dependencies
       const projectsIndex = sorted.indexOf('v4_projects');
       const decisionsIndex = sorted.indexOf('v4_decisions');
-      const tasksIndex = sorted.indexOf('v4_tasks');
+      const constraintsIndex = sorted.indexOf('v4_constraints');
 
       assert.ok(projectsIndex < decisionsIndex, 'v4_projects should come before v4_decisions');
-      assert.ok(projectsIndex < tasksIndex, 'v4_projects should come before v4_tasks');
+      assert.ok(projectsIndex < constraintsIndex, 'v4_projects should come before v4_constraints');
 
       await disconnectDb(db);
     });

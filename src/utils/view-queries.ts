@@ -1,7 +1,7 @@
 // src/utils/view-queries.ts
 import { Knex } from "knex";
 import { UniversalKnex } from "./universal-knex.js";
-import { convertStatusArray, convertChangeTypeArray, convertPriorityArray } from "./enum-converter.js";
+import { convertStatusArray, convertPriorityArray } from "./enum-converter.js";
 
 /**
  * View query functions - cross-database replacements for SQL views
@@ -94,7 +94,6 @@ export async function getActiveContext(knex: Knex): Promise<any[]> {
  */
 export async function getLayerSummary(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
-  const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
 
   return knex("v4_layers as l")
     .leftJoin("v4_decisions as d", function () {
@@ -107,18 +106,10 @@ export async function getLayerSummary(knex: Knex): Promise<any[]> {
         knex.raw(db.boolTrue().toString()),
       );
     })
-    .leftJoin("v4_file_changes as f", function () {
-      this.on("l.id", "=", "f.layer_id").andOn(
-        "f.ts",
-        ">=",
-        knex.raw(oneHourAgo.toString()),
-      );
-    })
     .select([
       "l.name as layer",
       knex.raw("COUNT(DISTINCT d.key_id) as decision_count"),
       knex.raw("COUNT(DISTINCT c.id) as constraint_count"),
-      knex.raw("COUNT(DISTINCT f.id) as recent_changes"),
     ])
     .groupBy("l.id", "l.name")
     .orderBy("l.name");
@@ -133,30 +124,6 @@ export async function getLayerSummary(knex: Knex): Promise<any[]> {
 export async function getUnreadMessagesByPriority(_knex: Knex): Promise<any[]> {
   // Messaging system and agent tracking removed - return empty array
   return [];
-}
-
-/**
- * v_recent_file_changes - Recent file changes with layer info
- */
-export async function getRecentFileChanges(knex: Knex): Promise<any[]> {
-  const db = new UniversalKnex(knex);
-  const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
-
-  // Note: Agent tracking removed in v4.0 - changed_by field removed
-  const result = await knex("v4_file_changes as fc")
-    .join("v4_files as f", "fc.file_id", "f.id")
-    .leftJoin("v4_layers as l", "fc.layer_id", "l.id")
-    .where("fc.ts", ">=", oneHourAgo)
-    .select([
-      "f.path",
-      "fc.change_type",
-      "l.name as layer",
-      "fc.description",
-      knex.raw(`${db.dateFunction("fc.ts")} as changed_at`),
-    ])
-    .orderBy("fc.ts", "desc");
-
-  return convertChangeTypeArray(result);
 }
 
 /**
@@ -191,33 +158,3 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
   return convertPriorityArray(result);
 }
 
-/**
- * v_task_board - Metadata-only task queries (v3.0.0)
- */
-export async function getTaskBoard(knex: Knex): Promise<any[]> {
-  const db = new UniversalKnex(knex);
-
-  // Note: Agent tracking removed in v4.0 - assigned_to field removed
-  return knex("v4_tasks as t")
-    .join("v4_task_statuses as ts", "t.status_id", "ts.id")
-    .leftJoin("v4_layers as l", "t.layer_id", "l.id")
-    .select([
-      "t.id as task_id",
-      "t.title",
-      "ts.name as status",
-      "t.priority",
-      "l.name as layer",
-      "t.project_id",
-      knex.raw(`${db.dateFunction("t.created_ts")} as created`),
-      knex.raw(`${db.dateFunction("t.updated_ts")} as updated`),
-      // Tags subquery
-      knex.raw(`(
-        SELECT ${db.stringAgg("tag.name", ",")}
-        FROM v4_task_tags tt
-        JOIN v4_tags tag ON tt.tag_id = tag.id
-        WHERE tt.task_id = t.id
-      ) as tags`),
-    ])
-    .orderBy("t.priority", "desc")
-    .orderBy("t.updated_ts", "desc");
-}

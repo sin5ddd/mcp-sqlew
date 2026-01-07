@@ -8,8 +8,6 @@ import { initializeDatabase, closeDatabase } from '../../../database.js';
 import type { DatabaseAdapter } from '../../../adapters/types.js';
 import { ProjectContext } from '../../../utils/project-context.js';
 import { setDecision, getContext, searchByLayer } from '../../../tools/context/index.js';
-import { createTask, listTasks } from '../../../tools/tasks.js';
-import { recordFileChange } from '../../../tools/files/index.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -66,77 +64,6 @@ describe('Multi-Project Data Isolation', () => {
     const decisionsB = await getContext({}, testDb);
     assert.strictEqual(decisionsB.decisions.length, 1);
     assert.strictEqual(decisionsB.decisions[0].value, 'JWT');
-  });
-
-  it('should isolate tasks between projects', async () => {
-    const knex = testDb.getKnex();
-
-    // Project A
-    const projectContextA = ProjectContext.getInstance();
-    await projectContextA.ensureProject(knex, 'frontend', 'config');
-
-    await createTask({
-      title: 'Build login component',
-      status: 'in_progress',
-      priority: 3
-    }, testDb);
-
-    const tasksA = await listTasks({}, testDb);
-    assert.strictEqual(tasksA.tasks.length, 1);
-
-    // Project B
-    ProjectContext.reset();
-    const projectContextB = ProjectContext.getInstance();
-    await projectContextB.ensureProject(knex, 'backend', 'config');
-
-    await createTask({
-      title: 'Design API schema',
-      status: 'todo',
-      priority: 4
-    }, testDb);
-
-    const tasksB = await listTasks({}, testDb);
-    assert.strictEqual(tasksB.tasks.length, 1);
-    assert.strictEqual(tasksB.tasks[0].title, 'Design API schema');
-  });
-
-  it('should isolate file changes between projects', async () => {
-    const knex = testDb.getKnex();
-
-    // Project A
-    const projectContextA = ProjectContext.getInstance();
-    await projectContextA.ensureProject(knex, 'web-app', 'config');
-
-    await recordFileChange({
-      file_path: 'src/index.ts',
-      agent_name: 'developer-1',
-      layer: 'infrastructure',
-      change_type: 'modified',
-      description: 'Updated imports'
-    }, testDb);
-
-    const changesA = await knex('v4_file_changes')
-      .where({ project_id: projectContextA.getProjectId() })
-      .select('*');
-    assert.strictEqual(changesA.length, 1);
-
-    // Project B
-    ProjectContext.reset();
-    const projectContextB = ProjectContext.getInstance();
-    await projectContextB.ensureProject(knex, 'api-server', 'config');
-
-    await recordFileChange({
-      file_path: 'src/index.ts',
-      agent_name: 'developer-2',
-      layer: 'business',
-      change_type: 'created',
-      description: 'Added endpoint'
-    }, testDb);
-
-    const changesB = await knex('v4_file_changes')
-      .where({ project_id: projectContextB.getProjectId() })
-      .select('*');
-    assert.strictEqual(changesB.length, 1);
   });
 });
 
@@ -288,9 +215,7 @@ describe('Migration Verification', () => {
 
     const tables = [
       'v4_decisions',
-      'v4_file_changes',
-      'v4_constraints',
-      'v4_tasks'
+      'v4_constraints'
     ];
 
     for (const table of tables) {

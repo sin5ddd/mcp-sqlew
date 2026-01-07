@@ -51,7 +51,7 @@ async function startMcpServer(): Promise<void> {
   const { parseArgs, validateArgs } = await import('./server/arg-parser.js');
   const { getToolRegistry } = await import('./server/tool-registry.js');
   const { handleToolCall } = await import('./server/tool-handlers.js');
-  const { initializeServer, startFileWatcher } = await import('./server/setup.js');
+  const { initializeServer } = await import('./server/setup.js');
   const { registerShutdownHandlers, performCleanup } = await import('./server/shutdown.js');
   const { handleInitializationError, safeConsoleError } = await import('./utils/error-handler.js');
 
@@ -118,15 +118,7 @@ async function startMcpServer(): Promise<void> {
     }
 
     safeConsoleError(`  Project: ${setupResult.projectContext.getProjectName()} (ID: ${setupResult.projectContext.getProjectId()}, source: ${setupResult.detectionSource})`);
-    safeConsoleError(`  Auto-delete config: messages=${setupResult.configValues.messageHours}h, file_history=${setupResult.configValues.fileHistoryDays}d, ignore_weekend=${setupResult.configValues.ignoreWeekend}`);
-
-    // Start file watcher for auto-task-tracking (after database is ready)
-    try {
-      await startFileWatcher();
-    } catch (error) {
-      safeConsoleError('⚠ Failed to start file watcher:', error);
-      safeConsoleError('  (Auto task tracking will be disabled)');
-    }
+    safeConsoleError(`  Auto-delete config: messages=${setupResult.configValues.messageHours}h, ignore_weekend=${setupResult.configValues.ignoreWeekend}`);
   } catch (error) {
     // If debug logger not initialized, write to stderr as fallback
     if (!debugLoggerInitialized) {

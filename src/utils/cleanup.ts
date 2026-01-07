@@ -8,7 +8,7 @@
 
 import { DatabaseAdapter } from '../adapters/index.js';
 import { Knex } from 'knex';
-import { calculateMessageCutoff, calculateFileChangeCutoff, releaseInactiveAgents } from './retention.js';
+import { calculateMessageCutoff, releaseInactiveAgents } from './retention.js';
 import { getProjectContext } from './project-context.js';
 
 /**
@@ -25,22 +25,19 @@ export async function performAutoCleanup(
   trx?: Knex.Transaction
 ): Promise<{
   messagesDeleted: number;
-  fileChangesDeleted: number;
   activityLogsDeleted: number;
   agentsReleased: number;
 }> {
   const messageCutoff = await calculateMessageCutoff(adapter);
-  const fileChangeCutoff = await calculateFileChangeCutoff(adapter);
 
   const messagesDeleted = await cleanupMessages(adapter, messageCutoff, trx);
-  const fileChangesDeleted = await cleanupFileChanges(adapter, fileChangeCutoff, trx);
   // Activity log uses same retention as messages (constraint #4)
   const activityLogsDeleted = await cleanupActivityLogs(adapter, messageCutoff, trx);
 
   // Release inactive generic agent slots (24 hours of inactivity)
   const agentsReleased = await releaseInactiveAgents(adapter, 24);
 
-  return { messagesDeleted, fileChangesDeleted, activityLogsDeleted, agentsReleased };
+  return { messagesDeleted, activityLogsDeleted, agentsReleased };
 }
 
 /**
@@ -58,29 +55,6 @@ export async function cleanupMessages(
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
   return await knex('v4_agent_messages').where('ts', '<', cutoffTimestamp).delete();
-}
-
-/**
- * Delete old file changes before the cutoff timestamp
- * PROJECT-SCOPED: Only deletes file changes for current project (Constraint #40)
- *
- * @param adapter - Database adapter instance
- * @param cutoffTimestamp - Unix timestamp (seconds) for cutoff
- * @param trx - Optional transaction
- * @returns Number of file changes deleted
- */
-export async function cleanupFileChanges(
-  adapter: DatabaseAdapter,
-  cutoffTimestamp: number,
-  trx?: Knex.Transaction
-): Promise<number> {
-  const knex = trx || adapter.getKnex();
-  const projectId = getProjectContext().getProjectId();
-
-  return await knex('v4_file_changes')
-    .where('project_id', projectId)
-    .where('ts', '<', cutoffTimestamp)
-    .delete();
 }
 
 /**
@@ -112,18 +86,15 @@ export async function cleanupActivityLogs(
  *
  * @param adapter - Database adapter instance
  * @param messageHours - Message retention in hours (optional)
- * @param fileChangeDays - File change retention in days (optional)
  * @param trx - Optional transaction
  * @returns Object with counts of deleted records
  */
 export async function cleanupWithCustomRetention(
   adapter: DatabaseAdapter,
   messageHours?: number,
-  fileChangeDays?: number,
   trx?: Knex.Transaction
-): Promise<{ messagesDeleted: number; fileChangesDeleted: number; activityLogsDeleted: number }> {
+): Promise<{ messagesDeleted: number; activityLogsDeleted: number }> {
   let messagesDeleted = 0;
-  let fileChangesDeleted = 0;
   let activityLogsDeleted = 0;
 
   if (messageHours !== undefined) {
@@ -133,10 +104,5 @@ export async function cleanupWithCustomRetention(
     activityLogsDeleted = await cleanupActivityLogs(adapter, messageCutoff, trx);
   }
 
-  if (fileChangeDays !== undefined) {
-    const fileChangeCutoff = Math.floor(Date.now() / 1000) - (fileChangeDays * 86400);
-    fileChangesDeleted = await cleanupFileChanges(adapter, fileChangeCutoff, trx);
-  }
-
-  return { messagesDeleted, fileChangesDeleted, activityLogsDeleted };
+  return { messagesDeleted, activityLogsDeleted };
 }

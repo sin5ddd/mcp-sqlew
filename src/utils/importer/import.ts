@@ -22,7 +22,6 @@ import type {
   IdMapping
 } from '../../types.js';
 import { importMasterTables } from './master-tables.js';
-import { sortTasksByDependencies, type TaskDependency } from './topological-sort.js';
 
 /**
  * Main import function
@@ -83,7 +82,7 @@ export async function importJsonData(
       return await performImport(trx, jsonData, projectName);
     });
 
-    console.error(`\n✓ Import complete: ${result.stats!.transaction_tables.tasks_created} tasks, ${result.stats!.transaction_tables.decisions_created} decisions`);
+    console.error(`\n✓ Import complete: ${result.stats!.transaction_tables.decisions_created} decisions, ${result.stats!.transaction_tables.constraints_created} constraints`);
     return result;
 
   } catch (error) {
@@ -131,14 +130,11 @@ async function performImport(
     options: {},
     mappings: {
       projects: new Map(),
-      files: new Map(),
       context_keys: new Map(),
       tags: new Map(),
       scopes: new Map(),
       constraint_categories: new Map(),
       layers: new Map(),
-      task_statuses: new Map(),
-      tasks: new Map(),
       decision_policies: new Map()
     },
     stats: initializeStats()
@@ -171,14 +167,12 @@ async function importTransactionTables(ctx: ImportContext): Promise<void> {
 
   // Import in dependency order
   // Note: activity_log removed in v4.0 (table was never created)
+  // Note: file_changes, tasks, task_details removed in v5.0
   await importDecisions(ctx);
   await importDecisionsNumeric(ctx);
   await importDecisionHistory(ctx);
   await importDecisionContext(ctx);
-  await importFileChanges(ctx);
   await importConstraints(ctx);
-  await importTasks(ctx);  // Uses topological sort internally
-  await importTaskDetails(ctx);
   await importDecisionPolicies(ctx);  // v4.0+ table
   await importTagIndex(ctx);  // v4.0+ table
 
@@ -268,44 +262,19 @@ async function importDecisionContext(ctx: ImportContext): Promise<void> {
     const newKeyId = ctx.mappings.context_keys.get(context.decision_key_id);
     if (!newKeyId) continue;
 
-    // Note: agent_id removed in v4.0
+    // Note: agent_id removed in v4.0, related_task_id removed in v5.0
     await ctx.knex('v4_decision_context').insert({
       decision_key_id: newKeyId,
       rationale: context.rationale,
       alternatives_considered: context.alternatives_considered,
       tradeoffs: context.tradeoffs,
       decision_date: context.decision_date,
-      related_task_id: null,  // Will be updated later if task exists
       related_constraint_id: null,
       project_id: ctx.projectId
     });
   }
 
   ctx.stats.transaction_tables.decision_context_created = contexts.length;
-}
-
-/**
- * Import v4_file_changes with remapped IDs
- */
-async function importFileChanges(ctx: ImportContext): Promise<void> {
-  const changes = ctx.jsonData.transaction_tables.file_changes || [];
-
-  for (const change of changes) {
-    const newFileId = ctx.mappings.files.get(change.file_id);
-    if (!newFileId) continue;
-
-    // Note: agent_id removed in v4.0
-    await ctx.knex('v4_file_changes').insert({
-      file_id: newFileId,
-      change_type: change.change_type,
-      layer_id: ctx.mappings.layers.get(change.layer_id) || null,
-      description: change.description,
-      ts: change.ts,
-      project_id: ctx.projectId
-    });
-  }
-
-  ctx.stats.transaction_tables.file_changes_created = changes.length;
 }
 
 /**
@@ -328,58 +297,6 @@ async function importConstraints(ctx: ImportContext): Promise<void> {
   }
 
   ctx.stats.transaction_tables.constraints_created = constraints.length;
-}
-
-/**
- * Import v4_tasks with topological sort for dependencies
- */
-async function importTasks(ctx: ImportContext): Promise<void> {
-  const tasks: any[] = ctx.jsonData.transaction_tables.tasks || [];
-  const dependencies: TaskDependency[] = ctx.jsonData.transaction_tables.task_dependencies || [];
-
-  // Sort tasks by dependency order
-  const sortedTasks = sortTasksByDependencies(tasks, dependencies);
-
-  for (const task of sortedTasks) {
-    // Note: assigned_agent_id, created_by_agent_id removed in v4.0
-    const [newTaskId] = await ctx.knex('v4_tasks').insert({
-      title: task.title,
-      status_id: ctx.mappings.task_statuses.get(task.status_id) || task.status_id,
-      priority: task.priority,
-      layer_id: ctx.mappings.layers.get(task.layer_id) || null,
-      created_ts: task.created_ts,
-      updated_ts: task.updated_ts,
-      completed_ts: task.completed_ts,
-      project_id: ctx.projectId
-    });
-
-    ctx.mappings.tasks.set(task.id, newTaskId);
-  }
-
-  ctx.stats.transaction_tables.tasks_created = tasks.length;
-}
-
-/**
- * Import v4_task_details with remapped task IDs
- */
-async function importTaskDetails(ctx: ImportContext): Promise<void> {
-  const details = ctx.jsonData.transaction_tables.task_details || [];
-
-  for (const detail of details) {
-    const newTaskId = ctx.mappings.tasks.get(detail.task_id);
-    if (!newTaskId) continue;
-
-    // Note: v4_task_details doesn't have project_id column
-    await ctx.knex('v4_task_details').insert({
-      task_id: newTaskId,
-      description: detail.description,
-      acceptance_criteria: detail.acceptance_criteria,
-      acceptance_criteria_json: detail.acceptance_criteria_json || null,
-      notes: detail.notes
-    });
-  }
-
-  ctx.stats.transaction_tables.task_details_created = details.length;
 }
 
 /**
@@ -410,18 +327,19 @@ async function importDecisionPolicies(ctx: ImportContext): Promise<void> {
 
 /**
  * Import v4_tag_index (v4.0+ table)
- * Note: source_id remapping depends on source_type (decision, constraint, task)
+ * Note: source_id remapping depends on source_type (decision, constraint)
  */
 async function importTagIndex(ctx: ImportContext): Promise<void> {
   const indices = ctx.jsonData.master_tables?.tag_index || [];
 
   for (const index of indices) {
+    // Skip task-related entries (removed in v5.0)
+    if (index.source_type === 'task') continue;
+
     // Remap source_id based on source_type
     let newSourceId: number | null = null;
     if (index.source_type === 'decision') {
       newSourceId = ctx.mappings.context_keys.get(index.source_id) ?? null;
-    } else if (index.source_type === 'task') {
-      newSourceId = ctx.mappings.tasks.get(index.source_id) ?? null;
     }
     // Skip if we couldn't remap the source_id (e.g., constraint)
     if (!newSourceId && index.source_type !== 'constraint') continue;
@@ -447,10 +365,7 @@ async function importJunctionTables(ctx: ImportContext): Promise<void> {
   await importDecisionTags(ctx);
   await importDecisionScopes(ctx);
   await importConstraintTags(ctx);
-  await importTaskTags(ctx);
-  await importTaskFileLinks(ctx);
-  await importTaskDecisionLinks(ctx);
-  await importTaskDependencies(ctx);
+  // Note: task-related junction tables removed in v5.0
 
   console.error(`  ✓ Junction tables imported`);
 }
@@ -516,92 +431,6 @@ async function importConstraintTags(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_task_tags with remapped IDs
- */
-async function importTaskTags(ctx: ImportContext): Promise<void> {
-  const tags = ctx.jsonData.transaction_tables.task_tags || [];
-
-  for (const tag of tags) {
-    const newTaskId = ctx.mappings.tasks.get(tag.task_id);
-    const newTagId = ctx.mappings.tags.get(tag.tag_id);
-    if (!newTaskId || !newTagId) continue;
-
-    await ctx.knex('v4_task_tags').insert({
-      task_id: newTaskId,
-      tag_id: newTagId,
-      project_id: ctx.projectId
-    });
-  }
-
-  ctx.stats.junction_tables.task_tags_created = tags.length;
-}
-
-/**
- * Import v4_task_file_links with remapped IDs
- */
-async function importTaskFileLinks(ctx: ImportContext): Promise<void> {
-  const links = ctx.jsonData.transaction_tables.task_file_links || [];
-
-  for (const link of links) {
-    const newTaskId = ctx.mappings.tasks.get(link.task_id);
-    const newFileId = ctx.mappings.files.get(link.file_id);
-    if (!newTaskId || !newFileId) continue;
-
-    await ctx.knex('v4_task_file_links').insert({
-      task_id: newTaskId,
-      file_id: newFileId,
-      project_id: ctx.projectId
-    });
-  }
-
-  ctx.stats.junction_tables.task_file_links_created = links.length;
-}
-
-/**
- * Import v4_task_decision_links with remapped IDs
- */
-async function importTaskDecisionLinks(ctx: ImportContext): Promise<void> {
-  const links = ctx.jsonData.transaction_tables.task_decision_links || [];
-
-  for (const link of links) {
-    const newTaskId = ctx.mappings.tasks.get(link.task_id);
-    const newKeyId = ctx.mappings.context_keys.get(link.decision_key_id);
-    if (!newTaskId || !newKeyId) continue;
-
-    await ctx.knex('v4_task_decision_links').insert({
-      task_id: newTaskId,
-      decision_key_id: newKeyId,
-      project_id: ctx.projectId,
-      link_type: link.link_type || 'implements'
-    });
-  }
-
-  ctx.stats.junction_tables.task_decision_links_created = links.length;
-}
-
-/**
- * Import v4_task_dependencies with remapped task IDs
- */
-async function importTaskDependencies(ctx: ImportContext): Promise<void> {
-  const dependencies: TaskDependency[] = ctx.jsonData.transaction_tables.task_dependencies || [];
-
-  for (const dep of dependencies) {
-    const newBlockerId = ctx.mappings.tasks.get(dep.blocker_task_id);
-    const newBlockedId = ctx.mappings.tasks.get(dep.blocked_task_id);
-    if (!newBlockerId || !newBlockedId) continue;
-
-    await ctx.knex('v4_task_dependencies').insert({
-      blocker_task_id: newBlockerId,
-      blocked_task_id: newBlockedId,
-      created_ts: dep.created_ts,
-      project_id: ctx.projectId
-    });
-  }
-
-  ctx.stats.junction_tables.task_dependencies_created = dependencies.length;
-}
-
-/**
  * Initialize empty statistics
  */
 function initializeStats(): ImportStats {
@@ -609,8 +438,7 @@ function initializeStats(): ImportStats {
     project_created: false,
     master_tables: {
       // Note: agents_created removed in v4.0
-      files_created: 0,
-      files_reused: 0,
+      // Note: files_created, files_reused removed in v5.0
       context_keys_created: 0,
       tags_created: 0,
       tags_reused: 0,
@@ -622,22 +450,17 @@ function initializeStats(): ImportStats {
       decisions_numeric_created: 0,
       decision_history_created: 0,
       decision_context_created: 0,
-      file_changes_created: 0,
       constraints_created: 0,
-      tasks_created: 0,
-      task_details_created: 0,
       // Note: activity_log_created removed in v4.0
+      // Note: file_changes_created, tasks_created, task_details_created removed in v5.0
       decision_policies_created: 0,  // v4.0+ table
       tag_index_created: 0  // v4.0+ table
     },
     junction_tables: {
       decision_tags_created: 0,
       decision_scopes_created: 0,
-      constraint_tags_created: 0,
-      task_tags_created: 0,
-      task_file_links_created: 0,
-      task_decision_links_created: 0,
-      task_dependencies_created: 0
+      constraint_tags_created: 0
+      // Note: task_tags_created, task_file_links_created, task_decision_links_created, task_dependencies_created removed in v5.0
     }
   };
 }

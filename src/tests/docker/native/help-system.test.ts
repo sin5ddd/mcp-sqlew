@@ -43,17 +43,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
         'Description should mention decision or context management');
     });
 
-    it('should have task tool registered', async () => {
-      const db = getDb();
-
-      const tool = await db('v4_help_tools')
-        .where({ tool_name: 'task' })
-        .first();
-
-      assert.ok(tool, 'Task tool should be registered');
-      assert.strictEqual(tool.tool_name, 'task');
-      assert.ok(tool.description, 'Tool should have description');
-    });
+    // Note: Task tool removed in v5.0 (deprecated)
 
     it('should have constraint tool registered', async () => {
       const db = getDb();
@@ -91,8 +81,8 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
 
       const toolNames = tools.map((t: any) => t.tool_name);
 
-      // Core tools that must exist
-      const requiredTools = ['decision', 'task', 'constraint', 'help', 'example'];
+      // Core tools that must exist (task removed in v5.0)
+      const requiredTools = ['decision', 'constraint', 'help', 'example'];
       for (const requiredTool of requiredTools) {
         assert.ok(
           toolNames.includes(requiredTool),
@@ -132,32 +122,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       assert.ok(paramNames.includes('value'), 'Should have value parameter');
     });
 
-    it('should have task.create action documented', async () => {
-      const db = getDb();
-
-      const action = await db('v4_help_actions')
-        .where({ tool_name: 'task', action_name: 'create' })
-        .first();
-
-      assert.ok(action, 'task.create action should be documented');
-      assert.strictEqual(action.action_name, 'create');
-      assert.ok(action.description, 'Action should have description');
-
-      // Parameters are stored in v4_help_action_params table
-      const params = await db('v4_help_action_params')
-        .where({ action_id: action.id })
-        .select('*');
-
-      // Verify file_actions parameter is documented (v3.8.0)
-      const paramNames = params.map((p: any) => p.param_name);
-      assert.ok(
-        paramNames.includes('file_actions'),
-        'Should document file_actions parameter'
-      );
-
-      const fileActionsParam = params.find((p: any) => p.param_name === 'file_actions');
-      assert.ok(fileActionsParam, 'file_actions parameter should exist');
-    });
+    // Note: task.create action test removed in v5.0 (task tool deprecated)
 
     it('should have constraint.add action documented', async () => {
       const db = getDb();
@@ -185,18 +150,18 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
         .where({ tool_name: 'decision' })
         .select('action_name');
 
-      const taskActions = await db('v4_help_actions')
-        .where({ tool_name: 'task' })
+      // Note: Task tool removed in v5.0
+      const constraintActions = await db('v4_help_actions')
+        .where({ tool_name: 'constraint' })
         .select('action_name');
 
       assert.ok(decisionActions.length > 1, 'Decision tool should have multiple actions');
-      assert.ok(taskActions.length > 1, 'Task tool should have multiple actions');
+      assert.ok(constraintActions.length >= 1, 'Constraint tool should have actions');
 
-      // Verify key task actions exist
-      const taskActionNames = taskActions.map((a: any) => a.action_name);
-      assert.ok(taskActionNames.includes('create'), 'Should have create action');
-      assert.ok(taskActionNames.includes('update'), 'Should have update action');
-      assert.ok(taskActionNames.includes('move'), 'Should have move action');
+      // Verify key decision actions exist
+      const decisionActionNames = decisionActions.map((a: any) => a.action_name);
+      assert.ok(decisionActionNames.includes('set'), 'Should have set action');
+      assert.ok(decisionActionNames.includes('get'), 'Should have get action');
     });
 
     it('should indicate required vs optional parameters', async () => {
@@ -375,21 +340,21 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should search examples by tool and keyword', async () => {
       const db = getDb();
 
-      // Join with v4_help_actions to filter by tool_name
+      // Join with v4_help_actions to filter by tool_name (task -> decision in v5.0)
       const examples = await db('v4_help_action_examples')
         .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id')
-        .where({ 'v4_help_actions.tool_name': 'task' })
+        .where({ 'v4_help_actions.tool_name': 'decision' })
         .andWhere(function() {
-          this.where('title', 'like', '%create%')
-            .orWhere('explanation', 'like', '%create%');
+          this.where('title', 'like', '%set%')
+            .orWhere('explanation', 'like', '%set%');
         })
         .select('v4_help_action_examples.*', 'v4_help_actions.tool_name');
 
       assert.ok(Array.isArray(examples), 'Should return filtered search results');
 
-      // All results should be for task tool
+      // All results should be for decision tool
       examples.forEach((ex: any) => {
-        assert.strictEqual(ex.tool_name, 'task');
+        assert.strictEqual(ex.tool_name, 'decision');
       });
     });
   });
