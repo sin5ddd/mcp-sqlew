@@ -66,7 +66,7 @@ export function normalizeIdentifier(value: string): string {
  * @example
  * // Check for duplicate tag (detects 'dry', 'DRY', 'D-R-Y', 'd_r_y')
  * const result = await checkNormalizedDuplicate(
- *   knex, 'v4_tags', 'name', 'DRY', { project_id: 1 }
+ *   knex, 'm_tags', 'name', 'DRY', { project_id: 1 }
  * );
  * if (result.isDuplicate) {
  *   throw new Error(`Tag "${result.existingValue}" already exists`);
@@ -124,7 +124,7 @@ export async function checkNormalizedDuplicate(
  * @example
  * // Validate tag before insert
  * await validateNoNormalizedDuplicate(
- *   knex, 'v4_tags', 'name', 'api-design', 'tag', { project_id: 1 }
+ *   knex, 'm_tags', 'name', 'api-design', 'tag', { project_id: 1 }
  * );
  * // Throws if 'api_design' or 'apiDesign' exists:
  * // Tag "api_design" already exists (naming conflict with "api-design")

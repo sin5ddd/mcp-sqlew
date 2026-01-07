@@ -40,7 +40,7 @@ export async function getVersions(
 
   try {
     // Get key_id for the decision
-    const keyResult = await knex('v4_context_keys')
+    const keyResult = await knex('m_context_keys')
       .where({ key_name: params.key })
       .first('id') as { id: number } | undefined;
 
@@ -55,9 +55,9 @@ export async function getVersions(
 
     const keyId = keyResult.id;
 
-    // Query v4_decision_history
+    // Query t_decision_history
     // Note: Agent tracking removed in v4.0 - agent field removed
-    const rows = await knex('v4_decision_history as dh')
+    const rows = await knex('t_decision_history as dh')
       .where({ 'dh.key_id': keyId, 'dh.project_id': projectId })
       .select(
         'dh.version',

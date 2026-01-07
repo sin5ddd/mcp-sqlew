@@ -1,7 +1,7 @@
 /**
  * Suggest by Tag Overlap
  *
- * Fast query using v4_tag_index denormalized table
+ * Fast query using t_tag_index denormalized table
  * for efficient tag matching.
  */
 
@@ -21,7 +21,7 @@ export interface ByTagsParams {
 /**
  * Suggest decisions by tag overlap
  *
- * Uses v4_tag_index for fast tag lookups.
+ * Uses t_tag_index for fast tag lookups.
  *
  * @param params - Parameters with tags to match
  * @returns Suggestions ranked by tag overlap and similarity
@@ -45,7 +45,7 @@ export async function suggestByTags(params: ByTagsParams): Promise<SuggestRespon
   };
 
   // Lower default min_score for tag searches - tag matches are inherently valuable
-  // since we're filtering by v4_tag_index first
+  // since we're filtering by t_tag_index first
   const suggestions = transformAndScoreDecisions(candidates, context, {
     minScore: params.min_score ?? 15,  // Lower threshold for tag-based searches
     limit: params.limit,

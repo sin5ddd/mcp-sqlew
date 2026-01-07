@@ -45,20 +45,20 @@ export async function aggregateNumericDecisions(
   // For 'count' aggregation, include both numeric and text decisions
   // This provides more intuitive behavior when users want to count all decisions
   if (aggregation === 'count') {
-    // Build query for v4_decisions (text decisions only)
-    // Note: v4_decisions may have rows for numeric decisions with empty value
+    // Build query for t_decisions (text decisions only)
+    // Note: t_decisions may have rows for numeric decisions with empty value
     // so we filter to only count non-empty text values
-    let textQuery = knex('v4_decisions as d')
-      .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
+    let textQuery = knex('t_decisions as d')
+      .join('m_context_keys as ck', 'd.key_id', 'ck.id')
       .where('ck.key_name', 'like', keyPattern)
       .where('d.status', 1)
       .where('d.project_id', projectId)
       .whereNotNull('d.value')
       .where('d.value', '!=', '');
 
-    // Build query for v4_decisions_numeric (numeric decisions)
-    let numericQuery = knex('v4_decisions_numeric as dn')
-      .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+    // Build query for t_decisions_numeric (numeric decisions)
+    let numericQuery = knex('t_decisions_numeric as dn')
+      .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
       .where('ck.key_name', 'like', keyPattern)
       .where('dn.status', 1)
       .where('dn.project_id', projectId);
@@ -66,10 +66,10 @@ export async function aggregateNumericDecisions(
     // Add layer filter if provided
     if (layer) {
       textQuery = textQuery
-        .join('v4_layers as l', 'd.layer_id', 'l.id')
+        .join('m_layers as l', 'd.layer_id', 'l.id')
         .where('l.name', layer);
       numericQuery = numericQuery
-        .join('v4_layers as l', 'dn.layer_id', 'l.id')
+        .join('m_layers as l', 'dn.layer_id', 'l.id')
         .where('l.name', layer);
     }
 
@@ -92,8 +92,8 @@ export async function aggregateNumericDecisions(
   }
 
   // For other aggregations (avg, sum, min, max), use numeric decisions only
-  let query = knex('v4_decisions_numeric as dn')
-    .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+  let query = knex('t_decisions_numeric as dn')
+    .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
     .where('ck.key_name', 'like', keyPattern)
     .where('dn.status', 1)  // Active decisions only
     .where('dn.project_id', projectId);  // Multi-project support (v3.7.0+)
@@ -101,7 +101,7 @@ export async function aggregateNumericDecisions(
   // Add layer filter if provided
   if (layer) {
     query = query
-      .join('v4_layers as l', 'dn.layer_id', 'l.id')
+      .join('m_layers as l', 'dn.layer_id', 'l.id')
       .where('l.name', layer);
   }
 
@@ -192,8 +192,8 @@ export async function timeSeriesAggregation(
   }[bucket];
 
   // Query decisions in time range
-  const results = await knex('v4_decisions_numeric as dn')
-    .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+  const results = await knex('t_decisions_numeric as dn')
+    .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
     .where('ck.key_name', 'like', keyPattern)
     .where('dn.status', 1)
     .where('dn.project_id', projectId)  // Multi-project support (v3.7.0+)
@@ -245,8 +245,8 @@ export async function calculatePercentiles(
   const projectId = getProjectContext().getProjectId();
 
   // Fetch all values
-  const results = await knex('v4_decisions_numeric as dn')
-    .join('v4_context_keys as ck', 'dn.key_id', 'ck.id')
+  const results = await knex('t_decisions_numeric as dn')
+    .join('m_context_keys as ck', 'dn.key_id', 'ck.id')
     .where('ck.key_name', 'like', keyPattern)
     .where('dn.status', 1)
     .where('dn.project_id', projectId)  // Multi-project support (v3.7.0+)

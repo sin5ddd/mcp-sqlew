@@ -15,7 +15,7 @@ import type { HasUpdatesParams, HasUpdatesResponse } from '../types.js';
  *
  * @param params - Agent name and since_timestamp (ISO 8601)
  * @param adapter - Optional database adapter (for testing)
- * @returns Boolean flag and counts for decisions, messages, files
+ * @returns Boolean flag and counts for decisions
  */
 export async function hasUpdates(
   params: HasUpdatesParams,
@@ -39,13 +39,13 @@ export async function hasUpdates(
     const sinceTs = Math.floor(sinceDate.getTime() / 1000);
 
     // Count decisions updated since timestamp (both string and numeric tables)
-    const decisionCount1 = await knex('v4_decisions')
+    const decisionCount1 = await knex('t_decisions')
       .where({ project_id: projectId })
       .where('ts', '>', sinceTs)
       .count('* as count')
       .first() as { count: number };
 
-    const decisionCount2 = await knex('v4_decisions_numeric')
+    const decisionCount2 = await knex('t_decisions_numeric')
       .where({ project_id: projectId })
       .where('ts', '>', sinceTs)
       .count('* as count')
@@ -53,22 +53,13 @@ export async function hasUpdates(
 
     const decisionsCount = (decisionCount1?.count || 0) + (decisionCount2?.count || 0);
 
-    // Count file changes since timestamp (project-scoped)
-    const fileResult = await knex('v4_file_changes')
-      .where({ project_id: projectId })
-      .where('ts', '>', sinceTs)
-      .count('* as count')
-      .first() as { count: number };
-    const filesCount = fileResult?.count || 0;
-
     // Determine if there are any updates
-    const hasUpdatesFlag = decisionsCount > 0 || filesCount > 0;
+    const hasUpdatesFlag = decisionsCount > 0;
 
     return {
       has_updates: hasUpdatesFlag,
       counts: {
-        decisions: decisionsCount,
-        files: filesCount
+        decisions: decisionsCount
       }
     };
   } catch (error) {

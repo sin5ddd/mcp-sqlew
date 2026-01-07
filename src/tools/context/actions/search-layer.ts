@@ -41,7 +41,7 @@ export async function searchByLayer(
 
   if (params._reference_project) {
     // Cross-project query: look up the referenced project
-    const refProject = await knex('v4_projects')
+    const refProject = await knex('m_projects')
       .where({ name: params._reference_project })
       .first<{ id: number; name: string }>();
 
@@ -99,14 +99,14 @@ export async function searchByLayer(
         return dateB - dateA; // desc
       });
     } else {
-      // Use base v4_decisions table with minimal joins
+      // Use base t_decisions table with minimal joins
       const db = new UniversalKnex(knex);
       const statusInt = STRING_TO_STATUS[statusValue];
 
       // Note: Agent tracking removed in v4.0 - decided_by field removed
-      const stringDecisions = knex('v4_decisions as d')
-        .innerJoin('v4_context_keys as ck', 'd.key_id', 'ck.id')
-        .leftJoin('v4_layers as l', 'd.layer_id', 'l.id')
+      const stringDecisions = knex('t_decisions as d')
+        .innerJoin('m_context_keys as ck', 'd.key_id', 'ck.id')
+        .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
         .where('l.name', params.layer)
         .where('d.status', statusInt)
         .where('d.project_id', projectId)
@@ -121,9 +121,9 @@ export async function searchByLayer(
           knex.raw(`${db.dateFunction('d.ts')} as updated`)
         );
 
-      const numericDecisions = knex('v4_decisions_numeric as dn')
-        .innerJoin('v4_context_keys as ck', 'dn.key_id', 'ck.id')
-        .leftJoin('v4_layers as l', 'dn.layer_id', 'l.id')
+      const numericDecisions = knex('t_decisions_numeric as dn')
+        .innerJoin('m_context_keys as ck', 'dn.key_id', 'ck.id')
+        .leftJoin('m_layers as l', 'dn.layer_id', 'l.id')
         .where('l.name', params.layer)
         .where('dn.status', statusInt)
         .where('dn.project_id', projectId)

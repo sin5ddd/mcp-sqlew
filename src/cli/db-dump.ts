@@ -57,7 +57,7 @@ EXAMPLES:
   npm run db:dump -- mysql dump.sql from=postgresql
 
   # Specific tables only
-  npm run db:dump -- mysql dump.sql tables=v4_decisions,v4_tasks
+  npm run db:dump -- mysql dump.sql tables=t_decisions,v4_tasks
 
   # For MariaDB batch mode (1000 statement limit)
   npm run db:dump -- mysql dump.sql max-statements=900

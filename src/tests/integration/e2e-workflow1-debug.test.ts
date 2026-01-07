@@ -35,7 +35,7 @@ describe('Workflow 1 Debug', () => {
       const knex = adapter.getKnex();
       const projectId = ProjectContext.getInstance().getProjectId();
 
-      await knex('v4_decision_policies')
+      await knex('t_decision_policies')
         .where({ name: 'test-cve-policy', project_id: projectId })
         .del();
     } catch (error) {
@@ -53,11 +53,11 @@ describe('Workflow 1 Debug', () => {
       const projectId = ProjectContext.getInstance().getProjectId();
 
       // Delete existing policy if present (from failed previous run)
-      await knex('v4_decision_policies')
+      await knex('t_decision_policies')
         .where({ name: 'test-cve-policy', project_id: projectId })
         .del();
 
-      await knex('v4_decision_policies').insert({
+      await knex('t_decision_policies').insert({
         project_id: projectId,
         name: 'test-cve-policy',
         category: 'security',

@@ -3,7 +3,7 @@
  * Enum mappings, default values, and standard data
  */
 
-import { Status, MessageType, Priority, ChangeType } from './types.js';
+import { Status, MessageType, Priority } from './types.js';
 
 // ============================================================================
 // Database Configuration
@@ -138,24 +138,6 @@ export const STRING_TO_PRIORITY: Record<string, Priority> = {
   'critical': Priority.CRITICAL,
 };
 
-/**
- * Map change type integer to string
- */
-export const CHANGE_TYPE_TO_STRING: Record<ChangeType, string> = {
-  [ChangeType.CREATED]: 'created',
-  [ChangeType.MODIFIED]: 'modified',
-  [ChangeType.DELETED]: 'deleted',
-};
-
-/**
- * Map change type string to integer
- */
-export const STRING_TO_CHANGE_TYPE: Record<string, ChangeType> = {
-  'created': ChangeType.CREATED,
-  'modified': ChangeType.MODIFIED,
-  'deleted': ChangeType.DELETED,
-};
-
 // ============================================================================
 // Default Values
 // ============================================================================
@@ -203,11 +185,6 @@ export const ONE_WEEK = 604800;
  * Default retention period for messages (24 hours)
  */
 export const MESSAGE_RETENTION_SECONDS = ONE_DAY;
-
-/**
- * Default retention period for file changes (7 days)
- */
-export const FILE_CHANGE_RETENTION_SECONDS = ONE_WEEK;
 
 /**
  * Default active context window (1 hour)
@@ -311,11 +288,6 @@ export const DEFAULT_QUERY_LIMIT = 100;
  */
 export const DEFAULT_TAG_MATCH_MODE = 'OR';
 
-/**
- * Default hours to look back for file changes
- */
-export const DEFAULT_FILE_CHANGES_HOURS = 24;
-
 // ============================================================================
 // SQLite Constants
 // ============================================================================
@@ -340,17 +312,6 @@ export const SQLITE_FALSE = 0;
 export const CONFIG_KEYS = {
   AUTODELETE_IGNORE_WEEKEND: 'autodelete_ignore_weekend',
   AUTODELETE_MESSAGE_HOURS: 'autodelete_message_hours',
-  AUTODELETE_FILE_HISTORY_DAYS: 'autodelete_file_history_days',
-  AUTO_ARCHIVE_DONE_DAYS: 'auto_archive_done_days',
-  REVIEW_IDLE_MINUTES: 'review_idle_minutes',
-  REVIEW_REQUIRE_ALL_FILES_MODIFIED: 'review_require_all_files_modified',
-  REVIEW_REQUIRE_TESTS_PASS: 'review_require_tests_pass',
-  REVIEW_REQUIRE_COMPILE: 'review_require_compile',
-  // v3.5.2: Two-step Git-aware workflow
-  GIT_AUTO_COMPLETE_ON_STAGE: 'git_auto_complete_on_stage',
-  GIT_AUTO_ARCHIVE_ON_COMMIT: 'git_auto_archive_on_commit',
-  REQUIRE_ALL_FILES_STAGED: 'require_all_files_staged',
-  REQUIRE_ALL_FILES_COMMITTED_FOR_ARCHIVE: 'require_all_files_committed_for_archive',
 } as const;
 
 // ============================================================================
@@ -368,8 +329,6 @@ export const ERROR_MESSAGES = {
   DECISION_NOT_FOUND: 'Decision not found',
   MESSAGE_NOT_FOUND: 'Message not found',
   CONSTRAINT_NOT_FOUND: 'Constraint not found',
-  AGENT_NOT_FOUND: 'Agent not found',
-  FILE_NOT_FOUND: 'File not found',
   LAYER_NOT_FOUND: 'Layer not found',
   TAG_NOT_FOUND: 'Tag not found',
   SCOPE_NOT_FOUND: 'Scope not found',

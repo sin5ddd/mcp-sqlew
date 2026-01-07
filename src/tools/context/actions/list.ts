@@ -40,7 +40,7 @@ export async function getContext(
 
   if (params._reference_project) {
     // Cross-project query: look up the referenced project
-    const refProject = await knex('v4_projects')
+    const refProject = await knex('m_projects')
       .where({ name: params._reference_project })
       .first<{ id: number; name: string }>();
 

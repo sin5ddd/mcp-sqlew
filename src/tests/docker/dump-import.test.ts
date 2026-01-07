@@ -135,7 +135,7 @@ describe('Cross-Database Migration Tests', () => {
     it('should verify data integrity (row counts)', async () => {
       console.log('    Verifying data integrity...');
 
-      const testTables = ['v4_tasks', 'v4_decisions'];
+      const testTables = ['v4_tasks', 't_decisions'];
 
       for (const table of testTables) {
         const sqliteCount = await sqliteDb(table).count('* as count').first();
@@ -229,7 +229,7 @@ describe('Cross-Database Migration Tests', () => {
     it('should verify data integrity (row counts)', async () => {
       console.log('    Verifying data integrity...');
 
-      const testTables = ['v4_tasks', 'v4_decisions'];
+      const testTables = ['v4_tasks', 't_decisions'];
 
       for (const table of testTables) {
         const sqliteCount = await sqliteDb(table).count('* as count').first();
@@ -251,9 +251,9 @@ describe('Cross-Database Migration Tests', () => {
     it('should verify boolean values converted correctly (PostgreSQL)', async () => {
       console.log('    Verifying boolean conversions...');
 
-      // Use v4_constraints which has 'active' boolean field
-      const sqliteConstraints = await sqliteDb('v4_constraints').select('*').limit(3);
-      const pgConstraints = await postgresDb('v4_constraints').select('*').limit(3);
+      // Use t_constraints which has 'active' boolean field
+      const sqliteConstraints = await sqliteDb('t_constraints').select('*').limit(3);
+      const pgConstraints = await postgresDb('t_constraints').select('*').limit(3);
 
       for (let i = 0; i < sqliteConstraints.length; i++) {
         // SQLite stores booleans as 0/1, PostgreSQL as TRUE/FALSE

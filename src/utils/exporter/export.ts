@@ -120,7 +120,7 @@ export async function generateJsonExport(
     exportMode = 'single_project';
 
     // Get project by name
-    const project = await knex('v4_projects')
+    const project = await knex('m_projects')
       .where({ name: projectName })
       .first();
 
@@ -142,7 +142,7 @@ export async function generateJsonExport(
     exportMode = 'all_projects';
 
     // Get all projects
-    const projects = await knex('v4_projects').select('*');
+    const projects = await knex('m_projects').select('*');
     projectIds = projects.map(p => p.id);
     projectData = projects.map(p => ({
       name: p.name,
@@ -263,15 +263,15 @@ async function exportMasterTables(
       .select('id', 'project_id', 'path');
   }
 
-  // Get used context key IDs from v4_decisions
+  // Get used context key IDs from t_decisions
   const usedKeyIds = new Set<number>();
 
-  const decisions = await knex('v4_decisions')
+  const decisions = await knex('t_decisions')
     .whereIn('project_id', projectIds)
     .distinct('key_id');
   decisions.forEach(row => usedKeyIds.add(row.key_id));
 
-  const decisionsNumeric = await knex('v4_decisions_numeric')
+  const decisionsNumeric = await knex('t_decisions_numeric')
     .whereIn('project_id', projectIds)
     .distinct('key_id');
   decisionsNumeric.forEach(row => usedKeyIds.add(row.key_id));
@@ -282,7 +282,7 @@ async function exportMasterTables(
   taskDecisionLinks.forEach(row => usedKeyIds.add(row.key_id));
 
   if (usedKeyIds.size > 0) {
-    masterTables.context_keys = await knex('v4_context_keys')
+    masterTables.context_keys = await knex('m_context_keys')
       .whereIn('id', Array.from(usedKeyIds))
       .select('id', 'key_name as key');
   }
@@ -290,17 +290,17 @@ async function exportMasterTables(
   // Get used tag IDs from various tag tables
   const usedTagIds = new Set<number>();
 
-  // Join through parent table (v4_decisions) to filter by project_id
-  // Note: v4_decision_tags uses decision_key_id (references v4_context_keys.id)
-  const decisionTags = await knex('v4_decision_tags as dt')
-    .join('v4_decisions as d', 'dt.decision_key_id', 'd.key_id')
+  // Join through parent table (t_decisions) to filter by project_id
+  // Note: t_decision_tags uses decision_key_id (references m_context_keys.id)
+  const decisionTags = await knex('t_decision_tags as dt')
+    .join('t_decisions as d', 'dt.decision_key_id', 'd.key_id')
     .whereIn('d.project_id', projectIds)
     .distinct('dt.tag_id');
   decisionTags.forEach(row => usedTagIds.add(row.tag_id));
 
-  // Join through parent table (v4_constraints) to filter by project_id
-  const constraintTags = await knex('v4_constraint_tags as ct')
-    .join('v4_constraints as c', 'ct.constraint_id', 'c.id')
+  // Join through parent table (t_constraints) to filter by project_id
+  const constraintTags = await knex('t_constraint_tags as ct')
+    .join('t_constraints as c', 'ct.constraint_id', 'c.id')
     .whereIn('c.project_id', projectIds)
     .distinct('ct.tag_id');
   constraintTags.forEach(row => usedTagIds.add(row.tag_id));
@@ -313,38 +313,38 @@ async function exportMasterTables(
   taskTags.forEach(row => usedTagIds.add(row.tag_id));
 
   if (usedTagIds.size > 0) {
-    masterTables.tags = await knex('v4_tags')
+    masterTables.tags = await knex('m_tags')
       .whereIn('id', Array.from(usedTagIds))
       .select('id', 'project_id', 'name');
   }
 
-  // Get used scope IDs from v4_decision_scopes
+  // Get used scope IDs from t_decision_scopes
   const usedScopeIds = new Set<number>();
 
-  // Join through parent table (v4_decisions) to filter by project_id
-  // Note: v4_decision_scopes uses decision_key_id (references v4_context_keys.id)
-  const decisionScopes = await knex('v4_decision_scopes as ds')
-    .join('v4_decisions as d', 'ds.decision_key_id', 'd.key_id')
+  // Join through parent table (t_decisions) to filter by project_id
+  // Note: t_decision_scopes uses decision_key_id (references m_context_keys.id)
+  const decisionScopes = await knex('t_decision_scopes as ds')
+    .join('t_decisions as d', 'ds.decision_key_id', 'd.key_id')
     .whereIn('d.project_id', projectIds)
     .distinct('ds.scope_id');
   decisionScopes.forEach(row => usedScopeIds.add(row.scope_id));
 
   if (usedScopeIds.size > 0) {
-    masterTables.scopes = await knex('v4_scopes')
+    masterTables.scopes = await knex('m_scopes')
       .whereIn('id', Array.from(usedScopeIds))
       .select('id', 'project_id', 'name');
   }
 
-  // Get used category IDs from v4_constraints
+  // Get used category IDs from t_constraints
   const usedCategoryIds = new Set<number>();
 
-  const constraints = await knex('v4_constraints')
+  const constraints = await knex('t_constraints')
     .whereIn('project_id', projectIds)
     .distinct('category_id');
   constraints.forEach(row => usedCategoryIds.add(row.category_id));
 
   if (usedCategoryIds.size > 0) {
-    masterTables.constraint_categories = await knex('v4_constraint_categories')
+    masterTables.constraint_categories = await knex('m_constraint_categories')
       .whereIn('id', Array.from(usedCategoryIds))
       .select('id', 'name');
   }
@@ -352,7 +352,7 @@ async function exportMasterTables(
   // Get used layer IDs from all tables that reference layers
   const usedLayerIds = new Set<number>();
 
-  const decisionLayers = await knex('v4_decisions')
+  const decisionLayers = await knex('t_decisions')
     .whereIn('project_id', projectIds)
     .whereNotNull('layer_id')
     .distinct('layer_id');
@@ -364,7 +364,7 @@ async function exportMasterTables(
     .distinct('layer_id');
   fileChangeLayers.forEach(row => usedLayerIds.add(row.layer_id));
 
-  const constraintLayers = await knex('v4_constraints')
+  const constraintLayers = await knex('t_constraints')
     .whereIn('project_id', projectIds)
     .whereNotNull('layer_id')
     .distinct('layer_id');
@@ -377,7 +377,7 @@ async function exportMasterTables(
   taskLayers.forEach(row => usedLayerIds.add(row.layer_id));
 
   if (usedLayerIds.size > 0) {
-    masterTables.layers = await knex('v4_layers')
+    masterTables.layers = await knex('m_layers')
       .whereIn('id', Array.from(usedLayerIds))
       .select('id', 'name');
   }
@@ -387,12 +387,12 @@ async function exportMasterTables(
     .select('id', 'name');
 
   // Export v4.0+ tables: decision_policies (filtered by project_id)
-  masterTables.decision_policies = await knex('v4_decision_policies')
+  masterTables.decision_policies = await knex('t_decision_policies')
     .whereIn('project_id', projectIds)
     .select('id', 'project_id', 'name', 'description', 'defaults', 'required_fields', 'validation_rules', 'quality_gates', 'suggest_similar', 'category', 'ts');
 
   // Export v4.0+ tables: tag_index (filtered by project_id)
-  masterTables.tag_index = await knex('v4_tag_index')
+  masterTables.tag_index = await knex('t_tag_index')
     .whereIn('project_id', projectIds)
     .select('id', 'tag', 'source_type', 'source_id', 'project_id', 'created_ts');
 
@@ -425,31 +425,31 @@ async function exportTransactionTables(
   };
 
   // Export each transaction table
-  transactionTables.decisions = await knex('v4_decisions')
+  transactionTables.decisions = await knex('t_decisions')
     .whereIn('project_id', projectIds)
     .select('*');
 
-  transactionTables.decisions_numeric = await knex('v4_decisions_numeric')
+  transactionTables.decisions_numeric = await knex('t_decisions_numeric')
     .whereIn('project_id', projectIds)
     .select('*');
 
-  transactionTables.decision_history = await knex('v4_decision_history')
+  transactionTables.decision_history = await knex('t_decision_history')
     .whereIn('project_id', projectIds)
     .select('*');
 
   // Junction tables - filter by joining through parent table
-  // Note: decision junction tables use decision_key_id (references v4_context_keys.id)
-  transactionTables.decision_tags = await knex('v4_decision_tags as dt')
-    .join('v4_decisions as d', 'dt.decision_key_id', 'd.key_id')
+  // Note: decision junction tables use decision_key_id (references m_context_keys.id)
+  transactionTables.decision_tags = await knex('t_decision_tags as dt')
+    .join('t_decisions as d', 'dt.decision_key_id', 'd.key_id')
     .whereIn('d.project_id', projectIds)
     .select('dt.*');
 
-  transactionTables.decision_scopes = await knex('v4_decision_scopes as ds')
-    .join('v4_decisions as d', 'ds.decision_key_id', 'd.key_id')
+  transactionTables.decision_scopes = await knex('t_decision_scopes as ds')
+    .join('t_decisions as d', 'ds.decision_key_id', 'd.key_id')
     .whereIn('d.project_id', projectIds)
     .select('ds.*');
 
-  transactionTables.decision_context = await knex('v4_decision_context')
+  transactionTables.decision_context = await knex('t_decision_context')
     .whereIn('project_id', projectIds)
     .select('*');
 
@@ -457,13 +457,13 @@ async function exportTransactionTables(
     .whereIn('project_id', projectIds)
     .select('*');
 
-  transactionTables.constraints = await knex('v4_constraints')
+  transactionTables.constraints = await knex('t_constraints')
     .whereIn('project_id', projectIds)
     .select('*');
 
   // Junction table - filter by joining through parent table
-  transactionTables.constraint_tags = await knex('v4_constraint_tags as ct')
-    .join('v4_constraints as c', 'ct.constraint_id', 'c.id')
+  transactionTables.constraint_tags = await knex('t_constraint_tags as ct')
+    .join('t_constraints as c', 'ct.constraint_id', 'c.id')
     .whereIn('c.project_id', projectIds)
     .select('ct.*');
 

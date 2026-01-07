@@ -7,8 +7,8 @@
  * @since v4.1.0
  */
 
-import { STATUS_TO_STRING, CHANGE_TYPE_TO_STRING, PRIORITY_TO_STRING } from '../constants.js';
-import { Status, ChangeType, Priority } from '../types.js';
+import { STATUS_TO_STRING, PRIORITY_TO_STRING } from '../constants.js';
+import { Status, Priority } from '../types.js';
 
 // ============================================================================
 // Status Conversion
@@ -42,35 +42,6 @@ export function convertStatusArray<T extends { status: number | null }>(
   rows: T[]
 ): (Omit<T, 'status'> & { status: string })[] {
   return rows.map(convertStatus);
-}
-
-// ============================================================================
-// Change Type Conversion
-// ============================================================================
-
-/**
- * Convert change_type integer to string for a single record
- *
- * @example
- * const row = { id: 1, change_type: 1 };
- * const result = convertChangeType(row);
- * // result.change_type === 'created'
- */
-export function convertChangeType<T extends { change_type: number | null }>(
-  row: T
-): Omit<T, 'change_type'> & { change_type: string } {
-  const typeInt = row.change_type as ChangeType | null;
-  const typeStr = typeInt !== null ? (CHANGE_TYPE_TO_STRING[typeInt] || 'modified') : 'modified';
-  return { ...row, change_type: typeStr };
-}
-
-/**
- * Convert change_type integer to string for an array of records
- */
-export function convertChangeTypeArray<T extends { change_type: number | null }>(
-  rows: T[]
-): (Omit<T, 'change_type'> & { change_type: string })[] {
-  return rows.map(convertChangeType);
 }
 
 // ============================================================================

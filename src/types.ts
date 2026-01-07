@@ -50,16 +50,6 @@ export enum Priority {
   CRITICAL = 4,
 }
 
-/**
- * File change type enumeration
- * 1 = created, 2 = modified, 3 = deleted
- */
-export enum ChangeType {
-  CREATED = 1,
-  MODIFIED = 2,
-  DELETED = 3,
-}
-
 // ============================================================================
 // Parameter Validation Types
 // ============================================================================
@@ -86,11 +76,6 @@ export interface ValidationError {
 export interface Agent {
   readonly id: number;
   readonly name: string;
-}
-
-export interface File {
-  readonly id: number;
-  readonly path: string;
 }
 
 export interface ContextKey {
@@ -172,16 +157,6 @@ export interface AgentMessage {
   readonly read: number;  // SQLite boolean: 0 or 1
 }
 
-export interface FileChange {
-  readonly id: number;
-  readonly file_id: number;
-  readonly agent_id: number;
-  readonly layer_id: number | null;
-  readonly change_type: ChangeType;
-  readonly description: string | null;
-  readonly ts: number;
-}
-
 export interface Constraint {
   readonly id: number;
   readonly category_id: number;
@@ -246,7 +221,6 @@ export interface ActiveContext {
 export interface LayerSummary {
   readonly layer: string;
   readonly decisions_count: number;
-  readonly file_changes_count: number;
   readonly constraints_count: number;
 }
 
@@ -254,15 +228,6 @@ export interface UnreadMessagesByPriority {
   readonly agent: string;
   readonly priority: 'critical' | 'high' | 'medium' | 'low';
   readonly count: number;
-}
-
-export interface RecentFileChange {
-  readonly path: string;
-  readonly changed_by: string;
-  readonly layer: string | null;
-  readonly change_type: 'created' | 'modified' | 'deleted';
-  readonly description: string | null;
-  readonly changed_at: string;  // ISO 8601 datetime
 }
 
 export interface TaggedConstraint {
@@ -371,28 +336,6 @@ export interface HasUpdatesParams {
   since_timestamp: string;  // ISO 8601 timestamp
 }
 
-export interface RecordFileChangeParams {
-  file_path: string;
-  agent_name?: string;  // Optional since v4.1.2 (legacy sub-agent system removed)
-  change_type: 'created' | 'modified' | 'deleted';
-  layer?: string;
-  description?: string;
-}
-
-export interface GetFileChangesParams {
-  file_path?: string;
-  agent_name?: string;
-  layer?: string;
-  change_type?: 'created' | 'modified' | 'deleted';
-  since?: string;  // ISO 8601 timestamp
-  limit?: number;
-}
-
-export interface CheckFileLockParams {
-  file_path: string;
-  lock_duration?: number;  // Seconds (default: 300 = 5 min)
-}
-
 export interface AddConstraintParams {
   category: string;
   constraint_text: string;
@@ -418,37 +361,11 @@ export interface DeactivateConstraintParams {
 }
 
 // ============================================================================
-// Task Acceptance Criteria Types (v3.0.2 - File Watcher)
-// ============================================================================
-
-/**
- * Acceptance check types for automated task validation
- */
-export type AcceptanceCheckType = 'tests_pass' | 'code_removed' | 'code_contains' | 'file_exists';
-
-/**
- * Acceptance check definition
- */
-export interface AcceptanceCheck {
-  type: AcceptanceCheckType;
-  command?: string;           // For tests_pass: shell command to execute
-  expected_pattern?: string;  // For tests_pass: pattern to match in output
-  file?: string;              // For code_* and file_exists: target file path
-  pattern?: string;           // For code_removed/code_contains: regex pattern
-  timeout?: number;           // Optional timeout in seconds (default: 60)
-}
-
-// ============================================================================
 // Batch Operation Parameter Types (FR-005)
 // ============================================================================
 
 export interface SetDecisionBatchParams {
   decisions: SetDecisionParams[];
-  atomic?: boolean;  // Default: true (all succeed or all fail)
-}
-
-export interface RecordFileChangeBatchParams {
-  file_changes: RecordFileChangeParams[];
   atomic?: boolean;  // Default: true (all succeed or all fail)
 }
 
@@ -607,26 +524,7 @@ export interface HasUpdatesResponse {
   has_updates: boolean;
   counts: {
     decisions: number;
-    files: number;
   };
-}
-
-export interface RecordFileChangeResponse {
-  success: boolean;
-  change_id: number;
-  timestamp: string;
-}
-
-export interface GetFileChangesResponse {
-  changes: RecentFileChange[];
-  count: number;
-}
-
-export interface CheckFileLockResponse {
-  locked: boolean;
-  last_agent?: string;
-  last_change?: string;
-  change_type?: string;
 }
 
 export interface AddConstraintResponse {
@@ -646,38 +544,14 @@ export interface DeactivateConstraintResponse {
 
 export interface GetStatsResponse {
   agents: number;
-  files: number;
   context_keys: number;
   active_decisions: number;
   total_decisions: number;
-  file_changes: number;
   active_constraints: number;
   total_constraints: number;
   tags: number;
   scopes: number;
   layers: number;
-  // Task statistics (v3.x)
-  total_tasks: number;
-  active_tasks: number;  // Excludes archived and done
-  tasks_by_status: {
-    todo: number;
-    in_progress: number;
-    waiting_review: number;
-    blocked: number;
-    done: number;
-    archived: number;
-  };
-  tasks_by_priority: {
-    low: number;      // priority = 1
-    medium: number;   // priority = 2
-    high: number;     // priority = 3
-    critical: number; // priority = 4
-  };
-  // Review status (v3.4.0)
-  review_status: {
-    awaiting_commit: number;  // Tasks in waiting_review awaiting git commits
-    overdue_review: number;   // Tasks in waiting_review > 24h
-  };
 }
 
 export interface FlushWALResponse {
@@ -709,19 +583,6 @@ export interface SetDecisionBatchResponse {
     key: string;
     key_id?: number;
     version?: string;
-    success: boolean;
-    error?: string;
-  }>;
-}
-
-export interface RecordFileChangeBatchResponse {
-  success: boolean;
-  inserted: number;
-  failed: number;
-  results: Array<{
-    file_path: string;
-    change_id?: number;
-    timestamp?: string;
     success: boolean;
     error?: string;
   }>;
@@ -801,26 +662,6 @@ export type DecisionAction =
   | 'help' | 'example' | 'use_case';
 
 /**
- * Task tool actions
- * Provides compile-time type checking for action parameters
- */
-export type TaskAction =
-  | 'create' | 'update' | 'get' | 'list' | 'move' | 'link'
-  | 'archive' | 'create_batch' | 'add_dependency' | 'remove_dependency'
-  | 'get_dependencies' | 'watch_files' | 'get_pruned_files' | 'link_pruned_file'
-  | 'watcher'
-  | 'help' | 'example' | 'use_case';
-
-/**
- * File tool actions
- * Provides compile-time type checking for action parameters
- */
-export type FileAction =
-  | 'record' | 'get' | 'check_lock' | 'record_batch'
-  | 'sqlite_flush'
-  | 'help' | 'example' | 'use_case';
-
-/**
  * Constraint tool actions
  * Provides compile-time type checking for action parameters
  */
@@ -880,18 +721,15 @@ export interface IdMapping extends Map<number, number> {}
 
 /**
  * Complete ID mapping context for all master tables
- * Note: agents removed in v4.0 (agent system deleted)
+ * Note: agents removed in v4.0, files/tasks removed in v5.0
  */
 export interface ImportIdMappings {
   projects: IdMapping;
-  files: IdMapping;
   context_keys: IdMapping;
   tags: IdMapping;
   scopes: IdMapping;
   constraint_categories: IdMapping;
   layers: IdMapping;
-  task_statuses: IdMapping;
-  tasks: IdMapping;  // Transaction table, but needed for dependencies
   decision_policies: IdMapping;  // v4.0+ table
 }
 
@@ -916,12 +754,11 @@ export interface ImportContext {
 /**
  * Import statistics
  * Note: agents_created, activity_log_created removed in v4.0
+ * Note: files/tasks related stats removed in v5.0
  */
 export interface ImportStats {
   project_created: boolean;
   master_tables: {
-    files_created: number;
-    files_reused: number;
     context_keys_created: number;
     tags_created: number;
     tags_reused: number;
@@ -933,10 +770,7 @@ export interface ImportStats {
     decisions_numeric_created: number;
     decision_history_created: number;
     decision_context_created: number;
-    file_changes_created: number;
     constraints_created: number;
-    tasks_created: number;
-    task_details_created: number;
     decision_policies_created: number;  // v4.0+ table
     tag_index_created: number;  // v4.0+ table
   };
@@ -944,25 +778,7 @@ export interface ImportStats {
     decision_tags_created: number;
     decision_scopes_created: number;
     constraint_tags_created: number;
-    task_tags_created: number;
-    task_file_links_created: number;
-    task_decision_links_created: number;
-    task_dependencies_created: number;
   };
-}
-
-/**
- * Task dependency graph for topological sorting
- */
-export interface TaskDependencyGraph {
-  /** Task IDs with no dependencies (roots) */
-  roots: number[];
-  /** Map from blocker_task_id to array of blocked_task_ids */
-  children: Map<number, number[]>;
-  /** Map from blocked_task_id to array of blocker_task_ids */
-  parents: Map<number, number[]>;
-  /** All task IDs in the graph */
-  allTaskIds: Set<number>;
 }
 
 /**

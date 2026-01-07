@@ -42,7 +42,7 @@ export async function deactivateConstraint(
       validateActionParams('constraint', 'deactivate', normalizedParams);
 
       // Check if constraint exists in current project
-      const constraint = await knex('v4_constraints')
+      const constraint = await knex('t_constraints')
         .where({ id: normalizedParams.constraint_id, project_id: projectId })
         .select('id', 'active')
         .first() as { id: number; active: number } | undefined;
@@ -52,7 +52,7 @@ export async function deactivateConstraint(
       }
 
       // Update constraint to inactive (idempotent) with project_id filter
-      await knex('v4_constraints')
+      await knex('t_constraints')
         .where({ id: normalizedParams.constraint_id, project_id: projectId })
         .update({ active: SQLITE_FALSE });
 

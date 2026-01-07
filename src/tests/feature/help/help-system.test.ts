@@ -24,13 +24,15 @@ import { estimateTokens } from '../../../utils/token-estimation.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Test configuration - only current tools (message, config were deprecated in v4.0)
-const TEST_TOOLS = ['decision', 'task', 'file', 'constraint'];
+// Test configuration - only current tools (task, file deprecated in v5.0)
+const TEST_TOOLS = ['decision', 'constraint', 'suggest', 'help', 'example', 'use_case'];
 const TEST_ACTIONS: Record<string, string[]> = {
   decision: ['set', 'get', 'list'],
-  task: ['create', 'list', 'update'],
-  file: ['record', 'get'],
-  constraint: ['add', 'get']
+  constraint: ['add', 'get'],
+  suggest: ['by_key', 'by_tags'],
+  help: ['query_action', 'query_tool'],
+  example: ['get', 'search'],
+  use_case: ['get', 'search']
 };
 
 describe('Help System', () => {
@@ -162,10 +164,11 @@ describe('Help System', () => {
   });
 
   describe('queryHelpNextActions - workflow hints queries', () => {
+    // Note: task and file tools deprecated in v5.0
     const nextActionsTests = [
       { tool: 'decision', action: 'set' },
-      { tool: 'task', action: 'create' },
-      { tool: 'file', action: 'record' }
+      { tool: 'constraint', action: 'add' },
+      { tool: 'suggest', action: 'by_key' }
     ];
 
     for (const test of nextActionsTests) {

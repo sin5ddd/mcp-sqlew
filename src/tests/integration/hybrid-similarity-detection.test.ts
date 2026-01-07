@@ -36,7 +36,7 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
     projectId = projectContext.getProjectId();
 
     // Clean up any existing test data from previous runs (including old key patterns)
-    const testKeyIds = await knex('v4_context_keys')
+    const testKeyIds = await knex('m_context_keys')
       .select('id')
       .where(function(this: any) {
         this.where('key_name', 'like', 'test-%')
@@ -52,43 +52,43 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
 
     if (keyIds.length > 0) {
       // Delete in order of dependencies (child tables first)
-      await knex('v4_tag_index')
+      await knex('t_tag_index')
         .whereIn('source_id', keyIds)
         .where('source_type', 'decision')
         .where('project_id', projectId)
         .delete();
 
-      await knex('v4_decision_tags')
+      await knex('t_decision_tags')
         .whereIn('decision_key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
-      await knex('v4_decision_scopes')
+      await knex('t_decision_scopes')
         .whereIn('decision_key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
-      await knex('v4_decision_history')
+      await knex('t_decision_history')
         .whereIn('key_id', keyIds)
         .delete();
 
-      await knex('v4_decisions')
-        .whereIn('key_id', keyIds)
-        .where('project_id', projectId)
-        .delete();
-
-      await knex('v4_decisions_numeric')
+      await knex('t_decisions')
         .whereIn('key_id', keyIds)
         .where('project_id', projectId)
         .delete();
 
-      await knex('v4_context_keys')
+      await knex('t_decisions_numeric')
+        .whereIn('key_id', keyIds)
+        .where('project_id', projectId)
+        .delete();
+
+      await knex('m_context_keys')
         .whereIn('id', keyIds)
         .delete();
     }
 
     // Clean up existing policies
-    await knex('v4_decision_policies')
+    await knex('t_decision_policies')
       .where('project_id', projectId)
       .where(function(this: any) {
         this.where('name', 'like', '%test%')
@@ -97,7 +97,7 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       .delete();
 
     // Create test policy with suggest_similar=1 (no validation_rules to match all decisions)
-    await knex('v4_decision_policies').insert({
+    await knex('t_decision_policies').insert({
       project_id: projectId,
       name: 'test-policy',
       category: 'testing',
@@ -236,9 +236,9 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
 
       // Verify decision was NOT created
       const adapter = getAdapter();
-      const check = await adapter.getKnex()('v4_decisions')
-        .join('v4_context_keys', 'v4_decisions.key_id', 'v4_context_keys.id')
-        .where('v4_context_keys.key_name', 'v390-tier2-duplicate-001')
+      const check = await adapter.getKnex()('t_decisions')
+        .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
+        .where('m_context_keys.key_name', 'v390-tier2-duplicate-001')
         .first();
 
       assert.strictEqual(check, undefined, 'Decision should not have been created');
@@ -313,18 +313,18 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
 
       // Verify decision 'v390-tier3-duplicate-001' was NOT created (updated existing instead)
       const adapter = getAdapter();
-      const check = await adapter.getKnex()('v4_decisions')
-        .join('v4_context_keys', 'v4_decisions.key_id', 'v4_context_keys.id')
-        .where('v4_context_keys.key_name', 'v390-tier3-duplicate-001')
+      const check = await adapter.getKnex()('t_decisions')
+        .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
+        .where('m_context_keys.key_name', 'v390-tier3-duplicate-001')
         .first();
 
       assert.strictEqual(check, undefined, 'New decision should not have been created');
 
       // Verify 'v390-tier3-baseline-001' was updated to version 1.0.1
-      const updated = await adapter.getKnex()('v4_decisions')
-        .join('v4_context_keys', 'v4_decisions.key_id', 'v4_context_keys.id')
-        .where('v4_context_keys.key_name', 'v390-tier3-baseline-001')
-        .select('v4_decisions.version')
+      const updated = await adapter.getKnex()('t_decisions')
+        .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
+        .where('m_context_keys.key_name', 'v390-tier3-baseline-001')
+        .select('t_decisions.version')
         .first();
 
       assert.ok(updated, 'Original decision should still exist');
@@ -386,10 +386,10 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
 
       // Verify database was updated with new value
       const adapter = getAdapter();
-      const updated = await adapter.getKnex()('v4_decisions')
-        .join('v4_context_keys', 'v4_decisions.key_id', 'v4_context_keys.id')
-        .where('v4_context_keys.key_name', 'v390-tier3-preserve-004')
-        .select('v4_decisions.value')
+      const updated = await adapter.getKnex()('t_decisions')
+        .join('m_context_keys', 't_decisions.key_id', 'm_context_keys.id')
+        .where('m_context_keys.key_name', 'v390-tier3-preserve-004')
+        .select('t_decisions.value')
         .first();
 
       assert.strictEqual(updated.value, newValue, 'Database should have new value');
@@ -482,7 +482,7 @@ describe('Hybrid Similarity Detection (v3.9.0)', () => {
       const adapter = getAdapter();
       const knex = adapter.getKnex();
 
-      await knex('v4_decision_policies').insert({
+      await knex('t_decision_policies').insert({
         project_id: projectId,
         name: 'no-suggest-policy',
         category: 'testing',
