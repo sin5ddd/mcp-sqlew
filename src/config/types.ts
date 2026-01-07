@@ -365,12 +365,13 @@ export interface ProjectConfig {
 /**
  * Environment variables for cloud backend configuration.
  * These are read by the saas-connector plugin.
+ *
+ * Note: API endpoint is hardcoded in the plugin for security.
+ * This prevents endpoint information from being exposed in OSS code.
  */
 export const CLOUD_ENV_VARS = {
   /** API key for authentication (required for cloud mode) */
   API_KEY: 'SQLEW_API_KEY',
-  /** API endpoint override (optional, for development) */
-  ENDPOINT: 'SQLEW_API_ENDPOINT',
   /** Project ID (optional) */
   PROJECT_ID: 'SQLEW_PROJECT_ID',
 } as const;
@@ -378,15 +379,15 @@ export const CLOUD_ENV_VARS = {
 /**
  * Cloud backend configuration.
  * Loaded from environment variables (.sqlew/.env).
- * API details are handled by the saas-connector plugin.
+ *
+ * Note: API endpoint is NOT configurable here - it's hardcoded in the plugin.
+ * This is intentional for security (no endpoint info in OSS).
  *
  * @since v4.4.0
  */
 export interface CloudConfig {
   /** API key for authentication */
   apiKey: string;
-  /** API endpoint (default handled by plugin) */
-  endpoint?: string;
   /** Project ID (optional) */
   projectId?: string;
 }

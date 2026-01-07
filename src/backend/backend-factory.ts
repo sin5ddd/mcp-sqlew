@@ -54,7 +54,6 @@ export function loadCloudConfig(projectRoot?: string): CloudConfig | null {
 
   return {
     apiKey,
-    endpoint: process.env[CLOUD_ENV_VARS.ENDPOINT],
     projectId: process.env[CLOUD_ENV_VARS.PROJECT_ID],
   };
 }

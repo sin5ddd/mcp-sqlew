@@ -24,7 +24,6 @@ describe('Backend Factory', () => {
     await resetBackend();
     // Clear environment variables
     delete process.env.SQLEW_API_KEY;
-    delete process.env.SQLEW_API_ENDPOINT;
     delete process.env.SQLEW_PROJECT_ID;
   });
 
@@ -178,15 +177,6 @@ describe('Backend Factory', () => {
       const config = loadCloudConfig();
 
       assert.strictEqual(config?.apiKey, 'test-api-key');
-    });
-
-    it('should include endpoint when set', () => {
-      process.env.SQLEW_API_KEY = 'test-api-key';
-      process.env.SQLEW_API_ENDPOINT = 'http://localhost:8080';
-
-      const config = loadCloudConfig();
-
-      assert.strictEqual(config?.endpoint, 'http://localhost:8080');
     });
 
     it('should include projectId when set', () => {

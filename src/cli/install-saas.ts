@@ -16,9 +16,9 @@ import { loadCloudConfig } from '../backend/backend-factory.js';
 import { KNOWN_PLUGINS, getPluginInfo } from '../backend/plugin-loader.js';
 
 /**
- * Default download endpoint
+ * Download endpoint (hardcoded for security - no endpoint info in config)
  */
-const DEFAULT_DOWNLOAD_ENDPOINT = 'https://api.sqlew.io/v1/connector/download';
+const DOWNLOAD_ENDPOINT = 'https://api.sqlew.io/v1/connector/download';
 
 /**
  * Install the SaaS connector plugin
@@ -60,12 +60,7 @@ export async function installSaasCommand(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // Determine download endpoint
-  const endpoint = cloudConfig.endpoint
-    ? `${cloudConfig.endpoint}/v1/connector/download`
-    : DEFAULT_DOWNLOAD_ENDPOINT;
-
-  console.log(`[install-saas] Downloading from: ${endpoint}`);
+  console.log('[install-saas] Downloading plugin...');
 
   try {
     // Create plugins directory
@@ -78,7 +73,7 @@ export async function installSaasCommand(args: string[]): Promise<void> {
 
     // Download plugin
     const tarballPath = path.join(pluginsDir, 'connector.tgz');
-    await downloadPlugin(endpoint, cloudConfig.apiKey, tarballPath);
+    await downloadPlugin(DOWNLOAD_ENDPOINT, cloudConfig.apiKey, tarballPath);
 
     console.log('[install-saas] Download complete, extracting...');
 
