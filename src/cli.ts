@@ -22,6 +22,7 @@ import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
 import { onStopCommand } from './cli/hooks/on-stop.js';
 import { onEnterPlanCommand } from './cli/hooks/on-enter-plan.js';
 import { onExitPlanCommand } from './cli/hooks/on-exit-plan.js';
+import { installSaasCommand, showInstallSaasHelp } from './cli/install-saas.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
@@ -47,6 +48,8 @@ interface CLIArgs {
   'db-path'?: string;
   help?: boolean;
   init?: boolean;
+  'install-saas'?: boolean;
+  force?: boolean;
 }
 
 // ============================================================================
@@ -72,6 +75,10 @@ function parseArgs(args: string[]): CLIArgs {
         parsed.help = true;
       } else if (key === 'init') {
         parsed.init = true;
+      } else if (key === 'install-saas') {
+        parsed['install-saas'] = true;
+      } else if (key === 'force') {
+        parsed.force = true;
       } else if (value && !value.startsWith('--')) {
         // Handle different key types
         if (key === 'limit') {
@@ -153,6 +160,7 @@ USAGE:
 COMMANDS:
   Setup:
     --init           One-shot initialization (Skills + CLAUDE.md + Hooks + gitignore)
+    --install-saas   Install SaaS connector plugin (requires API key)
     init --hooks     Initialize Claude Code and Git hooks only
 
   Database:
@@ -422,6 +430,12 @@ export async function runCli(rawArgs: string[]): Promise<void> {
   // --init flag: comprehensive initialization (Skills + CLAUDE.md + Hooks + gitignore)
   if (args.init) {
     await initAllCommand();
+    return;
+  }
+
+  // --install-saas flag: install SaaS connector plugin
+  if (args['install-saas']) {
+    await installSaasCommand(rawArgs);
     return;
   }
 
