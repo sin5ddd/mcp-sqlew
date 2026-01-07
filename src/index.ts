@@ -22,7 +22,7 @@ const cliCommands = [
   'on-subagent-stop', 'on-stop', 'on-exit-plan',
 ];
 // CLI flags that should route to CLI (not MCP server)
-const cliFlags = ['--init', '--help', '--version'];
+const cliFlags = ['--init', '--help', '--version', '--install-saas'];
 const isCliCommand = cliCommands.includes(firstArg) || cliFlags.includes(firstArg);
 
 if (isCliCommand) {

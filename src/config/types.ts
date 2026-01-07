@@ -239,9 +239,15 @@ export interface DatabaseConfig {
    * Database type for multi-RDBMS support.
    * Omit for SQLite (uses path field).
    *
+   * - 'sqlite': Local SQLite database (default)
+   * - 'postgres': PostgreSQL database
+   * - 'mysql': MySQL/MariaDB database
+   * - 'cloud': Cloud backend via plugin (requires saas-connector)
+   *
    * @since v3.7.0
+   * @since v4.4.0 Added 'cloud' type for SaaS backend
    */
-  type?: 'sqlite' | 'postgres' | 'mysql';
+  type?: 'sqlite' | 'postgres' | 'mysql' | 'cloud';
 
   /**
    * Connection configuration for PostgreSQL/MySQL.
@@ -350,6 +356,40 @@ export interface ProjectConfig {
    * Can include spaces and special characters.
    */
   display_name?: string;
+}
+
+// ============================================================================
+// Cloud Backend Configuration (v4.4.0+)
+// ============================================================================
+
+/**
+ * Environment variables for cloud backend configuration.
+ * These are read by the saas-connector plugin.
+ *
+ * Note: API endpoint is hardcoded in the plugin for security.
+ * This prevents endpoint information from being exposed in OSS code.
+ */
+export const CLOUD_ENV_VARS = {
+  /** API key for authentication (required for cloud mode) */
+  API_KEY: 'SQLEW_API_KEY',
+  /** Project ID (optional) */
+  PROJECT_ID: 'SQLEW_PROJECT_ID',
+} as const;
+
+/**
+ * Cloud backend configuration.
+ * Loaded from environment variables (.sqlew/.env).
+ *
+ * Note: API endpoint is NOT configurable here - it's hardcoded in the plugin.
+ * This is intentional for security (no endpoint info in OSS).
+ *
+ * @since v4.4.0
+ */
+export interface CloudConfig {
+  /** API key for authentication */
+  apiKey: string;
+  /** Project ID (optional) */
+  projectId?: string;
 }
 
 /**
