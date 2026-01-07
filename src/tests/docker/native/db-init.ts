@@ -114,7 +114,7 @@ export async function initDatabase(dbType: DatabaseType): Promise<Knex> {
  * Checks:
  * - knex_migrations table exists
  * - At least one migration ran
- * - Key tables exist (v4_decisions, v4_constraints)
+ * - Key tables exist (t_decisions, t_constraints)
  *
  * Note: v4_tasks removed in v5.0 (deprecated)
  *
@@ -131,7 +131,7 @@ export async function verifyMigrations(db: Knex): Promise<void> {
   assert.ok(migrations.length > 0, 'At least one migration should have run');
 
   // Check key tables exist (task tables removed in v5.0)
-  const keyTables = ['v4_context_keys', 'v4_decisions', 'v4_constraints'];
+  const keyTables = ['m_context_keys', 't_decisions', 't_constraints'];
   for (const table of keyTables) {
     const exists = await db.schema.hasTable(table);
     assert.ok(exists, `Table ${table} should exist after migrations`);

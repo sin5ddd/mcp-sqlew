@@ -37,9 +37,9 @@ export async function importMasterTables(ctx: ImportContext): Promise<ImportCont
 }
 
 /**
- * Import v4_context_keys (global, always create new)
+ * Import m_context_keys (global, always create new)
  *
- * CRITICAL: context_keys.id IS the decision ID (v4_decisions.key_id PRIMARY KEY)
+ * CRITICAL: context_keys.id IS the decision ID (t_decisions.key_id PRIMARY KEY)
  * Never reuse context_keys even if key string matches
  *
  * Architectural Decision: Decision #251 - Context key isolation
@@ -49,7 +49,7 @@ async function importContextKeys(ctx: ImportContext): Promise<void> {
 
   for (const key of keys) {
     // Always create new context key (even if key string matches)
-    const [newId] = await ctx.knex('v4_context_keys').insert({
+    const [newId] = await ctx.knex('m_context_keys').insert({
       key_name: key.key
     });
 
@@ -60,7 +60,7 @@ async function importContextKeys(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_tags (project-scoped, smart merge)
+ * Import m_tags (project-scoped, smart merge)
  */
 async function importTags(ctx: ImportContext): Promise<void> {
   const tags = ctx.jsonData.master_tables.tags || [];
@@ -69,7 +69,7 @@ async function importTags(ctx: ImportContext): Promise<void> {
 
   for (const tag of tags) {
     // Check if tag already exists in target project
-    const existing = await ctx.knex('v4_tags')
+    const existing = await ctx.knex('m_tags')
       .where({
         project_id: ctx.projectId,
         name: tag.name
@@ -82,7 +82,7 @@ async function importTags(ctx: ImportContext): Promise<void> {
       reused++;
     } else {
       // Create new tag entry
-      const [newId] = await ctx.knex('v4_tags').insert({
+      const [newId] = await ctx.knex('m_tags').insert({
         project_id: ctx.projectId,
         name: tag.name
       });
@@ -97,7 +97,7 @@ async function importTags(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_scopes (project-scoped, smart merge)
+ * Import m_scopes (project-scoped, smart merge)
  */
 async function importScopes(ctx: ImportContext): Promise<void> {
   const scopes = ctx.jsonData.master_tables.scopes || [];
@@ -106,7 +106,7 @@ async function importScopes(ctx: ImportContext): Promise<void> {
 
   for (const scope of scopes) {
     // Check if scope already exists in target project
-    const existing = await ctx.knex('v4_scopes')
+    const existing = await ctx.knex('m_scopes')
       .where({
         project_id: ctx.projectId,
         name: scope.name
@@ -119,7 +119,7 @@ async function importScopes(ctx: ImportContext): Promise<void> {
       reused++;
     } else {
       // Create new scope entry
-      const [newId] = await ctx.knex('v4_scopes').insert({
+      const [newId] = await ctx.knex('m_scopes').insert({
         project_id: ctx.projectId,
         name: scope.name
       });
@@ -134,14 +134,14 @@ async function importScopes(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_constraint_categories (global, create or reuse by name)
+ * Import m_constraint_categories (global, create or reuse by name)
  */
 async function importConstraintCategories(ctx: ImportContext): Promise<void> {
   const categories = ctx.jsonData.master_tables.constraint_categories || [];
 
   for (const category of categories) {
     // Check if category exists by name (global lookup)
-    const existing = await ctx.knex('v4_constraint_categories')
+    const existing = await ctx.knex('m_constraint_categories')
       .where({ name: category.name })
       .first();
 
@@ -150,7 +150,7 @@ async function importConstraintCategories(ctx: ImportContext): Promise<void> {
       ctx.mappings.constraint_categories.set(category.id, existing.id);
     } else {
       // Create new category
-      const [newId] = await ctx.knex('v4_constraint_categories').insert({
+      const [newId] = await ctx.knex('m_constraint_categories').insert({
         name: category.name
       });
 
@@ -160,14 +160,14 @@ async function importConstraintCategories(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_layers (global, create or reuse by name)
+ * Import m_layers (global, create or reuse by name)
  */
 async function importLayers(ctx: ImportContext): Promise<void> {
   const layers = ctx.jsonData.master_tables.layers || [];
 
   for (const layer of layers) {
     // Check if layer exists by name (global lookup)
-    const existing = await ctx.knex('v4_layers')
+    const existing = await ctx.knex('m_layers')
       .where({ name: layer.name })
       .first();
 
@@ -176,7 +176,7 @@ async function importLayers(ctx: ImportContext): Promise<void> {
       ctx.mappings.layers.set(layer.id, existing.id);
     } else {
       // Create new layer
-      const [newId] = await ctx.knex('v4_layers').insert({
+      const [newId] = await ctx.knex('m_layers').insert({
         name: layer.name
       });
 

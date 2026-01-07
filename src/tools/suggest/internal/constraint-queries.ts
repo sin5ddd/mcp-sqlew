@@ -24,10 +24,10 @@ export interface ConstraintCandidate {
 /**
  * Build base constraint query with all necessary JOINs
  *
- * Returns a query builder for v4_constraints with:
- * - v4_constraint_categories (for category names)
- * - v4_layers (for layer names)
- * - v4_constraint_tags + v4_tags (for tags with GROUP_CONCAT)
+ * Returns a query builder for t_constraints with:
+ * - m_constraint_categories (for category names)
+ * - m_layers (for layer names)
+ * - t_constraint_tags + m_tags (for tags with GROUP_CONCAT)
  *
  * Includes multi-project support (v3.7.0+)
  *
@@ -51,7 +51,7 @@ export function buildConstraintQuery(
     ? (isPostgres ? knex.raw("string_agg(DISTINCT t.name, ',') as tags") : knex.raw('GROUP_CONCAT(DISTINCT t.name) as tags'))
     : (isPostgres ? knex.raw("string_agg(t.name, ',') as tags") : knex.raw('GROUP_CONCAT(t.name) as tags'));
 
-  return knex('v4_constraints as c')
+  return knex('t_constraints as c')
     .select(
       'c.id as constraint_id',
       'c.constraint_text',
@@ -61,10 +61,10 @@ export function buildConstraintQuery(
       'c.ts',
       tagConcat
     )
-    .join('v4_constraint_categories as cc', 'c.category_id', 'cc.id')
-    .leftJoin('v4_layers as l', 'c.layer_id', 'l.id')
-    .leftJoin('v4_constraint_tags as ct', 'c.id', 'ct.constraint_id')
-    .leftJoin('v4_tags as t', 'ct.tag_id', 't.id')
+    .join('m_constraint_categories as cc', 'c.category_id', 'cc.id')
+    .leftJoin('m_layers as l', 'c.layer_id', 'l.id')
+    .leftJoin('t_constraint_tags as ct', 'c.id', 'ct.constraint_id')
+    .leftJoin('m_tags as t', 'ct.tag_id', 't.id')
     .where('c.project_id', projectId)
     .where('c.active', 1)
     .groupBy('c.id', 'c.constraint_text', 'cc.name', 'l.name', 'c.priority', 'c.ts');
@@ -91,7 +91,7 @@ export async function checkExactConstraintMatch(
     ? knex.raw("string_agg(DISTINCT t.name, ',') as tags")
     : knex.raw('GROUP_CONCAT(DISTINCT t.name) as tags');
 
-  let query = knex('v4_constraints as c')
+  let query = knex('t_constraints as c')
     .select(
       'c.id as constraint_id',
       'c.constraint_text',
@@ -101,10 +101,10 @@ export async function checkExactConstraintMatch(
       'c.ts',
       tagConcat
     )
-    .join('v4_constraint_categories as cc', 'c.category_id', 'cc.id')
-    .leftJoin('v4_layers as l', 'c.layer_id', 'l.id')
-    .leftJoin('v4_constraint_tags as ct', 'c.id', 'ct.constraint_id')
-    .leftJoin('v4_tags as t', 'ct.tag_id', 't.id')
+    .join('m_constraint_categories as cc', 'c.category_id', 'cc.id')
+    .leftJoin('m_layers as l', 'c.layer_id', 'l.id')
+    .leftJoin('t_constraint_tags as ct', 'c.id', 'ct.constraint_id')
+    .leftJoin('m_tags as t', 'ct.tag_id', 't.id')
     .where('c.constraint_text', text)
     .where('c.project_id', projectId)
     .where('c.active', 1)

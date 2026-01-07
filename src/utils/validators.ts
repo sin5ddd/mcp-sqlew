@@ -79,7 +79,7 @@ export async function validateLayer(adapter: DatabaseAdapter, layer: string): Pr
   }
 
   const knex = adapter.getKnex();
-  const result = await knex('v4_layers').where({ name: layer }).select('id').first() as { id: number } | undefined;
+  const result = await knex('m_layers').where({ name: layer }).select('id').first() as { id: number } | undefined;
   if (!result) {
     throw new Error(`Layer not found in database: ${layer}`);
   }

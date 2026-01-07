@@ -1,14 +1,14 @@
 /**
  * Suggest Tool (v3.9.0) - Native RDBMS Integration Tests (Refactored)
  *
- * Tests Decision Intelligence tag index (v4_tag_index), similarity calculations,
+ * Tests Decision Intelligence tag index (t_tag_index), similarity calculations,
  * and three-tier detection on fresh MySQL, MariaDB, and PostgreSQL installations.
  *
  * Task #533: Refactor to use direct Knex operations instead of MCP tool functions
  *
  * REFACTORING PATTERN:
  * - Direct database operations via Knex for all data setup
- * - Manual tag index population (v4_tag_index inserts)
+ * - Manual tag index population (t_tag_index inserts)
  * - Manual similarity score calculation (Levenshtein, Jaccard)
  * - No MCP tool function calls (no handleSuggestAction, no setDecision)
  */
@@ -157,15 +157,15 @@ async function createDecisionWithTags(
   const { key, value, layer, tags = [], priority = 2, version = '1.0.0', projectId } = params;
 
   // Get or create context key
-  let keyRecord = await db('v4_context_keys').where({ key_name: key }).first();
+  let keyRecord = await db('m_context_keys').where({ key_name: key }).first();
   if (!keyRecord) {
-    await db('v4_context_keys').insert({ key_name: key });
-    keyRecord = await db('v4_context_keys').where({ key_name: key }).first();
+    await db('m_context_keys').insert({ key_name: key });
+    keyRecord = await db('m_context_keys').where({ key_name: key }).first();
   }
   const keyId = keyRecord.id;
 
   // Get layer ID
-  const layerRecord = await db('v4_layers').where({ name: layer }).first();
+  const layerRecord = await db('m_layers').where({ name: layer }).first();
   if (!layerRecord) {
     throw new Error(`Layer "${layer}" not found`);
   }
@@ -174,12 +174,12 @@ async function createDecisionWithTags(
   const ts = Math.floor(Date.now() / 1000);
 
   // Insert decision
-  const existingDecision = await db('v4_decisions')
+  const existingDecision = await db('t_decisions')
     .where({ key_id: keyId, project_id: projectId })
     .first();
 
   if (!existingDecision) {
-    await db('v4_decisions').insert({
+    await db('t_decisions').insert({
       key_id: keyId,
       project_id: projectId,
       value,
@@ -189,7 +189,7 @@ async function createDecisionWithTags(
       ts,
     });
   } else {
-    await db('v4_decisions')
+    await db('t_decisions')
       .where({ key_id: keyId, project_id: projectId })
       .update({ value, version, layer_id: layerId, ts });
   }
@@ -198,32 +198,32 @@ async function createDecisionWithTags(
   if (tags.length > 0) {
     for (const tagName of tags) {
       // Get or create tag
-      let tagRecord = await db('v4_tags').where({ name: tagName }).first();
+      let tagRecord = await db('m_tags').where({ name: tagName }).first();
       if (!tagRecord) {
-        await db('v4_tags').insert({ name: tagName });
-        tagRecord = await db('v4_tags').where({ name: tagName }).first();
+        await db('m_tags').insert({ name: tagName });
+        tagRecord = await db('m_tags').where({ name: tagName }).first();
       }
       const tagId = tagRecord.id;
 
       // Insert decision tag
-      const existingTag = await db('v4_decision_tags')
+      const existingTag = await db('t_decision_tags')
         .where({ decision_key_id: keyId, tag_id: tagId, project_id: projectId })
         .first();
 
       if (!existingTag) {
-        await db('v4_decision_tags').insert({
+        await db('t_decision_tags').insert({
           decision_key_id: keyId,
           tag_id: tagId,
           project_id: projectId,
         });
 
         // Populate tag index (v4 polymorphic design: source_type + source_id)
-        const existingIndex = await db('v4_tag_index')
+        const existingIndex = await db('t_tag_index')
           .where({ tag: tagName, source_type: 'decision', source_id: keyId, project_id: projectId })
           .first();
 
         if (!existingIndex) {
-          await db('v4_tag_index').insert({
+          await db('t_tag_index').insert({
             tag: tagName,
             source_type: 'decision',
             source_id: keyId,
@@ -247,9 +247,9 @@ async function queryTagIndex(
   tags: string[],
   projectId: number = 1
 ): Promise<Array<{ source_id: number; tag: string; key_name: string }>> {
-  const results = await db('v4_tag_index as ti')
+  const results = await db('t_tag_index as ti')
     .select('ti.source_id', 'ti.tag', 'ck.key_name')
-    .join('v4_context_keys as ck', 'ti.source_id', 'ck.id')
+    .join('m_context_keys as ck', 'ti.source_id', 'ck.id')
     .where('ti.source_type', 'decision')
     .where('ti.project_id', projectId)
     .whereIn('ti.tag', tags);
@@ -265,7 +265,7 @@ async function getDecisionByKeyId(
   keyId: number,
   projectId: number
 ): Promise<any> {
-  const decision = await db('v4_decisions as d')
+  const decision = await db('t_decisions as d')
     .select(
       'd.key_id',
       'ck.key_name',
@@ -274,8 +274,8 @@ async function getDecisionByKeyId(
       'd.version',
       'd.ts'
     )
-    .join('v4_context_keys as ck', 'd.key_id', 'ck.id')
-    .leftJoin('v4_layers as l', 'd.layer_id', 'l.id')
+    .join('m_context_keys as ck', 'd.key_id', 'ck.id')
+    .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
     .where('d.key_id', keyId)
     .where('d.project_id', projectId)
     .where('d.status', 1)
@@ -284,9 +284,9 @@ async function getDecisionByKeyId(
   if (!decision) return null;
 
   // Get tags
-  const tags = await db('v4_decision_tags as dt')
+  const tags = await db('t_decision_tags as dt')
     .select('t.name as tag_name')
-    .join('v4_tags as t', 'dt.tag_id', 't.id')
+    .join('m_tags as t', 'dt.tag_id', 't.id')
     .where('dt.decision_key_id', keyId)
     .where('dt.project_id', projectId);
 
@@ -302,7 +302,7 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
   // Get project ID before running tests
   it('should get project ID', async () => {
     const db = getDb();
-    const project = await db('v4_projects').first();
+    const project = await db('m_projects').first();
     assert.ok(project, 'Project should exist');
     projectId = project.id;
   });
@@ -311,8 +311,8 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
   // Tag Index Population Tests
   // ============================================================================
 
-  describe('Tag Index (v4_tag_index) - Data Integrity', () => {
-    it('should populate v4_tag_index when creating decision with tags', async () => {
+  describe('Tag Index (t_tag_index) - Data Integrity', () => {
+    it('should populate t_tag_index when creating decision with tags', async () => {
       const db = getDb();
 
       const keyId = await createDecisionWithTags(db, {
@@ -324,7 +324,7 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
       });
 
       // Verify tag index entries (v4 uses source_type='decision', source_id=keyId)
-      const indexEntries = await db('v4_tag_index')
+      const indexEntries = await db('t_tag_index')
         .where({ source_type: 'decision', source_id: keyId, project_id: projectId })
         .select('tag');
 
@@ -369,7 +369,7 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
       assert.ok(apiKeys.length >= 2, 'Should have api-related keys');
     });
 
-    it('should handle FK constraints (source_id references v4_context_keys)', async () => {
+    it('should handle FK constraints (source_id references m_context_keys)', async () => {
       const db = getDb();
 
       // Create decision
@@ -381,14 +381,14 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
         projectId,
       });
 
-      // Verify FK constraint: source_id in v4_tag_index references v4_context_keys.id
-      const tagIndexEntry = await db('v4_tag_index')
+      // Verify FK constraint: source_id in t_tag_index references m_context_keys.id
+      const tagIndexEntry = await db('t_tag_index')
         .where({ source_type: 'decision', source_id: keyId, project_id: projectId })
         .first();
 
       assert.ok(tagIndexEntry, 'Tag index entry should exist');
 
-      const contextKey = await db('v4_context_keys')
+      const contextKey = await db('m_context_keys')
         .where({ id: keyId })
         .first();
 
@@ -567,11 +567,11 @@ runTestsOnAllDatabases('Suggest Tool (v3.9.0) - Refactored', (getDb, dbType) => 
       });
 
       // Query with layer filter (v4 uses source_type, source_id, tag)
-      const businessResults = await db('v4_tag_index as ti')
+      const businessResults = await db('t_tag_index as ti')
         .select('ti.source_id', 'ti.tag', 'l.name as layer')
-        .join('v4_context_keys as ck', 'ti.source_id', 'ck.id')
-        .join('v4_decisions as d', 'ck.id', 'd.key_id')
-        .join('v4_layers as l', 'd.layer_id', 'l.id')
+        .join('m_context_keys as ck', 'ti.source_id', 'ck.id')
+        .join('t_decisions as d', 'ck.id', 'd.key_id')
+        .join('m_layers as l', 'd.layer_id', 'l.id')
         .where('ti.source_type', 'decision')
         .where('ti.tag', 'test')
         .where('l.name', 'business')

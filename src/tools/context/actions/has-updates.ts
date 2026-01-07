@@ -39,13 +39,13 @@ export async function hasUpdates(
     const sinceTs = Math.floor(sinceDate.getTime() / 1000);
 
     // Count decisions updated since timestamp (both string and numeric tables)
-    const decisionCount1 = await knex('v4_decisions')
+    const decisionCount1 = await knex('t_decisions')
       .where({ project_id: projectId })
       .where('ts', '>', sinceTs)
       .count('* as count')
       .first() as { count: number };
 
-    const decisionCount2 = await knex('v4_decisions_numeric')
+    const decisionCount2 = await knex('t_decisions_numeric')
       .where({ project_id: projectId })
       .where('ts', '>', sinceTs)
       .count('* as count')

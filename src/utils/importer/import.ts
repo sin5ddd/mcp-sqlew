@@ -53,7 +53,7 @@ export async function importJsonData(
   console.error(`\nImporting project: ${projectName}`);
 
   // Step 2: Check for project name conflict
-  const existingProject = await knex('v4_projects')
+  const existingProject = await knex('m_projects')
     .where({ name: projectName })
     .first();
 
@@ -105,7 +105,7 @@ async function performImport(
 ): Promise<JsonImportResult> {
   // Step 1: Create new project
   const projectData = jsonData.project || jsonData.projects?.[0];
-  const [projectId] = await trx('v4_projects').insert({
+  const [projectId] = await trx('m_projects').insert({
     name: projectName,
     display_name: projectData?.display_name || projectName,
     detection_source: projectData?.detection_source || 'import',
@@ -180,7 +180,7 @@ async function importTransactionTables(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_decisions with remapped context_key IDs
+ * Import t_decisions with remapped context_key IDs
  */
 async function importDecisions(ctx: ImportContext): Promise<void> {
   const decisions = ctx.jsonData.transaction_tables.decisions || [];
@@ -190,7 +190,7 @@ async function importDecisions(ctx: ImportContext): Promise<void> {
     if (!newKeyId) continue;
 
     // Note: agent_id removed in v4.0
-    await ctx.knex('v4_decisions').insert({
+    await ctx.knex('t_decisions').insert({
       key_id: newKeyId,
       value: decision.value,
       layer_id: ctx.mappings.layers.get(decision.layer_id) || null,
@@ -205,7 +205,7 @@ async function importDecisions(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_decisions_numeric with remapped context_key IDs
+ * Import t_decisions_numeric with remapped context_key IDs
  */
 async function importDecisionsNumeric(ctx: ImportContext): Promise<void> {
   const decisions = ctx.jsonData.transaction_tables.decisions_numeric || [];
@@ -215,7 +215,7 @@ async function importDecisionsNumeric(ctx: ImportContext): Promise<void> {
     if (!newKeyId) continue;
 
     // Note: agent_id removed in v4.0
-    await ctx.knex('v4_decisions_numeric').insert({
+    await ctx.knex('t_decisions_numeric').insert({
       key_id: newKeyId,
       value: decision.value,
       layer_id: ctx.mappings.layers.get(decision.layer_id) || null,
@@ -230,7 +230,7 @@ async function importDecisionsNumeric(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_decision_history with remapped context_key IDs
+ * Import t_decision_history with remapped context_key IDs
  */
 async function importDecisionHistory(ctx: ImportContext): Promise<void> {
   const history = ctx.jsonData.transaction_tables.decision_history || [];
@@ -240,7 +240,7 @@ async function importDecisionHistory(ctx: ImportContext): Promise<void> {
     if (!newKeyId) continue;
 
     // Note: agent_id removed in v4.0
-    await ctx.knex('v4_decision_history').insert({
+    await ctx.knex('t_decision_history').insert({
       key_id: newKeyId,
       version: entry.version,
       value: entry.value,
@@ -253,7 +253,7 @@ async function importDecisionHistory(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_decision_context with remapped IDs
+ * Import t_decision_context with remapped IDs
  */
 async function importDecisionContext(ctx: ImportContext): Promise<void> {
   const contexts = ctx.jsonData.transaction_tables.decision_context || [];
@@ -263,7 +263,7 @@ async function importDecisionContext(ctx: ImportContext): Promise<void> {
     if (!newKeyId) continue;
 
     // Note: agent_id removed in v4.0, related_task_id removed in v5.0
-    await ctx.knex('v4_decision_context').insert({
+    await ctx.knex('t_decision_context').insert({
       decision_key_id: newKeyId,
       rationale: context.rationale,
       alternatives_considered: context.alternatives_considered,
@@ -278,14 +278,14 @@ async function importDecisionContext(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_constraints with remapped IDs
+ * Import t_constraints with remapped IDs
  */
 async function importConstraints(ctx: ImportContext): Promise<void> {
   const constraints = ctx.jsonData.transaction_tables.constraints || [];
 
   for (const constraint of constraints) {
     // Note: agent_id removed in v4.0
-    await ctx.knex('v4_constraints').insert({
+    await ctx.knex('t_constraints').insert({
       category_id: ctx.mappings.constraint_categories.get(constraint.category_id) || constraint.category_id,
       constraint_text: constraint.constraint_text,
       priority: constraint.priority,
@@ -300,13 +300,13 @@ async function importConstraints(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_decision_policies (v4.0+ table)
+ * Import t_decision_policies (v4.0+ table)
  */
 async function importDecisionPolicies(ctx: ImportContext): Promise<void> {
   const policies = ctx.jsonData.master_tables?.decision_policies || [];
 
   for (const policy of policies) {
-    const [newPolicyId] = await ctx.knex('v4_decision_policies').insert({
+    const [newPolicyId] = await ctx.knex('t_decision_policies').insert({
       name: policy.name,
       description: policy.description,
       defaults: policy.defaults,
@@ -326,7 +326,7 @@ async function importDecisionPolicies(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_tag_index (v4.0+ table)
+ * Import t_tag_index (v4.0+ table)
  * Note: source_id remapping depends on source_type (decision, constraint)
  */
 async function importTagIndex(ctx: ImportContext): Promise<void> {
@@ -344,7 +344,7 @@ async function importTagIndex(ctx: ImportContext): Promise<void> {
     // Skip if we couldn't remap the source_id (e.g., constraint)
     if (!newSourceId && index.source_type !== 'constraint') continue;
 
-    await ctx.knex('v4_tag_index').insert({
+    await ctx.knex('t_tag_index').insert({
       tag: index.tag,
       source_type: index.source_type,
       source_id: newSourceId || index.source_id,  // Use original for constraints
@@ -371,7 +371,7 @@ async function importJunctionTables(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_decision_tags with remapped IDs
+ * Import t_decision_tags with remapped IDs
  */
 async function importDecisionTags(ctx: ImportContext): Promise<void> {
   const tags = ctx.jsonData.transaction_tables.decision_tags || [];
@@ -381,7 +381,7 @@ async function importDecisionTags(ctx: ImportContext): Promise<void> {
     const newTagId = ctx.mappings.tags.get(tag.tag_id);
     if (!newKeyId || !newTagId) continue;
 
-    await ctx.knex('v4_decision_tags').insert({
+    await ctx.knex('t_decision_tags').insert({
       decision_key_id: newKeyId,
       tag_id: newTagId,
       project_id: ctx.projectId
@@ -392,7 +392,7 @@ async function importDecisionTags(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_decision_scopes with remapped IDs
+ * Import t_decision_scopes with remapped IDs
  */
 async function importDecisionScopes(ctx: ImportContext): Promise<void> {
   const scopes = ctx.jsonData.transaction_tables.decision_scopes || [];
@@ -402,7 +402,7 @@ async function importDecisionScopes(ctx: ImportContext): Promise<void> {
     const newScopeId = ctx.mappings.scopes.get(scope.scope_id);
     if (!newKeyId || !newScopeId) continue;
 
-    await ctx.knex('v4_decision_scopes').insert({
+    await ctx.knex('t_decision_scopes').insert({
       decision_key_id: newKeyId,
       scope_id: newScopeId,
       project_id: ctx.projectId
@@ -413,7 +413,7 @@ async function importDecisionScopes(ctx: ImportContext): Promise<void> {
 }
 
 /**
- * Import v4_constraint_tags with remapped IDs
+ * Import t_constraint_tags with remapped IDs
  */
 async function importConstraintTags(ctx: ImportContext): Promise<void> {
   const tags = ctx.jsonData.transaction_tables.constraint_tags || [];

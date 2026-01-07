@@ -152,13 +152,13 @@ async function testDatabase(config: DbConfig): Promise<{ success: boolean; error
     // Verify v4 tables exist
     console.log('  📋 Verifying v4 tables...');
     const v4Tables = [
-      'v4_projects',
-      'v4_decisions',
+      'm_projects',
+      't_decisions',
       'v4_tasks',
-      'v4_constraints',
+      't_constraints',
       'v4_file_changes',
-      'v4_layers',
-      'v4_tags',
+      'm_layers',
+      'm_tags',
       'v4_task_statuses',
       // Note: v4_config removed in v4.0 - config is now in-memory
     ];
@@ -173,15 +173,15 @@ async function testDatabase(config: DbConfig): Promise<{ success: boolean; error
 
     // Verify master data
     console.log('  📊 Verifying master data...');
-    const layers = await db('v4_layers').count('* as count').first();
+    const layers = await db('m_layers').count('* as count').first();
     const statuses = await db('v4_task_statuses').count('* as count').first();
-    const projects = await db('v4_projects').count('* as count').first();
-    const tags = await db('v4_tags').count('* as count').first();
+    const projects = await db('m_projects').count('* as count').first();
+    const tags = await db('m_tags').count('* as count').first();
 
-    console.log(`    - v4_layers: ${layers?.count} rows`);
+    console.log(`    - m_layers: ${layers?.count} rows`);
     console.log(`    - v4_task_statuses: ${statuses?.count} rows`);
-    console.log(`    - v4_projects: ${projects?.count} rows`);
-    console.log(`    - v4_tags: ${tags?.count} rows`);
+    console.log(`    - m_projects: ${projects?.count} rows`);
+    console.log(`    - m_tags: ${tags?.count} rows`);
 
     if (Number(layers?.count) !== 9) {
       throw new Error(`Expected 9 layers, got ${layers?.count}`);
@@ -198,7 +198,7 @@ async function testDatabase(config: DbConfig): Promise<{ success: boolean; error
     // Test FK constraints
     console.log('  🔗 Testing FK constraints...');
     try {
-      await db('v4_decisions').insert({
+      await db('t_decisions').insert({
         project_id: 9999, // Non-existent
         key_id: 1,
         value: 'test',

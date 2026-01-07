@@ -19,12 +19,12 @@ import type {
 } from '../types.js';
 
 /**
- * Retrieve v4_constraints with advanced filtering
+ * Retrieve t_constraints with advanced filtering
  * Uses JOIN queries for cross-database compatibility (no views)
  *
  * @param params - Filter parameters
  * @param adapter - Optional database adapter (for testing)
- * @returns Array of v4_constraints matching filters
+ * @returns Array of t_constraints matching filters
  */
 export async function getConstraints(
   params: GetConstraintsParams,
@@ -44,9 +44,9 @@ export async function getConstraints(
       const db = new UniversalKnex(knex);
 
       // Build query using JOINs (no views - cross-DB compatible)
-      let query = knex('v4_constraints as c')
-        .join('v4_constraint_categories as cat', 'c.category_id', 'cat.id')
-        .leftJoin('v4_layers as l', 'c.layer_id', 'l.id')
+      let query = knex('t_constraints as c')
+        .join('m_constraint_categories as cat', 'c.category_id', 'cat.id')
+        .leftJoin('m_layers as l', 'c.layer_id', 'l.id')
         .where('c.project_id', projectId)
         ;
 
@@ -83,8 +83,8 @@ export async function getConstraints(
         const tags = parseStringArray(params.tags);
         query = query.whereExists(function() {
           this.select(knex.raw('1'))
-            .from('v4_constraint_tags as ct')
-            .join('v4_tags as t', 'ct.tag_id', 't.id')
+            .from('t_constraint_tags as ct')
+            .join('m_tags as t', 'ct.tag_id', 't.id')
             .whereRaw('ct.constraint_id = c.id')
             .whereIn('t.name', tags);
         });
@@ -112,8 +112,8 @@ export async function getConstraints(
         // Tags subquery
         knex.raw(`(
           SELECT ${db.stringAgg('t2.name', ',')}
-          FROM v4_constraint_tags ct2
-          JOIN v4_tags t2 ON ct2.tag_id = t2.id
+          FROM t_constraint_tags ct2
+          JOIN m_tags t2 ON ct2.tag_id = t2.id
           WHERE ct2.constraint_id = c.id
         ) as tags`),
       ]);

@@ -81,9 +81,9 @@ export async function getOrCreateContextKey(
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
-  await knex('v4_context_keys').insert({ key_name: key }).onConflict('key_name').ignore();
+  await knex('m_context_keys').insert({ key_name: key }).onConflict('key_name').ignore();
 
-  const result = await knex('v4_context_keys').where({ key_name: key }).first('id');
+  const result = await knex('m_context_keys').where({ key_name: key }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create context key: ${key}`);
@@ -134,16 +134,16 @@ export async function getOrCreateTag(
   // Case-insensitive duplicate check (v4.0.2)
   // Prevents creating 'DRY' when 'dry' already exists
   await validateNoCaseInsensitiveDuplicate(
-    knex, 'v4_tags', 'name', name, 'tag', { project_id: projectId }
+    knex, 'm_tags', 'name', name, 'tag', { project_id: projectId }
   );
 
   // Insert with composite key (project_id, name)
-  await knex('v4_tags')
+  await knex('m_tags')
     .insert({ project_id: projectId, name })
     .onConflict(['project_id', 'name'])  // Composite conflict resolution (v3.7.3)
     .ignore();
 
-  const result = await knex('v4_tags')
+  const result = await knex('m_tags')
     .where({ project_id: projectId, name })  // Filter by both columns (v3.7.3)
     .first('id');
 
@@ -168,16 +168,16 @@ export async function getOrCreateScope(
   // Case-insensitive duplicate check (v4.0.2)
   // Prevents creating 'Global' when 'global' already exists
   await validateNoCaseInsensitiveDuplicate(
-    knex, 'v4_scopes', 'name', name, 'scope', { project_id: projectId }
+    knex, 'm_scopes', 'name', name, 'scope', { project_id: projectId }
   );
 
   // Insert with composite key (project_id, name)
-  await knex('v4_scopes')
+  await knex('m_scopes')
     .insert({ project_id: projectId, name })
     .onConflict(['project_id', 'name'])  // Composite conflict resolution (v3.7.3)
     .ignore();
 
-  const result = await knex('v4_scopes')
+  const result = await knex('m_scopes')
     .where({ project_id: projectId, name })  // Filter by both columns (v3.7.3)
     .first('id');
 
@@ -198,9 +198,9 @@ export async function getOrCreateCategoryId(
 ): Promise<number> {
   const knex = trx || adapter.getKnex();
 
-  await knex('v4_constraint_categories').insert({ name: category }).onConflict('name').ignore();
+  await knex('m_constraint_categories').insert({ name: category }).onConflict('name').ignore();
 
-  const result = await knex('v4_constraint_categories').where({ name: category }).first('id');
+  const result = await knex('m_constraint_categories').where({ name: category }).first('id');
 
   if (!result) {
     throw new Error(`Failed to get or create category: ${category}`);
@@ -239,7 +239,7 @@ export async function addDecisionContext(
   const projectId = getProjectContext().getProjectId();
 
   // Insert context
-  const [id] = await knex('v4_decision_context').insert({
+  const [id] = await knex('t_decision_context').insert({
     decision_key_id: keyId,
     project_id: projectId,  // Required v4 field
     rationale,

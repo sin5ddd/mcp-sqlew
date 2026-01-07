@@ -94,7 +94,7 @@ export class ProjectContext {
 
     // Query database for existing project or create new one
     // Uses Knex query builder (Constraint #49, #50)
-    let project = await knex('v4_projects')
+    let project = await knex('m_projects')
       .where({ name: projectName })
       .first<{
         id: number;
@@ -110,7 +110,7 @@ export class ProjectContext {
       // Set timestamps in application code for cross-DB compatibility
       const now = Math.floor(Date.now() / 1000);
 
-      await knex('v4_projects').insert({
+      await knex('m_projects').insert({
         name: projectName,
         display_name: options?.displayName || projectName,
         detection_source: detectionSource,
@@ -122,7 +122,7 @@ export class ProjectContext {
 
       // Fetch the newly created project by name
       // (Avoids cross-database inconsistencies with .returning())
-      project = await knex('v4_projects')
+      project = await knex('m_projects')
         .where({ name: projectName })
         .first<{
           id: number;

@@ -5,7 +5,7 @@
  * Used by the query layer to determine which tables to use.
  *
  * Version Detection Logic:
- * - v4.x: v4_projects table exists → use v4_ tables
+ * - v4.x: m_projects table exists → use v4_ tables
  * - v3.x: m_agents table exists but no v4_ tables → use m_/t_ tables
  * - v2.x: Legacy tables without m_ prefix (unlikely to exist now)
  *
@@ -49,8 +49,8 @@ export async function detectSchemaVersion(knex: Knex): Promise<SchemaVersionInfo
   debugLog('INFO', 'Detecting database schema version...');
 
   // Check for v4 tables (primary indicator of v4.x schema)
-  const hasV4Projects = await knex.schema.hasTable('v4_projects');
-  const hasV4Decisions = await knex.schema.hasTable('v4_decisions');
+  const hasV4Projects = await knex.schema.hasTable('m_projects');
+  const hasV4Decisions = await knex.schema.hasTable('t_decisions');
   const hasV4Tasks = await knex.schema.hasTable('v4_tasks');
 
   // Check for v3 tables (primary indicator of v3.x schema)
@@ -202,10 +202,10 @@ export const TableNames = {
   tagIndex: () => getTableName('tag_index', 'transaction'),
 
   // Help system tables (v4 only has these with v4_ prefix)
-  helpTools: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_tools' : 'v4_help_tools',
-  helpActions: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_actions' : 'v4_help_actions',
-  helpActionParams: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_action_params' : 'm_help_action_params',
-  helpActionExamples: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_action_examples' : 'm_help_action_examples',
-  helpUseCases: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_use_cases' : 'm_help_use_cases',
-  helpUseCaseCategories: () => cachedVersionInfo?.version === 'v4' ? 'v4_help_use_case_cats' : 'v4_help_use_case_cats',
+  helpTools: () => cachedVersionInfo?.version === 'v4' ? 'm_help_tools' : 'm_help_tools',
+  helpActions: () => cachedVersionInfo?.version === 'v4' ? 'm_help_actions' : 'm_help_actions',
+  helpActionParams: () => cachedVersionInfo?.version === 'v4' ? 't_help_action_params' : 'm_help_action_params',
+  helpActionExamples: () => cachedVersionInfo?.version === 'v4' ? 't_help_action_examples' : 'm_help_action_examples',
+  helpUseCases: () => cachedVersionInfo?.version === 'v4' ? 't_help_use_cases' : 'm_help_use_cases',
+  helpUseCaseCategories: () => cachedVersionInfo?.version === 'v4' ? 'm_help_use_case_cats' : 'm_help_use_case_cats',
 };

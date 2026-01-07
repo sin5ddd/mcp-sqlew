@@ -90,9 +90,9 @@ export function runTestsOnAllDatabases(
  */
 export async function seedTestData(db: Knex): Promise<void> {
   // Layers (should already exist from migrations, but verify)
-  const layerCount = await db('v4_layers').count('* as count').first();
+  const layerCount = await db('m_layers').count('* as count').first();
   if (!layerCount || layerCount.count === 0) {
-    await db('v4_layers').insert([
+    await db('m_layers').insert([
       { name: 'presentation' },
       { name: 'business' },
       { name: 'data' },
@@ -108,18 +108,18 @@ export async function seedTestData(db: Knex): Promise<void> {
   // Tags
   const tags = ['test', 'api', 'performance', 'security', 'architecture'];
   for (const tag of tags) {
-    const exists = await db('v4_tags').where({ name: tag, project_id: 1 }).first();
+    const exists = await db('m_tags').where({ name: tag, project_id: 1 }).first();
     if (!exists) {
-      await db('v4_tags').insert({ name: tag, project_id: 1 });
+      await db('m_tags').insert({ name: tag, project_id: 1 });
     }
   }
 
   // Scopes
   const scopes = ['global', 'module', 'component'];
   for (const scope of scopes) {
-    const exists = await db('v4_scopes').where({ name: scope, project_id: 1 }).first();
+    const exists = await db('m_scopes').where({ name: scope, project_id: 1 }).first();
     if (!exists) {
-      await db('v4_scopes').insert({ name: scope, project_id: 1 });
+      await db('m_scopes').insert({ name: scope, project_id: 1 });
     }
   }
 
@@ -139,24 +139,24 @@ export async function cleanupTestData(db: Knex): Promise<void> {
   // Transaction tables
 
   // t_decision_tags has (decision_key_id, project_id, tag_id)
-  await db('v4_decision_tags').where('project_id', 1).del();
-  // v4_decision_scopes has (decision_key_id, project_id, scope_id)
-  await db('v4_decision_scopes').where('project_id', 1).del();
+  await db('t_decision_tags').where('project_id', 1).del();
+  // t_decision_scopes has (decision_key_id, project_id, scope_id)
+  await db('t_decision_scopes').where('project_id', 1).del();
   // t_decision_context has project_id (added in v3.7.0)
-  await db('v4_decision_context').where('project_id', 1).del();
-  // v4_decisions has project_id
-  await db('v4_decisions').where('project_id', 1).del();
+  await db('t_decision_context').where('project_id', 1).del();
+  // t_decisions has project_id
+  await db('t_decisions').where('project_id', 1).del();
   // t_decisions_numeric has project_id
-  await db('v4_decisions_numeric').where('project_id', 1).del();
-  // v4_context_keys has (id, key_name) - NO project_id
-  await db('v4_context_keys').del();
+  await db('t_decisions_numeric').where('project_id', 1).del();
+  // m_context_keys has (id, key_name) - NO project_id
+  await db('m_context_keys').del();
 
-  await db('v4_constraints').where('project_id', 1).del();
+  await db('t_constraints').where('project_id', 1).del();
 
   // Note: Task and file tables removed in v5.0
 
-  // v4_tag_index has (tag, source_type, source_id, project_id, created_ts) - polymorphic design
-  await db('v4_tag_index').where('project_id', 1).del();
+  // t_tag_index has (tag, source_type, source_id, project_id, created_ts) - polymorphic design
+  await db('t_tag_index').where('project_id', 1).del();
 }
 
 // ============================================================================
@@ -175,13 +175,13 @@ export async function assertDecisionExists(
   key: string,
   expectedValue: string
 ): Promise<void> {
-  const contextKey = await db('v4_context_keys')
+  const contextKey = await db('m_context_keys')
     .where({ key_name: key })
     .first();
 
   assert.ok(contextKey, `Decision key "${key}" should exist`);
 
-  const decision = await db('v4_decisions')
+  const decision = await db('t_decisions')
     .where({ key_id: contextKey.id, project_id: 1 })
     .first();
 
@@ -196,7 +196,7 @@ export async function assertDecisionExists(
  * @param rule - Constraint rule to check
  */
 export async function assertConstraintActive(db: Knex, rule: string): Promise<void> {
-  const constraint = await db('v4_constraints')
+  const constraint = await db('t_constraints')
     .where({ constraint_text: rule, active: 1, project_id: 1 })
     .first();
 
@@ -217,16 +217,16 @@ export async function assertDecisionHasTags(
   key: string,
   expectedTags: string[]
 ): Promise<void> {
-  const contextKey = await db('v4_context_keys')
+  const contextKey = await db('m_context_keys')
     .where({ key_name: key })
     .first();
 
   assert.ok(contextKey, `Decision key "${key}" should exist`);
 
-  const tags = await db('v4_decision_tags')
-    .join('v4_tags', 'v4_decision_tags.tag_id', 'v4_tags.id')
-    .where({ 'v4_decision_tags.decision_key_id': contextKey.id, 'v4_decision_tags.project_id': 1 })
-    .pluck('v4_tags.name');
+  const tags = await db('t_decision_tags')
+    .join('m_tags', 't_decision_tags.tag_id', 'm_tags.id')
+    .where({ 't_decision_tags.decision_key_id': contextKey.id, 't_decision_tags.project_id': 1 })
+    .pluck('m_tags.name');
 
   assert.strictEqual(tags.length, expectedTags.length, `Should have ${expectedTags.length} tags`);
 
@@ -247,14 +247,14 @@ export async function assertTagIndexPopulated(
   key: string,
   expectedTags: string[]
 ): Promise<void> {
-  const contextKey = await db('v4_context_keys')
+  const contextKey = await db('m_context_keys')
     .where({ key_name: key })
     .first();
 
   assert.ok(contextKey, `Decision key "${key}" should exist`);
 
-  // v4_tag_index uses polymorphic design: source_type + source_id + tag
-  const indexEntries = await db('v4_tag_index')
+  // t_tag_index uses polymorphic design: source_type + source_id + tag
+  const indexEntries = await db('t_tag_index')
     .where({ source_type: 'decision', source_id: contextKey.id, project_id: 1 })
     .pluck('tag');
 
@@ -277,11 +277,11 @@ export async function assertTagIndexPopulated(
  * @returns Tag ID
  */
 export async function getTagId(db: Knex, tagName: string): Promise<number> {
-  let tag = await db('v4_tags').where({ name: tagName, project_id: 1 }).first();
+  let tag = await db('m_tags').where({ name: tagName, project_id: 1 }).first();
 
   if (!tag) {
-    await db('v4_tags').insert({ name: tagName, project_id: 1 });
-    tag = await db('v4_tags').where({ name: tagName, project_id: 1 }).first();
+    await db('m_tags').insert({ name: tagName, project_id: 1 });
+    tag = await db('m_tags').where({ name: tagName, project_id: 1 }).first();
   }
 
   return tag.id;
@@ -295,7 +295,7 @@ export async function getTagId(db: Knex, tagName: string): Promise<number> {
  * @returns Layer ID
  */
 export async function getLayerId(db: Knex, layerName: string): Promise<number> {
-  const layer = await db('v4_layers').where({ name: layerName }).first();
+  const layer = await db('m_layers').where({ name: layerName }).first();
   assert.ok(layer, `Layer "${layerName}" should exist`);
   return layer.id;
 }
@@ -308,11 +308,11 @@ export async function getLayerId(db: Knex, layerName: string): Promise<number> {
  * @returns Scope ID
  */
 export async function getScopeId(db: Knex, scopeName: string): Promise<number> {
-  let scope = await db('v4_scopes').where({ name: scopeName, project_id: 1 }).first();
+  let scope = await db('m_scopes').where({ name: scopeName, project_id: 1 }).first();
 
   if (!scope) {
-    await db('v4_scopes').insert({ name: scopeName, project_id: 1 });
-    scope = await db('v4_scopes').where({ name: scopeName, project_id: 1 }).first();
+    await db('m_scopes').insert({ name: scopeName, project_id: 1 });
+    scope = await db('m_scopes').where({ name: scopeName, project_id: 1 }).first();
   }
 
   return scope.id;
@@ -353,11 +353,11 @@ export async function seedRichTestData(db: Knex, projectId: number = 1): Promise
   const decisionKeys = ['migration-test-decision-1', 'migration-test-decision-2', 'migration-test-decision-3'];
   for (let i = 0; i < decisionKeys.length; i++) {
     const keyName = decisionKeys[i];
-    await db('v4_context_keys').insert({ key_name: keyName });
-    const keyRecord = await db('v4_context_keys').where({ key_name: keyName }).first();
+    await db('m_context_keys').insert({ key_name: keyName });
+    const keyRecord = await db('m_context_keys').where({ key_name: keyName }).first();
 
     const layerId = (i % 3) + 1; // Rotate through layers 1, 2, 3
-    await db('v4_decisions').insert({
+    await db('t_decisions').insert({
       key_id: keyRecord.id,
       project_id: projectId,
       value: `Test decision value ${i + 1}`,
@@ -368,9 +368,9 @@ export async function seedRichTestData(db: Knex, projectId: number = 1): Promise
     });
 
     // Add tags to decisions
-    const tagIds = await db('v4_tags').where({ project_id: projectId }).limit(2).pluck('id');
+    const tagIds = await db('m_tags').where({ project_id: projectId }).limit(2).pluck('id');
     for (const tagId of tagIds) {
-      await db('v4_decision_tags').insert({
+      await db('t_decision_tags').insert({
         decision_key_id: keyRecord.id,
         project_id: projectId,
         tag_id: tagId,
@@ -384,8 +384,8 @@ export async function seedRichTestData(db: Knex, projectId: number = 1): Promise
     { text: 'Migration test constraint 2', category: 'performance', priority: 2 },
   ];
   for (const c of constraints) {
-    const categoryRecord = await db('v4_constraint_categories').where({ name: c.category }).first();
-    await db('v4_constraints').insert({
+    const categoryRecord = await db('m_constraint_categories').where({ name: c.category }).first();
+    await db('t_constraints').insert({
       constraint_text: c.text,
       project_id: projectId,
       category_id: categoryRecord?.id || 1,
@@ -439,13 +439,13 @@ export async function verifySqlewAccess(
 
   // Core v4 tables to verify (task/file tables removed in v5.0)
   const tablesToCheck = [
-    'v4_projects',
-    'v4_layers',
-    'v4_tags',
-    'v4_context_keys',
-    'v4_decisions',
-    'v4_decision_tags',
-    'v4_constraints',
+    'm_projects',
+    'm_layers',
+    'm_tags',
+    'm_context_keys',
+    't_decisions',
+    't_decision_tags',
+    't_constraints',
   ];
 
   for (const table of tablesToCheck) {
@@ -469,13 +469,13 @@ export async function verifySqlewAccess(
   // Test basic CRUD: Try to insert and read a decision
   try {
     const testKey = `migration-verify-${Date.now()}`;
-    await db('v4_context_keys').insert({ key_name: testKey });
-    const inserted = await db('v4_context_keys').where({ key_name: testKey }).first();
+    await db('m_context_keys').insert({ key_name: testKey });
+    const inserted = await db('m_context_keys').where({ key_name: testKey }).first();
     if (!inserted) {
       errors.push('CRUD test failed: Could not read inserted context key');
     }
     // Cleanup
-    await db('v4_context_keys').where({ key_name: testKey }).del();
+    await db('m_context_keys').where({ key_name: testKey }).del();
   } catch (err) {
     errors.push(`CRUD test failed: ${(err as Error).message}`);
   }
@@ -497,15 +497,15 @@ export async function getTableCounts(db: Knex): Promise<Record<string, number>> 
   const counts: Record<string, number> = {};
   // Task and file tables removed in v5.0
   const tables = [
-    'v4_projects',
-    'v4_layers',
-    'v4_tags',
-    'v4_scopes',
-    'v4_context_keys',
-    'v4_decisions',
-    'v4_decision_tags',
-    'v4_decision_scopes',
-    'v4_constraints',
+    'm_projects',
+    'm_layers',
+    'm_tags',
+    'm_scopes',
+    'm_context_keys',
+    't_decisions',
+    't_decision_tags',
+    't_decision_scopes',
+    't_constraints',
   ];
 
   for (const table of tables) {

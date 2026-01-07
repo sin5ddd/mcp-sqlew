@@ -57,7 +57,7 @@ export function useCaseExample() {
           title: 'Full feature implementation workflow',
           complexity: 'advanced',
           description: 'Complete workflow from decision to implementation.',
-          action_sequence: [],  // Populated from v4_help_action_sequences if seeded
+          action_sequence: [],  // Populated from t_help_action_sequences if seeded
           full_example: {
             workflow: '1. decision.set for architectural choice\n2. constraint.add for requirements\n3. task.create for implementation\n4. task.link to decision and constraint\n5. file.record for changes\n6. task.move to done'
           }

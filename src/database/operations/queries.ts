@@ -15,7 +15,7 @@ export async function getLayerId(
   trx?: Knex.Transaction
 ): Promise<number | null> {
   const knex = trx || adapter.getKnex();
-  const result = await knex('v4_layers').where({ name }).first('id');
+  const result = await knex('m_layers').where({ name }).first('id');
   return result ? result.id : null;
 }
 
@@ -28,7 +28,7 @@ export async function getCategoryId(
   trx?: Knex.Transaction
 ): Promise<number | null> {
   const knex = trx || adapter.getKnex();
-  const result = await knex('v4_constraint_categories').where({ name }).first('id');
+  const result = await knex('m_constraint_categories').where({ name }).first('id');
   return result ? result.id : null;
 }
 
@@ -61,9 +61,9 @@ export async function getDecisionWithContext(
 
   // First get the decision
   // Note: Agent tracking removed in v4.0 - decided_by field removed
-  const decision = await knex('v4_decisions as d')
-    .join('v4_context_keys as k', 'd.key_id', 'k.id')
-    .leftJoin('v4_layers as l', 'd.layer_id', 'l.id')
+  const decision = await knex('t_decisions as d')
+    .join('m_context_keys as k', 'd.key_id', 'k.id')
+    .leftJoin('m_layers as l', 'd.layer_id', 'l.id')
     .where('k.key_name', decisionKey)
     .select(
       'k.key_name as key',
@@ -82,8 +82,8 @@ export async function getDecisionWithContext(
 
   // Get all contexts for this decision
   // Note: Agent tracking removed in v4.0 - decided_by field removed
-  const contexts = await knex('v4_decision_context as dc')
-    .join('v4_context_keys as k', 'dc.decision_key_id', 'k.id')
+  const contexts = await knex('t_decision_context as dc')
+    .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
     .where('k.key_name', decisionKey)
     .select(
       'dc.id',
@@ -135,8 +135,8 @@ export async function listDecisionContexts(
   const knex = adapter.getKnex();
 
   // Note: Agent tracking removed in v4.0 - decided_by field removed
-  let query = knex('v4_decision_context as dc')
-    .join('v4_context_keys as k', 'dc.decision_key_id', 'k.id')
+  let query = knex('t_decision_context as dc')
+    .join('m_context_keys as k', 'dc.decision_key_id', 'k.id')
     .select(
       'dc.id',
       'k.key_name as decision_key',

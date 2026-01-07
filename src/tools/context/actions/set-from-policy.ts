@@ -44,7 +44,7 @@ export async function setFromPolicy(
 
   try {
     // Fetch policy
-    const policy = await knex('v4_decision_policies')
+    const policy = await knex('t_decision_policies')
       .where({ name: params.policy_name, project_id: projectId })
       .select('id', 'name', 'defaults', 'required_fields')
       .first();

@@ -28,10 +28,10 @@ export async function getTaggedDecisions(knex: Knex): Promise<any[]> {
 
   // Use subqueries for tag/scope aggregation
   // Note: Agent tracking removed in v4.0 - decided_by field removed
-  const result = await knex("v4_decisions as d")
-    .join("v4_context_keys as k", "d.key_id", "k.id")
-    .leftJoin("v4_layers as l", "d.layer_id", "l.id")
-    .leftJoin("v4_decisions_numeric as dn", function () {
+  const result = await knex("t_decisions as d")
+    .join("m_context_keys as k", "d.key_id", "k.id")
+    .leftJoin("m_layers as l", "d.layer_id", "l.id")
+    .leftJoin("t_decisions_numeric as dn", function () {
       this.on("dn.key_id", "=", "d.key_id").andOn(
         "dn.project_id",
         "=",
@@ -50,15 +50,15 @@ export async function getTaggedDecisions(knex: Knex): Promise<any[]> {
       // Tags subquery
       knex.raw(`(
         SELECT ${db.stringAgg("t2.name", ",")}
-        FROM v4_decision_tags dt2
-        JOIN v4_tags t2 ON dt2.tag_id = t2.id
+        FROM t_decision_tags dt2
+        JOIN m_tags t2 ON dt2.tag_id = t2.id
         WHERE dt2.decision_key_id = d.key_id
       ) as tags`),
       // Scopes subquery
       knex.raw(`(
         SELECT ${db.stringAgg("s2.name", ",")}
-        FROM v4_decision_scopes ds2
-        JOIN v4_scopes s2 ON ds2.scope_id = s2.id
+        FROM t_decision_scopes ds2
+        JOIN m_scopes s2 ON ds2.scope_id = s2.id
         WHERE ds2.decision_key_id = d.key_id
       ) as scopes`),
     ]);
@@ -74,9 +74,9 @@ export async function getActiveContext(knex: Knex): Promise<any[]> {
   const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
 
   // Note: Agent tracking removed in v4.0 - decided_by field removed
-  return knex("v4_decisions as d")
-    .join("v4_context_keys as k", "d.key_id", "k.id")
-    .leftJoin("v4_layers as l", "d.layer_id", "l.id")
+  return knex("t_decisions as d")
+    .join("m_context_keys as k", "d.key_id", "k.id")
+    .leftJoin("m_layers as l", "d.layer_id", "l.id")
     .where("d.ts", ">=", oneHourAgo)
     .andWhere("d.status", 1) // active only
     .select([
@@ -95,11 +95,11 @@ export async function getActiveContext(knex: Knex): Promise<any[]> {
 export async function getLayerSummary(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
 
-  return knex("v4_layers as l")
-    .leftJoin("v4_decisions as d", function () {
+  return knex("m_layers as l")
+    .leftJoin("t_decisions as d", function () {
       this.on("l.id", "=", "d.layer_id").andOn("d.status", "=", knex.raw("1"));
     })
-    .leftJoin("v4_constraints as c", function () {
+    .leftJoin("t_constraints as c", function () {
       this.on("l.id", "=", "c.layer_id").andOn(
         "c.active",
         "=",
@@ -133,9 +133,9 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
   const db = new UniversalKnex(knex);
 
   // Note: Agent tracking removed in v4.0 - added_by field removed
-  const result = await knex("v4_constraints as c")
-    .join("v4_constraint_categories as cat", "c.category_id", "cat.id")
-    .leftJoin("v4_layers as l", "c.layer_id", "l.id")
+  const result = await knex("t_constraints as c")
+    .join("m_constraint_categories as cat", "c.category_id", "cat.id")
+    .leftJoin("m_layers as l", "c.layer_id", "l.id")
     .where("c.active", db.boolTrue())
     .select([
       "c.id",
@@ -147,8 +147,8 @@ export async function getTaggedConstraints(knex: Knex): Promise<any[]> {
       // Tags subquery
       knex.raw(`(
         SELECT ${db.stringAgg("t2.name", ",")}
-        FROM v4_constraint_tags ct2
-        JOIN v4_tags t2 ON ct2.tag_id = t2.id
+        FROM t_constraint_tags ct2
+        JOIN m_tags t2 ON ct2.tag_id = t2.id
         WHERE ct2.constraint_id = c.id
       ) as tags`),
     ])
