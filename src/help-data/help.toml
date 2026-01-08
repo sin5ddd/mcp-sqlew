@@ -1,0 +1,246 @@
+# Help Tool - Documentation Query System
+# Query action documentation, parameters, and workflow guidance
+
+[tool]
+name = "help"
+description = "Help System - Query action documentation, parameters, and workflow guidance. Returns only requested information (80-95% token reduction vs legacy help)."
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+
+[[actions]]
+name = "query_action"
+description = "Get documentation for a specific action"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"query_action\""
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = true
+  description = "Tool name (decision, constraint, suggest, help, example, use_case)"
+
+  [[actions.params]]
+  name = "target_action"
+  type = "string"
+  required = true
+  description = "Action name to query"
+
+  [[actions.examples]]
+  title = "Query action docs"
+  code = '''
+{
+  "action": "query_action",
+  "tool": "decision",
+  "target_action": "set"
+}
+'''
+  explanation = "Get full documentation for decision.set including parameters and examples"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "query_params"
+description = "Get parameter list for an action (quick reference)"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"query_params\""
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = true
+  description = "Tool name"
+
+  [[actions.params]]
+  name = "target_action"
+  type = "string"
+  required = true
+  description = "Action name to query"
+
+  [[actions.examples]]
+  title = "Query params only"
+  code = '''
+{
+  "action": "query_params",
+  "tool": "decision",
+  "target_action": "set"
+}
+'''
+  explanation = "Get just the parameter list for decision.set (minimal tokens)"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "query_tool"
+description = "Get tool overview and all actions"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"query_tool\""
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = true
+  description = "Tool name to query"
+
+  [[actions.examples]]
+  title = "Query tool overview"
+  code = '''
+{
+  "action": "query_tool",
+  "tool": "decision"
+}
+'''
+  explanation = "Get overview of decision tool with list of all available actions"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "workflow_hints"
+description = "Get common next actions after current action"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"workflow_hints\""
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = true
+  description = "Current tool name"
+
+  [[actions.params]]
+  name = "current_action"
+  type = "string"
+  required = true
+  description = "Current action name"
+
+  [[actions.examples]]
+  title = "Get workflow hints"
+  code = '''
+{
+  "action": "workflow_hints",
+  "tool": "decision",
+  "current_action": "set"
+}
+'''
+  explanation = "After decision.set, what actions typically follow?"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "batch_guide"
+description = "Get guidance for batch operations"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"batch_guide\""
+
+  [[actions.params]]
+  name = "operation"
+  type = "string"
+  required = true
+  description = "Batch operation name in format \"tool.action\" (e.g., \"decision.set_batch\")"
+
+  [[actions.examples]]
+  title = "Get batch guide"
+  code = '''
+{
+  "action": "batch_guide",
+  "operation": "decision.set_batch"
+}
+'''
+  explanation = "Get guidance for using decision.set_batch"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "error_recovery"
+description = "Analyze errors and suggest fixes"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"error_recovery\""
+
+  [[actions.params]]
+  name = "error_message"
+  type = "string"
+  required = true
+  description = "Error message to analyze"
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = false
+  description = "Tool that produced the error (optional, helps narrow suggestions)"
+
+  [[actions.examples]]
+  title = "Analyze error"
+  code = '''
+{
+  "action": "error_recovery",
+  "error_message": "Decision key 'auth/method' already exists",
+  "tool": "decision"
+}
+'''
+  explanation = "Get suggestions for fixing the error"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "help"
+description = "Get help system documentation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"help\""
+
+  [[actions.examples]]
+  title = "Get help"
+  code = '''
+{
+  "action": "help"
+}
+'''
+  explanation = "Display help tool documentation"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "example"
+description = "Get help system examples"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"example\""
+
+  [[actions.examples]]
+  title = "Get examples"
+  code = '''
+{
+  "action": "example"
+}
+'''
+  explanation = "Display help tool usage examples"

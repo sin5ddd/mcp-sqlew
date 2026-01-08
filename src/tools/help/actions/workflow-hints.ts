@@ -1,21 +1,37 @@
 /**
  * Help Tool - workflow_hints Action
  * Get common next actions after current action
+ *
+ * TOML-based implementation (v5.0+)
+ * Loads from src/help-data/*.toml instead of database
  */
 
-import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter } from '../../../database.js';
-import { queryHelpNextActions } from '../../help-queries.js';
+import { getHelpLoader } from '../../../help-loader.js';
 import { HelpWorkflowHintsParams, HelpNextActionsResult } from '../types.js';
 
 /**
  * Get workflow hints (common next actions)
- * Reuses existing queryHelpNextActions from help-queries.ts
+ * Uses HelpSystemLoader (TOML-based)
  */
 export async function workflowHints(
-  params: HelpWorkflowHintsParams,
-  adapter?: DatabaseAdapter
+  params: HelpWorkflowHintsParams
 ): Promise<HelpNextActionsResult | { error: string }> {
-  const actualAdapter = adapter ?? getAdapter();
-  return queryHelpNextActions(actualAdapter, params.tool, params.current_action);
+  const loader = await getHelpLoader();
+
+  // Verify tool and action exist
+  const action = loader.getAction(params.tool, params.current_action);
+  if (!action) {
+    return {
+      error: `Action "${params.tool}.${params.current_action}" not found in help system`
+    };
+  }
+
+  // Get next actions from use case sequences
+  const nextActions = loader.getNextActions(params.tool, params.current_action);
+
+  return {
+    tool: params.tool,
+    action: params.current_action,
+    next_actions: nextActions
+  };
 }

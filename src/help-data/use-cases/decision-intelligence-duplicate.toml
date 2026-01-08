@@ -1,0 +1,35 @@
+# Use Case: Check for duplicate decisions
+# Category: decision_intelligence
+# Complexity: basic
+
+[use_case]
+id = 5
+category = "decision_intelligence"
+title = "Check for duplicate decisions"
+complexity = "basic"
+description = "Prevent duplicate decisions with the suggest tool. Always check before creating new decisions to maintain consistency."
+
+workflow = """
+1. Use suggest.check_duplicate with the proposed key
+2. Review suggestions - if similar exists, update it instead
+3. If no duplicates, create new decision with decision.set
+"""
+
+[[action_sequence]]
+order = 1
+tool = "suggest"
+action = "check_duplicate"
+description = "Check for existing similar decisions"
+
+[[action_sequence]]
+order = 2
+tool = "decision"
+action = "set"
+description = "Create new or update existing"
+
+[full_example]
+scenario = "Check before adding auth decision"
+steps = [
+  { step = 1, code = '{"action":"check_duplicate","key":"auth/session-timeout"}', note = "Check for duplicates" },
+  { step = 2, code = '{"action":"set","key":"auth/session-timeout","value":"30 minutes","layer":"infrastructure","tags":["security","session"]}', note = "Create if no duplicates" }
+]

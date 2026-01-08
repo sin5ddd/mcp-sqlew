@@ -1,0 +1,42 @@
+# Use Case: Record an architecture decision
+# Category: decision_tracking
+# Complexity: basic
+
+[use_case]
+id = 1
+category = "decision_tracking"
+title = "Record an architecture decision"
+complexity = "basic"
+description = "Document an architectural choice with context. This is the fundamental workflow for recording decisions in the system."
+
+workflow = """
+1. Use decision.set to record the decision with key, value, layer, and tags
+2. Use decision.add_decision_context to add rationale and alternatives
+3. Use decision.get to verify the recorded decision
+"""
+
+[[action_sequence]]
+order = 1
+tool = "decision"
+action = "set"
+description = "Record the decision with metadata"
+
+[[action_sequence]]
+order = 2
+tool = "decision"
+action = "add_decision_context"
+description = "Add rationale explaining why this decision was made"
+
+[[action_sequence]]
+order = 3
+tool = "decision"
+action = "get"
+description = "Verify the decision was recorded correctly"
+
+[full_example]
+scenario = "Record a database engine decision"
+steps = [
+  { step = 1, code = '{"action":"set","key":"db/engine","value":"PostgreSQL 15","layer":"data","tags":["database","persistence"]}', note = "Record the decision" },
+  { step = 2, code = '{"action":"add_decision_context","key":"db/engine","rationale":"PostgreSQL provides strong ACID compliance and JSON support needed for our data model","alternatives":"MySQL, MongoDB, SQLite","tradeoffs":"Higher operational complexity than SQLite, but better scalability"}', note = "Add context" },
+  { step = 3, code = '{"action":"get","key":"db/engine","include_context":true}', note = "Verify with context" }
+]

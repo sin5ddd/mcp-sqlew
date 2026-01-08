@@ -1,0 +1,219 @@
+# Suggest Tool - Decision Intelligence System
+# Find related decisions and prevent duplicates
+
+[tool]
+name = "suggest"
+description = "Intelligent Decision/Constraint Suggestion System - Find related decisions by key pattern, tags, or full context. Prevents duplicates and ensures consistency with hybrid scoring."
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+
+[[actions]]
+name = "by_key"
+description = "Find similar decisions by key pattern matching"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"by_key\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key pattern to match"
+
+  [[actions.params]]
+  name = "target"
+  type = "string"
+  required = false
+  description = "Target type: decision or constraint"
+  default = "decision"
+
+  [[actions.params]]
+  name = "limit"
+  type = "number"
+  required = false
+  description = "Maximum suggestions to return"
+  default = "5"
+
+  [[actions.params]]
+  name = "min_score"
+  type = "number"
+  required = false
+  description = "Minimum relevance score (0-100)"
+  default = "30"
+
+  [[actions.examples]]
+  title = "Find similar by key"
+  code = '''
+{
+  "action": "by_key",
+  "key": "auth/jwt"
+}
+'''
+  explanation = "Find decisions with keys similar to 'auth/jwt'"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "by_tags"
+description = "Find decisions by tag overlap"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"by_tags\""
+
+  [[actions.params]]
+  name = "tags"
+  type = "string[]"
+  required = true
+  description = "Tags to search for"
+
+  [[actions.params]]
+  name = "target"
+  type = "string"
+  required = false
+  description = "Target type: decision or constraint"
+  default = "decision"
+
+  [[actions.params]]
+  name = "limit"
+  type = "number"
+  required = false
+  description = "Maximum suggestions to return"
+  default = "5"
+
+  [[actions.examples]]
+  title = "Find by tags"
+  code = '''
+{
+  "action": "by_tags",
+  "tags": ["security", "authentication"]
+}
+'''
+  explanation = "Find decisions that share the specified tags"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "by_context"
+description = "Hybrid scoring combining key, tags, layer, priority"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"by_context\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key pattern"
+
+  [[actions.params]]
+  name = "tags"
+  type = "string[]"
+  required = false
+  description = "Tags for matching"
+  default = "[]"
+
+  [[actions.params]]
+  name = "layer"
+  type = "string"
+  required = false
+  description = "Layer filter"
+
+  [[actions.params]]
+  name = "target"
+  type = "string"
+  required = false
+  description = "Target type: decision or constraint"
+  default = "decision"
+
+  [[actions.params]]
+  name = "limit"
+  type = "number"
+  required = false
+  description = "Maximum suggestions to return"
+  default = "5"
+
+  [[actions.params]]
+  name = "min_score"
+  type = "number"
+  required = false
+  description = "Minimum relevance score (0-100)"
+  default = "30"
+
+  [[actions.examples]]
+  title = "Full context search"
+  code = '''
+{
+  "action": "by_context",
+  "key": "auth/method",
+  "tags": ["security", "jwt"],
+  "layer": "infrastructure"
+}
+'''
+  explanation = "Find related decisions using hybrid scoring (key similarity + tag overlap + layer match)"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "check_duplicate"
+description = "Check if decision key already exists or is similar"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"check_duplicate\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Proposed decision key"
+
+  [[actions.params]]
+  name = "target"
+  type = "string"
+  required = false
+  description = "Target type: decision or constraint"
+  default = "decision"
+
+  [[actions.examples]]
+  title = "Check for duplicate"
+  code = '''
+{
+  "action": "check_duplicate",
+  "key": "auth/session-timeout"
+}
+'''
+  explanation = "Before creating a new decision, check if a similar one already exists"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "help"
+description = "Get suggest tool documentation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"help\""
+
+  [[actions.examples]]
+  title = "Get help"
+  code = '''
+{
+  "action": "help"
+}
+'''
+  explanation = "Display suggest tool documentation"

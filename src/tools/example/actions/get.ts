@@ -1,59 +1,40 @@
 /**
  * Example Tool - get Action
  * Get examples by tool, action, or topic
+ *
+ * TOML-based implementation (v5.0+)
+ * Loads from src/help-data/*.toml instead of database
  */
 
-import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter } from '../../../database.js';
+import { getHelpLoader } from '../../../help-loader.js';
 import { ExampleGetParams, ExampleResult } from '../types.js';
 
 /**
  * Get examples for specific tool/action/topic
- * Returns all matching examples from t_help_action_examples
+ * Uses HelpSystemLoader (TOML-based)
  */
 export async function getExample(
-  params: ExampleGetParams,
-  adapter?: DatabaseAdapter
+  params: ExampleGetParams
 ): Promise<ExampleResult[] | { error: string }> {
-  const actualAdapter = adapter ?? getAdapter();
-  const db = actualAdapter.getKnex();
+  const loader = await getHelpLoader();
 
-  try {
-    let query = db('t_help_action_examples')
-      .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.id')
-      .select(
-        't_help_action_examples.id as example_id',
-        't_help_action_examples.title',
-        'm_help_actions.tool_name as tool',
-        'm_help_actions.action_name as action',
-        't_help_action_examples.code',
-        't_help_action_examples.explanation'
-      );
+  const results = loader.getExamples({
+    tool: params.tool,
+    action: params.action_name,
+    topic: params.topic,
+    limit: 50
+  });
 
-    // Apply filters
-    if (params.tool) {
-      query = query.where('m_help_actions.tool_name', params.tool);
-    }
-
-    if (params.action_name) {
-      query = query.where('m_help_actions.action_name', params.action_name);
-    }
-
-    if (params.topic) {
-      query = query.where(function() {
-        this.where('t_help_action_examples.title', 'like', `%${params.topic}%`)
-          .orWhere('t_help_action_examples.explanation', 'like', `%${params.topic}%`);
-      });
-    }
-
-    const examples = await query;
-
-    if (examples.length === 0) {
-      return { error: 'No examples found matching the criteria' };
-    }
-
-    return examples;
-  } catch (error) {
-    return { error: `Failed to retrieve examples: ${(error as Error).message}` };
+  if (results.length === 0) {
+    return { error: 'No examples found matching the criteria' };
   }
+
+  return results.map((r, index) => ({
+    example_id: index + 1,
+    title: r.example.title,
+    tool: r.tool,
+    action: r.action,
+    code: r.example.code,
+    explanation: r.example.explanation
+  }));
 }

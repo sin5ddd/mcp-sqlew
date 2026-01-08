@@ -1,0 +1,22 @@
+# Use Case Categories
+# Categorization of workflow scenarios
+
+[[categories]]
+id = 1
+name = "decision_tracking"
+description = "Use cases for recording, retrieving, and versioning architectural decisions, design choices, and shared context."
+
+[[categories]]
+id = 2
+name = "constraint_management"
+description = "Use cases for defining, enforcing, and tracking architectural constraints and requirements."
+
+[[categories]]
+id = 3
+name = "cross_tool_workflow"
+description = "Use cases demonstrating multi-step workflows spanning multiple tools for complex scenarios."
+
+[[categories]]
+id = 4
+name = "decision_intelligence"
+description = "Use cases for intelligent decision suggestions, duplicate detection, and policy-based automation."

@@ -1,0 +1,833 @@
+# Decision Tool - Context Management
+# Store decisions with metadata (tags, layers, versions, scopes)
+
+[tool]
+name = "decision"
+description = "Context Management - Store decisions with metadata (tags, layers, versions, scopes). Track architectural decisions, design choices, and shared context with full version history and rich decision context support."
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+
+[[actions]]
+name = "set"
+description = "Create or update a decision with full metadata support"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"set\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Unique decision key (hierarchical path recommended, e.g., \"auth/method\")"
+
+  [[actions.params]]
+  name = "value"
+  type = "string | number"
+  required = true
+  description = "Decision value"
+
+  [[actions.params]]
+  name = "tags"
+  type = "string[]"
+  required = false
+  description = "Tags for categorization"
+  default = "[]"
+
+  [[actions.params]]
+  name = "layer"
+  type = "string"
+  required = false
+  description = "Architecture layer: presentation, business, data, infrastructure, cross-cutting, documentation, planning, coordination, review"
+
+  [[actions.params]]
+  name = "scope"
+  type = "string"
+  required = false
+  description = "Module or component scope"
+
+  [[actions.params]]
+  name = "version"
+  type = "string"
+  required = false
+  description = "Version identifier"
+  default = "v1.0.0"
+
+  [[actions.params]]
+  name = "status"
+  type = "string"
+  required = false
+  description = "Decision status: active, deprecated, draft"
+  default = "active"
+
+  [[actions.examples]]
+  title = "Basic decision"
+  code = '''
+{
+  "action": "set",
+  "key": "auth/method",
+  "value": "JWT tokens with refresh",
+  "tags": ["security", "auth"],
+  "layer": "infrastructure"
+}
+'''
+  explanation = "Store a simple architectural decision with tags and layer assignment"
+
+  [[actions.examples]]
+  title = "Decision with scope"
+  code = '''
+{
+  "action": "set",
+  "key": "db/connection-pool-size",
+  "value": 20,
+  "tags": ["database", "performance"],
+  "layer": "data",
+  "scope": "api-service"
+}
+'''
+  explanation = "Store a numeric decision scoped to a specific service"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "get"
+description = "Retrieve a specific decision by key"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"get\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key to retrieve"
+
+  [[actions.params]]
+  name = "include_context"
+  type = "boolean"
+  required = false
+  description = "Include rationale/alternatives/tradeoffs"
+  default = "false"
+
+  [[actions.examples]]
+  title = "Get decision"
+  code = '''
+{
+  "action": "get",
+  "key": "auth/method"
+}
+'''
+  explanation = "Retrieve a decision by its key"
+
+  [[actions.examples]]
+  title = "Get with context"
+  code = '''
+{
+  "action": "get",
+  "key": "auth/method",
+  "include_context": true
+}
+'''
+  explanation = "Retrieve a decision with its full context (rationale, alternatives, tradeoffs)"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "list"
+description = "List decisions with filtering options"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"list\""
+
+  [[actions.params]]
+  name = "status"
+  type = "string"
+  required = false
+  description = "Filter by status: active, deprecated, draft"
+
+  [[actions.params]]
+  name = "layer"
+  type = "string"
+  required = false
+  description = "Filter by layer"
+
+  [[actions.params]]
+  name = "limit"
+  type = "number"
+  required = false
+  description = "Maximum results"
+  default = "50"
+
+  [[actions.examples]]
+  title = "List all active decisions"
+  code = '''
+{
+  "action": "list",
+  "status": "active"
+}
+'''
+  explanation = "List all active decisions"
+
+  [[actions.examples]]
+  title = "List by layer"
+  code = '''
+{
+  "action": "list",
+  "layer": "infrastructure",
+  "limit": 20
+}
+'''
+  explanation = "List decisions in a specific architecture layer"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "search_tags"
+description = "Search decisions by tags (AND/OR logic)"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"search_tags\""
+
+  [[actions.params]]
+  name = "tags"
+  type = "string[]"
+  required = true
+  description = "Tags to search for"
+
+  [[actions.params]]
+  name = "match_all"
+  type = "boolean"
+  required = false
+  description = "If true, match ALL tags (AND); if false, match ANY (OR)"
+  default = "false"
+
+  [[actions.examples]]
+  title = "Search by tags (OR)"
+  code = '''
+{
+  "action": "search_tags",
+  "tags": ["security", "auth"]
+}
+'''
+  explanation = "Find decisions with any of the specified tags"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "search_layer"
+description = "Search decisions by architecture layer"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"search_layer\""
+
+  [[actions.params]]
+  name = "layer"
+  type = "string"
+  required = true
+  description = "Layer to search"
+
+  [[actions.examples]]
+  title = "Search by layer"
+  code = '''
+{
+  "action": "search_layer",
+  "layer": "infrastructure"
+}
+'''
+  explanation = "Find all decisions in the infrastructure layer"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "versions"
+description = "Get version history for a decision"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"versions\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key"
+
+  [[actions.examples]]
+  title = "Get version history"
+  code = '''
+{
+  "action": "versions",
+  "key": "auth/method"
+}
+'''
+  explanation = "View all previous versions of a decision"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "quick_set"
+description = "Simplified decision setter with auto-inferred layer"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"quick_set\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key"
+
+  [[actions.params]]
+  name = "value"
+  type = "string | number"
+  required = true
+  description = "Decision value"
+
+  [[actions.examples]]
+  title = "Quick set"
+  code = '''
+{
+  "action": "quick_set",
+  "key": "api/rate-limit",
+  "value": 1000
+}
+'''
+  explanation = "Quickly set a decision with minimal parameters (layer auto-inferred from key)"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "search_advanced"
+description = "Advanced search with multiple criteria"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"search_advanced\""
+
+  [[actions.params]]
+  name = "key_pattern"
+  type = "string"
+  required = false
+  description = "Key pattern to match (supports wildcards)"
+
+  [[actions.params]]
+  name = "tags"
+  type = "string[]"
+  required = false
+  description = "Tags to filter by"
+
+  [[actions.params]]
+  name = "layer"
+  type = "string"
+  required = false
+  description = "Layer to filter by"
+
+  [[actions.params]]
+  name = "status"
+  type = "string"
+  required = false
+  description = "Status to filter by"
+
+  [[actions.examples]]
+  title = "Advanced search"
+  code = '''
+{
+  "action": "search_advanced",
+  "key_pattern": "auth/*",
+  "tags": ["security"],
+  "layer": "infrastructure"
+}
+'''
+  explanation = "Search with multiple criteria combined"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "set_batch"
+description = "Batch set multiple decisions atomically"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"set_batch\""
+
+  [[actions.params]]
+  name = "decisions"
+  type = "object[]"
+  required = true
+  description = "Array of decision objects (each with key, value, and optional metadata)"
+
+  [[actions.examples]]
+  title = "Batch set"
+  code = '''
+{
+  "action": "set_batch",
+  "decisions": [
+    {"key": "api/version", "value": "v2", "layer": "presentation"},
+    {"key": "api/format", "value": "JSON", "layer": "presentation"}
+  ]
+}
+'''
+  explanation = "Set multiple decisions in a single atomic operation"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "has_updates"
+description = "Check for new/updated decisions since timestamp"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"has_updates\""
+
+  [[actions.params]]
+  name = "since"
+  type = "number"
+  required = true
+  description = "Unix timestamp to check from"
+
+  [[actions.examples]]
+  title = "Check for updates"
+  code = '''
+{
+  "action": "has_updates",
+  "since": 1704067200
+}
+'''
+  explanation = "Check if any decisions have been added or modified since the given timestamp"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "set_from_template"
+description = "Create decision from predefined template"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"set_from_template\""
+
+  [[actions.params]]
+  name = "template_name"
+  type = "string"
+  required = true
+  description = "Name of the template to use"
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key"
+
+  [[actions.params]]
+  name = "value"
+  type = "string"
+  required = true
+  description = "Decision value"
+
+  [[actions.examples]]
+  title = "Create from template"
+  code = '''
+{
+  "action": "set_from_template",
+  "template_name": "architecture_decision",
+  "key": "db/engine",
+  "value": "PostgreSQL 15"
+}
+'''
+  explanation = "Create a decision using a predefined template for consistent metadata"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "create_template"
+description = "Create reusable decision template"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"create_template\""
+
+  [[actions.params]]
+  name = "name"
+  type = "string"
+  required = true
+  description = "Template name"
+
+  [[actions.params]]
+  name = "defaults"
+  type = "object"
+  required = true
+  description = "Default values for decisions created from this template"
+
+  [[actions.examples]]
+  title = "Create template"
+  code = '''
+{
+  "action": "create_template",
+  "name": "security_decision",
+  "defaults": {
+    "layer": "cross-cutting",
+    "tags": ["security"],
+    "status": "active"
+  }
+}
+'''
+  explanation = "Create a template for security-related decisions"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "list_templates"
+description = "List all available decision templates"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"list_templates\""
+
+  [[actions.examples]]
+  title = "List templates"
+  code = '''
+{
+  "action": "list_templates"
+}
+'''
+  explanation = "View all available decision templates"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "hard_delete"
+description = "Permanently delete decision (irreversible)"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"hard_delete\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key to delete"
+
+  [[actions.examples]]
+  title = "Hard delete"
+  code = '''
+{
+  "action": "hard_delete",
+  "key": "deprecated/old-setting"
+}
+'''
+  explanation = "Permanently remove a decision and all its history"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "add_decision_context"
+description = "Add rich context (rationale, alternatives, tradeoffs)"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"add_decision_context\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key"
+
+  [[actions.params]]
+  name = "rationale"
+  type = "string"
+  required = true
+  description = "Why this decision was made"
+
+  [[actions.params]]
+  name = "alternatives"
+  type = "string"
+  required = false
+  description = "Other options considered"
+
+  [[actions.params]]
+  name = "tradeoffs"
+  type = "string"
+  required = false
+  description = "Tradeoffs of this decision"
+
+  [[actions.examples]]
+  title = "Add context"
+  code = '''
+{
+  "action": "add_decision_context",
+  "key": "auth/method",
+  "rationale": "JWT provides stateless authentication suitable for our microservices architecture",
+  "alternatives": "Session-based auth, OAuth2 only",
+  "tradeoffs": "Requires token refresh handling, larger payload than session cookies"
+}
+'''
+  explanation = "Document the reasoning behind a decision for future reference"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "list_decision_contexts"
+description = "List decision contexts with filtering"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"list_decision_contexts\""
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = false
+  description = "Filter by decision key"
+
+  [[actions.examples]]
+  title = "List contexts"
+  code = '''
+{
+  "action": "list_decision_contexts",
+  "key": "auth/method"
+}
+'''
+  explanation = "View all context entries for a decision"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "analytics"
+description = "Get decision analytics and statistics"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"analytics\""
+
+  [[actions.examples]]
+  title = "Get analytics"
+  code = '''
+{
+  "action": "analytics"
+}
+'''
+  explanation = "View statistics about decisions (count by layer, status, tags, etc.)"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "create_policy"
+description = "Create reusable decision policy with validation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"create_policy\""
+
+  [[actions.params]]
+  name = "name"
+  type = "string"
+  required = true
+  description = "Policy name"
+
+  [[actions.params]]
+  name = "defaults"
+  type = "object"
+  required = false
+  description = "Default values"
+
+  [[actions.params]]
+  name = "validation_rules"
+  type = "object"
+  required = false
+  description = "Validation rules (regex patterns, etc.)"
+
+  [[actions.params]]
+  name = "quality_gates"
+  type = "object"
+  required = false
+  description = "Required fields and quality checks"
+
+  [[actions.examples]]
+  title = "Create policy"
+  code = '''
+{
+  "action": "create_policy",
+  "name": "cve_tracking",
+  "defaults": {
+    "layer": "cross-cutting",
+    "tags": ["security", "vulnerability"]
+  },
+  "validation_rules": {
+    "patterns": {"key": "^CVE-\\d{4}-\\d{4,7}$"}
+  },
+  "quality_gates": {
+    "required_fields": ["rationale"]
+  }
+}
+'''
+  explanation = "Create a policy that enforces CVE key format and requires rationale"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "list_policies"
+description = "List all available decision policies"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"list_policies\""
+
+  [[actions.examples]]
+  title = "List policies"
+  code = '''
+{
+  "action": "list_policies"
+}
+'''
+  explanation = "View all available decision policies (built-in and custom)"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "set_from_policy"
+description = "Create decision from policy template"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"set_from_policy\""
+
+  [[actions.params]]
+  name = "policy"
+  type = "string"
+  required = true
+  description = "Policy name to use"
+
+  [[actions.params]]
+  name = "key"
+  type = "string"
+  required = true
+  description = "Decision key"
+
+  [[actions.params]]
+  name = "value"
+  type = "string"
+  required = true
+  description = "Decision value"
+
+  [[actions.examples]]
+  title = "Create from policy"
+  code = '''
+{
+  "action": "set_from_policy",
+  "policy": "security_vulnerability",
+  "key": "CVE-2024-12345",
+  "value": "Patched in v2.3.1"
+}
+'''
+  explanation = "Create a decision using policy defaults and validation"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "help"
+description = "Get decision tool documentation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"help\""
+
+  [[actions.examples]]
+  title = "Get help"
+  code = '''
+{
+  "action": "help"
+}
+'''
+  explanation = "Display decision tool documentation"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "example"
+description = "Get decision tool examples"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"example\""
+
+  [[actions.examples]]
+  title = "Get examples"
+  code = '''
+{
+  "action": "example"
+}
+'''
+  explanation = "Display decision tool usage examples"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "use_case"
+description = "Get decision tool use cases"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"use_case\""
+
+  [[actions.examples]]
+  title = "Get use cases"
+  code = '''
+{
+  "action": "use_case"
+}
+'''
+  explanation = "Display decision tool use case workflows"

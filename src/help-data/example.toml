@@ -1,0 +1,177 @@
+# Example Tool - Code Example Browser
+# Browse and search code examples for sqlew tools
+
+[tool]
+name = "example"
+description = "Example System - Browse and search code examples for sqlew tools. Returns working code snippets with explanations (token-efficient)."
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+
+[[actions]]
+name = "get"
+description = "Get examples by tool, action, or topic"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"get\""
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = false
+  description = "Filter by tool name"
+
+  [[actions.params]]
+  name = "action_name"
+  type = "string"
+  required = false
+  description = "Filter by action name"
+
+  [[actions.params]]
+  name = "topic"
+  type = "string"
+  required = false
+  description = "Search by topic in title or explanation"
+
+  [[actions.examples]]
+  title = "Get examples for an action"
+  code = '''
+{
+  "action": "get",
+  "tool": "decision",
+  "action_name": "set"
+}
+'''
+  explanation = "Get all examples for decision.set action"
+
+  [[actions.examples]]
+  title = "Get examples by topic"
+  code = '''
+{
+  "action": "get",
+  "topic": "authentication"
+}
+'''
+  explanation = "Search for examples related to authentication"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "search"
+description = "Search examples by keyword"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"search\""
+
+  [[actions.params]]
+  name = "keyword"
+  type = "string"
+  required = true
+  description = "Keyword to search in title, explanation, and code"
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = false
+  description = "Filter by tool (optional)"
+
+  [[actions.params]]
+  name = "complexity"
+  type = "string"
+  required = false
+  description = "Filter by complexity: basic, intermediate, advanced"
+
+  [[actions.params]]
+  name = "limit"
+  type = "number"
+  required = false
+  description = "Maximum results"
+  default = "20"
+
+  [[actions.examples]]
+  title = "Search examples"
+  code = '''
+{
+  "action": "search",
+  "keyword": "batch",
+  "tool": "decision"
+}
+'''
+  explanation = "Search for examples containing 'batch' in the decision tool"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "list_all"
+description = "List all available examples with filtering"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"list_all\""
+
+  [[actions.params]]
+  name = "tool"
+  type = "string"
+  required = false
+  description = "Filter by tool"
+
+  [[actions.params]]
+  name = "complexity"
+  type = "string"
+  required = false
+  description = "Filter by complexity: basic, intermediate, advanced"
+
+  [[actions.params]]
+  name = "limit"
+  type = "number"
+  required = false
+  description = "Maximum results"
+  default = "20"
+
+  [[actions.params]]
+  name = "offset"
+  type = "number"
+  required = false
+  description = "Offset for pagination"
+  default = "0"
+
+  [[actions.examples]]
+  title = "List all examples"
+  code = '''
+{
+  "action": "list_all",
+  "tool": "decision",
+  "limit": 10
+}
+'''
+  explanation = "List first 10 examples for the decision tool"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "help"
+description = "Get example system documentation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"help\""
+
+  [[actions.examples]]
+  title = "Get help"
+  code = '''
+{
+  "action": "help"
+}
+'''
+  explanation = "Display example tool documentation"

@@ -1,0 +1,50 @@
+# Use Case: Full feature implementation workflow
+# Category: cross_tool_workflow
+# Complexity: advanced
+
+[use_case]
+id = 4
+category = "cross_tool_workflow"
+title = "Full feature implementation workflow"
+complexity = "advanced"
+description = "Complete workflow from architectural decision to implementation. Demonstrates how decisions and constraints work together."
+
+workflow = """
+1. Use decision.set to record the architectural choice
+2. Use constraint.add to add implementation requirements
+3. Use decision.add_decision_context to document rationale
+4. Use suggest.by_context to find related decisions
+"""
+
+[[action_sequence]]
+order = 1
+tool = "decision"
+action = "set"
+description = "Record architectural decision"
+
+[[action_sequence]]
+order = 2
+tool = "constraint"
+action = "add"
+description = "Add implementation constraint"
+
+[[action_sequence]]
+order = 3
+tool = "decision"
+action = "add_decision_context"
+description = "Document rationale"
+
+[[action_sequence]]
+order = 4
+tool = "suggest"
+action = "by_context"
+description = "Find related decisions"
+
+[full_example]
+scenario = "Implement authentication feature"
+steps = [
+  { step = 1, code = '{"action":"set","key":"auth/method","value":"JWT with refresh tokens","layer":"infrastructure","tags":["security","auth"]}', note = "Architecture decision" },
+  { step = 2, code = '{"action":"add","constraint_text":"JWT tokens must expire within 15 minutes","category":"security","priority":4}', note = "Security constraint" },
+  { step = 3, code = '{"action":"add_decision_context","key":"auth/method","rationale":"JWT provides stateless auth suitable for microservices","alternatives":"Session-based, OAuth2 only"}', note = "Document reasoning" },
+  { step = 4, code = '{"action":"by_context","key":"auth/method","tags":["security"],"layer":"infrastructure"}', note = "Find related decisions" }
+]

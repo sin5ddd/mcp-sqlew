@@ -1,0 +1,147 @@
+# Use Case Tool - Workflow Scenario Catalog
+# Browse and search complete workflow scenarios
+
+[tool]
+name = "use_case"
+description = "Use Case Catalog - Browse and search complete workflow scenarios. Returns end-to-end workflows with executable code examples."
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+
+[[actions]]
+name = "get"
+description = "Get complete use case workflow by ID"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"get\""
+
+  [[actions.params]]
+  name = "use_case_id"
+  type = "number"
+  required = true
+  description = "Use case ID to retrieve"
+
+  [[actions.examples]]
+  title = "Get use case"
+  code = '''
+{
+  "action": "get",
+  "use_case_id": 4
+}
+'''
+  explanation = "Get the complete workflow for use case #4"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "search"
+description = "Search use cases by keyword/category"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"search\""
+
+  [[actions.params]]
+  name = "keyword"
+  type = "string"
+  required = true
+  description = "Search keyword (searches title and description)"
+
+  [[actions.params]]
+  name = "category"
+  type = "string"
+  required = false
+  description = "Filter by category"
+
+  [[actions.params]]
+  name = "complexity"
+  type = "string"
+  required = false
+  description = "Filter by complexity: basic, intermediate, advanced"
+
+  [[actions.examples]]
+  title = "Search use cases"
+  code = '''
+{
+  "action": "search",
+  "keyword": "authentication",
+  "complexity": "intermediate"
+}
+'''
+  explanation = "Search for intermediate-level use cases about authentication"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "list_all"
+description = "List all use cases with filtering"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"list_all\""
+
+  [[actions.params]]
+  name = "category"
+  type = "string"
+  required = false
+  description = "Filter by category: decision_tracking, constraint_management, cross_tool_workflow, decision_intelligence"
+
+  [[actions.params]]
+  name = "complexity"
+  type = "string"
+  required = false
+  description = "Filter by complexity: basic, intermediate, advanced"
+
+  [[actions.params]]
+  name = "limit"
+  type = "number"
+  required = false
+  description = "Maximum results"
+  default = "20"
+
+  [[actions.params]]
+  name = "offset"
+  type = "number"
+  required = false
+  description = "Offset for pagination"
+  default = "0"
+
+  [[actions.examples]]
+  title = "List all use cases"
+  code = '''
+{
+  "action": "list_all",
+  "category": "decision_tracking",
+  "complexity": "basic"
+}
+'''
+  explanation = "List basic-level use cases in the decision_tracking category"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "help"
+description = "Get use case catalog documentation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"help\""
+
+  [[actions.examples]]
+  title = "Get help"
+  code = '''
+{
+  "action": "help"
+}
+'''
+  explanation = "Display use case tool documentation"
