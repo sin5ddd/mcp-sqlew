@@ -2,14 +2,14 @@
  * Backend Factory
  *
  * Creates and manages backend instances based on configuration.
- * Supports LocalBackend (direct DB) and plugin-based backends (e.g., SaaS).
+ * Supports LocalBackend (direct DB) and SaaS backend (submodule).
  */
 
 import type { ToolBackend } from './types.js';
 import type { SqlewConfig, CloudConfig } from '../config/types.js';
 import { CLOUD_ENV_VARS } from '../config/types.js';
 import { LocalBackend } from './local-backend.js';
-import { loadPlugin, KNOWN_PLUGINS } from './plugin-loader.js';
+import { createBackend as createSaaSBackend } from '@sqlew/saas-connector';
 import { debugLog } from '../utils/debug-logger.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -122,18 +122,14 @@ export async function createBackend(config: SqlewConfig, projectRoot?: string): 
       throw new Error(validation.errors.join('; '));
     }
 
-    // Load saas-connector plugin (async for ESM compatibility)
-    const root = projectRoot || process.cwd();
-    const result = await loadPlugin(KNOWN_PLUGINS.SAAS_CONNECTOR, root, cloudConfig);
-
-    if (!result.success || !result.backend) {
+    // Create SaaS backend directly from submodule
+    try {
+      return createSaaSBackend(cloudConfig!);
+    } catch (error) {
       throw new Error(
-        result.error ||
-        `SaaS connector not found. Run: sqlew --install-saas`
+        `SaaS connector initialization failed. Run: cd saas-connector && npm run build`
       );
     }
-
-    return result.backend;
   }
 
   // Default: LocalBackend
@@ -155,8 +151,8 @@ export async function initializeBackend(config: SqlewConfig, projectRoot?: strin
   globalBackend = await createBackend(config, projectRoot);
   initialized = true;
 
-  const modeInfo = globalBackend.backendType === 'plugin'
-    ? `plugin (${globalBackend.pluginName || 'unknown'})`
+  const modeInfo = globalBackend.backendType === 'saas'
+    ? `saas (${globalBackend.pluginName || 'saas-connector'})`
     : globalBackend.backendType;
   debugLog('INFO', 'Backend initialized', { type: modeInfo });
 
@@ -186,7 +182,7 @@ export function isBackendInitialized(): boolean {
 /**
  * Get current backend type
  */
-export function getBackendType(): 'local' | 'plugin' | null {
+export function getBackendType(): 'local' | 'saas' | null {
   return globalBackend?.backendType ?? null;
 }
 
