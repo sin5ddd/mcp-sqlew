@@ -1,0 +1,3 @@
+[submodule "saas-connector"]
+	path = saas-connector
+	url = https://github.com/sin5ddd/sqlew-saas-connector.git
