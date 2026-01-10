@@ -1,0 +1,21 @@
+# Help System Schema Metadata
+# Version tracking for help data files
+
+version = "5.0.0"
+help_data_version = "1.0.0"
+last_updated = "2026-01-08"
+
+[conventions]
+# Naming conventions used in this help system
+action_naming = "snake_case"
+parameter_naming = "snake_case"
+
+[tools]
+# List of available tools (for quick reference)
+available = ["decision", "constraint", "suggest", "help", "example", "use_case"]
+
+[complexity_levels]
+# Use case complexity definitions
+basic = "Simple single-tool operations"
+intermediate = "Multi-step workflows within a tool"
+advanced = "Cross-tool workflows with dependencies"

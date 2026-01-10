@@ -10,6 +10,7 @@ import type { SqlewConfig, CloudConfig } from '../config/types.js';
 import { CLOUD_ENV_VARS } from '../config/types.js';
 import { LocalBackend } from './local-backend.js';
 import { loadPlugin, KNOWN_PLUGINS } from './plugin-loader.js';
+import { debugLog } from '../utils/debug-logger.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -111,7 +112,7 @@ export function validateCloudConfig(config: CloudConfig | null): { valid: boolea
  * @param projectRoot - Project root directory
  * @returns Backend instance
  */
-export function createBackend(config: SqlewConfig, projectRoot?: string): ToolBackend {
+export async function createBackend(config: SqlewConfig, projectRoot?: string): Promise<ToolBackend> {
   if (isCloudMode(config)) {
     // Load cloud config from environment
     const cloudConfig = loadCloudConfig(projectRoot);
@@ -121,9 +122,9 @@ export function createBackend(config: SqlewConfig, projectRoot?: string): ToolBa
       throw new Error(validation.errors.join('; '));
     }
 
-    // Load saas-connector plugin
+    // Load saas-connector plugin (async for ESM compatibility)
     const root = projectRoot || process.cwd();
-    const result = loadPlugin(KNOWN_PLUGINS.SAAS_CONNECTOR, root, cloudConfig);
+    const result = await loadPlugin(KNOWN_PLUGINS.SAAS_CONNECTOR, root, cloudConfig);
 
     if (!result.success || !result.backend) {
       throw new Error(
@@ -146,18 +147,18 @@ export function createBackend(config: SqlewConfig, projectRoot?: string): ToolBa
  * @param projectRoot - Project root directory
  * @returns Backend instance
  */
-export function initializeBackend(config: SqlewConfig, projectRoot?: string): ToolBackend {
+export async function initializeBackend(config: SqlewConfig, projectRoot?: string): Promise<ToolBackend> {
   if (initialized && globalBackend) {
     return globalBackend;
   }
 
-  globalBackend = createBackend(config, projectRoot);
+  globalBackend = await createBackend(config, projectRoot);
   initialized = true;
 
   const modeInfo = globalBackend.backendType === 'plugin'
     ? `plugin (${globalBackend.pluginName || 'unknown'})`
     : globalBackend.backendType;
-  console.error(`✅ ${modeInfo} backend initialized`);
+  debugLog('INFO', 'Backend initialized', { type: modeInfo });
 
   return globalBackend;
 }

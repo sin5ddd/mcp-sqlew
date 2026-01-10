@@ -1,0 +1,247 @@
+# Constraint Tool - Architectural Rules
+# Define and manage project constraints with priorities
+
+[tool]
+name = "constraint"
+description = "Architectural Rules - Define and manage project constraints with priorities. Supports categories, layer associations, and tag filtering."
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+
+[[actions]]
+name = "add"
+description = "Add a new constraint with priority"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"add\""
+
+  [[actions.params]]
+  name = "constraint_text"
+  type = "string"
+  required = true
+  description = "Constraint rule text"
+
+  [[actions.params]]
+  name = "category"
+  type = "string"
+  required = true
+  description = "Constraint category: architecture, security, code-style, performance"
+
+  [[actions.params]]
+  name = "priority"
+  type = "number"
+  required = false
+  description = "Priority: 1=low, 2=medium, 3=high, 4=critical"
+  default = "2"
+
+  [[actions.params]]
+  name = "layer"
+  type = "string"
+  required = false
+  description = "Architecture layer this constraint applies to"
+
+  [[actions.params]]
+  name = "tags"
+  type = "string[]"
+  required = false
+  description = "Tags for categorization"
+  default = "[]"
+
+  [[actions.examples]]
+  title = "Add security constraint"
+  code = '''
+{
+  "action": "add",
+  "constraint_text": "All API endpoints must require authentication",
+  "category": "security",
+  "priority": 4,
+  "layer": "presentation"
+}
+'''
+  explanation = "Add a critical security constraint for API endpoints"
+
+  [[actions.examples]]
+  title = "Add code style constraint"
+  code = '''
+{
+  "action": "add",
+  "constraint_text": "Use functional components with hooks instead of class components",
+  "category": "code-style",
+  "priority": 2,
+  "tags": ["react", "frontend"]
+}
+'''
+  explanation = "Add a medium-priority coding style constraint"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "get"
+description = "Retrieve constraints with filtering"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"get\""
+
+  [[actions.params]]
+  name = "category"
+  type = "string"
+  required = false
+  description = "Filter by category"
+
+  [[actions.params]]
+  name = "layer"
+  type = "string"
+  required = false
+  description = "Filter by layer"
+
+  [[actions.params]]
+  name = "priority"
+  type = "number"
+  required = false
+  description = "Filter by minimum priority"
+
+  [[actions.params]]
+  name = "active_only"
+  type = "boolean"
+  required = false
+  description = "Only return active constraints"
+  default = "true"
+
+  [[actions.examples]]
+  title = "Get all security constraints"
+  code = '''
+{
+  "action": "get",
+  "category": "security"
+}
+'''
+  explanation = "Retrieve all security-related constraints"
+
+  [[actions.examples]]
+  title = "Get critical constraints"
+  code = '''
+{
+  "action": "get",
+  "priority": 4
+}
+'''
+  explanation = "Retrieve all critical (priority 4) constraints"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "deactivate"
+description = "Deactivate a constraint (soft delete)"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"deactivate\""
+
+  [[actions.params]]
+  name = "constraint_id"
+  type = "number"
+  required = true
+  description = "ID of the constraint to deactivate"
+
+  [[actions.examples]]
+  title = "Deactivate constraint"
+  code = '''
+{
+  "action": "deactivate",
+  "constraint_id": 5
+}
+'''
+  explanation = "Soft-delete a constraint by marking it inactive"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "suggest_pending"
+description = "Get AI-suggested constraints based on codebase analysis"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"suggest_pending\""
+
+  [[actions.examples]]
+  title = "Get suggestions"
+  code = '''
+{
+  "action": "suggest_pending"
+}
+'''
+  explanation = "View AI-suggested constraints that haven't been reviewed yet"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "help"
+description = "Get constraint tool documentation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"help\""
+
+  [[actions.examples]]
+  title = "Get help"
+  code = '''
+{
+  "action": "help"
+}
+'''
+  explanation = "Display constraint tool documentation"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "example"
+description = "Get constraint tool examples"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"example\""
+
+  [[actions.examples]]
+  title = "Get examples"
+  code = '''
+{
+  "action": "example"
+}
+'''
+  explanation = "Display constraint tool usage examples"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "use_case"
+description = "Get constraint tool use cases"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"use_case\""
+
+  [[actions.examples]]
+  title = "Get use cases"
+  code = '''
+{
+  "action": "use_case"
+}
+'''
+  explanation = "Display constraint tool use case workflows"

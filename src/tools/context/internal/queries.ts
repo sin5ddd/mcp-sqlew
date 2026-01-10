@@ -619,6 +619,18 @@ export async function setDecisionInternal(
     versionAction = 'initial';
   }
 
+  // Record history BEFORE update (only for existing decisions)
+  // This preserves the previous version before it gets overwritten
+  if (existingDecision) {
+    await knex('t_decision_history').insert({
+      key_id: keyId,
+      project_id: projectId,
+      version: existingDecision.version,
+      value: existingDecision.value,
+      ts: existingDecision.ts,
+    });
+  }
+
   // Insert or update decision
   // For ALL decisions (text and numeric), create a row in t_decisions
   // For numeric decisions, ALSO create a row in t_decisions_numeric

@@ -1,69 +1,36 @@
 /**
  * Example Tool - search Action
  * Search examples by keyword
+ *
+ * TOML-based implementation (v5.0+)
+ * Loads from src/help-data/*.toml instead of database
  */
 
-import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter } from '../../../database.js';
+import { getHelpLoader } from '../../../help-loader.js';
 import { ExampleSearchParams, ExampleSearchResult } from '../types.js';
 
 /**
  * Search examples by keyword with optional filters
- * Returns truncated preview of matching examples
+ * Uses HelpSystemLoader (TOML-based)
  */
 export async function searchExamples(
-  params: ExampleSearchParams,
-  adapter?: DatabaseAdapter
+  params: ExampleSearchParams
 ): Promise<ExampleSearchResult | { error: string }> {
-  const actualAdapter = adapter ?? getAdapter();
-  const db = actualAdapter.getKnex();
+  const loader = await getHelpLoader();
 
-  try {
-    let query = db('t_help_action_examples')
-      .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.id')
-      .where(function() {
-        this.where('t_help_action_examples.title', 'like', `%${params.keyword}%`)
-          .orWhere('t_help_action_examples.explanation', 'like', `%${params.keyword}%`)
-          .orWhere('t_help_action_examples.code', 'like', `%${params.keyword}%`);
-      });
+  const results = loader.searchExamples(params.keyword, {
+    tool: params.tool,
+    limit: 20
+  });
 
-    // Apply optional filters
-    if (params.tool) {
-      query = query.where('m_help_actions.tool_name', params.tool);
-    }
-
-    if (params.action_name) {
-      query = query.where('m_help_actions.action_name', params.action_name);
-    }
-
-    const examples = await query
-      .select(
-        't_help_action_examples.id as example_id',
-        't_help_action_examples.title',
-        'm_help_actions.tool_name as tool',
-        'm_help_actions.action_name as action',
-        't_help_action_examples.code'
-      )
-      .limit(20);  // Limit to 20 results
-
-    if (examples.length === 0) {
-      return {
-        total: 0,
-        examples: []
-      };
-    }
-
-    return {
-      total: examples.length,
-      examples: examples.map(ex => ({
-        example_id: ex.example_id,
-        title: ex.title,
-        tool: ex.tool,
-        action: ex.action,
-        preview: ex.code.substring(0, 100) + (ex.code.length > 100 ? '...' : '')
-      }))
-    };
-  } catch (error) {
-    return { error: `Failed to search examples: ${(error as Error).message}` };
-  }
+  return {
+    total: results.length,
+    examples: results.map((r, index) => ({
+      example_id: index + 1,
+      title: r.example.title,
+      tool: r.tool,
+      action: r.action,
+      preview: r.example.code.substring(0, 100) + (r.example.code.length > 100 ? '...' : '')
+    }))
+  };
 }

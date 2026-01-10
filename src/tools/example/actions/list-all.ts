@@ -1,55 +1,37 @@
 /**
  * Example Tool - list_all Action
  * List all available examples with filtering
+ *
+ * TOML-based implementation (v5.0+)
+ * Loads from src/help-data/*.toml instead of database
  */
 
-import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter } from '../../../database.js';
+import { getHelpLoader } from '../../../help-loader.js';
 import { ExampleListAllParams, ExampleListAllResult } from '../types.js';
 
 /**
  * List all examples with optional filtering and pagination
+ * Uses HelpSystemLoader (TOML-based)
  */
 export async function listAllExamples(
-  params: ExampleListAllParams,
-  adapter?: DatabaseAdapter
+  params: ExampleListAllParams
 ): Promise<ExampleListAllResult | { error: string }> {
-  const actualAdapter = adapter ?? getAdapter();
-  const db = actualAdapter.getKnex();
+  const loader = await getHelpLoader();
 
-  const limit = params.limit || 20;
-  const offset = params.offset || 0;
+  const result = loader.listExamples({
+    tool: params.tool,
+    limit: params.limit || 20,
+    offset: params.offset || 0
+  });
 
-  try {
-    let query = db('t_help_action_examples')
-      .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.id');
-
-    // Apply optional filters
-    if (params.tool) {
-      query = query.where('m_help_actions.tool_name', params.tool);
-    }
-
-    // Get total count
-    const totalResult = await query.clone().count('* as count').first();
-    const total = totalResult ? Number(totalResult.count) : 0;
-
-    // Get paginated results
-    const examples = await query
-      .select(
-        't_help_action_examples.id as example_id',
-        't_help_action_examples.title',
-        'm_help_actions.tool_name as tool',
-        'm_help_actions.action_name as action'
-      )
-      .limit(limit)
-      .offset(offset);
-
-    return {
-      total,
-      filtered: examples.length,
-      examples
-    };
-  } catch (error) {
-    return { error: `Failed to list examples: ${(error as Error).message}` };
-  }
+  return {
+    total: result.total,
+    filtered: result.examples.length,
+    examples: result.examples.map((e, index) => ({
+      example_id: index + 1,
+      title: e.title,
+      tool: e.tool,
+      action: e.action
+    }))
+  };
 }

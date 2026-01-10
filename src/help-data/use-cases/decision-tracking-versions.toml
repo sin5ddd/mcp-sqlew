@@ -1,0 +1,42 @@
+# Use Case: Track decision versions
+# Category: decision_tracking
+# Complexity: intermediate
+
+[use_case]
+id = 2
+category = "decision_tracking"
+title = "Track decision versions"
+complexity = "intermediate"
+description = "Update a decision and view its version history. Useful for understanding how decisions evolved over time."
+
+workflow = """
+1. Use decision.set to record the initial decision
+2. Use decision.set again with updated value (same key)
+3. Use decision.versions to see the complete version history
+"""
+
+[[action_sequence]]
+order = 1
+tool = "decision"
+action = "set"
+description = "Record initial decision"
+
+[[action_sequence]]
+order = 2
+tool = "decision"
+action = "set"
+description = "Update the decision with new value"
+
+[[action_sequence]]
+order = 3
+tool = "decision"
+action = "versions"
+description = "View version history"
+
+[full_example]
+scenario = "Track API version evolution"
+steps = [
+  { step = 1, code = '{"action":"set","key":"api/version","value":"v1.0","layer":"presentation"}', note = "Initial version" },
+  { step = 2, code = '{"action":"set","key":"api/version","value":"v2.0","layer":"presentation","version":"v2.0.0"}', note = "Update to v2" },
+  { step = 3, code = '{"action":"versions","key":"api/version"}', note = "View history" }
+]

@@ -1,0 +1,34 @@
+# Use Case: Define project constraints
+# Category: constraint_management
+# Complexity: basic
+
+[use_case]
+id = 3
+category = "constraint_management"
+title = "Define project constraints"
+complexity = "basic"
+description = "Add architectural constraints with priority levels. Constraints help enforce coding standards and architectural rules across the project."
+
+workflow = """
+1. Use constraint.add to add a new constraint with category and priority
+2. Use constraint.get to list and verify active constraints
+"""
+
+[[action_sequence]]
+order = 1
+tool = "constraint"
+action = "add"
+description = "Add the constraint"
+
+[[action_sequence]]
+order = 2
+tool = "constraint"
+action = "get"
+description = "Verify constraint was added"
+
+[full_example]
+scenario = "Add security constraints"
+steps = [
+  { step = 1, code = '{"action":"add","constraint_text":"All API endpoints must require authentication","category":"security","priority":4,"layer":"presentation"}', note = "Critical security constraint" },
+  { step = 2, code = '{"action":"get","category":"security"}', note = "List all security constraints" }
+]

@@ -20,7 +20,7 @@
     "MIGRATION_v2.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-help-data.js",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "clean": "rimraf dist",

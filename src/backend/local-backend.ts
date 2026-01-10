@@ -28,7 +28,6 @@ import {
   getExample, searchExamples, listAllExamples, exampleHelp, exampleExample
 } from '../tools/example/index.js';
 import { trackAndReturnHelp } from '../utils/help-tracking.js';
-import { queryHelpListUseCases } from '../tools/help-queries.js';
 import { handleSuggestAction } from '../tools/suggest/index.js';
 
 /**
@@ -193,7 +192,8 @@ export class LocalBackend implements ToolBackend {
         return exampleContent;
       }
       case 'use_case': {
-        return await queryHelpListUseCases(getAdapter(), {
+        return await listAllUseCases({
+          action: 'list_all',
           category: params.category,
           complexity: params.complexity,
           limit: params.limit,
@@ -223,7 +223,8 @@ export class LocalBackend implements ToolBackend {
         return constraintExampleContent;
       }
       case 'use_case': {
-        return await queryHelpListUseCases(getAdapter(), {
+        return await listAllUseCases({
+          action: 'list_all',
           category: params.category,
           complexity: params.complexity,
           limit: params.limit,

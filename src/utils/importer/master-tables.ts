@@ -37,26 +37,38 @@ export async function importMasterTables(ctx: ImportContext): Promise<ImportCont
 }
 
 /**
- * Import m_context_keys (global, always create new)
+ * Import m_context_keys (global, reuse if key_name matches)
  *
- * CRITICAL: context_keys.id IS the decision ID (t_decisions.key_id PRIMARY KEY)
- * Never reuse context_keys even if key string matches
- *
- * Architectural Decision: Decision #251 - Context key isolation
+ * UPDATED v5.0: Context keys are global (not project-scoped), so we should
+ * reuse existing keys if key_name matches to avoid UNIQUE constraint violations.
+ * This allows importing to the same DB (e.g., project cloning).
  */
 async function importContextKeys(ctx: ImportContext): Promise<void> {
   const keys = ctx.jsonData.master_tables.context_keys || [];
+  let created = 0;
+  let reused = 0;
 
   for (const key of keys) {
-    // Always create new context key (even if key string matches)
-    const [newId] = await ctx.knex('m_context_keys').insert({
-      key_name: key.key
-    });
+    // Check if context key already exists (global table)
+    const existing = await ctx.knex('m_context_keys')
+      .where({ key_name: key.key })
+      .first();
 
-    ctx.mappings.context_keys.set(key.id, newId);
+    if (existing) {
+      // Reuse existing ID
+      ctx.mappings.context_keys.set(key.id, existing.id);
+      reused++;
+    } else {
+      // Create new context key
+      const [newId] = await ctx.knex('m_context_keys').insert({
+        key_name: key.key
+      });
+      ctx.mappings.context_keys.set(key.id, newId);
+      created++;
+    }
   }
 
-  ctx.stats.master_tables.context_keys_created = keys.length;
+  ctx.stats.master_tables.context_keys_created = created;
 }
 
 /**
