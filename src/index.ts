@@ -118,7 +118,6 @@ async function startMcpServer(): Promise<void> {
     }
 
     safeConsoleError(`  Project: ${setupResult.projectContext.getProjectName()} (ID: ${setupResult.projectContext.getProjectId()}, source: ${setupResult.detectionSource})`);
-    safeConsoleError(`  Auto-delete config: messages=${setupResult.configValues.messageHours}h, ignore_weekend=${setupResult.configValues.ignoreWeekend}`);
   } catch (error) {
     // If debug logger not initialized, write to stderr as fallback
     if (!debugLoggerInitialized) {

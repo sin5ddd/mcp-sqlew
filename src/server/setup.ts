@@ -13,8 +13,8 @@
 
 import { existsSync } from 'fs';
 import { resolve, isAbsolute } from 'path';
-import { DatabaseAdapter, initializeDatabase, setConfigValue, getAllConfig, getAdapter } from '../database.js';
-import { CONFIG_KEYS, DEFAULT_DB_PATH } from '../constants.js';
+import { DatabaseAdapter, initializeDatabase, getAdapter } from '../database.js';
+import { DEFAULT_DB_PATH } from '../constants.js';
 import { loadConfigFile, DEFAULT_CONFIG_PATH } from '../config/loader.js';
 import type { SqlewConfig } from '../config/types.js';
 import { ensureProjectConfig } from '../config/writer.js';
@@ -27,6 +27,7 @@ import { determineProjectRoot } from '../utils/project-root.js';
 import { ParsedArgs } from './arg-parser.js';
 import { initializeSqlewIntegrations } from '../init-skills.js';
 import { loadGlobalConfig } from '../config/global-config.js';
+import { initializeBackend, isCloudMode } from '../backend/backend-factory.js';
 
 /**
  * Extract project name from a path, skipping hidden directories.
@@ -159,10 +160,6 @@ export interface SetupResult {
   fileConfig: SqlewConfig;
   projectRoot: string;
   projectContext: ProjectContext;
-  configValues: {
-    ignoreWeekend: boolean;
-    messageHours: string;
-  };
   detectionSource: 'cli' | 'config' | 'git' | 'metadata' | 'directory';
 }
 
@@ -183,10 +180,11 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
     await loadConfigWithPriority(currentDir, parsedArgs);
 
   // 2. Only create .sqlew/ if:
-  //    - Using SQLite (not MySQL/PostgreSQL)
+  //    - Using SQLite (not MySQL/PostgreSQL/Cloud)
   //    - Config source is local or default (not worktree parent or global)
   const isExternalDB = fileConfig.database?.type === 'mysql' || fileConfig.database?.type === 'postgres';
-  const shouldCreateLocalDir = !isExternalDB && (configSource === 'local' || configSource === 'default');
+  const isCloud = isCloudMode(fileConfig);
+  const shouldCreateLocalDir = !isExternalDB && !isCloud && (configSource === 'local' || configSource === 'default');
 
   if (shouldCreateLocalDir) {
     ensureSqlewDirectory(finalProjectRoot);
@@ -224,15 +222,25 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
   });
   debugLog('INFO', 'Database path determined', { dbPath });
 
-  // 4. Initialize database (SILENT - no stderr writes yet)
+  // 4. Initialize database and backend (SILENT - no stderr writes yet)
   let db: DatabaseAdapter;
   const isExplicitRDBMS = fileConfig.database?.type === 'mysql'
                        || fileConfig.database?.type === 'postgres';
 
-  if (isExplicitRDBMS) {
+  // Cloud mode: Initialize SaaS backend only (help/example/use_case use TOML files, no DB needed)
+  if (isCloud) {
+    initializeBackend(fileConfig, finalProjectRoot);
+    debugLog('INFO', 'Backend initialized', { type: 'cloud' });
+
+    // Create dummy adapter for compatibility (not actually used in cloud mode)
+    // help/example/use_case tools read from TOML files via help-loader.ts
+    db = null as unknown as DatabaseAdapter;
+  } else if (isExplicitRDBMS) {
     // User explicitly configured MySQL/PostgreSQL
     // Note: Config uses 'postgres' but initializeDatabase expects 'postgresql'
     const dbType = fileConfig.database!.type === 'postgres' ? 'postgresql' : fileConfig.database!.type;
+    const dbHost = fileConfig.database!.connection?.host || 'localhost';
+    const dbName = fileConfig.database!.connection?.database || 'sqlew';
     const config = {
       databaseType: dbType as 'mysql' | 'postgresql',
       connection: {
@@ -247,7 +255,7 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
 
       // Test connection immediately - fail fast if connection is bad
       await db.getKnex().raw('SELECT 1');
-      debugLog('INFO', `Successfully connected to ${config.databaseType}`);
+      debugLog('INFO', 'Backend initialized', { type: dbType, host: dbHost, database: dbName });
     } catch (error: any) {
       // Connection failed - EXIT WITHOUT SQLITE FALLBACK
       const errorMsg = `❌ Failed to connect to ${config.databaseType}: ${error.message}`;
@@ -263,93 +271,101 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
     const resolvedDbPath = dbPath || resolve(finalProjectRoot, DEFAULT_DB_PATH);
     const config = { connection: { filename: resolvedDbPath } };
     db = await initializeDatabase(config);
+    debugLog('INFO', 'Backend initialized', { type: 'sqlite', path: resolvedDbPath });
   }
 
-  // 5. Apply CLI config overrides (SILENT)
-  if (parsedArgs.autodeleteIgnoreWeekend !== undefined) {
-    await setConfigValue(db, CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND, parsedArgs.autodeleteIgnoreWeekend ? '1' : '0');
-  }
-  if (parsedArgs.autodeleteMessageHours !== undefined) {
-    await setConfigValue(db, CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS, String(parsedArgs.autodeleteMessageHours));
-  }
-
-  // 6. Read config values for diagnostics (SILENT)
-  const configValues = await getAllConfig(db);
-  const ignoreWeekend = configValues[CONFIG_KEYS.AUTODELETE_IGNORE_WEEKEND] === '1';
-  const messageHours = configValues[CONFIG_KEYS.AUTODELETE_MESSAGE_HOURS];
-
-  // 7. Initialize ProjectContext (v3.7.0+ multi-project support)
-  const knex = getAdapter().getKnex();
-  let projectName: string;
+  // 5-7. ProjectContext initialization
+  // Cloud mode skips DB-dependent operations (uses config.toml values directly)
+  let projectName = extractProjectNameFromPath(finalProjectRoot);
   let detectionSource: 'cli' | 'config' | 'git' | 'metadata' | 'directory' = 'directory';
 
-  // Priority order: CLI --project-name > config.toml > git remote > directory name
-  if (parsedArgs.projectName) {
-    // CLI argument takes highest priority (for testing/override scenarios)
-    projectName = parsedArgs.projectName;
-    detectionSource = 'cli';
-    debugLog('INFO', 'Project name from CLI argument', { projectName });
-  } else if (fileConfig.project?.name) {
-    // Config.toml is authoritative source
-    projectName = fileConfig.project.name;
-    detectionSource = 'config';
-    debugLog('INFO', 'Project name from config.toml', { projectName });
-  } else {
-    // Detect from VCS or directory
-    const vcsAdapter = await detectVCS(finalProjectRoot);
-
-    if (vcsAdapter) {
-      const detectedName = await vcsAdapter.extractProjectName();
-      if (detectedName) {
-        projectName = detectedName;
-        detectionSource = 'git';
-        debugLog('INFO', 'Project name detected from VCS', { projectName, vcs: vcsAdapter.getVCSType() });
-      } else {
-        // Fallback to directory name (skip hidden directories like .sqlew)
-        projectName = extractProjectNameFromPath(finalProjectRoot);
-        detectionSource = 'directory';
-        debugLog('INFO', 'Project name from directory', { projectName });
-      }
-    } else {
-      // No VCS detected, use directory name (skip hidden directories like .sqlew)
-      projectName = extractProjectNameFromPath(finalProjectRoot);
-      detectionSource = 'directory';
-      debugLog('INFO', 'Project name from directory (no VCS)', { projectName });
-    }
-
-    // Write to config.toml if not present AND not CLI override
-    if (!parsedArgs.projectName) {
-      const configWritten = ensureProjectConfig(finalProjectRoot, projectName, {
-        configPath: parsedArgs.configPath,
-      });
-
-      if (configWritten) {
-        debugLog('INFO', 'Project name written to config.toml', {
-          projectName,
-          detectionSource,
-          configPath: parsedArgs.configPath || DEFAULT_CONFIG_PATH
-        });
-      }
-    }
+  if (isCloud) {
+    // Cloud mode: Use config.toml values directly (no local DB)
+    projectName = fileConfig.project?.name || extractProjectNameFromPath(finalProjectRoot);
+    detectionSource = fileConfig.project?.name ? 'config' : 'directory';
+    debugLog('INFO', 'Cloud mode: Using config.toml values', { projectName });
   }
 
-  // Initialize ProjectContext singleton
+  // Initialize ProjectContext
   const projectContext = ProjectContext.getInstance();
-  await projectContext.ensureProject(knex, projectName, detectionSource, {
-    projectRootPath: finalProjectRoot,
-  });
 
-  debugLog('INFO', 'ProjectContext initialized', {
-    projectId: projectContext.getProjectId(),
-    projectName: projectContext.getProjectName(),
-  });
+  if (isCloud) {
+    // Cloud mode: Already have projectName/detectionSource from config.toml
+    // Use initWithoutDb (no local DB access)
+    projectContext.initWithoutDb(projectName, detectionSource, {
+      projectRootPath: finalProjectRoot,
+    });
+
+    debugLog('INFO', 'ProjectContext initialized (cloud mode)', {
+      projectId: projectContext.getProjectId(),
+      projectName: projectContext.getProjectName(),
+    });
+  } else {
+    // Local/RDBMS mode: Detect project name with priority order
+    const knex = getAdapter().getKnex();
+
+    // Priority order: CLI --project-name > config.toml > git remote > directory name
+    if (parsedArgs.projectName) {
+      projectName = parsedArgs.projectName;
+      detectionSource = 'cli';
+      debugLog('INFO', 'Project name from CLI argument', { projectName });
+    } else if (fileConfig.project?.name) {
+      projectName = fileConfig.project.name;
+      detectionSource = 'config';
+      debugLog('INFO', 'Project name from config.toml', { projectName });
+    } else {
+      // Detect from VCS or directory
+      const vcsAdapter = await detectVCS(finalProjectRoot);
+
+      if (vcsAdapter) {
+        const detectedName = await vcsAdapter.extractProjectName();
+        if (detectedName) {
+          projectName = detectedName;
+          detectionSource = 'git';
+          debugLog('INFO', 'Project name detected from VCS', { projectName, vcs: vcsAdapter.getVCSType() });
+        } else {
+          projectName = extractProjectNameFromPath(finalProjectRoot);
+          detectionSource = 'directory';
+          debugLog('INFO', 'Project name from directory', { projectName });
+        }
+      } else {
+        projectName = extractProjectNameFromPath(finalProjectRoot);
+        detectionSource = 'directory';
+        debugLog('INFO', 'Project name from directory (no VCS)', { projectName });
+      }
+
+      // Write to config.toml if not present AND not CLI override
+      if (!parsedArgs.projectName) {
+        const configWritten = ensureProjectConfig(finalProjectRoot, projectName, {
+          configPath: parsedArgs.configPath,
+        });
+
+        if (configWritten) {
+          debugLog('INFO', 'Project name written to config.toml', {
+            projectName,
+            detectionSource,
+            configPath: parsedArgs.configPath || DEFAULT_CONFIG_PATH
+          });
+        }
+      }
+    }
+
+    // Initialize with database
+    await projectContext.ensureProject(knex, projectName, detectionSource, {
+      projectRootPath: finalProjectRoot,
+    });
+
+    debugLog('INFO', 'ProjectContext initialized', {
+      projectId: projectContext.getProjectId(),
+      projectName: projectContext.getProjectName(),
+    });
+  }
 
   // Log successful initialization
   debugLog('INFO', 'MCP Shared Context Server initialized', {
     dbPath,
     projectId: projectContext.getProjectId(),
     projectName: projectContext.getProjectName(),
-    autoDeleteConfig: { messageHours, ignoreWeekend },
     debugLogLevel: debugLogLevel
   });
 
@@ -377,7 +393,6 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
     fileConfig,
     projectRoot: finalProjectRoot,
     projectContext,
-    configValues: { ignoreWeekend, messageHours },
     detectionSource,
   };
 }
