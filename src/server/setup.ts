@@ -229,7 +229,7 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
 
   // Cloud mode: Initialize SaaS backend only (help/example/use_case use TOML files, no DB needed)
   if (isCloud) {
-    initializeBackend(fileConfig, finalProjectRoot);
+    await initializeBackend(fileConfig, finalProjectRoot);
     debugLog('INFO', 'Backend initialized', { type: 'cloud' });
 
     // Create dummy adapter for compatibility (not actually used in cloud mode)

@@ -3,10 +3,14 @@
  *
  * Loads and manages backend plugins from .sqlew/plugins/ directory.
  * Plugins are distributed via `sqlew --install-saas` command.
+ *
+ * ESM-compatible: Uses dynamic import() instead of require()
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createRequire } from 'module';
+import { pathToFileURL } from 'url';
 import type { ToolBackend, PluginModule } from './types.js';
 
 /**
@@ -45,18 +49,18 @@ export interface PluginLoadResult {
  * @param config - Plugin configuration
  * @returns Plugin load result
  */
-export function loadPlugin(
+export async function loadPlugin(
   pluginName: string,
   projectRoot: string,
   config: unknown
-): PluginLoadResult {
+): Promise<PluginLoadResult> {
   // Search for plugin in known paths
   for (const searchPath of PLUGIN_SEARCH_PATHS) {
     const pluginPath = path.join(projectRoot, searchPath, pluginName);
 
     if (fs.existsSync(pluginPath)) {
       try {
-        return loadPluginFromPath(pluginPath, config);
+        return await loadPluginFromPath(pluginPath, config);
       } catch (error) {
         return {
           success: false,
@@ -70,8 +74,8 @@ export function loadPlugin(
   // Also try as npm package
   try {
     const npmPath = `@sqlew/${pluginName}`;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pluginModule = require(npmPath) as PluginModule;
+    // Dynamic import for ESM compatibility
+    const pluginModule = await importPluginModule(npmPath);
     const backend = pluginModule.createBackend(config);
     return {
       success: true,
@@ -92,7 +96,7 @@ export function loadPlugin(
 /**
  * Load plugin from a specific path
  */
-function loadPluginFromPath(pluginPath: string, config: unknown): PluginLoadResult {
+async function loadPluginFromPath(pluginPath: string, config: unknown): Promise<PluginLoadResult> {
   const indexPath = path.join(pluginPath, 'index.js');
 
   if (!fs.existsSync(indexPath)) {
@@ -103,8 +107,8 @@ function loadPluginFromPath(pluginPath: string, config: unknown): PluginLoadResu
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pluginModule = require(indexPath) as PluginModule;
+  // Dynamic import for ESM compatibility (use file:// URL for absolute paths)
+  const pluginModule = await importPluginModule(pathToFileURL(indexPath).href);
 
   // Validate plugin module
   if (typeof pluginModule.createBackend !== 'function') {
@@ -125,6 +129,16 @@ function loadPluginFromPath(pluginPath: string, config: unknown): PluginLoadResu
 }
 
 /**
+ * Import a plugin module with CommonJS interop
+ * CommonJS modules are available as .default when imported via ESM
+ */
+async function importPluginModule(modulePath: string): Promise<PluginModule> {
+  const imported = await import(modulePath);
+  // Handle CommonJS interop: CommonJS exports are in .default
+  return (imported.default ?? imported) as PluginModule;
+}
+
+/**
  * Check if a plugin is installed
  *
  * @param pluginName - Plugin name
@@ -140,8 +154,9 @@ export function isPluginInstalled(pluginName: string, projectRoot: string): bool
     }
   }
 
-  // Check npm package
+  // Check npm package using createRequire (ESM-compatible way to use require.resolve)
   try {
+    const require = createRequire(import.meta.url);
     require.resolve(`@sqlew/${pluginName}`);
     return true;
   } catch {

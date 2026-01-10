@@ -25,16 +25,16 @@ describe('Plugin Loader', () => {
   });
 
   describe('loadPlugin', () => {
-    it('should return error for non-existent plugin', () => {
-      const result = loadPlugin('non-existent-plugin', testProjectRoot, {});
+    it('should return error for non-existent plugin', async () => {
+      const result = await loadPlugin('non-existent-plugin', testProjectRoot, {});
 
       assert.strictEqual(result.success, false);
       assert.ok(result.error);
       assert.ok(result.error.includes('not found') || result.error.includes('--install-saas'));
     });
 
-    it('should return error for saas-connector when not installed', () => {
-      const result = loadPlugin(KNOWN_PLUGINS.SAAS_CONNECTOR, testProjectRoot, {});
+    it('should return error for saas-connector when not installed', async () => {
+      const result = await loadPlugin(KNOWN_PLUGINS.SAAS_CONNECTOR, testProjectRoot, {});
 
       assert.strictEqual(result.success, false);
       assert.ok(result.error);

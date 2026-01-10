@@ -35,9 +35,10 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
     try {
       result = await backend.execute(name, action, params);
     } catch (backendError) {
-      // Fallback to LocalBackend for unsupported tools in plugin mode
-      // This allows help/example/use_case to work locally while data tools use SaaS
-      if (getBackendType() === 'plugin' && isUnsupportedToolError(backendError)) {
+      // Fallback to LocalBackend for:
+      // - UNSUPPORTED_TOOL: Tool not supported in SaaS mode
+      // - LOCAL_ONLY_ACTION: Action requires local processing (help/example/use_case/suggest_pending)
+      if (getBackendType() === 'plugin' && isLocalFallbackRequired(backendError)) {
         const localBackend = new LocalBackend();
         result = await localBackend.execute(name, action, params);
       } else {
@@ -70,16 +71,23 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
 }
 
 /**
- * Check if error is an UNSUPPORTED_TOOL error from plugin backend
- * Used to determine if we should fallback to LocalBackend
+ * Check if error requires fallback to LocalBackend
+ *
+ * Detects two types of errors from plugin backend:
+ * - UNSUPPORTED_TOOL: The tool itself is not supported in SaaS mode
+ * - LOCAL_ONLY_ACTION: The specific action requires local processing (e.g., help, example, use_case)
  */
-function isUnsupportedToolError(error: unknown): boolean {
+export function isLocalFallbackRequired(error: unknown): boolean {
   if (error && typeof error === 'object') {
-    // Check for ApiError with code property
+    // UNSUPPORTED_TOOL: Tool itself is not supported
     if ('code' in error && error.code === 'UNSUPPORTED_TOOL') {
       return true;
     }
-    // Check for error message pattern
+    // LOCAL_ONLY_ACTION: Action requires local processing (TOML/hardcoded data)
+    if ('code' in error && error.code === 'LOCAL_ONLY_ACTION') {
+      return true;
+    }
+    // Legacy: Message pattern matching for backwards compatibility
     if ('message' in error && typeof error.message === 'string') {
       return error.message.includes('not supported in SaaS mode');
     }
