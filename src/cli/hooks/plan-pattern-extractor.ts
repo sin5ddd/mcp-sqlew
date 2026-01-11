@@ -99,12 +99,14 @@ export function extractPatternsFromPlan(content: string): ExtractionResult {
   // Decision pattern: ## or ### 📌 Decision: [key]
   // Supports both h2 (##) and h3 (###) headings for flexibility
   // Captures: key, then body until next ## or ### or end
-  const decisionRegex = /#{2,3}\s*📌\s*Decision:\s*(.+?)\n([\s\S]*?)(?=#{2,3}\s|$)/gi;
+  // Note: \r?\n handles both Windows (CRLF) and Unix (LF) line endings
+  const decisionRegex = /#{2,3}\s*📌\s*Decision:\s*(.+?)\r?\n([\s\S]*?)(?=#{2,3}\s|$)/gi;
 
   // Constraint pattern: ## or ### 🚫 Constraint: [category]
   // Supports both h2 (##) and h3 (###) headings for flexibility
   // Captures: category, then body until next ## or ### or end
-  const constraintRegex = /#{2,3}\s*🚫\s*Constraint:\s*(.+?)\n([\s\S]*?)(?=#{2,3}\s|$)/gi;
+  // Note: \r?\n handles both Windows (CRLF) and Unix (LF) line endings
+  const constraintRegex = /#{2,3}\s*🚫\s*Constraint:\s*(.+?)\r?\n([\s\S]*?)(?=#{2,3}\s|$)/gi;
 
   // Parse decisions
   let match;
@@ -160,8 +162,9 @@ export function extractPatternsFromPlan(content: string): ExtractionResult {
 function extractField(body: string, fieldName: string): string {
   // Match: - **FieldName**: value (until newline or end)
   // Double backslashes needed in template literals for regex escapes
+  // \r?\n handles both Windows (CRLF) and Unix (LF) line endings
   const regex = new RegExp(
-    `-\\s*\\*\\*${fieldName}\\*\\*:\\s*(.+?)(?=\\n-\\s*\\*\\*|\\n\\n|$)`,
+    `-\\s*\\*\\*${fieldName}\\*\\*:\\s*(.+?)(?=\\r?\\n-\\s*\\*\\*|\\r?\\n\\r?\\n|$)`,
     'is'
   );
   const match = body.match(regex);

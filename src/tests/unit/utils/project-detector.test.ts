@@ -224,7 +224,8 @@ name = "async-test-project"
       const result = detectProjectNameSync(projectRoot);
 
       // Should detect from config.toml or directory name
-      assert.ok(['mcp-sqlew-hotfix', 'mcp-sqlew'].includes(result.name) || result.name === 'mcp-sqlew-hotfix');
+      // Note: 'sqlew' is added for CI environment after repo migration to sqlew-io/sqlew
+      assert.ok(['mcp-sqlew-hotfix', 'mcp-sqlew', 'sqlew'].includes(result.name));
       assert.ok(['config', 'directory', 'git'].includes(result.source));
     });
   });

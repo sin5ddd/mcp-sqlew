@@ -4,9 +4,6 @@
 
 import type { DatabaseAdapter } from '../../adapters/index.js';
 import { createDatabaseAdapter } from '../../adapters/index.js';
-import { syncAgentsWithConfig } from '../../sync-agents.js';
-import { syncCommandsWithConfig } from '../../sync-commands.js';
-import { syncGitignore } from '../../sync-gitignore.js';
 import { debugLog } from '../../utils/debug-logger.js';
 import knexConfig from '../../knexfile.js';
 import { detectSchemaVersion, getSchemaVersion } from './schema-version.js';
@@ -114,15 +111,6 @@ export async function initializeDatabase(
     hasV3Tables: schemaVersionInfo.hasV3Tables,
     tablePrefix: schemaVersionInfo.tablePrefix,
   });
-
-  // Sync agents with config.toml
-  syncAgentsWithConfig();
-
-  // Sync commands with config.toml
-  syncCommandsWithConfig();
-
-  // Sync .gitignore with sqlew system patterns
-  syncGitignore();
 
   adapterInstance = adapter;
   return adapter;

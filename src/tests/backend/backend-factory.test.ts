@@ -77,18 +77,16 @@ describe('Backend Factory', () => {
       );
     });
 
-    it('should throw error for cloud config when plugin not installed', async () => {
+    it('should create SaaS backend when API key is set', async () => {
       const config: SqlewConfig = {
         database: { type: 'cloud' },
       };
 
-      // Set API key but plugin is not installed
+      // Set API key - SaaS backend should be created via submodule
       process.env.SQLEW_API_KEY = 'test-key';
 
-      await assert.rejects(
-        async () => await createBackend(config),
-        /saas-connector.*not found|--install-saas/i
-      );
+      const backend = await createBackend(config);
+      assert.strictEqual(backend.backendType, 'saas');
     });
   });
 

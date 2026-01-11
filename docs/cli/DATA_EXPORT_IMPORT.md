@@ -30,26 +30,26 @@ solutions including schema + data using SQL dumps.
 
 ```bash
 # Export all projects (no installation required!)
-npx sqlew db:export backup.json
+sqlew db:export backup.json
 
 # Export specific project to file
-npx sqlew db:export backup.json project=my-project
+sqlew db:export backup.json project=my-project
 
 # Export to stdout (pipe to another command)
-npx sqlew db:export project=visualizer
+sqlew db:export project=visualizer
 ```
 
 ### Import a Project
 
 ```bash
 # Import from JSON export
-npx sqlew db:import backup.json
+sqlew db:import backup.json
 
 # Import with custom project name
-npx sqlew db:import backup.json project-name=new-name
+sqlew db:import backup.json project-name=new-name
 
 # Dry-run validation (no actual import)
-npx sqlew db:import backup.json dry-run=true
+sqlew db:import backup.json dry-run=true
 ```
 
 ## Export Command
@@ -57,16 +57,16 @@ npx sqlew db:import backup.json dry-run=true
 ### Syntax
 
 ```bash
-npx sqlew db:export [output-file] [key=value ...]
+sqlew db:export [output-file] [key=value ...]
 ```
 
 ### Options
 
-| Option            | Description                     | Default           |
-|-------------------|---------------------------------|-------------------|
-| `project=<name>`  | Export specific project by name | All projects      |
-| `db-path=<path>`  | Database file path              | `.sqlew/sqlew.db` |
-| `config=<path>`   | Config file path                | Auto-detect       |
+| Option           | Description                     | Default           |
+| ---------------- | ------------------------------- | ----------------- |
+| `project=<name>` | Export specific project by name | All projects      |
+| `db-path=<path>` | Database file path              | `.sqlew/sqlew.db` |
+| `config=<path>`  | Config file path                | Auto-detect       |
 
 ### What Gets Exported
 
@@ -95,19 +95,19 @@ npx sqlew db:export [output-file] [key=value ...]
 ### Syntax
 
 ```bash
-npx sqlew db:import <source-file> [key=value ...]
+sqlew db:import <source-file> [key=value ...]
 ```
 
 ### Options
 
-| Option                   | Description                   | Default            |
-|--------------------------|-------------------------------|--------------------|
-| `<source-file>`          | JSON export file path         | **Required**       |
-| `project-name=<name>`    | Target project name           | Use name from JSON |
-| `skip-if-exists=true`    | Skip import if project exists | `true`             |
-| `dry-run=true`           | Validate only, don't import   | `false`            |
-| `db-path=<path>`         | Database file path            | `.sqlew/sqlew.db`  |
-| `config=<path>`          | Config file path              | Auto-detect        |
+| Option                | Description                   | Default            |
+| --------------------- | ----------------------------- | ------------------ |
+| `<source-file>`       | JSON export file path         | **Required**       |
+| `project-name=<name>` | Target project name           | Use name from JSON |
+| `skip-if-exists=true` | Skip import if project exists | `true`             |
+| `dry-run=true`        | Validate only, don't import   | `false`            |
+| `db-path=<path>`      | Database file path            | `.sqlew/sqlew.db`  |
+| `config=<path>`       | Config file path              | Auto-detect        |
 
 ### Import Process
 
@@ -152,16 +152,17 @@ npx sqlew db:import <source-file> [key=value ...]
 
 ```bash
 # Export data
-npx sqlew db:export backup.json
+sqlew db:export backup.json
 
 # Import data
-npx sqlew db:import backup.json
+sqlew db:import backup.json
 
 # SQL dump (same-database backup)
-npx sqlew db:dump sqlite backup.sql
+sqlew db:dump sqlite backup.sql
 ```
 
 **Note**: Both MCP server mode and CLI commands use the same `sqlew` entry point. The first argument determines the mode:
+
 - `db:export`, `db:import`, `db:dump`, `query` → CLI mode
 - No argument or MCP-related args → MCP server mode
 
@@ -177,13 +178,13 @@ consolidate all project contexts into one shared database.
 ```bash
 # Step 1: Export from each project's SQLite database
 cd ~/project-a
-npx sqlew db:export /tmp/project-a.json project=project-a
+sqlew db:export /tmp/project-a.json project=project-a
 
 cd ~/project-b
-npx sqlew db:export /tmp/project-b.json project=project-b
+sqlew db:export /tmp/project-b.json project=project-b
 
 cd ~/project-c
-npx sqlew db:export /tmp/project-c.json project=project-c
+sqlew db:export /tmp/project-c.json project=project-c
 
 # Step 2: Create shared database and import all projects
 cd ~/shared-database
@@ -197,9 +198,9 @@ cd ~/shared-database
 # password = "mypassword"
 # database = "shared_sqlew_db"
 
-npx sqlew db:import /tmp/project-a.json
-npx sqlew db:import /tmp/project-b.json
-npx sqlew db:import /tmp/project-c.json
+sqlew db:import /tmp/project-a.json
+sqlew db:import /tmp/project-b.json
+sqlew db:import /tmp/project-c.json
 
 # Step 3: Configure each project to use shared database
 # In each project's .mcp.json:
@@ -230,11 +231,11 @@ npx sqlew db:import /tmp/project-c.json
 
 ```bash
 # Export from source database
-npx sqlew db:export main-export.json project=main
+sqlew db:export main-export.json project=main
 
 # Import to different database (different machine or different database type)
 # This works because the project doesn't exist in the target database yet
-npx sqlew db:import main-export.json db-path=/path/to/new/database.db
+sqlew db:import main-export.json db-path=/path/to/new/database.db
 ```
 
 **Note**: Import skips if project name exists.
@@ -243,44 +244,44 @@ npx sqlew db:import main-export.json db-path=/path/to/new/database.db
 
 ```bash
 # Backup with SQL dump (preserves schema + data)
-npx sqlew db:dump sqlite backup-$(date +%Y%m%d).sql
+sqlew db:dump sqlite backup-$(date +%Y%m%d).sql
 
 # Or simple SQLite file copy
 cp .sqlew/sqlew.db .sqlew/backup-$(date +%Y%m%d).db
 ```
 
-See `npx sqlew db:dump --help` for full backup options.
+See `sqlew db:dump --help` for full backup options.
 
 ### Project Sharing
 
 ```bash
 # Developer A: Export project
-npx sqlew db:export feature-x.json project=feature-x
+sqlew db:export feature-x.json project=feature-x
 
 # Developer B: Import project
-npx sqlew db:import feature-x.json
+sqlew db:import feature-x.json
 ```
 
 ### Multi-Project Consolidation
 
 ```bash
 # Export from different databases
-npx sqlew db:export vis.json project=visualizer
-npx sqlew db:export api.json project=api
+sqlew db:export vis.json project=visualizer
+sqlew db:export api.json project=api
 
 # Import to single database
-npx sqlew db:import vis.json
-npx sqlew db:import api.json
+sqlew db:import vis.json
+sqlew db:import api.json
 ```
 
 ### Cross-Database Migration
 
 ```bash
 # Export from SQLite
-npx sqlew db:export data.json db-path=.sqlew/sqlew.db
+sqlew db:export data.json db-path=.sqlew/sqlew.db
 
 # Import to MySQL (configure .sqlew/config.toml for MySQL first)
-npx sqlew db:import data.json
+sqlew db:import data.json
 ```
 
 ---
@@ -307,7 +308,7 @@ Before starting a migration, ensure you have:
 cd /path/to/your/project
 
 # Export all data to JSON
-npx sqlew db:export migration-backup.json
+sqlew db:export migration-backup.json
 ```
 
 #### Step 2: Prepare MySQL Database
@@ -352,17 +353,17 @@ name = "your-project-name"
 
 ```bash
 # Import data to MySQL (config.toml will be used automatically)
-npx sqlew db:import migration-backup.json
+sqlew db:import migration-backup.json
 ```
 
 #### Step 5: Verify Migration
 
 ```bash
 # Test MCP server connection
-npx sqlew --config-path=.sqlew/config.toml
+sqlew --config-path=.sqlew/config.toml
 
 # Or test with MCP Inspector
-npx @modelcontextprotocol/inspector npx sqlew
+npx @modelcontextprotocol/inspector sqlew
 ```
 
 ---
@@ -375,7 +376,7 @@ npx @modelcontextprotocol/inspector npx sqlew
 cd /path/to/your/project
 
 # Export all data to JSON
-npx sqlew db:export migration-backup.json
+sqlew db:export migration-backup.json
 ```
 
 #### Step 2: Prepare PostgreSQL Database
@@ -422,14 +423,14 @@ name = "your-project-name"
 
 ```bash
 # Import data to PostgreSQL
-npx sqlew db:import migration-backup.json
+sqlew db:import migration-backup.json
 ```
 
 #### Step 5: Verify Migration
 
 ```bash
 # Test MCP server connection
-npx sqlew --config-path=.sqlew/config.toml
+sqlew --config-path=.sqlew/config.toml
 ```
 
 ---
@@ -458,7 +459,7 @@ password = "mysql-password"
 Then export:
 
 ```bash
-npx sqlew db:export migration-backup.json
+sqlew db:export migration-backup.json
 ```
 
 #### Step 2: Prepare PostgreSQL Database
@@ -500,7 +501,7 @@ name = "your-project-name"
 #### Step 4: Import to PostgreSQL
 
 ```bash
-npx sqlew db:import migration-backup.json
+sqlew db:import migration-backup.json
 ```
 
 ---
@@ -528,10 +529,10 @@ SELECT COUNT(*) FROM v4_file_changes;
 
 ```bash
 # Start MCP server with new config
-npx sqlew
+sqlew
 
 # Or use MCP Inspector for interactive testing
-npx @modelcontextprotocol/inspector npx sqlew
+npx @modelcontextprotocol/inspector sqlew
 ```
 
 #### 3. Verify in Claude Code
@@ -540,12 +541,12 @@ Update your `.mcp.json` to use the new database:
 
 ```json
 {
-  "mcpServers": {
-    "sqlew": {
-      "command": "npx",
-      "args": ["sqlew", "--config-path", "/path/to/.sqlew/config.toml"]
+    "mcpServers": {
+        "sqlew": {
+            "command": "npx",
+            "args": ["sqlew", "--config-path", "/path/to/.sqlew/config.toml"]
+        }
     }
-  }
 }
 ```
 
@@ -584,6 +585,7 @@ Error: permission denied for schema public
 ```
 
 **Solution**: Grant schema privileges to the user:
+
 ```sql
 -- PostgreSQL
 GRANT ALL ON SCHEMA public TO sqlew_user;
@@ -632,7 +634,7 @@ Solution: Ensure all referenced entities exist in export
 Always test imports with `dry-run=true` first:
 
 ```bash
-npx sqlew db:import data.json dry-run=true
+sqlew db:import data.json dry-run=true
 ```
 
 This validates:
@@ -666,16 +668,16 @@ This validates:
 
 ## Comparison with db:dump
 
-| Feature            | db:export (JSON)                     | db:dump (SQL)                         |
-|--------------------|--------------------------------------|---------------------------------------|
-| Format             | JSON data only                       | SQL DDL + data                        |
-| Schema             | Not included                         | Full schema included                  |
-| Use Case           | **Cross-DB migration**, sharing      | **Same-DB backup/restore**            |
-| Cross-DB           | ✅ **Yes (ONLY option for cross-DB)** | ❌ No (v4.0.2+ same-DB only)           |
-| Size               | Smaller (~40% reduction)             | Larger (includes schema)              |
-| Import Speed       | Slower (ID remapping)                | Faster (direct SQL execution)         |
-| Conflict Handling  | Smart deduplication                  | Overwrite or fail                     |
-| Restore Capability | ❌ Skips if exists                    | ✅ Full restore                        |
+| Feature            | db:export (JSON)                      | db:dump (SQL)                 |
+| ------------------ | ------------------------------------- | ----------------------------- |
+| Format             | JSON data only                        | SQL DDL + data                |
+| Schema             | Not included                          | Full schema included          |
+| Use Case           | **Cross-DB migration**, sharing       | **Same-DB backup/restore**    |
+| Cross-DB           | ✅ **Yes (ONLY option for cross-DB)** | ❌ No (v4.0.2+ same-DB only)  |
+| Size               | Smaller (~40% reduction)              | Larger (includes schema)      |
+| Import Speed       | Slower (ID remapping)                 | Faster (direct SQL execution) |
+| Conflict Handling  | Smart deduplication                   | Overwrite or fail             |
+| Restore Capability | ❌ Skips if exists                    | ✅ Full restore               |
 
 **When to use db:export (JSON)** - **REQUIRED FOR CROSS-DATABASE**:
 

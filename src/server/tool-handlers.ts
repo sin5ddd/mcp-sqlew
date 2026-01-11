@@ -38,7 +38,7 @@ export async function handleToolCall(request: CallToolRequest): Promise<CallTool
       // Fallback to LocalBackend for:
       // - UNSUPPORTED_TOOL: Tool not supported in SaaS mode
       // - LOCAL_ONLY_ACTION: Action requires local processing (help/example/use_case/suggest_pending)
-      if (getBackendType() === 'plugin' && isLocalFallbackRequired(backendError)) {
+      if (getBackendType() === 'saas' && isLocalFallbackRequired(backendError)) {
         const localBackend = new LocalBackend();
         result = await localBackend.execute(name, action, params);
       } else {

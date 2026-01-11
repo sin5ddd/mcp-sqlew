@@ -124,7 +124,7 @@ export async function executeDbImport(args: DbImportArgs): Promise<void> {
   const validationError = validateArgs(args);
   if (validationError) {
     console.error(validationError);
-    console.error('Run "npx sqlew db:import --help" for usage information.');
+    console.error('Run "sqlew db:import --help" for usage information.');
     process.exit(1);
   }
 

@@ -258,7 +258,7 @@ export async function executeDbDump(args: DbDumpArgs): Promise<void> {
   const validationError = validateArgs(args);
   if (validationError) {
     console.error(validationError);
-    console.error('Run "npx sqlew db:dump --help" for usage information.');
+    console.error('Run "sqlew db:dump --help" for usage information.');
     process.exit(1);
   }
 

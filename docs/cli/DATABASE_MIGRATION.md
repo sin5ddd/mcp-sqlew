@@ -15,8 +15,8 @@ Starting from v4.0.2, `db:dump` generates SQL for the **same database type only*
 
 **For cross-database migrations**, use JSON export/import:
 ```bash
-npx sqlew db:export backup.json      # Export to JSON
-npx sqlew db:import backup.json      # Import to target database
+sqlew db:export backup.json      # Export to JSON
+sqlew db:import backup.json      # Import to target database
 ```
 
 See [DATA_EXPORT_IMPORT.md](DATA_EXPORT_IMPORT.md) for complete cross-database migration guide.
@@ -32,7 +32,7 @@ The `db:dump` CLI tool generates complete SQL dumps (CREATE TABLE + INSERT state
 **No installation required!** Use directly via npx:
 
 ```bash
-npx sqlew db:dump <format> [output-file] [key=value ...]
+sqlew db:dump <format> [output-file] [key=value ...]
 ```
 
 **Parameters:**
@@ -56,7 +56,7 @@ npx sqlew db:dump <format> [output-file] [key=value ...]
 
 ```bash
 # Backup SQLite database (default)
-npx sqlew db:dump sqlite backup-sqlite.sql
+sqlew db:dump sqlite backup-sqlite.sql
 ```
 
 **MySQL Backup:**
@@ -70,7 +70,7 @@ export MYSQL_PASSWORD=yourpass
 export MYSQL_DATABASE=mcp_context
 
 # Backup MySQL database
-npx sqlew db:dump mysql backup-mysql.sql from=mysql
+sqlew db:dump mysql backup-mysql.sql from=mysql
 ```
 
 **PostgreSQL Backup:**
@@ -84,7 +84,7 @@ export PG_PASSWORD=yourpass
 export PG_DATABASE=mcp_context
 
 # Backup PostgreSQL database
-npx sqlew db:dump postgresql backup-pg.sql from=postgresql
+sqlew db:dump postgresql backup-pg.sql from=postgresql
 ```
 
 > **Note**: For cross-database migrations (e.g., SQLite → MySQL), use JSON export/import instead.
@@ -95,7 +95,7 @@ npx sqlew db:dump postgresql backup-pg.sql from=postgresql
 Export only specific tables:
 
 ```bash
-npx sqlew db:dump mysql partial.sql tables=v4_decisions,v4_tasks,v4_files
+sqlew db:dump mysql partial.sql tables=v4_decisions,v4_tasks,v4_files
 ```
 
 ### Custom Chunk Size
@@ -103,7 +103,7 @@ npx sqlew db:dump mysql partial.sql tables=v4_decisions,v4_tasks,v4_files
 For large tables, adjust INSERT batch size:
 
 ```bash
-npx sqlew db:dump mysql dump.sql chunk-size=500
+sqlew db:dump mysql dump.sql chunk-size=500
 ```
 
 ### Data-Only Dumps
@@ -111,7 +111,7 @@ npx sqlew db:dump mysql dump.sql chunk-size=500
 For advanced use cases where you manage schema separately:
 
 ```bash
-npx sqlew db:dump mysql data-only.sql exclude-schema=true
+sqlew db:dump mysql data-only.sql exclude-schema=true
 ```
 
 This generates INSERT statements without CREATE TABLE, useful for:
@@ -126,13 +126,13 @@ Handle duplicate keys when importing into existing databases:
 
 ```bash
 # Ignore duplicates (safe for adding new data)
-npx sqlew db:dump mysql dump.sql on-conflict=ignore
+sqlew db:dump mysql dump.sql on-conflict=ignore
 
 # Update existing rows (sync/overwrite mode)
-npx sqlew db:dump mysql dump.sql on-conflict=replace
+sqlew db:dump mysql dump.sql on-conflict=replace
 
 # Fail on duplicates (default, strict mode)
-npx sqlew db:dump mysql dump.sql on-conflict=error
+sqlew db:dump mysql dump.sql on-conflict=error
 ```
 
 **Modes:**
@@ -286,5 +286,5 @@ PG_DATABASE=mcp_context     # Default: mcp_context
 
 For issues or questions:
 
-- GitHub Issues: https://github.com/sin5ddd/mcp-sqlew/issues
+- GitHub Issues: https://github.com/sqlew-io/sqlew/issues
 - Documentation: `/docs` directory in repository

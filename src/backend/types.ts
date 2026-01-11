@@ -1,16 +1,15 @@
 /**
  * Backend Abstraction Types
  *
- * Defines the ToolBackend interface for local and plugin-based backends.
- * Plugin implementations (e.g., SaaS connector) should implement this interface.
+ * Defines the ToolBackend interface for local and SaaS backends.
  */
 
 /**
  * Backend type identifier
  * - 'local': Direct database connection via Knex
- * - 'plugin': External plugin (e.g., SaaS connector)
+ * - 'saas': SaaS connector (submodule)
  */
-export type BackendType = 'local' | 'plugin';
+export type BackendType = 'local' | 'saas';
 
 /**
  * Health check result
@@ -63,26 +62,3 @@ export interface ToolBackend {
   readonly pluginName?: string;
 }
 
-/**
- * Plugin module interface
- *
- * Plugins must export a class that implements ToolBackend
- * and a factory function to create instances.
- */
-export interface PluginModule {
-  /**
-   * Create a backend instance
-   * @param config - Plugin-specific configuration
-   */
-  createBackend(config: unknown): ToolBackend;
-
-  /**
-   * Plugin version
-   */
-  version: string;
-
-  /**
-   * Minimum compatible mcp-sqlew version
-   */
-  minVersion?: string;
-}
