@@ -109,31 +109,43 @@ export function initializeSqlewIntegrations(projectRoot: string): void {
  * As of v5.0.0:
  * - Skills and Hooks are managed by sqlew-plugin (not per-project)
  * - Rules are installed globally (~/.claude/rules/sqlew/)
- * - Only sqlew working directories need gitignoring
+ * - Gitignore is placed inside .sqlew/ directory
+ *
+ * Note: *.db* catches .db, .db-journal, .db-wal, .db-shm files
  */
 const SQLEW_GITIGNORE_ENTRIES = [
-  '.sqlew/queue/',
-  '.sqlew/tmp/',
-  '.sqlew/*.db',
-  '.sqlew/*.db-journal',
+  'queue/',
+  'tmp/',
+  '*.db*',
 ];
 
-/** Marker comment for sqlew section in gitignore */
+/** Marker comment for sqlew gitignore */
 const SQLEW_GITIGNORE_MARKER = '# sqlew auto-generated files';
 
 /**
- * Initialize .gitignore with sqlew auto-generated file entries
- * Creates .gitignore if it doesn't exist, adds missing entries if sqlew section exists
+ * Initialize .sqlew/.gitignore with sqlew auto-generated file entries
+ * Creates .sqlew/.gitignore if it doesn't exist, adds missing entries if sqlew section exists
  */
 export function initializeGitignore(projectRoot: string): void {
-  const gitignorePath = path.join(projectRoot, '.gitignore');
+  const sqlewDir = path.join(projectRoot, '.sqlew');
+  const gitignorePath = path.join(sqlewDir, '.gitignore');
+
+  // Create .sqlew directory if needed
+  if (!fs.existsSync(sqlewDir)) {
+    try {
+      fs.mkdirSync(sqlewDir, { recursive: true });
+    } catch (error) {
+      debugLog('WARN', 'Failed to create .sqlew directory', { error });
+      return;
+    }
+  }
 
   // Read current .gitignore content (or empty string if doesn't exist)
   let content = '';
   if (fs.existsSync(gitignorePath)) {
     content = fs.readFileSync(gitignorePath, 'utf-8');
   } else {
-    debugLog('INFO', '.gitignore not found, creating new file', { gitignorePath });
+    debugLog('INFO', '.sqlew/.gitignore not found, creating new file', { gitignorePath });
   }
 
   // Check if sqlew section already exists
@@ -155,30 +167,29 @@ export function initializeGitignore(projectRoot: string): void {
         '\n' + missingEntries.join('\n') +
         content.slice(afterMarker);
       fs.writeFileSync(gitignorePath, newContent, 'utf-8');
-      debugLog('INFO', 'Added missing sqlew entries to .gitignore', {
+      debugLog('INFO', 'Added missing sqlew entries to .sqlew/.gitignore', {
         entries: missingEntries
       });
     } catch (error) {
-      debugLog('WARN', 'Failed to update .gitignore', { error });
+      debugLog('WARN', 'Failed to update .sqlew/.gitignore', { error });
     }
     return;
   }
 
   // Build section to add (fresh install)
   const sectionLines = [
-    '',
     SQLEW_GITIGNORE_MARKER,
     ...SQLEW_GITIGNORE_ENTRIES,
   ];
 
-  // Append to .gitignore
+  // Write to .sqlew/.gitignore
   try {
-    const newContent = content.trimEnd() + '\n' + sectionLines.join('\n') + '\n';
+    const newContent = content.trimEnd() + (content ? '\n' : '') + sectionLines.join('\n') + '\n';
     fs.writeFileSync(gitignorePath, newContent, 'utf-8');
-    debugLog('INFO', 'Added sqlew entries to .gitignore', {
+    debugLog('INFO', 'Created .sqlew/.gitignore', {
       entries: SQLEW_GITIGNORE_ENTRIES.length
     });
   } catch (error) {
-    debugLog('WARN', 'Failed to update .gitignore', { error });
+    debugLog('WARN', 'Failed to create .sqlew/.gitignore', { error });
   }
 }
