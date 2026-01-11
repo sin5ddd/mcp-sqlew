@@ -65,11 +65,11 @@ export interface ProjectRootOptions {
  * const root = determineProjectRoot({});
  * // Returns: '/path/to/project' (from environment variable)
  *
- * // User specified: npx sqlew --db-path=/absolute/path/to/.sqlew/db.db
+ * // User specified: sqlew --db-path=/absolute/path/to/.sqlew/db.db
  * const root = determineProjectRoot({ cliDbPath: '/absolute/path/to/.sqlew/db.db' });
  * // Returns: '/absolute/path/to/.sqlew' (not System32!)
  *
- * // User specified: npx sqlew --config-path=C:\Project\.sqlew\config.toml (Windows)
+ * // User specified: sqlew --config-path=C:\Project\.sqlew\config.toml (Windows)
  * const root = determineProjectRoot({ cliConfigPath: 'C:\\Project\\.sqlew\\config.toml' });
  * // Returns: 'C:/Project/.sqlew' (normalized to forward slashes)
  *
