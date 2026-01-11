@@ -25,7 +25,7 @@ import { initDebugLogger, debugLog } from '../utils/debug-logger.js';
 import { ensureSqlewDirectory } from '../config/example-generator.js';
 import { determineProjectRoot } from '../utils/project-root.js';
 import { ParsedArgs } from './arg-parser.js';
-import { initializeSqlewIntegrations } from '../init-skills.js';
+import { initializeSqlewRules } from '../init-rules.js';
 import { loadGlobalConfig } from '../config/global-config.js';
 import { initializeBackend, isCloudMode } from '../backend/backend-factory.js';
 
@@ -369,13 +369,12 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
     debugLogLevel: debugLogLevel
   });
 
-  // 8. Initialize sqlew integrations (skills + CLAUDE.md + hooks) - silent, non-blocking
+  // 8. Initialize sqlew rules (global rules + gitignore) - silent, non-blocking
   // IMPORTANT: Use currentDir (worktree) not finalProjectRoot (main repo)
-  // Skills, hooks, and CLAUDE.md should be installed where Claude Code is running
   try {
-    initializeSqlewIntegrations(currentDir);
+    initializeSqlewRules(currentDir);
   } catch (error) {
-    debugLog('WARN', 'Failed to initialize sqlew integrations', { error });
+    debugLog('WARN', 'Failed to initialize sqlew rules', { error });
     // Non-fatal - continue server startup
   }
 

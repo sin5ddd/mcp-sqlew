@@ -83,7 +83,7 @@ export function initializeGlobalRules(): void {
 }
 
 /**
- * Initialize sqlew integrations on MCP server startup
+ * Initialize sqlew rules on MCP server startup
  *
  * As of v5.0.0, Skills and Hooks are managed by the sqlew-plugin.
  * This function now only handles:
@@ -92,8 +92,8 @@ export function initializeGlobalRules(): void {
  *
  * @param projectRoot - Project root directory (for .gitignore updates)
  */
-export function initializeSqlewIntegrations(projectRoot: string): void {
-  debugLog('DEBUG', 'Initializing sqlew integrations', { projectRoot });
+export function initializeSqlewRules(projectRoot: string): void {
+  debugLog('DEBUG', 'Initializing sqlew rules', { projectRoot });
 
   // Initialize global rules (~/.claude/rules/sqlew/)
   // This applies Plan Mode Integration across all projects

@@ -15,7 +15,7 @@ import { trackPlanCommand } from './cli/hooks/track-plan.js';
 import { saveCommand } from './cli/hooks/save.js';
 import { checkCompletionCommand } from './cli/hooks/check-completion.js';
 import { markDoneCommand } from './cli/hooks/mark-done.js';
-import { initializeGlobalRules, initializeGitignore } from './init-skills.js';
+import { initializeGlobalRules, initializeGitignore } from './init-rules.js';
 import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
 import { onStopCommand } from './cli/hooks/on-stop.js';
 import { onEnterPlanCommand } from './cli/hooks/on-enter-plan.js';
@@ -268,7 +268,6 @@ async function queryFiles(_args: CLIArgs): Promise<void> {
  * This command now sets up:
  * - Global Rules (~/.claude/rules/sqlew/)
  * - Project .gitignore
- * - Legacy hooks (for backwards compatibility)
  */
 async function initAllCommand(): Promise<void> {
   const { determineProjectRoot } = await import('./utils/project-root.js');
@@ -312,7 +311,7 @@ async function initAllCommand(): Promise<void> {
   console.log('');
   console.log('Next steps:');
   console.log('  1. Consider using sqlew-plugin for better integration');
-  console.log('  2. Restart Claude Code for hooks to take effect');
+  console.log('  2. Restart Claude Code for rules to take effect');
   console.log('  3. Run "/sqlew" to start using sqlew context management');
 }
 
