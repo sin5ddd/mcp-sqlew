@@ -215,7 +215,11 @@ All tools support:
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
 - [CLI Mode Overview](docs/cli/README.md) - Database migration, export/import commands
-- [Migration Guides](docs/MIGRATION_v2.md) - Version upgrade guides
+
+### Upgrade Guides
+
+- **[Upgrade from v4 to v5](docs/MIGRATION_CLEANUP_GUIDE.md)** - Cleanup legacy files after plugin migration
+- [Migration from v2](docs/MIGRATION_v2.md) - Version upgrade guides
 
 ## Use Cases
 
