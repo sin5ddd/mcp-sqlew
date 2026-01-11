@@ -8,17 +8,37 @@
 
 ## 🚀 Quick Start
 
-### 1. Install globally (Recommended)
+### 1. Install MCP Server
 
 ```bash
 npm install -g sqlew
 ```
 
-### 2. Add to your MCP config
+### 2. Install Plugin (Recommended - v5.0.0+)
 
-Add to `.mcp.json` in your project root:
+```bash
+# Add the marketplace
+/plugin marketplace add sqlew-io/sqlew-plugin
 
-```json
+# Install the plugin
+/plugin add sqlew
+```
+
+**That's it!** The plugin automatically sets up everything:
+- ✅ MCP server config (`.mcp.json`)
+- ✅ Claude Code Skills (Plan Mode guidance)
+- ✅ Claude Code Hooks (automatic decision capture)
+- ✅ Specialized Agents (architect, researcher, scrum-master)
+
+> **Note:** Global Rules are automatically created at `~/.claude/rules/sqlew/` when the MCP server starts.
+
+### Alternative: Manual Installation (Legacy)
+
+For users who prefer not to use the plugin system:
+
+```bash
+# 1. Add to .mcp.json manually
+cat >> .mcp.json << 'EOF'
 {
   "mcpServers": {
     "sqlew": {
@@ -26,21 +46,15 @@ Add to `.mcp.json` in your project root:
     }
   }
 }
-```
+EOF
 
-### 3. Initialize project
-
-```bash
+# 2. Initialize legacy hooks and rules
 sqlew --init
 ```
 
-This one-shot command sets up:
-- Claude Code Skills
-- CLAUDE.md integration hints
-- Plan-to-ADR hooks
-- .gitignore entries
+> **Note:** Legacy installation does not include Skills or Agents.
 
-### 4. Just use Plan Mode!
+### 3. Just use Plan Mode!
 
 **That's it!** Now every time you:
 1. Create a plan in Claude Code
@@ -228,7 +242,7 @@ All tools support:
 
 ## Support
 
-Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) - One-time or monthly options available.
+Support development via [GitHub Sponsors](https://github.com/sponsors/sqlew-io) - One-time or monthly options available.
 
 ## Version
 
@@ -249,19 +263,19 @@ Apache License 2.0 - Free for commercial and personal use. See [LICENSE](LICENSE
 ## Links
 
 - [npm package](https://www.npmjs.com/package/sqlew)
-- [GitHub repository](https://github.com/sin5ddd/mcp-sqlew)
+- [GitHub repository](https://github.com/sqlew-io/sqlew)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 
 ## Support & Documentation
 
-- Issues: [GitHub Issues](https://github.com/sin5ddd/mcp-sqlew/issues)
+- Issues: [GitHub Issues](https://github.com/sqlew-io/sqlew/issues)
 - Docs: [docs/](docs/) directory
 
 ## Acknowledgments
 
 Built with [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk), [better-sqlite3](https://github.com/WiseLibs/better-sqlite3), and TypeScript.
 
-**Author**: sin5ddd
+**Author**: sqlew-io
 
 ---
 

@@ -53,4 +53,4 @@ See [docs/SLASH_COMMANDS.md](../../docs/SLASH_COMMANDS.md) for detailed usage ex
 
 - [Main README](../../README.md)
 - [Slash Commands Documentation](../../docs/SLASH_COMMANDS.md)
-- [Project Repository](https://github.com/sin5ddd/mcp-sqlew)
+- [Project Repository](https://github.com/sqlew-io/sqlew)

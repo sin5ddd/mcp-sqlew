@@ -15,7 +15,7 @@ export function generateMinimalConfig(): string {
   return `# sqlew Minimal Configuration
 # Generated automatically - edit as needed
 # Full example: .sqlew/config.example.toml
-# Documentation: https://github.com/sin5ddd/mcp-sqlew
+# Documentation: https://github.com/sqlew-io/sqlew
 
 # ============================================================================
 # Specialized Agents Settings

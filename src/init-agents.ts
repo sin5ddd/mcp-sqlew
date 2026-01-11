@@ -2,7 +2,17 @@
 
 /**
  * CLI tool to initialize sqlew specialized agents
- * Usage: npx mcp-sqlew init-agents [--path <custom-path>]
+ *
+ * @deprecated v5.0.0 - Agents are now managed by sqlew-plugin
+ *
+ * As of v5.0.0, agents are included in the sqlew-plugin and installed automatically.
+ * This CLI is kept for backwards compatibility but will show a deprecation notice.
+ *
+ * New installation method:
+ *   /plugin marketplace add sqlew-io/sqlew-plugin
+ *   /plugin add sqlew
+ *
+ * @see https://github.com/sqlew-io/sqlew-plugin
  */
 
 import * as fs from 'fs';
@@ -172,6 +182,25 @@ function main(): void {
   try {
     console.log('mcp-sqlew Agent Installer\n');
 
+    // Show deprecation notice
+    console.log('⚠ DEPRECATION NOTICE (v5.0.0)');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Agents are now included in the sqlew-plugin (Claude Code Plugin).');
+    console.log('');
+    console.log('NEW INSTALLATION METHOD:');
+    console.log('  /plugin marketplace add sqlew-io/sqlew-plugin');
+    console.log('  /plugin add sqlew');
+    console.log('');
+    console.log('Benefits of using the plugin:');
+    console.log('  • Automatic installation of Skills, Hooks, and Agents');
+    console.log('  • Clean uninstall with /plugin remove sqlew');
+    console.log('  • No files left in project directories');
+    console.log('');
+    console.log('For more info: https://github.com/sqlew-io/sqlew-plugin');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+    console.log('Continuing with legacy installation...\n');
+
     // STEP 1: Ensure minimal config.toml exists
     ensureConfigExists();
 
@@ -236,7 +265,7 @@ function main(): void {
     console.log('\n  3. Customize agent selection:');
     console.log('     Edit .sqlew/config.toml → [agents] section');
     console.log('     Disable unused agents to reduce token consumption\n');
-    console.log('For more info: https://github.com/sin5ddd/mcp-sqlew\n');
+    console.log('For more info: https://github.com/sqlew-io/sqlew\n');
 
   } catch (error) {
     console.error(`\n❌ Error: ${error instanceof Error ? error.message : String(error)}\n`);

@@ -286,5 +286,5 @@ PG_DATABASE=mcp_context     # Default: mcp_context
 
 For issues or questions:
 
-- GitHub Issues: https://github.com/sin5ddd/mcp-sqlew/issues
+- GitHub Issues: https://github.com/sqlew-io/sqlew/issues
 - Documentation: `/docs` directory in repository

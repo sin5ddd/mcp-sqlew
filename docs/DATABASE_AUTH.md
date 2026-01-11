@@ -119,7 +119,7 @@ password = "db-password"
 
 ## Future Authentication Methods
 
-> **Status**: Planned for future releases. If you need these features, please [open an issue](https://github.com/sin5ddd/mcp-sqlew/issues) - we'll prioritize based on demand!
+> **Status**: Planned for future releases. If you need these features, please [open an issue](https://github.com/sqlew-io/sqlew/issues) - we'll prioritize based on demand!
 
 ### SSL/TLS Client Certificates
 

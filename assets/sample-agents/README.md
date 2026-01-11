@@ -33,4 +33,4 @@ Agents configured as `true` are automatically installed to your project's `.clau
 ## Links
 
 - [Main README](../../README.md#specialized-agents)
-- [Project Repository](https://github.com/sin5ddd/mcp-sqlew)
+- [Project Repository](https://github.com/sqlew-io/sqlew)

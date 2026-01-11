@@ -1,19 +1,22 @@
 /**
  * Init Hooks Command
  *
- * Initializes Claude Code Hooks configuration for sqlew.
- * Creates/updates .claude/settings.local.json with hook settings.
- * Optionally installs Git hooks (post-merge, post-rewrite).
+ * @deprecated v5.0.0 - Hooks are now managed by sqlew-plugin
  *
- * Usage:
+ * As of v5.0.0, hooks are included in the sqlew-plugin and installed automatically.
+ * This CLI is kept for backwards compatibility.
+ *
+ * New installation method:
+ *   /plugin marketplace add sqlew-io/sqlew-plugin
+ *   /plugin add sqlew
+ *
+ * Legacy Usage:
  *   sqlew init --hooks              # Initialize all hooks
  *   sqlew init --hooks --no-git     # Skip Git hooks
  *
- * Auto-initialization:
- *   Called automatically on MCP server startup (first time only).
- *   Silent mode - no console output unless errors occur.
- *
+ * @see https://github.com/sqlew-io/sqlew-plugin
  * @since v4.1.0
+ * @deprecated v5.0.0
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, statSync } from 'fs';
@@ -411,10 +414,27 @@ function parseInitArgs(args: string[]): { noGit: boolean } {
 /**
  * Main init hooks command entry point
  *
+ * @deprecated v5.0.0 - Use sqlew-plugin instead
  * @param args - Command line arguments
  */
 export async function initHooksCommand(args: string[] = []): Promise<void> {
   try {
+    // Show deprecation notice
+    console.log('');
+    console.log('⚠ DEPRECATION NOTICE (v5.0.0)');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Hooks are now included in the sqlew-plugin (Claude Code Plugin).');
+    console.log('');
+    console.log('NEW INSTALLATION METHOD:');
+    console.log('  /plugin marketplace add sqlew-io/sqlew-plugin');
+    console.log('  /plugin add sqlew');
+    console.log('');
+    console.log('For more info: https://github.com/sqlew-io/sqlew-plugin');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+    console.log('Continuing with legacy installation...');
+    console.log('');
+
     const options = parseInitArgs(args);
 
     // Determine project root

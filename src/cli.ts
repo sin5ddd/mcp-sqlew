@@ -16,7 +16,7 @@ import { saveCommand } from './cli/hooks/save.js';
 import { checkCompletionCommand } from './cli/hooks/check-completion.js';
 import { markDoneCommand } from './cli/hooks/mark-done.js';
 import { initHooksCommand } from './cli/hooks/init-hooks.js';
-import { initializeSkills, initializeRules, initializeGitignore } from './init-skills.js';
+import { initializeGlobalRules, initializeGitignore } from './init-skills.js';
 import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
 import { onStopCommand } from './cli/hooks/on-stop.js';
 import { onEnterPlanCommand } from './cli/hooks/on-enter-plan.js';
@@ -149,11 +149,18 @@ sqlew CLI - Query and database migration tool for mcp-sqlew
 
 USAGE:
   sqlew <command> [options]
-  sqlew --init              # One-shot project setup (recommended)
 
-COMMANDS:
-  Setup:
-    --init           One-shot initialization (Skills + CLAUDE.md + Hooks + gitignore)
+RECOMMENDED SETUP (v5.0.0+):
+  The sqlew-plugin is now the recommended way to install Skills, Hooks, and Agents.
+
+  /plugin marketplace add sqlew-io/sqlew-plugin
+  /plugin add sqlew
+
+  For more info: https://github.com/sqlew-io/sqlew-plugin
+
+LEGACY COMMANDS:
+  Setup (deprecated - use sqlew-plugin instead):
+    --init           Legacy initialization (global rules + gitignore + legacy hooks)
     init --hooks     Initialize Claude Code and Git hooks only
 
   Database:
@@ -161,29 +168,26 @@ COMMANDS:
     db:export  Export project data to JSON format (data-only, for append-import)
     db:import  Import project data from JSON export (append to existing database)
 
-  Claude Code Hooks (v4.1.0+):
+  Claude Code Hooks (internal use):
     suggest          Find related decisions (PreToolUse hook for Task)
     track-plan       Track plan files (PreToolUse hook for Write)
     save             Save decisions on code edit (PostToolUse hook for Edit|Write)
     check-completion Check task completion (PostToolUse hook for TodoWrite)
     mark-done        Mark decisions as implemented (Git hooks or manual)
 
-  Plan Mode Hooks (v4.2.0+):
+  Plan Mode Hooks (internal use):
     on-enter-plan    Inject TOML template (PostToolUse hook for EnterPlanMode)
     on-exit-plan     Prompt TOML documentation (PostToolUse hook for ExitPlanMode)
     on-subagent-stop Process Plan agent completion (SubagentStop hook)
     on-stop          Process main agent stop (Stop hook)
 
 OPTIONS:
-  --init                   Initialize all sqlew integrations
+  --init                   Legacy initialization
   --help                   Show this help message
 
 EXAMPLES:
-  # Full project setup (Skills, CLAUDE.md, Hooks, gitignore)
+  # Legacy initialization (prefer sqlew-plugin instead)
   sqlew --init
-
-  # Initialize only hooks
-  sqlew init --hooks
 
   # Generate MySQL dump for database migration
   npm run db:dump -- mysql -o dump-mysql.sql
@@ -260,45 +264,52 @@ async function queryFiles(_args: CLIArgs): Promise<void> {
 // ============================================================================
 
 /**
- * Comprehensive project initialization
- * Sets up Skills, CLAUDE.md integration, Hooks, and gitignore in one command
+ * Project initialization command
+ *
+ * As of v5.0.0, Skills and Hooks are managed by the sqlew-plugin.
+ * This command now sets up:
+ * - Global Rules (~/.claude/rules/sqlew/)
+ * - Project .gitignore
+ * - Legacy hooks (for backwards compatibility)
  */
 async function initAllCommand(): Promise<void> {
   const { determineProjectRoot } = await import('./utils/project-root.js');
   const projectPath = determineProjectRoot();
 
-  console.log('[sqlew --init] Starting comprehensive initialization...');
+  console.log('');
+  console.log('⚠ NOTE: sqlew v5.0.0 introduces sqlew-plugin for Skills/Hooks/Agents');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
+  console.log('RECOMMENDED INSTALLATION (v5.0.0+):');
+  console.log('  /plugin marketplace add sqlew-io/sqlew-plugin');
+  console.log('  /plugin add sqlew');
+  console.log('');
+  console.log('For more info: https://github.com/sqlew-io/sqlew-plugin');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
+  console.log('[sqlew --init] Starting initialization...');
   console.log(`[sqlew --init] Project root: ${projectPath}`);
   console.log('');
 
-  // 1. Initialize Skills
-  console.log('[1/4] Initializing Skills...');
+  // 1. Initialize Global Rules (~/.claude/rules/sqlew/)
+  console.log('[1/3] Setting up global rules (~/.claude/rules/sqlew/)...');
   try {
-    initializeSkills(projectPath);
-    console.log('      ✓ Skills initialized');
-  } catch (error) {
-    console.log(`      ✗ Skills failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  // 2. Initialize .claude/rules/
-  console.log('[2/4] Setting up .claude/rules/...');
-  try {
-    initializeRules(projectPath);
-    console.log('      ✓ Plan mode integration rule installed');
+    initializeGlobalRules();
+    console.log('      ✓ Global plan mode integration rule installed');
   } catch (error) {
     console.log(`      ✗ Rules setup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 3. Initialize Hooks
-  console.log('[3/4] Setting up Claude Code Hooks...');
+  // 2. Initialize Hooks (legacy - for users not using plugin)
+  console.log('[2/3] Setting up Claude Code Hooks (legacy)...');
   try {
     await initHooksCommand([]);
   } catch (error) {
     console.log(`      ✗ Hooks failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 4. Initialize gitignore
-  console.log('[4/4] Updating .gitignore...');
+  // 3. Initialize gitignore
+  console.log('[3/3] Updating .gitignore...');
   try {
     initializeGitignore(projectPath);
     console.log('      ✓ .gitignore updated');
@@ -310,8 +321,9 @@ async function initAllCommand(): Promise<void> {
   console.log('[sqlew --init] Initialization complete!');
   console.log('');
   console.log('Next steps:');
-  console.log('  1. Restart Claude Code for hooks to take effect');
-  console.log('  2. Run "/sqlew" to start using sqlew context management');
+  console.log('  1. Consider using sqlew-plugin for better integration');
+  console.log('  2. Restart Claude Code for hooks to take effect');
+  console.log('  3. Run "/sqlew" to start using sqlew context management');
 }
 
 // ============================================================================

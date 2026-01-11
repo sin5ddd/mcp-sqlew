@@ -1,14 +1,19 @@
 /**
- * Auto-initialize sqlew skills, CLAUDE.md integration, and hooks on server startup
- * Copies skills from assets if not present, appends to CLAUDE.md if section missing,
- * and sets up Claude Code hooks in settings.local.json (first time only)
+ * Auto-initialize sqlew Rules on server startup
+ *
+ * As of v5.0.0, Skills and Hooks are managed by the sqlew-plugin (Claude Code Plugin).
+ * This module now only handles:
+ * - Global Rules initialization (~/.claude/rules/sqlew/)
+ * - Project .gitignore updates
+ *
+ * @see https://github.com/sqlew-io/sqlew-plugin for Skills/Hooks/Agents
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { fileURLToPath } from 'url';
 import { debugLog } from './utils/debug-logger.js';
-import { autoInitializeHooks } from './cli/hooks/init-hooks.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,61 +28,29 @@ function getAssetsPath(): string {
 }
 
 /**
- * Initialize skills in project's .claude/skills directory
- * Only copies if skill directory doesn't exist
+ * Get the global Claude rules directory
+ * @returns Path to ~/.claude/rules/sqlew/
  */
-export function initializeSkills(projectRoot: string): void {
-  const skillsSourceDir = path.join(getAssetsPath(), 'sample-skills');
-  const skillsTargetDir = path.join(projectRoot, '.claude', 'skills');
-
-  // Check if source exists
-  if (!fs.existsSync(skillsSourceDir)) {
-    debugLog('WARN', 'Skills source directory not found', { skillsSourceDir });
-    return;
-}
-
-  // Get list of skill directories to copy
-  const skillDirs = fs.readdirSync(skillsSourceDir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => dirent.name);
-
-  for (const skillName of skillDirs) {
-    const sourceSkillDir = path.join(skillsSourceDir, skillName);
-    const targetSkillDir = path.join(skillsTargetDir, skillName);
-
-    // Only copy if target doesn't exist
-    if (!fs.existsSync(targetSkillDir)) {
-      try {
-        // Create target directory
-        fs.mkdirSync(targetSkillDir, { recursive: true });
-
-        // Copy all files in skill directory
-        const files = fs.readdirSync(sourceSkillDir);
-        for (const file of files) {
-          const sourceFile = path.join(sourceSkillDir, file);
-          const targetFile = path.join(targetSkillDir, file);
-          fs.copyFileSync(sourceFile, targetFile);
-        }
-
-        debugLog('INFO', `Skill initialized: ${skillName}`, { targetSkillDir });
-      } catch (error) {
-        debugLog('WARN', `Failed to initialize skill: ${skillName}`, { error });
-      }
-    }
-}
+function getGlobalRulesDir(): string {
+  const home = os.homedir();
+  return path.join(home, '.claude', 'rules', 'sqlew');
 }
 
 /**
- * Initialize Plan Mode Integration rule in .claude/rules/ directory
- * This approach is safer than editing CLAUDE.md directly:
- * - Files in .claude/rules/ are auto-loaded with same priority as CLAUDE.md
+ * Initialize Plan Mode Integration rule in global ~/.claude/rules/sqlew/ directory
+ *
+ * As of v5.0.0, rules are installed globally to apply across all projects.
+ * This approach:
+ * - Applies to all projects without per-project installation
+ * - Survives plugin uninstall (user can manually delete if desired)
  * - No risk of corrupting user's CLAUDE.md content
- * - Simple file copy/overwrite for updates
+ *
+ * Global rules location: ~/.claude/rules/sqlew/plan-mode-integration.md
  */
-export function initializeRules(projectRoot: string): void {
+export function initializeGlobalRules(): void {
   const snippetPath = path.join(getAssetsPath(), 'claude-md-snippets', 'plan-mode-integration.md');
-  const rulesDir = path.join(projectRoot, '.claude', 'rules');
-  const targetPath = path.join(rulesDir, 'plan-mode-integration.md');
+  const globalRulesDir = getGlobalRulesDir();
+  const targetPath = path.join(globalRulesDir, 'plan-mode-integration.md');
 
   // Check if snippet source exists
   if (!fs.existsSync(snippetPath)) {
@@ -92,57 +65,57 @@ export function initializeRules(projectRoot: string): void {
   if (fs.existsSync(targetPath)) {
     const currentContent = fs.readFileSync(targetPath, 'utf-8');
     if (currentContent === snippetContent) {
-      debugLog('DEBUG', 'Plan mode integration rule is already up-to-date');
+      debugLog('DEBUG', 'Global plan mode integration rule is already up-to-date');
       return;
     }
   }
 
-  // Create rules directory if needed
+  // Create global rules directory if needed
   try {
-    fs.mkdirSync(rulesDir, { recursive: true });
+    fs.mkdirSync(globalRulesDir, { recursive: true });
 
     // Copy/update the rule file
     fs.writeFileSync(targetPath, snippetContent, 'utf-8');
-    debugLog('INFO', 'Plan mode integration rule initialized', { targetPath });
+    debugLog('INFO', 'Global plan mode integration rule initialized', { targetPath });
   } catch (error) {
-    debugLog('WARN', 'Failed to initialize plan mode integration rule', { error });
+    debugLog('WARN', 'Failed to initialize global plan mode integration rule', { error });
   }
 }
 
 /**
- * Initialize all sqlew integrations (skills + rules + hooks + gitignore)
- * Called during server startup
+ * Initialize sqlew integrations on MCP server startup
+ *
+ * As of v5.0.0, Skills and Hooks are managed by the sqlew-plugin.
+ * This function now only handles:
+ * - Global Rules initialization (~/.claude/rules/sqlew/)
+ * - Project .gitignore updates
+ *
+ * @param projectRoot - Project root directory (for .gitignore updates)
  */
 export function initializeSqlewIntegrations(projectRoot: string): void {
   debugLog('DEBUG', 'Initializing sqlew integrations', { projectRoot });
 
-  // Initialize skills
-  initializeSkills(projectRoot);
+  // Initialize global rules (~/.claude/rules/sqlew/)
+  // This applies Plan Mode Integration across all projects
+  initializeGlobalRules();
 
-  // Initialize .claude/rules/ for Plan Mode Integration
-  initializeRules(projectRoot);
-
-  // Initialize Claude Code hooks (first time only)
-  const hooksInitialized = autoInitializeHooks(projectRoot);
-  if (hooksInitialized) {
-    debugLog('INFO', 'Claude Code hooks auto-initialized', { projectRoot });
-}
-
-  // Initialize .gitignore entries for auto-generated files
+  // Initialize .gitignore entries for sqlew-generated files
   initializeGitignore(projectRoot);
 }
 
 /**
  * Files/directories auto-generated by sqlew that should be gitignored
- * These are installed per-project and shouldn't be committed
+ *
+ * As of v5.0.0:
+ * - Skills and Hooks are managed by sqlew-plugin (not per-project)
+ * - Rules are installed globally (~/.claude/rules/sqlew/)
+ * - Only sqlew working directories need gitignoring
  */
 const SQLEW_GITIGNORE_ENTRIES = [
-  '.claude/skills/sqlew-decision-format/',
-  '.claude/skills/sqlew-plan-guidance/',
-  '.claude/rules/plan-mode-integration.md',
-  '.claude/commands/sqlew.md',
   '.sqlew/queue/',
   '.sqlew/tmp/',
+  '.sqlew/*.db',
+  '.sqlew/*.db-journal',
 ];
 
 /** Marker comment for sqlew section in gitignore */
