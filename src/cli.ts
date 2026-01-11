@@ -15,7 +15,6 @@ import { trackPlanCommand } from './cli/hooks/track-plan.js';
 import { saveCommand } from './cli/hooks/save.js';
 import { checkCompletionCommand } from './cli/hooks/check-completion.js';
 import { markDoneCommand } from './cli/hooks/mark-done.js';
-import { initHooksCommand } from './cli/hooks/init-hooks.js';
 import { initializeGlobalRules, initializeGitignore } from './init-skills.js';
 import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
 import { onStopCommand } from './cli/hooks/on-stop.js';
@@ -160,8 +159,7 @@ RECOMMENDED SETUP (v5.0.0+):
 
 LEGACY COMMANDS:
   Setup (deprecated - use sqlew-plugin instead):
-    --init           Legacy initialization (global rules + gitignore + legacy hooks)
-    init --hooks     Initialize Claude Code and Git hooks only
+    --init           Legacy initialization (global rules + gitignore)
 
   Database:
     db:dump    Generate SQL dump for database migration (schema + data)
@@ -292,7 +290,7 @@ async function initAllCommand(): Promise<void> {
   console.log('');
 
   // 1. Initialize Global Rules (~/.claude/rules/sqlew/)
-  console.log('[1/3] Setting up global rules (~/.claude/rules/sqlew/)...');
+  console.log('[1/2] Setting up global rules (~/.claude/rules/sqlew/)...');
   try {
     initializeGlobalRules();
     console.log('      ✓ Global plan mode integration rule installed');
@@ -300,16 +298,8 @@ async function initAllCommand(): Promise<void> {
     console.log(`      ✗ Rules setup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 2. Initialize Hooks (legacy - for users not using plugin)
-  console.log('[2/3] Setting up Claude Code Hooks (legacy)...');
-  try {
-    await initHooksCommand([]);
-  } catch (error) {
-    console.log(`      ✗ Hooks failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  // 3. Initialize gitignore
-  console.log('[3/3] Updating .gitignore...');
+  // 2. Initialize gitignore
+  console.log('[2/2] Updating .sqlew/.gitignore...');
   try {
     initializeGitignore(projectPath);
     console.log('      ✓ .gitignore updated');
@@ -412,10 +402,21 @@ export async function runCli(rawArgs: string[]): Promise<void> {
     return;
   }
 
-  // init --hooks command (hooks only)
+  // init --hooks command (removed in v5.0.0 - use sqlew-plugin instead)
   if (args.command === 'init' && rawArgs.includes('--hooks')) {
-    await initHooksCommand(rawArgs.slice(1));
-    return;
+    console.log('');
+    console.log('⚠ The "init --hooks" command has been removed in v5.0.0');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+    console.log('Hooks are now managed by the sqlew-plugin (Claude Code Plugin).');
+    console.log('');
+    console.log('INSTALLATION:');
+    console.log('  /plugin marketplace add sqlew-io/sqlew-plugin');
+    console.log('  /plugin install sqlew-plugin');
+    console.log('');
+    console.log('For more info: https://github.com/sqlew-io/sqlew-plugin');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    process.exit(0);
   }
 
   // Show help if requested or no command
