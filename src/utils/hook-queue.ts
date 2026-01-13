@@ -437,7 +437,6 @@ export async function processQueue(
         const message = error instanceof Error ? error.message : String(error);
         errors.push({ item, error: message });
         debugLog('ERROR', `[hook-queue] Item ${i + 1} failed`, { callId, error: message });
-        console.error(`[hook-queue] Error processing item: ${message}`);
       }
     }
 

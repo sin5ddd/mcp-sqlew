@@ -37,7 +37,7 @@ function getGlobalRulesDir(): string {
 }
 
 /**
- * Initialize Plan Mode Integration rule in global ~/.claude/rules/sqlew/ directory
+ * Initialize all rules from claude-md-snippets in global ~/.claude/rules/sqlew/ directory
  *
  * As of v5.0.0, rules are installed globally to apply across all projects.
  * This approach:
@@ -45,40 +45,62 @@ function getGlobalRulesDir(): string {
  * - Survives plugin uninstall (user can manually delete if desired)
  * - No risk of corrupting user's CLAUDE.md content
  *
- * Global rules location: ~/.claude/rules/sqlew/plan-mode-integration.md
+ * Global rules location: ~/.claude/rules/sqlew/*.md
  */
 export function initializeGlobalRules(): void {
-  const snippetPath = path.join(getAssetsPath(), 'claude-md-snippets', 'plan-mode-integration.md');
+  const snippetsDir = path.join(getAssetsPath(), 'claude-md-snippets');
   const globalRulesDir = getGlobalRulesDir();
-  const targetPath = path.join(globalRulesDir, 'plan-mode-integration.md');
 
-  // Check if snippet source exists
-  if (!fs.existsSync(snippetPath)) {
-    debugLog('WARN', 'Plan mode integration snippet not found', { snippetPath });
+  // Check if snippets directory exists
+  if (!fs.existsSync(snippetsDir)) {
+    debugLog('WARN', 'Claude MD snippets directory not found', { snippetsDir });
     return;
-  }
-
-  // Read snippet content
-  const snippetContent = fs.readFileSync(snippetPath, 'utf-8');
-
-  // Check if target already exists and is up-to-date
-  if (fs.existsSync(targetPath)) {
-    const currentContent = fs.readFileSync(targetPath, 'utf-8');
-    if (currentContent === snippetContent) {
-      debugLog('DEBUG', 'Global plan mode integration rule is already up-to-date');
-      return;
-    }
   }
 
   // Create global rules directory if needed
   try {
     fs.mkdirSync(globalRulesDir, { recursive: true });
+  } catch (error) {
+    debugLog('WARN', 'Failed to create global rules directory', { error });
+    return;
+  }
+
+  // Find all .md files in snippets directory
+  const snippetFiles = fs.readdirSync(snippetsDir).filter(f => f.endsWith('.md'));
+
+  let updated = 0;
+  let upToDate = 0;
+
+  for (const filename of snippetFiles) {
+    const snippetPath = path.join(snippetsDir, filename);
+    const targetPath = path.join(globalRulesDir, filename);
+
+    // Read snippet content
+    const snippetContent = fs.readFileSync(snippetPath, 'utf-8');
+
+    // Check if target already exists and is up-to-date
+    if (fs.existsSync(targetPath)) {
+      const currentContent = fs.readFileSync(targetPath, 'utf-8');
+      if (currentContent === snippetContent) {
+        upToDate++;
+        continue;
+      }
+    }
 
     // Copy/update the rule file
-    fs.writeFileSync(targetPath, snippetContent, 'utf-8');
-    debugLog('INFO', 'Global plan mode integration rule initialized', { targetPath });
-  } catch (error) {
-    debugLog('WARN', 'Failed to initialize global plan mode integration rule', { error });
+    try {
+      fs.writeFileSync(targetPath, snippetContent, 'utf-8');
+      updated++;
+      debugLog('INFO', 'Global rule initialized', { filename });
+    } catch (error) {
+      debugLog('WARN', 'Failed to initialize global rule', { filename, error });
+    }
+  }
+
+  if (updated > 0) {
+    debugLog('INFO', 'Global rules initialized', { updated, upToDate });
+  } else {
+    debugLog('DEBUG', 'All global rules are up-to-date', { upToDate });
   }
 }
 
