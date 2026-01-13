@@ -8,9 +8,13 @@ After ExitPlanMode or when Plan-to-ADR processing completes, check if there are 
 
 ### How to Check
 
-1. Read `.sqlew/queue/pending.json`
-2. If `items` array is not empty, items are stuck in the queue
-3. Investigate why they weren't processed (likely High Similarity)
+Use the `queue` MCP tool to check the queue status:
+
+```
+queue { action: "list" }
+```
+
+If `count > 0`, items are stuck in the queue.
 
 ### Common Issue: High Similarity Block
 
@@ -24,9 +28,17 @@ If items remain in queue:
 
 1. **Check existing decisions** using `/sqlew search for <topic>`
 2. **Decide action:**
-   - If truly duplicate: Clear the queue item (edit pending.json)
+   - If truly duplicate: Use `queue { action: "remove", index: N }` to remove
    - If different intent: Update the key to be more specific
 3. **Report to user** if manual intervention is needed
+
+### Queue Tool Actions
+
+| Action | Description | Example |
+|--------|-------------|---------|
+| `list` | Show all pending items | `queue { action: "list" }` |
+| `remove` | Remove specific item | `queue { action: "remove", index: 0 }` |
+| `clear` | Remove all items | `queue { action: "clear" }` |
 
 ### Queue File Format
 
@@ -48,9 +60,3 @@ If items remain in queue:
   ]
 }
 ```
-
-### Clearing Stuck Items
-
-To clear processed/duplicate items, edit `.sqlew/queue/pending.json`:
-- Remove items from the `items` array
-- Or set `"items": []` to clear all

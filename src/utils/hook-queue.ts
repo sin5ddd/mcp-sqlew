@@ -39,7 +39,7 @@ const LOCK_TIMEOUT_MS = 30000;
  * @param projectPath - Project root path
  * @returns true if lock acquired, false if another process holds the lock
  */
-function tryAcquireLock(projectPath: string): boolean {
+export function tryAcquireLock(projectPath: string): boolean {
   const lockPath = join(projectPath, '.sqlew/queue/pending.lock');
 
   if (existsSync(lockPath)) {
@@ -82,7 +82,7 @@ function tryAcquireLock(projectPath: string): boolean {
  *
  * @param projectPath - Project root path
  */
-function releaseLock(projectPath: string): void {
+export function releaseLock(projectPath: string): void {
   const lockPath = join(projectPath, '.sqlew/queue/pending.lock');
   try {
     unlinkSync(lockPath);
@@ -234,7 +234,7 @@ export function readQueue(projectPath: string): QueueFile {
  * @param queue - Queue data to write
  * @param caller - Name of the calling function (for debug snapshots)
  */
-function writeQueue(projectPath: string, queue: QueueFile, caller: string = 'unknown'): void {
+export function writeQueue(projectPath: string, queue: QueueFile, caller: string = 'unknown'): void {
   ensureQueueDir(projectPath);
   const queuePath = getQueuePath(projectPath);
   const tempPath = queuePath + '.tmp';
