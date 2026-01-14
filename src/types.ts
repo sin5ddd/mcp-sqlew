@@ -451,6 +451,8 @@ export interface SetDecisionResponse {
     layer?: string;
     tags?: string[];
   }>;
+  // Human-readable warnings from SaaS backend (v5.1.0)
+  warnings?: string[];
 }
 
 export interface QuickSetDecisionResponse {
@@ -464,6 +466,8 @@ export interface QuickSetDecisionResponse {
     scope?: string;
   };
   message?: string;
+  // Human-readable warnings from SaaS backend (v5.1.0)
+  warnings?: string[];
 }
 
 export interface GetContextResponse {
@@ -484,6 +488,8 @@ export interface GetDecisionResponse {
     related_task_id: number | null;
     related_constraint_id: number | null;
   }>;
+  // Human-readable warnings from SaaS backend (v5.1.0)
+  warnings?: string[];
 }
 
 export interface HardDeleteDecisionResponse {
@@ -531,11 +537,15 @@ export interface AddConstraintResponse {
   success: boolean;
   constraint_id: number;
   already_exists?: boolean;
+  // Human-readable warnings from SaaS backend (v5.1.0)
+  warnings?: string[];
 }
 
 export interface GetConstraintsResponse {
   constraints: TaggedConstraint[];
   count: number;
+  // Human-readable warnings from SaaS backend (v5.1.0)
+  warnings?: string[];
 }
 
 export interface DeactivateConstraintResponse {
