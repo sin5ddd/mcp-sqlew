@@ -35,5 +35,13 @@ export type {
   HasUpdatesResponse,
   HardDeleteDecisionParams,
   HardDeleteDecisionResponse,
-  DecisionAction
+  DecisionAction,
+  // Export types (v5.0.0)
+  ExportFormat,
+  ExportDecisionParams,
+  ExportDecisionResponse,
+  ExportBlocks,
+  ExportBlockItem,
+  ExportBlockSection,
+  ExportBlockConstraint
 } from '../../types.js';

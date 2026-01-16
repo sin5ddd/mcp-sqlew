@@ -27,7 +27,7 @@ import { determineProjectRoot } from '../utils/project-root.js';
 import { ParsedArgs } from './arg-parser.js';
 import { initializeSqlewRules } from '../init-rules.js';
 import { loadGlobalConfig } from '../config/global-config.js';
-import { initializeBackend, isCloudMode } from '../backend/backend-factory.js';
+import { initializeBackend, isCloudMode, getBackend } from '../backend/backend-factory.js';
 
 /**
  * Extract project name from a path, skipping hidden directories.
@@ -380,8 +380,10 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
 
   // 9. Start queue watcher for hook-to-DB processing
   // Watches .sqlew/queue/pending.json and processes queued decisions
+  // Uses Backend abstraction to support both local DB and SaaS
   try {
-    await startQueueWatcher(currentDir);
+    const backend = getBackend();
+    await startQueueWatcher(currentDir, backend);
   } catch (error) {
     debugLog('WARN', 'Failed to start queue watcher', { error });
     // Non-fatal - hooks will still enqueue, processed on next startup

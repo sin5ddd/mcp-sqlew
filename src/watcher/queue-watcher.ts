@@ -16,12 +16,8 @@ import { join, dirname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { BaseWatcher } from './base-watcher.js';
 import { getQueuePath, hasQueueItems, processQueue, type QueueItem, type DecisionQueueItem, type ConstraintQueueItem } from '../utils/hook-queue.js';
-import { quickSetDecision } from '../tools/context/actions/quick-set.js';
-import { setDecision } from '../tools/context/actions/set.js';
-import { addConstraint } from '../tools/constraints/actions/add.js';
-import { activateConstraintsByTag } from '../tools/constraints/actions/activate.js';
 import { debugLog } from '../utils/debug-logger.js';
-import type { StatusString } from '../types.js';
+import type { ToolBackend } from '../backend/types.js';
 
 /**
  * QueueWatcher - Singleton for monitoring hook queue
@@ -29,23 +25,25 @@ import type { StatusString } from '../types.js';
 export class QueueWatcher extends BaseWatcher {
   private static instance: QueueWatcher | null = null;
   private projectRoot: string;
+  private backend: ToolBackend;
   private processing: boolean = false;
   private currentCallId: string = '';
 
-  private constructor(projectRoot: string) {
+  private constructor(projectRoot: string, backend: ToolBackend) {
     super('QueueWatcher', 500); // 500ms debounce for queue changes
     this.projectRoot = projectRoot;
+    this.backend = backend;
   }
 
   /**
    * Get singleton instance
    */
-  public static getInstance(projectRoot?: string): QueueWatcher {
+  public static getInstance(projectRoot?: string, backend?: ToolBackend): QueueWatcher {
     if (!QueueWatcher.instance) {
-      if (!projectRoot) {
-        throw new Error('QueueWatcher: projectRoot required for first initialization');
+      if (!projectRoot || !backend) {
+        throw new Error('QueueWatcher: projectRoot and backend required for first initialization');
       }
-      QueueWatcher.instance = new QueueWatcher(projectRoot);
+      QueueWatcher.instance = new QueueWatcher(projectRoot, backend);
     }
     return QueueWatcher.instance;
   }
@@ -181,6 +179,7 @@ export class QueueWatcher extends BaseWatcher {
 
   /**
    * Process a decision queue item
+   * Uses Backend abstraction to support both local DB and SaaS
    */
   private async processDecisionItem(item: DecisionQueueItem): Promise<void> {
     const { action, data } = item;
@@ -191,18 +190,18 @@ export class QueueWatcher extends BaseWatcher {
     });
 
     if (action === 'create') {
-      await quickSetDecision({
+      await this.backend.execute('decision', 'quick_set', {
         key: data.key,
-        value: data.value!,
-        status: data.status as StatusString,
+        value: data.value,
+        status: data.status,
         layer: data.layer,
         tags: data.tags,
       });
     } else if (action === 'update') {
-      await setDecision({
+      await this.backend.execute('decision', 'set', {
         key: data.key,
         value: data.value || `Updated: ${data.key}`,
-        status: data.status as StatusString,
+        status: data.status,
         layer: data.layer,
         tags: data.tags,
       });
@@ -211,6 +210,7 @@ export class QueueWatcher extends BaseWatcher {
 
   /**
    * Process a constraint queue item
+   * Uses Backend abstraction to support both local DB and SaaS
    * @since v4.2.1
    */
   private async processConstraintItem(item: ConstraintQueueItem): Promise<void> {
@@ -224,22 +224,22 @@ export class QueueWatcher extends BaseWatcher {
     });
 
     if (action === 'create') {
-      const priority = data.priority as 'low' | 'medium' | 'high' | 'critical' | undefined;
-      debugLog('INFO', `${this.watcherName}: Calling addConstraint`, {
+      const priority = data.priority || 'medium';
+      debugLog('INFO', `${this.watcherName}: Calling constraint.add via backend`, {
         callId: this.currentCallId,
         text: data.text?.slice(0, 30),
         category: data.category || 'architecture',
-        priority: priority || 'medium',
+        priority,
       });
-      const result = await addConstraint({
+      const result = await this.backend.execute<{ success: boolean; constraint_id: number }>('constraint', 'add', {
         constraint_text: data.text,
         category: data.category || 'architecture',
-        priority: priority || 'medium',
+        priority,
         layer: data.layer,
         tags: data.tags,
         active: data.active ?? true,
       });
-      debugLog('INFO', `${this.watcherName}: addConstraint returned`, {
+      debugLog('INFO', `${this.watcherName}: constraint.add returned`, {
         callId: this.currentCallId,
         success: result.success,
         constraint_id: result.constraint_id,
@@ -248,7 +248,7 @@ export class QueueWatcher extends BaseWatcher {
       // Activate constraints by plan_id tag
       if (data.plan_id) {
         const tag = data.plan_id.slice(0, 8); // Short form of plan_id
-        const result = await activateConstraintsByTag(tag);
+        const result = await this.backend.execute<{ success: boolean; activated_count: number }>('constraint', 'activate_by_tag', { tag });
         debugLog('INFO', `${this.watcherName}: Activated constraints`, {
           callId: this.currentCallId,
           activated_count: result.activated_count,
@@ -271,10 +271,13 @@ export class QueueWatcher extends BaseWatcher {
 
 /**
  * Start the queue watcher
- * Called from MCP server setup after DB initialization
+ * Called from MCP server setup after backend initialization
+ *
+ * @param projectRoot - Project root directory
+ * @param backend - ToolBackend instance (local or SaaS)
  */
-export async function startQueueWatcher(projectRoot: string): Promise<void> {
-  const watcher = QueueWatcher.getInstance(projectRoot);
+export async function startQueueWatcher(projectRoot: string, backend: ToolBackend): Promise<void> {
+  const watcher = QueueWatcher.getInstance(projectRoot, backend);
   await watcher.start();
 }
 

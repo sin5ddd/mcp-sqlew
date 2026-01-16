@@ -15,7 +15,7 @@ import {
 } from '../tools/context/index.js';
 import {
   addConstraint, getConstraints, activateConstraint, deactivateConstraint, suggestPendingConstraints,
-  constraintHelp, constraintExample
+  constraintHelp, constraintExample, activateConstraintsByTag
 } from '../tools/constraints/index.js';
 import {
   queryAction, queryParams, queryTool, workflowHints, batchGuide, errorRecovery,
@@ -29,6 +29,11 @@ import {
 } from '../tools/example/index.js';
 import { trackAndReturnHelp } from '../utils/help-tracking.js';
 import { handleSuggestAction } from '../tools/suggest/index.js';
+import {
+  listQueue, clearQueue, removeFromQueue
+} from '../tools/queue/index.js';
+import { getHelpLoader } from '../help-loader.js';
+import { ProjectContext } from '../utils/project-context.js';
 
 /**
  * LocalBackend implementation
@@ -68,6 +73,9 @@ export class LocalBackend implements ToolBackend {
         break;
       case 'suggest':
         result = await handleSuggestAction(p);
+        break;
+      case 'queue':
+        result = this.executeQueue(action, p);
         break;
       default:
         throw new Error(`Unknown tool: ${tool}`);
@@ -181,6 +189,13 @@ export class LocalBackend implements ToolBackend {
       case 'add_decision_context': return await addDecisionContextAction(params);
       case 'list_decision_contexts': return await listDecisionContextsAction(params);
       case 'analytics': return await handleAnalytics(params);
+      case 'export':
+        // SaaS-only feature - LocalBackend cannot provide export data
+        throw new Error(
+          'Export feature is SaaS-only. ' +
+          'To use document export, connect to sqlew SaaS (set SQLEW_API_KEY). ' +
+          'For local JSON backup, use: npm run db:export'
+        );
       case 'help': {
         const helpContent = decisionHelp();
         trackAndReturnHelp('decision', 'help', JSON.stringify(helpContent));
@@ -210,6 +225,7 @@ export class LocalBackend implements ToolBackend {
       case 'add': return await addConstraint(params);
       case 'get': return await getConstraints(params);
       case 'activate': return await activateConstraint(params);
+      case 'activate_by_tag': return await activateConstraintsByTag(params.tag);
       case 'deactivate': return await deactivateConstraint(params);
       case 'suggest_pending': return await suggestPendingConstraints(params);
       case 'help': {
@@ -366,6 +382,70 @@ export class LocalBackend implements ToolBackend {
         return useCaseExampleContent;
       }
       default: throw new Error(`Unknown use_case action: ${action}`);
+    }
+  }
+
+  /**
+   * Get project root path for file-based operations
+   *
+   * Priority: ProjectContext.project_root_path > process.cwd()
+   */
+  private getProjectRoot(): string {
+    const ctx = ProjectContext.getInstance();
+    if (ctx.isInitialized()) {
+      return ctx.getProjectMetadata().project_root_path || process.cwd();
+    }
+    return process.cwd();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async executeQueue(action: string, params: any): Promise<unknown> {
+    const projectRoot = this.getProjectRoot();
+
+    switch (action) {
+      case 'list':
+        return listQueue(projectRoot, params);
+      case 'clear':
+        return clearQueue(projectRoot, params);
+      case 'remove':
+        return removeFromQueue(projectRoot, params);
+      case 'help': {
+        const loader = await getHelpLoader();
+        const tool = loader.getTool('queue');
+        if (!tool) {
+          return { error: 'Queue help not found' };
+        }
+        const helpContent = {
+          tool: tool.name,
+          description: tool.description,
+          actions: tool.actions.map(a => ({
+            name: a.name,
+            description: a.description,
+            params: a.params,
+          })),
+        };
+        trackAndReturnHelp('queue', 'help', JSON.stringify(helpContent));
+        return helpContent;
+      }
+      case 'example': {
+        const loader = await getHelpLoader();
+        const tool = loader.getTool('queue');
+        if (!tool) {
+          return { error: 'Queue examples not found' };
+        }
+        const exampleContent = {
+          tool: tool.name,
+          examples: tool.actions.flatMap(a =>
+            a.examples.map(ex => ({
+              action: a.name,
+              ...ex,
+            }))
+          ),
+        };
+        trackAndReturnHelp('queue', 'example', JSON.stringify(exampleContent));
+        return exampleContent;
+      }
+      default: throw new Error(`Unknown queue action: ${action}`);
     }
   }
 }

@@ -43,6 +43,7 @@ export interface JsonExport {
 
   // Project metadata
   project?: {
+    id: number;
     name: string;
     display_name: string | null;
     detection_source: string;
@@ -53,6 +54,7 @@ export interface JsonExport {
   };
 
   projects?: Array<{
+    id: number;
     name: string;
     display_name: string | null;
     detection_source: string;
@@ -121,6 +123,7 @@ export async function generateJsonExport(
 
     projectIds = [project.id];
     projectData = {
+      id: project.id,
       name: project.name,
       display_name: project.display_name,
       detection_source: project.detection_source,
@@ -132,10 +135,13 @@ export async function generateJsonExport(
   } else {
     exportMode = 'all_projects';
 
-    // Get all projects
-    const projects = await knex('m_projects').select('*');
+    // Get all projects (exclude 'default' fallback project)
+    const projects = await knex('m_projects')
+      .select('*')
+      .where('name', '!=', 'default');
     projectIds = projects.map(p => p.id);
     projectData = projects.map(p => ({
+      id: p.id,
       name: p.name,
       display_name: p.display_name,
       detection_source: p.detection_source,

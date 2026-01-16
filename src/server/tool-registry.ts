@@ -249,5 +249,25 @@ Use this tool to learn end-to-end workflows and multi-step operations. Returns w
         additionalProperties: false,
       },
     },
+    {
+      name: 'queue',
+      description: 'Hook queue management - list, clear, remove pending items from .sqlew/queue/pending.json. Use action: "help" for documentation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'Queue action to perform',
+            enum: ['list', 'clear', 'remove', 'help', 'example']
+          },
+          index: {
+            type: 'number',
+            description: 'Item index for remove action (0-based)'
+          }
+        },
+        required: ['action'],
+        additionalProperties: false,
+      },
+    },
   ];
 }

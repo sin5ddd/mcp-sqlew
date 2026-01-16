@@ -108,8 +108,19 @@ The plugin automatically configures:
 ### Queue not processing
 
 1. Ensure MCP server is running
-2. Check `.sqlew/queue/pending.json` for items
+2. Use `queue { action: "list" }` to check pending items
 3. Verify QueueWatcher is active (check debug logs)
+
+### Items stuck in queue (High Similarity)
+
+Items may remain in queue if they have 60%+ similarity to existing decisions:
+
+1. **Check queue**: `queue { action: "list" }`
+2. **Search existing**: `/sqlew search for <topic>`
+3. **Remove if duplicate**: `queue { action: "remove", index: N }`
+4. **Or clear all**: `queue { action: "clear" }`
+
+See `~/.claude/rules/sqlew/queue-monitoring.md` for details.
 
 ### Debug logging
 
