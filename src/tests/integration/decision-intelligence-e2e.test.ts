@@ -545,10 +545,11 @@ describe('Decision Intelligence System - End-to-End Workflows', { timeout: 60000
       const preSuggestions = await handleSuggestAction({
         action: 'by_key',
         key: 'e2e/lifecycle/database-choice',
-        limit: 5
+        limit: 5,
+        min_score: 50  // High threshold to exclude unrelated decisions from other workflows
       });
 
-      // Should be empty (no similar decisions yet)
+      // Should be empty (no similar e2e/lifecycle decisions yet)
       assert.ok(preSuggestions.suggestions.length === 0, 'Should have no suggestions initially');
 
       // Phase 4: Create initial decision with version
