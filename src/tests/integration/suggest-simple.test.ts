@@ -63,6 +63,30 @@ describe('Suggest Tool - Simple Test', () => {
     }
   });
 
+  it('should find similar keys with default min_score=20', async () => {
+    // Add a decision with similar key pattern
+    await setDecision({
+      key: 'test/simple/decision2',
+      value: 'Test decision 2 - similar to decision1',
+      layer: 'business',
+      tags: ['test', 'similar']
+    });
+
+    // Search for similar keys - should match due to common prefix
+    const result = await handleSuggestAction({
+      action: 'by_key',
+      key: 'test/simple/decision',  // Common prefix
+      limit: 5
+    });
+
+    // With min_score=20 default, key similarity alone should find matches
+    assert.ok(result.count > 0, 'Should find at least one similar decision');
+    assert.ok(
+      result.suggestions.some((s: { key: string }) => s.key.startsWith('test/simple/')),
+      'Should find decisions with similar prefix'
+    );
+  });
+
   it('should call suggest check_duplicate without error', async () => {
     console.log('Testing suggest check_duplicate...');
 
