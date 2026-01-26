@@ -4,7 +4,9 @@
 
 After ExitPlanMode or when Plan-to-ADR processing completes, check if there are unprocessed items in the queue.
 
-**Queue file location:** `.sqlew/queue/pending.json`
+**Queue file locations:**
+- Pending: `.sqlew/queue/pending.json`
+- Failed: `.sqlew/queue/failed.json`
 
 ### How to Check
 
@@ -14,34 +16,36 @@ Use the `queue` MCP tool to check the queue status:
 queue { action: "list" }
 ```
 
-If `count > 0`, items are stuck in the queue.
+The response includes:
+- `count`: Number of pending items
+- `failedCount`: Number of failed items (if any)
 
-### Common Issue: High Similarity Block
+### Failed Queue (v5.0.1+)
 
-Items may remain in queue if they have high similarity (60%+) to existing decisions. This happens because:
-- HookQueueWatcher runs in background
-- Similarity warnings/blocks don't reach the AI
+Items that fail processing (e.g., HighSimilarity errors) are automatically moved to `failed.json` instead of being retried indefinitely.
 
-### Resolution Steps
+**Why items fail:**
+- **HighSimilarity (60%+)**: Item is too similar to an existing decision
+- **Validation errors**: Invalid layer, category, or other data issues
 
-If items remain in queue:
-
-1. **Check existing decisions** using `/sqlew search for <topic>`
-2. **Decide action:**
-   - If truly duplicate: Use `queue { action: "remove", index: N }` to remove
-   - If different intent: Update the key to be more specific
-3. **Report to user** if manual intervention is needed
+**Resolution:**
+1. Check `failedItems` in `queue { action: "list" }` response
+2. For duplicates: Clear with `queue { action: "clear", target: "failed" }`
+3. For different intent: Re-register manually with a more specific key via `/sqlew record <decision>`
 
 ### Queue Tool Actions
 
 | Action | Description | Example |
 |--------|-------------|---------|
-| `list` | Show all pending items | `queue { action: "list" }` |
-| `remove` | Remove specific item | `queue { action: "remove", index: 0 }` |
-| `clear` | Remove all items | `queue { action: "clear" }` |
+| `list` | Show pending and failed items | `queue { action: "list" }` |
+| `remove` | Remove specific pending item | `queue { action: "remove", index: 0 }` |
+| `clear` | Clear pending queue (default) | `queue { action: "clear" }` |
+| `clear` | Clear failed queue | `queue { action: "clear", target: "failed" }` |
+| `clear` | Clear both queues | `queue { action: "clear", target: "all" }` |
 
-### Queue File Format
+### Queue File Formats
 
+**pending.json:**
 ```json
 {
   "items": [
@@ -56,6 +60,24 @@ If items remain in queue:
         "layer": "infrastructure",
         "tags": ["plan", "auto-extracted", "..."]
       }
+    }
+  ]
+}
+```
+
+**failed.json:**
+```json
+{
+  "items": [
+    {
+      "item": {
+        "type": "decision",
+        "action": "create",
+        "timestamp": "2026-01-24T...",
+        "data": { "key": "...", "value": "..." }
+      },
+      "error": "HighSimilarity: 65% match with existing decision 'path/to/existing'",
+      "failedAt": "2026-01-24T..."
     }
   ]
 }

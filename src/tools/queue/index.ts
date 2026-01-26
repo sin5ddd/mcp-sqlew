@@ -25,4 +25,6 @@ export type {
   QueueFile,
   DecisionQueueItem,
   ConstraintQueueItem,
+  FailedQueueItem,
+  FailedQueueFile,
 } from './types.js';

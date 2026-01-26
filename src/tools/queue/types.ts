@@ -13,6 +13,8 @@ export type {
   DecisionQueueItem,
   ConstraintQueueItem,
   QueueAction,
+  FailedQueueItem,
+  FailedQueueFile,
 } from '../../utils/hook-queue.js';
 
 /**
@@ -43,6 +45,19 @@ export interface ListQueueResponse {
   }>;
   count: number;
   queuePath: string;
+  /** Failed items that could not be processed */
+  failedItems?: Array<{
+    index: number;
+    type: 'decision' | 'constraint';
+    action: string;
+    timestamp: string;
+    key?: string;
+    text?: string;
+    error: string;
+    failedAt: string;
+  }>;
+  failedCount?: number;
+  failedQueuePath?: string;
 }
 
 /**
@@ -51,6 +66,8 @@ export interface ListQueueResponse {
 export interface ClearQueueParams {
   projectPath?: string;
   confirm?: boolean;
+  /** Target queue to clear: 'pending' (default), 'failed', or 'all' */
+  target?: 'pending' | 'failed' | 'all';
 }
 
 /**
