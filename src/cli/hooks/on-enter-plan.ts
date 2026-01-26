@@ -14,7 +14,7 @@
  */
 
 import { readStdinJson, sendContinue, getProjectPath } from './stdin-parser.js';
-import { clearCurrentPlan, clearPlanTomlCache } from '../../config/global-config.js';
+import { clearCurrentPlan, clearPlanCache } from '../../config/global-config.js';
 
 // ============================================================================
 // Main Entry Point
@@ -41,7 +41,7 @@ export async function onEnterPlanCommand(): Promise<void> {
       // Clear stale caches from previous sessions
       // This ensures fresh start for new plan mode session
       clearCurrentPlan(projectPath);
-      clearPlanTomlCache(projectPath);
+      clearPlanCache(projectPath);
     }
 
     // Continue without additional context

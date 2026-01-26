@@ -22,7 +22,7 @@ import { extractPlanFileName, parseFrontmatter, generatePlanId, getPlanId } from
 import {
   saveCurrentPlan,
   loadCurrentPlan,
-  clearPlanTomlCache,
+  clearPlanCache,
   clearCurrentPlan,
   type CurrentPlanInfo,
 } from '../../config/global-config.js';
@@ -75,7 +75,7 @@ export async function trackPlanCommand(): Promise<void> {
       const projectPath = getProjectPath(input);
       if (projectPath) {
         // Clear old plan cache to prevent stale data on "clear context" approval
-        clearPlanTomlCache(projectPath);
+        clearPlanCache(projectPath);
         clearCurrentPlan(projectPath);
       }
       sendContinue('[sqlew] Plan mode entered. Waiting for plan file...');
@@ -128,7 +128,7 @@ export async function trackPlanCommand(): Promise<void> {
 
     // Clear old cache if switching plans
     if (isNewPlan) {
-      clearPlanTomlCache(projectPath);
+      clearPlanCache(projectPath);
     }
 
     // Save current plan info to cache

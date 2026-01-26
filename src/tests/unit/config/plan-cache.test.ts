@@ -12,11 +12,11 @@ import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
-  getPlanTomlCachePath,
-  loadPlanTomlCache,
-  savePlanTomlCache,
-  clearPlanTomlCache,
-  type PlanTomlCache,
+  getPlanCachePath,
+  loadPlanCache,
+  savePlanCache,
+  clearPlanCache,
+  type PlanCache,
   type DecisionCandidate,
   type ConstraintCandidate,
 } from '../../../config/global-config.js';
@@ -38,26 +38,26 @@ describe('plan-toml-cache', () => {
     }
   });
 
-  describe('getPlanTomlCachePath', () => {
+  describe('getPlanCachePath', () => {
     it('should return path ending with _plan-toml.json', () => {
-      const cachePath = getPlanTomlCachePath(testProjectPath);
+      const cachePath = getPlanCachePath(testProjectPath);
       assert.ok(cachePath.endsWith('_plan-toml.json'));
     });
 
     it('should return consistent path for same project', () => {
-      const path1 = getPlanTomlCachePath(testProjectPath);
-      const path2 = getPlanTomlCachePath(testProjectPath);
+      const path1 = getPlanCachePath(testProjectPath);
+      const path2 = getPlanCachePath(testProjectPath);
       assert.strictEqual(path1, path2);
     });
 
     it('should return different paths for different projects', () => {
-      const path1 = getPlanTomlCachePath(testProjectPath);
-      const path2 = getPlanTomlCachePath(join(testProjectPath, 'subdir'));
+      const path1 = getPlanCachePath(testProjectPath);
+      const path2 = getPlanCachePath(join(testProjectPath, 'subdir'));
       assert.notStrictEqual(path1, path2);
     });
   });
 
-  describe('savePlanTomlCache / loadPlanTomlCache', () => {
+  describe('savePlanCache / loadPlanCache', () => {
     it('should save and load cache correctly', () => {
       const decisions: DecisionCandidate[] = [
         {
@@ -77,7 +77,7 @@ describe('plan-toml-cache', () => {
         },
       ];
 
-      const cache: PlanTomlCache = {
+      const cache: PlanCache = {
         plan_id: 'test-plan-123',
         decisions,
         constraints,
@@ -86,8 +86,8 @@ describe('plan-toml-cache', () => {
         constraints_prompted: false,
       };
 
-      savePlanTomlCache(testProjectPath, cache);
-      const loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      const loaded = loadPlanCache(testProjectPath);
 
       assert.ok(loaded);
       assert.strictEqual(loaded.plan_id, 'test-plan-123');
@@ -98,7 +98,7 @@ describe('plan-toml-cache', () => {
     });
 
     it('should return null for non-existent cache', () => {
-      const loaded = loadPlanTomlCache(testProjectPath);
+      const loaded = loadPlanCache(testProjectPath);
       assert.strictEqual(loaded, null);
     });
 
@@ -114,7 +114,7 @@ describe('plan-toml-cache', () => {
         tradeoffs: 'Speed vs safety',
       };
 
-      const cache: PlanTomlCache = {
+      const cache: PlanCache = {
         plan_id: 'full-test',
         decisions: [decision],
         constraints: [],
@@ -123,8 +123,8 @@ describe('plan-toml-cache', () => {
         constraints_prompted: true,
       };
 
-      savePlanTomlCache(testProjectPath, cache);
-      const loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      const loaded = loadPlanCache(testProjectPath);
 
       assert.ok(loaded);
       const d = loaded.decisions[0];
@@ -148,7 +148,7 @@ describe('plan-toml-cache', () => {
         rationale: 'Performance matters',
       };
 
-      const cache: PlanTomlCache = {
+      const cache: PlanCache = {
         plan_id: 'constraint-test',
         decisions: [],
         constraints: [constraint],
@@ -157,8 +157,8 @@ describe('plan-toml-cache', () => {
         constraints_prompted: false,
       };
 
-      savePlanTomlCache(testProjectPath, cache);
-      const loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      const loaded = loadPlanCache(testProjectPath);
 
       assert.ok(loaded);
       const c = loaded.constraints[0];
@@ -171,7 +171,7 @@ describe('plan-toml-cache', () => {
     });
 
     it('should update existing cache on save', () => {
-      const cache1: PlanTomlCache = {
+      const cache1: PlanCache = {
         plan_id: 'plan-1',
         decisions: [{ key: 'first', value: 'First' }],
         constraints: [],
@@ -180,7 +180,7 @@ describe('plan-toml-cache', () => {
         constraints_prompted: false,
       };
 
-      const cache2: PlanTomlCache = {
+      const cache2: PlanCache = {
         plan_id: 'plan-2',
         decisions: [{ key: 'second', value: 'Second' }],
         constraints: [],
@@ -189,9 +189,9 @@ describe('plan-toml-cache', () => {
         constraints_prompted: true,
       };
 
-      savePlanTomlCache(testProjectPath, cache1);
-      savePlanTomlCache(testProjectPath, cache2);
-      const loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache1);
+      savePlanCache(testProjectPath, cache2);
+      const loaded = loadPlanCache(testProjectPath);
 
       assert.ok(loaded);
       assert.strictEqual(loaded.plan_id, 'plan-2');
@@ -200,9 +200,9 @@ describe('plan-toml-cache', () => {
     });
   });
 
-  describe('clearPlanTomlCache', () => {
+  describe('clearPlanCache', () => {
     it('should clear cache by writing empty arrays', () => {
-      const cache: PlanTomlCache = {
+      const cache: PlanCache = {
         plan_id: 'to-clear',
         decisions: [{ key: 'test', value: 'value' }],
         constraints: [{ text: 'rule', category: 'security' }],
@@ -211,10 +211,10 @@ describe('plan-toml-cache', () => {
         constraints_prompted: true,
       };
 
-      savePlanTomlCache(testProjectPath, cache);
-      clearPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      clearPlanCache(testProjectPath);
 
-      const cachePath = getPlanTomlCachePath(testProjectPath);
+      const cachePath = getPlanCachePath(testProjectPath);
       const content = JSON.parse(readFileSync(cachePath, 'utf-8'));
 
       assert.deepStrictEqual(content.decisions, []);
@@ -223,13 +223,13 @@ describe('plan-toml-cache', () => {
 
     it('should not throw for non-existent cache', () => {
       // Should not throw
-      clearPlanTomlCache(testProjectPath);
+      clearPlanCache(testProjectPath);
     });
   });
 
   describe('flag management', () => {
     it('should track decisions_registered flag', () => {
-      const cache: PlanTomlCache = {
+      const cache: PlanCache = {
         plan_id: 'flag-test',
         decisions: [{ key: 'test', value: 'value' }],
         constraints: [],
@@ -238,19 +238,19 @@ describe('plan-toml-cache', () => {
         constraints_prompted: false,
       };
 
-      savePlanTomlCache(testProjectPath, cache);
-      let loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      let loaded = loadPlanCache(testProjectPath);
       assert.strictEqual(loaded?.decisions_registered, false);
 
       // Update flag
       cache.decisions_registered = true;
-      savePlanTomlCache(testProjectPath, cache);
-      loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      loaded = loadPlanCache(testProjectPath);
       assert.strictEqual(loaded?.decisions_registered, true);
     });
 
     it('should track constraints_prompted flag', () => {
-      const cache: PlanTomlCache = {
+      const cache: PlanCache = {
         plan_id: 'flag-test',
         decisions: [],
         constraints: [{ text: 'rule', category: 'security' }],
@@ -259,14 +259,14 @@ describe('plan-toml-cache', () => {
         constraints_prompted: false,
       };
 
-      savePlanTomlCache(testProjectPath, cache);
-      let loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      let loaded = loadPlanCache(testProjectPath);
       assert.strictEqual(loaded?.constraints_prompted, false);
 
       // Update flag
       cache.constraints_prompted = true;
-      savePlanTomlCache(testProjectPath, cache);
-      loaded = loadPlanTomlCache(testProjectPath);
+      savePlanCache(testProjectPath, cache);
+      loaded = loadPlanCache(testProjectPath);
       assert.strictEqual(loaded?.constraints_prompted, true);
     });
   });
