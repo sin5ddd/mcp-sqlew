@@ -109,7 +109,7 @@ export function processPlanPatterns(projectPath: string): ProcessPlanResult {
     enqueueDecisionCreate(projectPath, {
       key: decision.key,
       value: decision.value,
-      status: 'draft',
+      status: 'active',  // Use active for suggest/duplicate detection
       layer: decision.layer || 'cross-cutting',
       tags: allTags,
     });
