@@ -79,6 +79,10 @@ export interface HookInput {
   permission_mode?: string;
   /** Stop hook active flag (for Stop/SubagentStop - prevents infinite loops) */
   stop_hook_active?: boolean;
+  /** SessionStart source: startup | resume | clear | compact */
+  source?: 'startup' | 'resume' | 'clear' | 'compact';
+  /** SessionEnd reason: clear | logout | prompt_input_exit | other */
+  reason?: 'clear' | 'logout' | 'prompt_input_exit' | 'other';
 }
 
 /**

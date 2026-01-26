@@ -23,6 +23,7 @@ import {
   saveCurrentPlan,
   loadCurrentPlan,
   clearPlanTomlCache,
+  clearCurrentPlan,
   type CurrentPlanInfo,
 } from '../../config/global-config.js';
 import { existsSync, readFileSync } from 'fs';
@@ -69,8 +70,14 @@ export async function trackPlanCommand(): Promise<void> {
   try {
     const input = await readStdinJson();
 
-    // Handle EnterPlanMode - prepare for plan tracking
+    // Handle EnterPlanMode - clear old cache and prepare for plan tracking
     if (input.tool_name === 'EnterPlanMode') {
+      const projectPath = getProjectPath(input);
+      if (projectPath) {
+        // Clear old plan cache to prevent stale data on "clear context" approval
+        clearPlanTomlCache(projectPath);
+        clearCurrentPlan(projectPath);
+      }
       sendContinue('[sqlew] Plan mode entered. Waiting for plan file...');
       return;
     }
