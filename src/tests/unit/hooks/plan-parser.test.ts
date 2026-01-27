@@ -13,7 +13,7 @@ import {
   extractTomlBlocks,
   parseTomlBlock,
   parsePlanToml,
-} from '../../../cli/hooks/plan-toml-parser.js';
+} from '../../../cli/hooks/plan-parser.js';
 
 describe('plan-toml-parser', () => {
   describe('extractTomlBlocks', () => {

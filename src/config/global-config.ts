@@ -368,7 +368,7 @@ export function clearCurrentPlan(projectPath: string): void {
 }
 
 // ============================================================================
-// Plan TOML Cache (v4.2.0+)
+// Plan Cache (v4.2.0+)
 // ============================================================================
 
 /**
@@ -415,7 +415,7 @@ export interface ConstraintCandidate {
  * Unified cache for plan TOML data
  * Stores parsed decisions and constraints from plan file
  */
-export interface PlanTomlCache {
+export interface PlanCache {
   /** Plan ID this cache is associated with */
   plan_id: string;
   /** Extracted decisions from TOML */
@@ -431,12 +431,12 @@ export interface PlanTomlCache {
 }
 
 /**
- * Get the plan TOML cache file path for a project
+ * Get the plan cache file path for a project
  *
  * @param projectPath - Project root path
- * @returns Absolute path to plan-toml cache file
+ * @returns Absolute path to plan cache file
  */
-export function getPlanTomlCachePath(projectPath: string): string {
+export function getPlanCachePath(projectPath: string): string {
   ensureGlobalConfigDir();
   const cacheDir = getSessionCacheDir();
   if (!existsSync(cacheDir)) {
@@ -466,13 +466,13 @@ export function getPlanTomlCachePath(projectPath: string): string {
 }
 
 /**
- * Load plan TOML cache for a project
+ * Load plan cache for a project
  *
  * @param projectPath - Project root path
  * @returns Plan TOML cache or null if not found
  */
-export function loadPlanTomlCache(projectPath: string): PlanTomlCache | null {
-  const cachePath = getPlanTomlCachePath(projectPath);
+export function loadPlanCache(projectPath: string): PlanCache | null {
+  const cachePath = getPlanCachePath(projectPath);
 
   if (!existsSync(cachePath)) {
     return null;
@@ -480,30 +480,30 @@ export function loadPlanTomlCache(projectPath: string): PlanTomlCache | null {
 
   try {
     const content = readFileSync(cachePath, 'utf-8');
-    return JSON.parse(content) as PlanTomlCache;
+    return JSON.parse(content) as PlanCache;
   } catch {
     return null;
   }
 }
 
 /**
- * Save plan TOML cache for a project
+ * Save plan cache for a project
  *
  * @param projectPath - Project root path
  * @param cache - Cache data to save
  */
-export function savePlanTomlCache(projectPath: string, cache: PlanTomlCache): void {
-  const cachePath = getPlanTomlCachePath(projectPath);
+export function savePlanCache(projectPath: string, cache: PlanCache): void {
+  const cachePath = getPlanCachePath(projectPath);
   writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf-8');
 }
 
 /**
- * Clear plan TOML cache for a project
+ * Clear plan cache for a project
  *
  * @param projectPath - Project root path
  */
-export function clearPlanTomlCache(projectPath: string): void {
-  const cachePath = getPlanTomlCachePath(projectPath);
+export function clearPlanCache(projectPath: string): void {
+  const cachePath = getPlanCachePath(projectPath);
   if (existsSync(cachePath)) {
     writeFileSync(cachePath, JSON.stringify({ decisions: [], constraints: [] }, null, 2), 'utf-8');
   }

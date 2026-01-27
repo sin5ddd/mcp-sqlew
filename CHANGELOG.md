@@ -11,11 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Queue Tool for Hook Queue Management**
+
+- New `queue` MCP tool to manage `.sqlew/queue/pending.json`
+- Actions: `list` (view pending items), `remove` (delete by index), `clear` (remove all)
+- Lock mechanism to prevent race conditions with QueueWatcher
+- Help documentation in `src/help-data/queue.toml`
+- Queue monitoring rule in `~/.claude/rules/sqlew/queue-monitoring.md`
+
 **TOML-based Help System**
 
 - Help documentation now stored in `src/help-data/*.toml` (version-controlled, human-editable)
 - `HelpSystemLoader` for startup-time loading with in-memory caching (O(1) lookups)
-- 14 TOML files: 7 tool files + 6 use case workflows + 1 schema file
+- 15 TOML files: 8 tool files (including queue) + 6 use case workflows + 1 schema file
 
 ### Changed
 

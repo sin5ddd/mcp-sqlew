@@ -20,6 +20,7 @@ import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
 import { onStopCommand } from './cli/hooks/on-stop.js';
 import { onEnterPlanCommand } from './cli/hooks/on-enter-plan.js';
 import { onExitPlanCommand } from './cli/hooks/on-exit-plan.js';
+import { onSessionStartCommand } from './cli/hooks/on-session-start.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
@@ -392,6 +393,12 @@ export async function runCli(rawArgs: string[]): Promise<void> {
   // ExitPlanMode hook (v4.2.0+)
   if (args.command === 'on-exit-plan') {
     await onExitPlanCommand();
+    return;
+  }
+
+  // SessionStart hook (v5.0.0+) - handles "clear context" Plan-to-ADR
+  if (args.command === 'on-session-start') {
+    await onSessionStartCommand();
     return;
   }
 

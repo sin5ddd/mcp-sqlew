@@ -40,8 +40,10 @@ export async function suggestByKey(params: ByKeyParams): Promise<SuggestResponse
     tags: [],
   };
 
+  // Use lower default threshold (20) for key-only searches
+  // Key similarity max is 20 points, so default 30 would never match
   const suggestions = transformAndScoreDecisions(candidates, context, {
-    minScore: params.min_score,
+    minScore: params.min_score ?? 20,
     limit: params.limit,
   });
 

@@ -1,0 +1,134 @@
+# Queue Tool - Hook Queue Management
+# Manage pending items in .sqlew/queue/pending.json
+
+[tool]
+name = "queue"
+description = "Hook queue management - list, clear, remove pending items from .sqlew/queue/pending.json. Safe operations with lock mechanism to prevent race conditions with QueueWatcher."
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
+
+[[actions]]
+name = "list"
+description = "List all pending items in the queue"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"list\""
+
+  [[actions.examples]]
+  title = "List queue items"
+  code = '''
+{
+  "action": "list"
+}
+'''
+  explanation = "Show all pending decisions/constraints in the queue with their index, type, and metadata"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "clear"
+description = "Clear all items from the queue"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"clear\""
+
+  [[actions.examples]]
+  title = "Clear all queue items"
+  code = '''
+{
+  "action": "clear"
+}
+'''
+  explanation = "Remove all pending items from the queue at once"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "remove"
+description = "Remove a specific item from the queue by index"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"remove\""
+
+  [[actions.params]]
+  name = "index"
+  type = "number"
+  required = true
+  description = "0-based index of the item to remove (use 'list' first to see indices)"
+
+  [[actions.examples]]
+  title = "Remove item at index 0"
+  code = '''
+{
+  "action": "remove",
+  "index": 0
+}
+'''
+  explanation = "Remove the first item from the queue. Use 'list' first to see available indices."
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "help"
+description = "Get queue tool documentation"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"help\""
+
+  [[actions.examples]]
+  title = "Get help"
+  code = '''
+{
+  "action": "help"
+}
+'''
+  explanation = "Display queue tool documentation"
+
+# -----------------------------------------------------------------------------
+
+[[actions]]
+name = "example"
+description = "Get queue tool usage examples"
+
+  [[actions.params]]
+  name = "action"
+  type = "string"
+  required = true
+  description = "Must be \"example\""
+
+  [[actions.examples]]
+  title = "Get examples"
+  code = '''
+{
+  "action": "example"
+}
+'''
+  explanation = "Display queue tool usage examples"
+
+# =============================================================================
+# USE CASES
+# =============================================================================
+
+[[use_cases]]
+title = "Handle stuck items due to High Similarity"
+description = "Items may remain in queue if they have 60%+ similarity to existing decisions"
+steps = [
+  "1. Use `queue list` to see stuck items",
+  "2. Check existing decisions with `/sqlew search for <topic>`",
+  "3. If truly duplicate: Use `queue remove` with the item index",
+  "4. If different intent: Update the key to be more specific and retry"
+]

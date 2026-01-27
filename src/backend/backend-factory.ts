@@ -9,6 +9,7 @@ import type { ToolBackend } from './types.js';
 import type { SqlewConfig, CloudConfig } from '../config/types.js';
 import { CLOUD_ENV_VARS } from '../config/types.js';
 import { LocalBackend } from './local-backend.js';
+import { TransformingBackend } from './transforming-backend.js';
 import { createBackend as createSaaSBackend } from '@sqlew/saas-connector';
 import { debugLog } from '../utils/debug-logger.js';
 import * as fs from 'fs';
@@ -122,9 +123,11 @@ export async function createBackend(config: SqlewConfig, projectRoot?: string): 
       throw new Error(validation.errors.join('; '));
     }
 
-    // Create SaaS backend directly from submodule
+    // Create SaaS backend and wrap with TransformingBackend
+    // TransformingBackend handles quick_set → set transformation locally
     try {
-      return createSaaSBackend(cloudConfig!);
+      const saasBackend = createSaaSBackend(cloudConfig!);
+      return new TransformingBackend(saasBackend);
     } catch (error) {
       throw new Error(
         `SaaS connector initialization failed. Run: cd saas-connector && npm run build`

@@ -48,3 +48,24 @@ If you've run `sqlew --hooks`, sqlew integration is **fully automatic**:
 
 **Final Plan Phase:**
 - `/sqlew record <decision>` - record key architectural decisions
+
+---
+
+### Failed Queue Check (IMPORTANT)
+
+**At the start of plan mode**, check if `.sqlew/queue/failed.json` exists:
+
+```bash
+# Check failed queue status
+queue { action: "list" }  # Shows both pending and failed items
+```
+
+**If failed items exist:**
+
+1. **Review each failed item** - Common failure: HighSimilarity (60%+) means the item is similar to an existing decision
+2. **Resolution options:**
+   - **If truly duplicate**: Delete the failed queue file or use `queue { action: "clear" }` with `target: "failed"`
+   - **If different intent**: Use a more specific key and re-register manually via `/sqlew record <decision>`
+3. **After resolving**: Delete or empty the failed queue file
+
+**Why this happens**: Items that fail processing (e.g., high similarity to existing decisions) are moved to `failed.json` instead of being retried indefinitely. This prevents infinite retry loops.

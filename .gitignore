@@ -75,3 +75,6 @@ test-vcs-staging/
 .claude/skills/sqlew-decision-format/
 .claude/skills/sqlew-plan-guidance/
 .claude/commands/sqlew.md
+
+# for claude code tmp bug
+tmpclaude-*-cwd
