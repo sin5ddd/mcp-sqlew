@@ -109,7 +109,7 @@ export async function executeDbExport(args: DbExportArgs): Promise<void> {
   const validationError = validateArgs(args);
   if (validationError) {
     console.error(validationError);
-    console.error('Run "npx sqlew db:export --help" for usage information.');
+    console.error('Run "sqlew db:export --help" for usage information.');
     process.exit(1);
   }
 
@@ -214,7 +214,7 @@ export async function executeDbExport(args: DbExportArgs): Promise<void> {
         console.error(`✓ JSON export written to: ${output}`);
         console.error(`\nNext steps:`);
         console.error(`  1. Copy file to target project directory`);
-        console.error(`  2. Import data: npx sqlew db:import --source=${output}`);
+        console.error(`  2. Import data: sqlew db:import --source=${output}`);
       } else {
         // Output to stdout (user can pipe to file)
         console.log(json);

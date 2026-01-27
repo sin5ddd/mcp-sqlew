@@ -2,7 +2,8 @@
 /**
  * Parameter Validation Test Suite for MCP Sqlew
  * Tests parameter validation, typo detection, and error message structure
- * Covers all 42 actions across 5 tools
+ *
+ * Note: Task and file tool tests removed in v5.0 (deprecated tools)
  */
 
 import { validateActionParams, validateBatchParams } from '../../../utils/parameter-validator.js';
@@ -60,46 +61,6 @@ const missingRequiredTests: ValidationTest[] = [
     expectedError: { missing_params: ['key'] }
   },
   {
-    name: 'task.create - missing title',
-    tool: 'task',
-    action: 'create',
-    params: { status: 'todo' },
-    shouldFail: true,
-    expectedError: { missing_params: ['title'] }
-  },
-  {
-    name: 'task.update - missing task_id',
-    tool: 'task',
-    action: 'update',
-    params: { title: 'Updated title' },
-    shouldFail: true,
-    expectedError: { missing_params: ['task_id'] }
-  },
-  {
-    name: 'task.add_dependency - missing blocker_task_id and blocked_task_id',
-    tool: 'task',
-    action: 'add_dependency',
-    params: {},
-    shouldFail: true,
-    expectedError: { missing_params: ['blocker_task_id', 'blocked_task_id'] }
-  },
-  {
-    name: 'file.record - missing file_path',
-    tool: 'file',
-    action: 'record',
-    params: { agent_name: 'test-agent', change_type: 'modified' },
-    shouldFail: true,
-    expectedError: { missing_params: ['file_path'] }
-  },
-  {
-    name: 'file.record - missing change_type',
-    tool: 'file',
-    action: 'record',
-    params: { file_path: '/test/file.ts' },
-    shouldFail: true,
-    expectedError: { missing_params: ['change_type'] }  // agent_name optional since v4.1.2
-  },
-  {
     name: 'constraint.add - missing category',
     tool: 'constraint',
     action: 'add',
@@ -155,46 +116,6 @@ const typoDetectionTests: ValidationTest[] = [
     expectedError: { did_you_mean: { tgs: 'tags' } }
   },
   {
-    name: 'task.create - typo: "titel" → "title"',
-    tool: 'task',
-    action: 'create',
-    params: { titel: 'Test task' },
-    shouldFail: true,
-    expectedError: { did_you_mean: { titel: 'title' } }
-  },
-  {
-    name: 'task.update - typo: "taskid" → "task_id"',
-    tool: 'task',
-    action: 'update',
-    params: { taskid: 1, title: 'Updated' },
-    shouldFail: true,
-    expectedError: { did_you_mean: { taskid: 'task_id' } }
-  },
-  {
-    name: 'task.create - typo: "priorit" → "priority"',
-    tool: 'task',
-    action: 'create',
-    params: { title: 'Test', priorit: 3 },
-    shouldFail: true,
-    expectedError: { did_you_mean: { priorit: 'priority' } }
-  },
-  {
-    name: 'file.record - typo: "file_pth" → "file_path"',
-    tool: 'file',
-    action: 'record',
-    params: { file_pth: '/test/file.ts', agent_name: 'test', change_type: 'modified' },
-    shouldFail: true,
-    expectedError: { did_you_mean: { file_pth: 'file_path' } }
-  },
-  {
-    name: 'file.record - typo: "change_typ" → "change_type"',
-    tool: 'file',
-    action: 'record',
-    params: { file_path: '/test/file.ts', agent_name: 'test', change_typ: 'modified' },
-    shouldFail: true,
-    expectedError: { did_you_mean: { change_typ: 'change_type' } }
-  },
-  {
     name: 'constraint.add - typo: "categry" → "category"',
     tool: 'constraint',
     action: 'add',
@@ -240,46 +161,6 @@ const validParameterTests: ValidationTest[] = [
     shouldFail: false
   },
   {
-    name: 'task.create - valid with optional params',
-    tool: 'task',
-    action: 'create',
-    params: {
-      title: 'Test task',
-      status: 'todo',
-      priority: 3,
-      assigned_agent: 'developer',
-      layer: 'business',
-      tags: ['feature', 'api']
-    },
-    shouldFail: false
-  },
-  {
-    name: 'task.create - valid with only required param',
-    tool: 'task',
-    action: 'create',
-    params: { title: 'Test task' },
-    shouldFail: false
-  },
-  {
-    name: 'task.add_dependency - valid',
-    tool: 'task',
-    action: 'add_dependency',
-    params: { blocker_task_id: 1, blocked_task_id: 2 },
-    shouldFail: false
-  },
-  {
-    name: 'file.record - valid',
-    tool: 'file',
-    action: 'record',
-    params: {
-      file_path: '/src/index.ts',
-      agent_name: 'developer',
-      change_type: 'modified',
-      layer: 'presentation'
-    },
-    shouldFail: false
-  },
-  {
     name: 'constraint.add - valid',
     tool: 'constraint',
     action: 'add',
@@ -302,13 +183,6 @@ const helpActionTests: ValidationTest[] = [
     name: 'decision.help - should skip validation',
     tool: 'decision',
     action: 'help',
-    params: {},
-    shouldFail: false
-  },
-  {
-    name: 'task.example - should skip validation',
-    tool: 'task',
-    action: 'example',
     params: {},
     shouldFail: false
   },
@@ -494,12 +368,10 @@ test('Action Spec Registry', async (t) => {
   });
 
   await t.test('All tools have action specs', () => {
-    const tools = ['decision', 'task', 'file', 'constraint'];
+    const tools = ['decision', 'constraint'];
     for (const tool of tools) {
       // Test at least one action per tool
       const spec = getActionSpec(tool, tool === 'decision' ? 'set' :
-                                       tool === 'task' ? 'create' :
-                                       tool === 'file' ? 'record' :
                                        tool === 'constraint' ? 'add' :
                                        'layer_summary');
       assert.ok(spec, `Tool "${tool}" should have action specs`);

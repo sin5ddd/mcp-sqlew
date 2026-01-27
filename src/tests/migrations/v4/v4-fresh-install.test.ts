@@ -43,16 +43,16 @@ describe('v4.0 Fresh Install Migration', () => {
   });
 
   describe('v4_ Table Creation', () => {
-    it('should create v4_projects table', async () => {
-      const hasTable = await db.schema.hasTable('v4_projects');
-      assert.strictEqual(hasTable, true, 'v4_projects table should exist');
+    it('should create m_projects table', async () => {
+      const hasTable = await db.schema.hasTable('m_projects');
+      assert.strictEqual(hasTable, true, 'm_projects table should exist');
     });
 
     // v4_agents table removed in v4.0 - agent tracking no longer needed
 
-    it('should create v4_decisions table', async () => {
-      const hasTable = await db.schema.hasTable('v4_decisions');
-      assert.strictEqual(hasTable, true, 'v4_decisions table should exist');
+    it('should create t_decisions table', async () => {
+      const hasTable = await db.schema.hasTable('t_decisions');
+      assert.strictEqual(hasTable, true, 't_decisions table should exist');
     });
 
     it('should create v4_tasks table', async () => {
@@ -60,9 +60,9 @@ describe('v4.0 Fresh Install Migration', () => {
       assert.strictEqual(hasTable, true, 'v4_tasks table should exist');
     });
 
-    it('should create v4_constraints table', async () => {
-      const hasTable = await db.schema.hasTable('v4_constraints');
-      assert.strictEqual(hasTable, true, 'v4_constraints table should exist');
+    it('should create t_constraints table', async () => {
+      const hasTable = await db.schema.hasTable('t_constraints');
+      assert.strictEqual(hasTable, true, 't_constraints table should exist');
     });
 
     it('should create v4_file_changes table', async () => {
@@ -70,14 +70,14 @@ describe('v4.0 Fresh Install Migration', () => {
       assert.strictEqual(hasTable, true, 'v4_file_changes table should exist');
     });
 
-    it('should create v4_layers table', async () => {
-      const hasTable = await db.schema.hasTable('v4_layers');
-      assert.strictEqual(hasTable, true, 'v4_layers table should exist');
+    it('should create m_layers table', async () => {
+      const hasTable = await db.schema.hasTable('m_layers');
+      assert.strictEqual(hasTable, true, 'm_layers table should exist');
     });
 
-    it('should create v4_tags table', async () => {
-      const hasTable = await db.schema.hasTable('v4_tags');
-      assert.strictEqual(hasTable, true, 'v4_tags table should exist');
+    it('should create m_tags table', async () => {
+      const hasTable = await db.schema.hasTable('m_tags');
+      assert.strictEqual(hasTable, true, 'm_tags table should exist');
     });
 
     it('should create v4_task_statuses table', async () => {
@@ -90,7 +90,7 @@ describe('v4.0 Fresh Install Migration', () => {
 
   describe('v4_ Master Data Seeding', () => {
     it('should seed 9 layers', async () => {
-      const layers = await db('v4_layers').select('*');
+      const layers = await db('m_layers').select('*');
       assert.strictEqual(layers.length, 9, 'Should have 9 layers');
 
       const layerNames = layers.map((l: any) => l.name);
@@ -119,12 +119,12 @@ describe('v4.0 Fresh Install Migration', () => {
     });
 
     it('should seed 5 constraint categories', async () => {
-      const categories = await db('v4_constraint_categories').select('*');
+      const categories = await db('m_constraint_categories').select('*');
       assert.strictEqual(categories.length, 5, 'Should have 5 constraint categories');
     });
 
     it('should seed default project', async () => {
-      const projects = await db('v4_projects').where({ name: 'default' });
+      const projects = await db('m_projects').where({ name: 'default' });
       assert.strictEqual(projects.length, 1, 'Should have default project');
       assert.strictEqual(projects[0].display_name, 'Default Project');
     });
@@ -132,7 +132,7 @@ describe('v4.0 Fresh Install Migration', () => {
     // System agent seed removed in v4.0 - agent tracking no longer needed
 
     it('should seed 8 common tags', async () => {
-      const tags = await db('v4_tags').select('*');
+      const tags = await db('m_tags').select('*');
       assert.strictEqual(tags.length, 8, 'Should have 8 tags');
     });
 
@@ -140,28 +140,28 @@ describe('v4.0 Fresh Install Migration', () => {
   });
 
   describe('v4_ Index Creation', () => {
-    it('should create indexes on v4_decisions', async () => {
+    it('should create indexes on t_decisions', async () => {
       // Query SQLite sqlite_master for indexes
       const indexes = await db.raw(`
         SELECT name FROM sqlite_master
-        WHERE type='index' AND tbl_name='v4_decisions' AND name LIKE 'idx_v4_%'
+        WHERE type='index' AND tbl_name='t_decisions' AND name LIKE 'idx_%'
       `);
-      assert.ok(indexes.length > 0, 'Should have indexes on v4_decisions');
+      assert.ok(indexes.length > 0, 'Should have indexes on t_decisions');
     });
 
     it('should create indexes on v4_tasks', async () => {
       const indexes = await db.raw(`
         SELECT name FROM sqlite_master
-        WHERE type='index' AND tbl_name='v4_tasks' AND name LIKE 'idx_v4_%'
+        WHERE type='index' AND tbl_name='v4_tasks' AND name LIKE 'idx_%'
       `);
       assert.ok(indexes.length > 0, 'Should have indexes on v4_tasks');
     });
   });
 
   describe('v4_ Foreign Key Constraints', () => {
-    it('should enforce FK on v4_decisions.project_id', async () => {
+    it('should enforce FK on t_decisions.project_id', async () => {
       try {
-        await db('v4_decisions').insert({
+        await db('t_decisions').insert({
           project_id: 9999, // Non-existent project
           key_id: 1,
           value: 'test',

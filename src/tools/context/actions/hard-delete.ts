@@ -37,7 +37,7 @@ export async function hardDeleteDecision(
     return await connectionManager.executeWithRetry(async () => {
       return await actualAdapter.transaction(async (trx) => {
         // Get key_id
-        const keyResult = await trx('v4_context_keys')
+        const keyResult = await trx('m_context_keys')
           .where({ key_name: params.key })
           .first('id') as { id: number } | undefined;
 
@@ -53,28 +53,28 @@ export async function hardDeleteDecision(
         const keyId = keyResult.id;
 
         // SECURITY: All deletes MUST filter by project_id to prevent cross-project deletion
-        // Delete from v4_decisions (if exists in this project)
-        const deletedString = await trx('v4_decisions')
+        // Delete from t_decisions (if exists in this project)
+        const deletedString = await trx('t_decisions')
           .where({ key_id: keyId, project_id: projectId })
           .delete();
 
-        // Delete from v4_decisions_numeric (if exists in this project)
-        const deletedNumeric = await trx('v4_decisions_numeric')
+        // Delete from t_decisions_numeric (if exists in this project)
+        const deletedNumeric = await trx('t_decisions_numeric')
           .where({ key_id: keyId, project_id: projectId })
           .delete();
 
-        // Delete from v4_decision_history (for this project only)
-        const deletedHistory = await trx('v4_decision_history')
+        // Delete from t_decision_history (for this project only)
+        const deletedHistory = await trx('t_decision_history')
           .where({ key_id: keyId, project_id: projectId })
           .delete();
 
-        // Delete from v4_decision_tags (for this project only)
-        const deletedTags = await trx('v4_decision_tags')
+        // Delete from t_decision_tags (for this project only)
+        const deletedTags = await trx('t_decision_tags')
           .where({ decision_key_id: keyId, project_id: projectId })
           .delete();
 
-        // Delete from v4_decision_scopes (for this project only)
-        const deletedScopes = await trx('v4_decision_scopes')
+        // Delete from t_decision_scopes (for this project only)
+        const deletedScopes = await trx('t_decision_scopes')
           .where({ decision_key_id: keyId, project_id: projectId })
           .delete();
 

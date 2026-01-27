@@ -61,7 +61,7 @@ message_hours = 24
 
 ```bash
 # CLI overrides config file
-npx sqlew --autodelete-message-hours=48
+sqlew --autodelete-message-hours=48
 
 # Result: message_hours = 48 (CLI wins)
 ```
@@ -80,7 +80,7 @@ npx sqlew --autodelete-message-hours=48
 
 **Custom path:** Specify via `--config-path` CLI argument
 ```bash
-npx sqlew --config-path=config/custom.toml
+sqlew --config-path=config/custom.toml
 ```
 
 ### TOML Structure
@@ -204,7 +204,7 @@ path = ".sqlew/prod.db"   # production
 
 **CLI Override:**
 ```bash
-npx sqlew /path/to/database.db
+sqlew /path/to/database.db
 ```
 
 ---
@@ -242,8 +242,8 @@ message_hours = 24
 
 **CLI Override:**
 ```bash
-npx sqlew --autodelete-ignore-weekend
-npx sqlew --autodelete-ignore-weekend=true
+sqlew --autodelete-ignore-weekend
+sqlew --autodelete-ignore-weekend=true
 ```
 
 #### `autodelete.message_hours`
@@ -267,7 +267,7 @@ message_hours = 720   # 30 days (max)
 
 **CLI Override:**
 ```bash
-npx sqlew --autodelete-message-hours=48
+sqlew --autodelete-message-hours=48
 ```
 
 #### `autodelete.file_history_days`
@@ -291,7 +291,7 @@ file_history_days = 365  # 1 year (max)
 
 **CLI Override:**
 ```bash
-npx sqlew --autodelete-file-history-days=30
+sqlew --autodelete-file-history-days=30
 ```
 
 ---
@@ -534,10 +534,10 @@ echo ".sqlew/config.toml" >> .gitignore
 
 ```bash
 # Uses .sqlew/config.toml automatically
-npx sqlew
+sqlew
 
 # Or specify custom config path
-npx sqlew --config-path=config/custom.toml
+sqlew --config-path=config/custom.toml
 ```
 
 ### 5. Verify Configuration
@@ -621,10 +621,10 @@ Use CLI arguments for one-time overrides or environment-specific settings:
 
 ```bash
 # Override specific settings at startup
-npx sqlew --autodelete-message-hours=48 --autodelete-ignore-weekend
+sqlew --autodelete-message-hours=48 --autodelete-ignore-weekend
 
 # Multiple arguments can be combined
-npx sqlew \
+sqlew \
   --db-path=.sqlew/prod.db \
   --autodelete-ignore-weekend \
   --autodelete-message-hours=168 \
@@ -772,10 +772,10 @@ file_history_days = 30
 **Usage:**
 ```bash
 # Development
-npx sqlew --config-path=.sqlew/dev.toml
+sqlew --config-path=.sqlew/dev.toml
 
 # Production
-npx sqlew --config-path=.sqlew/prod.toml
+sqlew --config-path=.sqlew/prod.toml
 ```
 
 ---
@@ -832,7 +832,7 @@ npx sqlew --config-path=.sqlew/prod.toml
 1. **Check priority:** CLI args override config file
    ```bash
    # CLI wins over config file
-   npx sqlew --autodelete-message-hours=24
+   sqlew --autodelete-message-hours=24
    ```
 
 2. **Verify config loading:**

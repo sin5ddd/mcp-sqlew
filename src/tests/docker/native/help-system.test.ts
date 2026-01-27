@@ -1,8 +1,8 @@
 /**
  * Help System - Native RDBMS Integration Tests
  *
- * Tests help system tables (v4_help_tools, v4_help_actions, v4_help_action_examples,
- * v4_help_use_cases, v4_help_use_case_cats) on fresh MySQL, MariaDB, and PostgreSQL installations.
+ * Tests help system tables (m_help_tools, m_help_actions, t_help_action_examples,
+ * t_help_use_cases, m_help_use_case_cats) on fresh MySQL, MariaDB, and PostgreSQL installations.
  *
  * Task #534: Refactor to use direct Knex operations instead of MCP tool functions
  * v4 migration: Updated all table/column names to v4 schema (2025-12-25)
@@ -19,20 +19,20 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
   // Get project ID before running tests
   it('should get project ID', async () => {
     const db = getDb();
-    const project = await db('v4_projects').first();
+    const project = await db('m_projects').first();
     assert.ok(project, 'Project should exist');
     projectId = project.id;
   });
 
   // ============================================================================
-  // v4_help_tools - Tool Registry
+  // m_help_tools - Tool Registry
   // ============================================================================
 
-  describe('v4_help_tools table', () => {
+  describe('m_help_tools table', () => {
     it('should have decision tool registered', async () => {
       const db = getDb();
 
-      const tool = await db('v4_help_tools')
+      const tool = await db('m_help_tools')
         .where({ tool_name: 'decision' })
         .first();
 
@@ -43,22 +43,12 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
         'Description should mention decision or context management');
     });
 
-    it('should have task tool registered', async () => {
-      const db = getDb();
-
-      const tool = await db('v4_help_tools')
-        .where({ tool_name: 'task' })
-        .first();
-
-      assert.ok(tool, 'Task tool should be registered');
-      assert.strictEqual(tool.tool_name, 'task');
-      assert.ok(tool.description, 'Tool should have description');
-    });
+    // Note: Task tool removed in v5.0 (deprecated)
 
     it('should have constraint tool registered', async () => {
       const db = getDb();
 
-      const tool = await db('v4_help_tools')
+      const tool = await db('m_help_tools')
         .where({ tool_name: 'constraint' })
         .first();
 
@@ -70,11 +60,11 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should have help and example tools registered', async () => {
       const db = getDb();
 
-      const helpTool = await db('v4_help_tools')
+      const helpTool = await db('m_help_tools')
         .where({ tool_name: 'help' })
         .first();
 
-      const exampleTool = await db('v4_help_tools')
+      const exampleTool = await db('m_help_tools')
         .where({ tool_name: 'example' })
         .first();
 
@@ -85,14 +75,14 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should have all core tools registered', async () => {
       const db = getDb();
 
-      const tools = await db('v4_help_tools')
+      const tools = await db('m_help_tools')
         .select('tool_name')
         .orderBy('tool_name');
 
       const toolNames = tools.map((t: any) => t.tool_name);
 
-      // Core tools that must exist
-      const requiredTools = ['decision', 'task', 'constraint', 'help', 'example'];
+      // Core tools that must exist (task removed in v5.0)
+      const requiredTools = ['decision', 'constraint', 'help', 'example'];
       for (const requiredTool of requiredTools) {
         assert.ok(
           toolNames.includes(requiredTool),
@@ -103,14 +93,14 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
   });
 
   // ============================================================================
-  // v4_help_actions - Action Documentation
+  // m_help_actions - Action Documentation
   // ============================================================================
 
-  describe('v4_help_actions table', () => {
+  describe('m_help_actions table', () => {
     it('should have decision.set action documented', async () => {
       const db = getDb();
 
-      const action = await db('v4_help_actions')
+      const action = await db('m_help_actions')
         .where({ tool_name: 'decision', action_name: 'set' })
         .first();
 
@@ -118,8 +108,8 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       assert.strictEqual(action.action_name, 'set');
       assert.ok(action.description, 'Action should have description');
 
-      // Parameters are stored in v4_help_action_params table
-      const params = await db('v4_help_action_params')
+      // Parameters are stored in t_help_action_params table
+      const params = await db('t_help_action_params')
         .where({ action_id: action.id })
         .select('*');
 
@@ -132,37 +122,12 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       assert.ok(paramNames.includes('value'), 'Should have value parameter');
     });
 
-    it('should have task.create action documented', async () => {
-      const db = getDb();
-
-      const action = await db('v4_help_actions')
-        .where({ tool_name: 'task', action_name: 'create' })
-        .first();
-
-      assert.ok(action, 'task.create action should be documented');
-      assert.strictEqual(action.action_name, 'create');
-      assert.ok(action.description, 'Action should have description');
-
-      // Parameters are stored in v4_help_action_params table
-      const params = await db('v4_help_action_params')
-        .where({ action_id: action.id })
-        .select('*');
-
-      // Verify file_actions parameter is documented (v3.8.0)
-      const paramNames = params.map((p: any) => p.param_name);
-      assert.ok(
-        paramNames.includes('file_actions'),
-        'Should document file_actions parameter'
-      );
-
-      const fileActionsParam = params.find((p: any) => p.param_name === 'file_actions');
-      assert.ok(fileActionsParam, 'file_actions parameter should exist');
-    });
+    // Note: task.create action test removed in v5.0 (task tool deprecated)
 
     it('should have constraint.add action documented', async () => {
       const db = getDb();
 
-      const action = await db('v4_help_actions')
+      const action = await db('m_help_actions')
         .where({ tool_name: 'constraint', action_name: 'add' })
         .first();
 
@@ -170,8 +135,8 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       assert.strictEqual(action.action_name, 'add');
       assert.ok(action.description, 'Action should have description');
 
-      // Parameters are stored in v4_help_action_params table
-      const params = await db('v4_help_action_params')
+      // Parameters are stored in t_help_action_params table
+      const params = await db('t_help_action_params')
         .where({ action_id: action.id })
         .select('*');
 
@@ -181,35 +146,35 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should have multiple actions per tool', async () => {
       const db = getDb();
 
-      const decisionActions = await db('v4_help_actions')
+      const decisionActions = await db('m_help_actions')
         .where({ tool_name: 'decision' })
         .select('action_name');
 
-      const taskActions = await db('v4_help_actions')
-        .where({ tool_name: 'task' })
+      // Note: Task tool removed in v5.0
+      const constraintActions = await db('m_help_actions')
+        .where({ tool_name: 'constraint' })
         .select('action_name');
 
       assert.ok(decisionActions.length > 1, 'Decision tool should have multiple actions');
-      assert.ok(taskActions.length > 1, 'Task tool should have multiple actions');
+      assert.ok(constraintActions.length >= 1, 'Constraint tool should have actions');
 
-      // Verify key task actions exist
-      const taskActionNames = taskActions.map((a: any) => a.action_name);
-      assert.ok(taskActionNames.includes('create'), 'Should have create action');
-      assert.ok(taskActionNames.includes('update'), 'Should have update action');
-      assert.ok(taskActionNames.includes('move'), 'Should have move action');
+      // Verify key decision actions exist
+      const decisionActionNames = decisionActions.map((a: any) => a.action_name);
+      assert.ok(decisionActionNames.includes('set'), 'Should have set action');
+      assert.ok(decisionActionNames.includes('get'), 'Should have get action');
     });
 
     it('should indicate required vs optional parameters', async () => {
       const db = getDb();
 
-      const action = await db('v4_help_actions')
+      const action = await db('m_help_actions')
         .where({ tool_name: 'decision', action_name: 'set' })
         .first();
 
       assert.ok(action, 'Action should exist');
 
-      // Parameters are stored in v4_help_action_params table
-      const params = await db('v4_help_action_params')
+      // Parameters are stored in t_help_action_params table
+      const params = await db('t_help_action_params')
         .where({ action_id: action.id })
         .select('*');
 
@@ -224,17 +189,17 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
   });
 
   // ============================================================================
-  // v4_help_actions - Foreign Key Constraints
+  // m_help_actions - Foreign Key Constraints
   // ============================================================================
 
-  describe('v4_help_actions foreign key constraints', () => {
+  describe('m_help_actions foreign key constraints', () => {
     it('should enforce FK constraint on tool_name', async () => {
       const db = getDb();
 
       try {
-        // v4_help_actions columns: id, tool_name, action_name, description, returns
-        // (parameters is stored in separate v4_help_action_params table)
-        await db('v4_help_actions').insert({
+        // m_help_actions columns: id, tool_name, action_name, description, returns
+        // (parameters is stored in separate t_help_action_params table)
+        await db('m_help_actions').insert({
           tool_name: 'non_existent_tool',
           action_name: 'test_action',
           description: 'Test description',
@@ -257,39 +222,39 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       // Insert a test action with valid tool_name
       const testActionName = `test_action_${Date.now()}`;
 
-      // v4_help_actions columns: id, tool_name, action_name, description, returns
-      await db('v4_help_actions').insert({
+      // m_help_actions columns: id, tool_name, action_name, description, returns
+      await db('m_help_actions').insert({
         tool_name: 'decision',
         action_name: testActionName,
         description: 'Test action',
       });
 
-      const inserted = await db('v4_help_actions')
+      const inserted = await db('m_help_actions')
         .where({ tool_name: 'decision', action_name: testActionName })
         .first();
 
       assert.ok(inserted, 'Should insert action with valid tool_name');
 
       // Cleanup
-      await db('v4_help_actions')
+      await db('m_help_actions')
         .where({ action_name: testActionName })
         .delete();
     });
   });
 
   // ============================================================================
-  // v4_help_action_examples - Example Storage
+  // t_help_action_examples - Example Storage
   // ============================================================================
 
-  describe('v4_help_action_examples table', () => {
+  describe('t_help_action_examples table', () => {
     it('should have examples for decision tool', async () => {
       const db = getDb();
 
-      // Join with v4_help_actions to filter by tool_name
-      const examples = await db('v4_help_action_examples')
-        .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id')
-        .where({ 'v4_help_actions.tool_name': 'decision' })
-        .select('v4_help_action_examples.*');
+      // Join with m_help_actions to filter by tool_name
+      const examples = await db('t_help_action_examples')
+        .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.id')
+        .where({ 'm_help_actions.tool_name': 'decision' })
+        .select('t_help_action_examples.*');
 
       // Should have examples seeded
       assert.ok(
@@ -307,11 +272,11 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should filter examples by action', async () => {
       const db = getDb();
 
-      // Join with v4_help_actions to filter by tool_name and action_name
-      const examples = await db('v4_help_action_examples')
-        .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id')
-        .where({ 'v4_help_actions.tool_name': 'decision', 'v4_help_actions.action_name': 'set' })
-        .select('v4_help_action_examples.*', 'v4_help_actions.tool_name', 'v4_help_actions.action_name');
+      // Join with m_help_actions to filter by tool_name and action_name
+      const examples = await db('t_help_action_examples')
+        .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.id')
+        .where({ 'm_help_actions.tool_name': 'decision', 'm_help_actions.action_name': 'set' })
+        .select('t_help_action_examples.*', 'm_help_actions.tool_name', 'm_help_actions.action_name');
 
       // Verify filtering works
       assert.ok(Array.isArray(examples), 'Should return array');
@@ -326,7 +291,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should have required columns', async () => {
       const db = getDb();
 
-      const examples = await db('v4_help_action_examples')
+      const examples = await db('t_help_action_examples')
         .limit(5)
         .select('*');
 
@@ -346,7 +311,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       const keyword = 'decision';
-      const examples = await db('v4_help_action_examples')
+      const examples = await db('t_help_action_examples')
         .where('title', 'like', `%${keyword}%`)
         .select('*');
 
@@ -365,7 +330,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       const keyword = 'task';
-      const examples = await db('v4_help_action_examples')
+      const examples = await db('t_help_action_examples')
         .where('explanation', 'like', `%${keyword}%`)
         .select('*');
 
@@ -375,34 +340,34 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should search examples by tool and keyword', async () => {
       const db = getDb();
 
-      // Join with v4_help_actions to filter by tool_name
-      const examples = await db('v4_help_action_examples')
-        .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.id')
-        .where({ 'v4_help_actions.tool_name': 'task' })
+      // Join with m_help_actions to filter by tool_name (task -> decision in v5.0)
+      const examples = await db('t_help_action_examples')
+        .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.id')
+        .where({ 'm_help_actions.tool_name': 'decision' })
         .andWhere(function() {
-          this.where('title', 'like', '%create%')
-            .orWhere('explanation', 'like', '%create%');
+          this.where('title', 'like', '%set%')
+            .orWhere('explanation', 'like', '%set%');
         })
-        .select('v4_help_action_examples.*', 'v4_help_actions.tool_name');
+        .select('t_help_action_examples.*', 'm_help_actions.tool_name');
 
       assert.ok(Array.isArray(examples), 'Should return filtered search results');
 
-      // All results should be for task tool
+      // All results should be for decision tool
       examples.forEach((ex: any) => {
-        assert.strictEqual(ex.tool_name, 'task');
+        assert.strictEqual(ex.tool_name, 'decision');
       });
     });
   });
 
   // ============================================================================
-  // v4_help_use_cases - Use Case Storage
+  // t_help_use_cases - Use Case Storage
   // ============================================================================
 
-  describe('v4_help_use_cases table', () => {
+  describe('t_help_use_cases table', () => {
     it('should have use case table structure', async () => {
       const db = getDb();
 
-      const useCases = await db('v4_help_use_cases')
+      const useCases = await db('t_help_use_cases')
         .limit(5)
         .select('*');
 
@@ -421,12 +386,12 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       // Get first use case if any exist
-      const firstUseCase = await db('v4_help_use_cases')
+      const firstUseCase = await db('t_help_use_cases')
         .orderBy('id', 'asc')
         .first();
 
       if (firstUseCase) {
-        const useCase = await db('v4_help_use_cases')
+        const useCase = await db('t_help_use_cases')
           .where({ id: firstUseCase.id })
           .first();
 
@@ -440,7 +405,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       const keyword = 'sprint';
-      const useCases = await db('v4_help_use_cases')
+      const useCases = await db('t_help_use_cases')
         .where('title', 'like', `%${keyword}%`)
         .select('*');
 
@@ -451,7 +416,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       const keyword = 'workflow';
-      const useCases = await db('v4_help_use_cases')
+      const useCases = await db('t_help_use_cases')
         .where('description', 'like', `%${keyword}%`)
         .select('*');
 
@@ -461,11 +426,11 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should filter use cases by complexity', async () => {
       const db = getDb();
 
-      const basicUseCases = await db('v4_help_use_cases')
+      const basicUseCases = await db('t_help_use_cases')
         .where({ complexity: 'basic' })
         .select('*');
 
-      const advancedUseCases = await db('v4_help_use_cases')
+      const advancedUseCases = await db('t_help_use_cases')
         .where({ complexity: 'advanced' })
         .select('*');
 
@@ -483,14 +448,14 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
   });
 
   // ============================================================================
-  // v4_help_use_case_cats - Use Case Category Management
+  // m_help_use_case_cats - Use Case Category Management
   // ============================================================================
 
-  describe('v4_help_use_case_cats table', () => {
+  describe('m_help_use_case_cats table', () => {
     it('should have use case categories', async () => {
       const db = getDb();
 
-      const categories = await db('v4_help_use_case_cats')
+      const categories = await db('m_help_use_case_cats')
         .select('*');
 
       assert.ok(Array.isArray(categories), 'Should return categories');
@@ -505,15 +470,15 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should join use cases with categories', async () => {
       const db = getDb();
 
-      const useCasesWithCategory = await db('v4_help_use_cases')
+      const useCasesWithCategory = await db('t_help_use_cases')
         .join(
-          'v4_help_use_case_cats',
-          'v4_help_use_cases.category_id',
-          'v4_help_use_case_cats.id'
+          'm_help_use_case_cats',
+          't_help_use_cases.category_id',
+          'm_help_use_case_cats.id'
         )
         .select(
-          'v4_help_use_cases.*',
-          'v4_help_use_case_cats.category_name'
+          't_help_use_cases.*',
+          'm_help_use_case_cats.category_name'
         )
         .limit(5);
 
@@ -527,20 +492,20 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should filter use cases by category name', async () => {
       const db = getDb();
 
-      const categories = await db('v4_help_use_case_cats')
+      const categories = await db('m_help_use_case_cats')
         .select('*');
 
       if (categories.length > 0) {
         const firstCategory = categories[0];
 
-        const useCases = await db('v4_help_use_cases')
+        const useCases = await db('t_help_use_cases')
           .join(
-            'v4_help_use_case_cats',
-            'v4_help_use_cases.category_id',
-            'v4_help_use_case_cats.id'
+            'm_help_use_case_cats',
+            't_help_use_cases.category_id',
+            'm_help_use_case_cats.id'
           )
-          .where('v4_help_use_case_cats.category_name', firstCategory.category_name)
-          .select('v4_help_use_cases.*');
+          .where('m_help_use_case_cats.category_name', firstCategory.category_name)
+          .select('t_help_use_cases.*');
 
         assert.ok(Array.isArray(useCases), 'Should return category-filtered results');
       }
@@ -548,7 +513,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
   });
 
   // NOTE: m_help_use_case_steps table does not exist in current schema
-  // Use case steps are stored in the 'workflow' TEXT column of v4_help_use_cases
+  // Use case steps are stored in the 'workflow' TEXT column of t_help_use_cases
 
   // ============================================================================
   // Cross-Database Compatibility Tests
@@ -559,7 +524,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       const unicodeKeyword = '日本語';
-      const examples = await db('v4_help_action_examples')
+      const examples = await db('t_help_action_examples')
         .where('title', 'like', `%${unicodeKeyword}%`)
         .select('*');
 
@@ -571,7 +536,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       const specialKeyword = "test's \"special\" chars";
-      const examples = await db('v4_help_action_examples')
+      const examples = await db('t_help_action_examples')
         .where('title', 'like', `%${specialKeyword}%`)
         .select('*');
 
@@ -582,12 +547,12 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should support pagination in example listing', async () => {
       const db = getDb();
 
-      const page1 = await db('v4_help_action_examples')
+      const page1 = await db('t_help_action_examples')
         .limit(5)
         .offset(0)
         .select('*');
 
-      const page2 = await db('v4_help_action_examples')
+      const page2 = await db('t_help_action_examples')
         .limit(5)
         .offset(5)
         .select('*');
@@ -607,12 +572,12 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should support pagination in use case listing', async () => {
       const db = getDb();
 
-      const page1 = await db('v4_help_use_cases')
+      const page1 = await db('t_help_use_cases')
         .limit(3)
         .offset(0)
         .select('*');
 
-      const page2 = await db('v4_help_use_cases')
+      const page2 = await db('t_help_use_cases')
         .limit(3)
         .offset(3)
         .select('*');
@@ -621,15 +586,15 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       assert.ok(Array.isArray(page2), 'Should return page 2');
     });
 
-    it('should retrieve parameters from v4_help_action_params', async () => {
+    it('should retrieve parameters from t_help_action_params', async () => {
       const db = getDb();
 
-      const action = await db('v4_help_actions')
+      const action = await db('m_help_actions')
         .where({ tool_name: 'decision', action_name: 'set' })
         .first();
 
       if (action) {
-        const params = await db('v4_help_action_params')
+        const params = await db('t_help_action_params')
           .where({ action_id: action.id })
           .select('*');
 
@@ -637,11 +602,11 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       }
     });
 
-    it('should enforce PRIMARY KEY uniqueness on tool_name in v4_help_tools', async () => {
+    it('should enforce PRIMARY KEY uniqueness on tool_name in m_help_tools', async () => {
       const db = getDb();
 
       try {
-        await db('v4_help_tools').insert({
+        await db('m_help_tools').insert({
           tool_name: 'decision', // Duplicate - conflicts with PRIMARY KEY
           description: 'Duplicate tool',
         });
@@ -667,8 +632,8 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       const db = getDb();
 
       try {
-        // v4_help_actions columns: id, tool_name, action_name, description, returns
-        await db('v4_help_actions').insert({
+        // m_help_actions columns: id, tool_name, action_name, description, returns
+        await db('m_help_actions').insert({
           tool_name: 'decision',
           action_name: 'set', // Duplicate combination
           description: 'Duplicate action',
@@ -694,13 +659,13 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should join tools, actions, and examples', async () => {
       const db = getDb();
 
-      const results = await db('v4_help_tools')
-        .join('v4_help_actions', 'v4_help_tools.tool_name', 'v4_help_actions.tool_name')
-        .leftJoin('v4_help_action_examples', 'v4_help_actions.id', 'v4_help_action_examples.action_id')
+      const results = await db('m_help_tools')
+        .join('m_help_actions', 'm_help_tools.tool_name', 'm_help_actions.tool_name')
+        .leftJoin('t_help_action_examples', 'm_help_actions.id', 't_help_action_examples.action_id')
         .select(
-          'v4_help_tools.tool_name',
-          'v4_help_actions.action_name',
-          'v4_help_action_examples.title'
+          'm_help_tools.tool_name',
+          'm_help_actions.action_name',
+          't_help_action_examples.title'
         )
         .limit(10);
 
@@ -716,7 +681,7 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
     it('should count actions per tool', async () => {
       const db = getDb();
 
-      const counts = await db('v4_help_actions')
+      const counts = await db('m_help_actions')
         .select('tool_name')
         .count('* as action_count')
         .groupBy('tool_name')
@@ -731,12 +696,12 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
       });
     });
 
-    // Note: v4_help_action_examples does not have 'complexity' column
-    // Complexity is stored in v4_help_use_cases
+    // Note: t_help_action_examples does not have 'complexity' column
+    // Complexity is stored in t_help_use_cases
     it('should count use cases per complexity level', async () => {
       const db = getDb();
 
-      const counts = await db('v4_help_use_cases')
+      const counts = await db('t_help_use_cases')
         .select('complexity')
         .count('* as use_case_count')
         .groupBy('complexity')
@@ -755,19 +720,19 @@ runTestsOnAllDatabases('Help System', (getDb, dbType) => {
 
       // Note: m_help_use_case_steps table does not exist
       // Steps are stored in 'workflow' TEXT column
-      const fullUseCases = await db('v4_help_use_cases')
+      const fullUseCases = await db('t_help_use_cases')
         .join(
-          'v4_help_use_case_cats',
-          'v4_help_use_cases.category_id',
-          'v4_help_use_case_cats.id'
+          'm_help_use_case_cats',
+          't_help_use_cases.category_id',
+          'm_help_use_case_cats.id'
         )
         .select(
-          'v4_help_use_cases.id',
-          'v4_help_use_cases.title',
-          'v4_help_use_case_cats.category_name',
-          'v4_help_use_cases.workflow'
+          't_help_use_cases.id',
+          't_help_use_cases.title',
+          'm_help_use_case_cats.category_name',
+          't_help_use_cases.workflow'
         )
-        .orderBy('v4_help_use_cases.id')
+        .orderBy('t_help_use_cases.id')
         .limit(20);
 
       assert.ok(Array.isArray(fullUseCases), 'Should return full use cases');

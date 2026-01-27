@@ -14,17 +14,9 @@ import {
   listDecisionContextsAction, handleAnalytics, decisionHelp, decisionExample
 } from '../tools/context/index.js';
 import {
-  recordFileChange, getFileChanges, checkFileLock, recordFileChangeBatch, sqliteFlush, fileHelp, fileExample
-} from '../tools/files/index.js';
-import {
   addConstraint, getConstraints, activateConstraint, deactivateConstraint, suggestPendingConstraints,
-  constraintHelp, constraintExample
+  constraintHelp, constraintExample, activateConstraintsByTag
 } from '../tools/constraints/index.js';
-import {
-  createTask, updateTask, getTask, listTasks, moveTask, linkTask, archiveTask,
-  batchCreateTasks, addDependency, removeDependency, getDependencies, watchFiles,
-  getPrunedFiles, linkPrunedFile, taskHelp, taskExample, taskUseCase, watcherStatus
-} from '../tools/tasks.js';
 import {
   queryAction, queryParams, queryTool, workflowHints, batchGuide, errorRecovery,
   helpHelp, helpExample
@@ -36,8 +28,12 @@ import {
   getExample, searchExamples, listAllExamples, exampleHelp, exampleExample
 } from '../tools/example/index.js';
 import { trackAndReturnHelp } from '../utils/help-tracking.js';
-import { queryHelpListUseCases } from '../tools/help-queries.js';
 import { handleSuggestAction } from '../tools/suggest/index.js';
+import {
+  listQueue, clearQueue, removeFromQueue
+} from '../tools/queue/index.js';
+import { getHelpLoader } from '../help-loader.js';
+import { ProjectContext } from '../utils/project-context.js';
 
 /**
  * LocalBackend implementation
@@ -63,14 +59,8 @@ export class LocalBackend implements ToolBackend {
       case 'decision':
         result = await this.executeDecision(action, p);
         break;
-      case 'file':
-        result = await this.executeFile(action, p);
-        break;
       case 'constraint':
         result = await this.executeConstraint(action, p);
-        break;
-      case 'task':
-        result = await this.executeTask(action, p);
         break;
       case 'help':
         result = await this.executeHelp(action, p);
@@ -83,6 +73,9 @@ export class LocalBackend implements ToolBackend {
         break;
       case 'suggest':
         result = await handleSuggestAction(p);
+        break;
+      case 'queue':
+        result = this.executeQueue(action, p);
         break;
       default:
         throw new Error(`Unknown tool: ${tool}`);
@@ -196,6 +189,13 @@ export class LocalBackend implements ToolBackend {
       case 'add_decision_context': return await addDecisionContextAction(params);
       case 'list_decision_contexts': return await listDecisionContextsAction(params);
       case 'analytics': return await handleAnalytics(params);
+      case 'export':
+        // SaaS-only feature - LocalBackend cannot provide export data
+        throw new Error(
+          'Export feature is SaaS-only. ' +
+          'To use document export, connect to sqlew SaaS (set SQLEW_API_KEY). ' +
+          'For local JSON backup, use: npm run db:export'
+        );
       case 'help': {
         const helpContent = decisionHelp();
         trackAndReturnHelp('decision', 'help', JSON.stringify(helpContent));
@@ -207,7 +207,8 @@ export class LocalBackend implements ToolBackend {
         return exampleContent;
       }
       case 'use_case': {
-        return await queryHelpListUseCases(getAdapter(), {
+        return await listAllUseCases({
+          action: 'list_all',
           category: params.category,
           complexity: params.complexity,
           limit: params.limit,
@@ -219,51 +220,12 @@ export class LocalBackend implements ToolBackend {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async executeFile(action: string, params: any): Promise<unknown> {
-    switch (action) {
-      case 'record': return await recordFileChange(params);
-      case 'get': return await getFileChanges(params);
-      case 'check_lock': return await checkFileLock(params);
-      case 'record_batch': {
-        let file_changes = params.file_changes;
-        if (typeof file_changes === 'string') {
-          try {
-            file_changes = JSON.parse(file_changes);
-          } catch (error) {
-            throw new Error(`Invalid JSON in "file_changes" parameter: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        }
-        return await recordFileChangeBatch({ file_changes, atomic: params.atomic });
-      }
-      case 'sqlite_flush': return await sqliteFlush();
-      case 'help': {
-        const fileHelpContent = fileHelp();
-        trackAndReturnHelp('file', 'help', JSON.stringify(fileHelpContent));
-        return fileHelpContent;
-      }
-      case 'example': {
-        const fileExampleContent = fileExample();
-        trackAndReturnHelp('file', 'example', JSON.stringify(fileExampleContent));
-        return fileExampleContent;
-      }
-      case 'use_case': {
-        return await queryHelpListUseCases(getAdapter(), {
-          category: params.category,
-          complexity: params.complexity,
-          limit: params.limit,
-          offset: params.offset
-        });
-      }
-      default: throw new Error(`Unknown file action: ${action}`);
-    }
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async executeConstraint(action: string, params: any): Promise<unknown> {
     switch (action) {
       case 'add': return await addConstraint(params);
       case 'get': return await getConstraints(params);
       case 'activate': return await activateConstraint(params);
+      case 'activate_by_tag': return await activateConstraintsByTag(params.tag);
       case 'deactivate': return await deactivateConstraint(params);
       case 'suggest_pending': return await suggestPendingConstraints(params);
       case 'help': {
@@ -277,7 +239,8 @@ export class LocalBackend implements ToolBackend {
         return constraintExampleContent;
       }
       case 'use_case': {
-        return await queryHelpListUseCases(getAdapter(), {
+        return await listAllUseCases({
+          action: 'list_all',
           category: params.category,
           complexity: params.complexity,
           limit: params.limit,
@@ -285,53 +248,6 @@ export class LocalBackend implements ToolBackend {
         });
       }
       default: throw new Error(`Unknown constraint action: ${action}`);
-    }
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async executeTask(action: string, params: any): Promise<unknown> {
-    switch (action) {
-      case 'create': return await createTask(params);
-      case 'update': return await updateTask(params);
-      case 'get': return await getTask(params);
-      case 'list': return await listTasks(params);
-      case 'move': return await moveTask(params);
-      case 'link': return await linkTask(params);
-      case 'archive': return await archiveTask(params);
-      case 'create_batch': {
-        let tasks = params.tasks;
-        if (typeof tasks === 'string') {
-          try {
-            tasks = JSON.parse(tasks);
-          } catch (error) {
-            throw new Error(`Invalid JSON in "tasks" parameter: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        }
-        return await batchCreateTasks({ tasks, atomic: params.atomic });
-      }
-      case 'add_dependency': return await addDependency(params);
-      case 'remove_dependency': return await removeDependency(params);
-      case 'get_dependencies': return await getDependencies(params);
-      case 'watch_files': return await watchFiles(params);
-      case 'get_pruned_files': return await getPrunedFiles(params);
-      case 'link_pruned_file': return await linkPrunedFile(params);
-      case 'watcher': return await watcherStatus(params);
-      case 'help': {
-        const taskHelpContent = taskHelp();
-        trackAndReturnHelp('task', 'help', JSON.stringify(taskHelpContent));
-        return taskHelpContent;
-      }
-      case 'example': {
-        const taskExampleContent = taskExample();
-        trackAndReturnHelp('task', 'example', JSON.stringify(taskExampleContent));
-        return taskExampleContent;
-      }
-      case 'use_case': {
-        const taskUseCaseContent = taskUseCase();
-        trackAndReturnHelp('task', 'use_case', JSON.stringify(taskUseCaseContent));
-        return taskUseCaseContent;
-      }
-      default: throw new Error(`Unknown task action: ${action}`);
     }
   }
 
@@ -466,6 +382,70 @@ export class LocalBackend implements ToolBackend {
         return useCaseExampleContent;
       }
       default: throw new Error(`Unknown use_case action: ${action}`);
+    }
+  }
+
+  /**
+   * Get project root path for file-based operations
+   *
+   * Priority: ProjectContext.project_root_path > process.cwd()
+   */
+  private getProjectRoot(): string {
+    const ctx = ProjectContext.getInstance();
+    if (ctx.isInitialized()) {
+      return ctx.getProjectMetadata().project_root_path || process.cwd();
+    }
+    return process.cwd();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async executeQueue(action: string, params: any): Promise<unknown> {
+    const projectRoot = this.getProjectRoot();
+
+    switch (action) {
+      case 'list':
+        return listQueue(projectRoot, params);
+      case 'clear':
+        return clearQueue(projectRoot, params);
+      case 'remove':
+        return removeFromQueue(projectRoot, params);
+      case 'help': {
+        const loader = await getHelpLoader();
+        const tool = loader.getTool('queue');
+        if (!tool) {
+          return { error: 'Queue help not found' };
+        }
+        const helpContent = {
+          tool: tool.name,
+          description: tool.description,
+          actions: tool.actions.map(a => ({
+            name: a.name,
+            description: a.description,
+            params: a.params,
+          })),
+        };
+        trackAndReturnHelp('queue', 'help', JSON.stringify(helpContent));
+        return helpContent;
+      }
+      case 'example': {
+        const loader = await getHelpLoader();
+        const tool = loader.getTool('queue');
+        if (!tool) {
+          return { error: 'Queue examples not found' };
+        }
+        const exampleContent = {
+          tool: tool.name,
+          examples: tool.actions.flatMap(a =>
+            a.examples.map(ex => ({
+              action: a.name,
+              ...ex,
+            }))
+          ),
+        };
+        trackAndReturnHelp('queue', 'example', JSON.stringify(exampleContent));
+        return exampleContent;
+      }
+      default: throw new Error(`Unknown queue action: ${action}`);
     }
   }
 }

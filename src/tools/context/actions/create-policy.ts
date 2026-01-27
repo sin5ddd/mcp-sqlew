@@ -66,7 +66,7 @@ export async function createPolicy(
     }
 
     // Check if policy already exists for this project (exact match)
-    const existingPolicy = await knex('v4_decision_policies')
+    const existingPolicy = await knex('t_decision_policies')
       .where({ name: params.name, project_id: projectId })
       .first();
 
@@ -80,7 +80,7 @@ export async function createPolicy(
     // Case-insensitive duplicate check (v4.0.2)
     // Prevents creating 'API-Design' when 'api-design' already exists
     await validateNoCaseInsensitiveDuplicate(
-      knex, 'v4_decision_policies', 'name', params.name, 'policy', { project_id: projectId }
+      knex, 't_decision_policies', 'name', params.name, 'policy', { project_id: projectId }
     );
 
     // Note: Agent tracking removed in v4.0 (created_by param kept for API compatibility but not stored)
@@ -99,7 +99,7 @@ export async function createPolicy(
     };
 
     // Insert policy
-    const [policyId] = await knex('v4_decision_policies').insert(policyData);
+    const [policyId] = await knex('t_decision_policies').insert(policyData);
 
     return {
       success: true,

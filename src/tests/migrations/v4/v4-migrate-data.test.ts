@@ -25,7 +25,7 @@ const __dirname = dirname(__filename);
 // シンプルな v4 スキーマ (必要なテーブルのみ) を定義
 // Note: Agent tracking removed in v4.0 - no v4_agents table or agent_id columns
 async function createV4Schema(db: Knex) {
-  await db.schema.createTable('v4_projects', table => {
+  await db.schema.createTable('m_projects', table => {
     table.integer('id').primary();
     table.string('name');
     table.string('display_name').nullable();
@@ -36,7 +36,7 @@ async function createV4Schema(db: Knex) {
     table.text('metadata').nullable();
   });
 
-  await db.schema.createTable('v4_context_keys', table => {
+  await db.schema.createTable('m_context_keys', table => {
     table.integer('id').primary();
     table.string('key_name');
   });
@@ -49,7 +49,7 @@ async function createV4Schema(db: Knex) {
 
   // Note: v4_config removed in v4.0 - config is now in-memory
 
-  await db.schema.createTable('v4_decisions', table => {
+  await db.schema.createTable('t_decisions', table => {
     table.string('key_id');
     table.integer('project_id');
     table.text('value');
@@ -59,7 +59,7 @@ async function createV4Schema(db: Knex) {
     table.integer('ts').nullable();
   });
 
-  await db.schema.createTable('v4_decision_history', table => {
+  await db.schema.createTable('t_decision_history', table => {
     table.increments('id').primary();
     table.string('key_id');
     table.integer('project_id');
@@ -183,14 +183,14 @@ describe('v4.0 Data Migration from v3.x', () => {
     });
 
     it('should skip data migration when no v3 tables exist', async () => {
-      // Note: v4_agents removed in v4.0 - check v4_projects instead
-      const projectsBefore = await db('v4_projects').count<{ count: number }[]>('* as count');
+      // Note: v4_agents removed in v4.0 - check m_projects instead
+      const projectsBefore = await db('m_projects').count<{ count: number }[]>('* as count');
       assert.strictEqual(Number(projectsBefore[0].count), 0);
 
       await migrateV4Data(db as any);
 
-      const projectsAfter = await db('v4_projects').count<{ count: number }[]>('* as count');
-      assert.strictEqual(Number(projectsAfter[0].count), 0, 'v4_projects should remain empty');
+      const projectsAfter = await db('m_projects').count<{ count: number }[]>('* as count');
+      assert.strictEqual(Number(projectsAfter[0].count), 0, 'm_projects should remain empty');
     });
   });
 
@@ -250,12 +250,12 @@ describe('v4.0 Data Migration from v3.x', () => {
 
       // Note: v4_agents removed in v4.0 - m_agents data is NOT migrated
 
-      const v4Projects = await db('v4_projects');
+      const v4Projects = await db('m_projects');
       assert.strictEqual(v4Projects.length, 1);
       assert.strictEqual(v4Projects[0].id, 1);
       assert.strictEqual(v4Projects[0].name, 'proj-1');
 
-      const v4ContextKeys = await db('v4_context_keys').orderBy('id');
+      const v4ContextKeys = await db('m_context_keys').orderBy('id');
       assert.strictEqual(v4ContextKeys.length, 2);
       assert.deepStrictEqual(v4ContextKeys.map((r: any) => r.key_name), ['ctx-1', 'ctx-2']);
 
@@ -265,12 +265,12 @@ describe('v4.0 Data Migration from v3.x', () => {
 
       // Note: v4_config removed in v4.0 - config is now in-memory
 
-      const v4Decisions = await db('v4_decisions').orderBy('key_id');
+      const v4Decisions = await db('t_decisions').orderBy('key_id');
       assert.strictEqual(v4Decisions.length, 2);
       // project_id を持たない t_decisions だったので、すべて project_id = 1 のはず
       assert.deepStrictEqual(v4Decisions.map((d: any) => d.project_id), [1, 1]);
 
-      const v4History = await db('v4_decision_history');
+      const v4History = await db('t_decision_history');
       assert.strictEqual(v4History.length, 1);
       assert.strictEqual(v4History[0].key_id, 'k1');
 
@@ -283,15 +283,15 @@ describe('v4.0 Data Migration from v3.x', () => {
       // Note: v4_agents removed in v4.0
       await migrateV4Data(db as any);
       const counts1 = {
-        projects: await db('v4_projects').count<{ count: number }[]>('* as count'),
-        decisions: await db('v4_decisions').count<{ count: number }[]>('* as count'),
+        projects: await db('m_projects').count<{ count: number }[]>('* as count'),
+        decisions: await db('t_decisions').count<{ count: number }[]>('* as count'),
       };
 
       await migrateV4Data(db as any);
 
       const counts2 = {
-        projects: await db('v4_projects').count<{ count: number }[]>('* as count'),
-        decisions: await db('v4_decisions').count<{ count: number }[]>('* as count'),
+        projects: await db('m_projects').count<{ count: number }[]>('* as count'),
+        decisions: await db('t_decisions').count<{ count: number }[]>('* as count'),
       };
 
       assert.strictEqual(Number(counts1.projects[0].count), Number(counts2.projects[0].count));
@@ -301,16 +301,16 @@ describe('v4.0 Data Migration from v3.x', () => {
     it('down() should clear only transaction tables', async () => {
       await migrateV4Data(db as any);
 
-      const beforeDecisions = await db('v4_decisions').count<{ count: number }[]>('* as count');
+      const beforeDecisions = await db('t_decisions').count<{ count: number }[]>('* as count');
       assert.ok(Number(beforeDecisions[0].count) > 0);
 
       await rollbackV4Data(db as any);
 
-      const afterDecisions = await db('v4_decisions').count<{ count: number }[]>('* as count');
+      const afterDecisions = await db('t_decisions').count<{ count: number }[]>('* as count');
       assert.strictEqual(Number(afterDecisions[0].count), 0);
 
-      // マスタテーブルは残っている (v4_agents removed in v4.0 - check v4_projects instead)
-      const projects = await db('v4_projects').count<{ count: number }[]>('* as count');
+      // マスタテーブルは残っている (v4_agents removed in v4.0 - check m_projects instead)
+      const projects = await db('m_projects').count<{ count: number }[]>('* as count');
       assert.ok(Number(projects[0].count) > 0);
     });
   });

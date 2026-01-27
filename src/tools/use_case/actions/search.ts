@@ -1,99 +1,56 @@
 /**
  * Use Case Tool - search Action
  * Search use cases by keyword/category
+ *
+ * TOML-based implementation (v5.0+)
+ * Loads from src/help-data/use-cases/*.toml instead of database
  */
 
-import { DatabaseAdapter } from '../../../adapters/index.js';
-import { getAdapter } from '../../../database.js';
+import { getHelpLoader } from '../../../help-loader.js';
 import { UseCaseSearchParams, UseCaseSearchResult } from '../types.js';
 
 /**
-* Search use cases by keyword/category
+ * Search use cases by keyword/category
+ * Uses HelpSystemLoader (TOML-based)
  */
 export async function searchUseCases(
-  params: UseCaseSearchParams,
-  adapter?: DatabaseAdapter
+  params: UseCaseSearchParams
 ): Promise<UseCaseSearchResult | { error: string; available_categories?: string[] }> {
-  const actualAdapter = adapter ?? getAdapter();
-  const knex = actualAdapter.getKnex();
+  const loader = await getHelpLoader();
 
-  try {
-    const { keyword, category, complexity } = params;
-
-    if (category) {
-      // Verify category exists
-      const categoryExists = await knex('v4_help_use_case_cats')
-        .where({ category_name: category })
-        .select('category_name')
-        .first();
-
-      if (!categoryExists) {
-        const availableCategories = await knex('v4_help_use_case_cats')
-          .select('category_name')
-          .orderBy('category_name')
-          .then(rows => rows.map((row: any) => row.category_name));
-        return {
-          error: `Category "${category}" not found`,
-          available_categories: availableCategories
-        };
-      }
+  // Validate category if provided
+  if (params.category) {
+    const categories = loader.getCategories();
+    const categoryExists = categories.some(c => c.name === params.category);
+    if (!categoryExists) {
+      return {
+        error: `Category "${params.category}" not found`,
+        available_categories: categories.map(c => c.name)
+      };
     }
-
-    if (complexity) {
-      if (!['basic', 'intermediate', 'advanced'].includes(complexity)) {
-        return { error: 'Complexity must be one of: basic, intermediate, advanced' };
-      }
-    }
-
-    // Build query with JOIN
-    let query = knex('v4_help_use_cases as uc')
-      .join('v4_help_use_case_cats as cat', 'uc.category_id', 'cat.id');
-
-    // Apply WHERE conditions
-    query = query.where((builder) => {
-      builder.where('uc.title', 'like', `%${keyword}%`)
-             .orWhere('uc.description', 'like', `%${keyword}%`);
-    });
-
-    if (category) {
-      query = query.andWhere('cat.category_name', category);
-    }
-    if (complexity) {
-      query = query.andWhere('uc.complexity', complexity);
-    }
-
-    // Get matching use cases (limit to 10 for search results)
-    const rows = await query
-      .select('uc.id as use_case_id', 'uc.title', 'uc.complexity', 'cat.category_name as category', 'uc.description')
-      .orderByRaw(`
-        CASE uc.complexity
-          WHEN 'basic' THEN 1
-          WHEN 'intermediate' THEN 2
-          WHEN 'advanced' THEN 3
-        END
-      `)
-      .orderBy('uc.id')
-      .limit(10) as Array<{
-      use_case_id: number;
-      title: string;
-      complexity: string;
-      category: string;
-      description: string;
-    }>;
-
-    return {
-      total: rows.length,
-      use_cases: rows.map(row => ({
-        use_case_id: row.use_case_id,
-        title: row.title,
-        complexity: row.complexity,
-        category: row.category,
-        description: row.description
-      }))
-    };
-
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { error: `Failed to search use cases: ${message}` };
   }
+
+  // Validate complexity if provided
+  if (params.complexity) {
+    if (!['basic', 'intermediate', 'advanced'].includes(params.complexity)) {
+      return { error: 'Complexity must be one of: basic, intermediate, advanced' };
+    }
+  }
+
+  const results = loader.searchUseCases(params.keyword, {
+    category: params.category,
+    complexity: params.complexity,
+    limit: 10
+  });
+
+  return {
+    total: results.length,
+    use_cases: results.map(uc => ({
+      use_case_id: uc.id,
+      title: uc.title,
+      complexity: uc.complexity,
+      category: uc.category,
+      description: uc.description
+    }))
+  };
 }

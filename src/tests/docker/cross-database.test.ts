@@ -204,8 +204,8 @@ describe('Cross-Database SQL Dump Export/Import', () => {
     it('should verify FK constraints exist (MySQL)', async () => {
       console.log('    🔗 Verifying FK constraints...');
 
-      const fks = await getFKConstraints(mysqlDb, 'mysql', 'v4_decisions');
-      assert.ok(fks.length > 0, 'Should have FK constraints on v4_decisions');
+      const fks = await getFKConstraints(mysqlDb, 'mysql', 't_decisions');
+      assert.ok(fks.length > 0, 'Should have FK constraints on t_decisions');
 
       console.log(`      ✅ Found ${fks.length} FK constraints`);
     });
@@ -214,7 +214,7 @@ describe('Cross-Database SQL Dump Export/Import', () => {
       console.log('    🧪 Testing FK constraint enforcement...');
 
       try {
-        await mysqlDb('v4_decisions').insert({
+        await mysqlDb('t_decisions').insert({
           key_id: 9999, // Non-existent key
           project_id: 1,
           value: 'test',
@@ -311,8 +311,8 @@ describe('Cross-Database SQL Dump Export/Import', () => {
     it('should verify FK constraints exist (MariaDB)', async () => {
       console.log('    🔗 Verifying FK constraints...');
 
-      const fks = await getFKConstraints(mariaDb, 'mariadb', 'v4_decisions');
-      assert.ok(fks.length > 0, 'Should have FK constraints on v4_decisions');
+      const fks = await getFKConstraints(mariaDb, 'mariadb', 't_decisions');
+      assert.ok(fks.length > 0, 'Should have FK constraints on t_decisions');
 
       console.log(`      ✅ Found ${fks.length} FK constraints`);
     });
@@ -379,8 +379,8 @@ describe('Cross-Database SQL Dump Export/Import', () => {
     it('should verify FK constraints exist (PostgreSQL)', async () => {
       console.log('    🔗 Verifying FK constraints...');
 
-      const fks = await getFKConstraints(postgresDb, 'postgresql', 'v4_decisions');
-      assert.ok(fks.length > 0, 'Should have FK constraints on v4_decisions');
+      const fks = await getFKConstraints(postgresDb, 'postgresql', 't_decisions');
+      assert.ok(fks.length > 0, 'Should have FK constraints on t_decisions');
 
       console.log(`      ✅ Found ${fks.length} FK constraints`);
     });
@@ -388,7 +388,7 @@ describe('Cross-Database SQL Dump Export/Import', () => {
     it('should convert booleans to TRUE/FALSE (PostgreSQL)', async () => {
       console.log('    🔄 Verifying boolean conversion...');
 
-      const result = await postgresDb('v4_constraints').select('active').first();
+      const result = await postgresDb('t_constraints').select('active').first();
 
       if (result) {
         // PostgreSQL should return actual boolean, not 0/1

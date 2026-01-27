@@ -94,7 +94,7 @@ export class ProjectContext {
 
     // Query database for existing project or create new one
     // Uses Knex query builder (Constraint #49, #50)
-    let project = await knex('v4_projects')
+    let project = await knex('m_projects')
       .where({ name: projectName })
       .first<{
         id: number;
@@ -110,7 +110,7 @@ export class ProjectContext {
       // Set timestamps in application code for cross-DB compatibility
       const now = Math.floor(Date.now() / 1000);
 
-      await knex('v4_projects').insert({
+      await knex('m_projects').insert({
         name: projectName,
         display_name: options?.displayName || projectName,
         detection_source: detectionSource,
@@ -122,7 +122,7 @@ export class ProjectContext {
 
       // Fetch the newly created project by name
       // (Avoids cross-database inconsistencies with .returning())
-      project = await knex('v4_projects')
+      project = await knex('m_projects')
         .where({ name: projectName })
         .first<{
           id: number;
@@ -151,6 +151,60 @@ export class ProjectContext {
     this.initialized = true;
 
     return this.projectMetadata;
+  }
+
+  /**
+   * Initialize without database access (for cloud mode)
+   *
+   * Uses projectId=0 as placeholder. Call setProjectId() to override
+   * with actual ID received from SaaS backend.
+   *
+   * @param projectName - Project name from config or detection
+   * @param detectionSource - How the project name was detected
+   * @param options - Optional metadata
+   * @returns Project metadata with placeholder ID
+   */
+  public initWithoutDb(
+    projectName: string,
+    detectionSource: 'cli' | 'config' | 'git' | 'metadata' | 'directory',
+    options?: { projectRootPath?: string }
+  ): ProjectMetadata {
+    // Return cached metadata if already initialized
+    if (this.initialized && this.projectMetadata) {
+      return this.projectMetadata;
+    }
+
+    // Validate project name
+    this.validateProjectName(projectName);
+
+    // Set metadata with placeholder ID (will be overridden by SaaS backend)
+    this.projectMetadata = {
+      id: 0,  // Placeholder - use setProjectId() to override
+      name: projectName,
+      detection_source: detectionSource,
+      project_root_path: options?.projectRootPath,
+    };
+
+    this.initialized = true;
+
+    return this.projectMetadata;
+  }
+
+  /**
+   * Override project ID with value from SaaS backend
+   *
+   * Called after receiving project ID from SaaS API response.
+   * Only works if already initialized (via initWithoutDb or ensureProject).
+   *
+   * @param projectId - Project ID from SaaS backend
+   */
+  public setProjectId(projectId: number): void {
+    if (!this.initialized || !this.projectMetadata) {
+      throw new Error(
+        'ProjectContext not initialized. Call initWithoutDb() or ensureProject() first.'
+      );
+    }
+    this.projectMetadata.id = projectId;
   }
 
   /**

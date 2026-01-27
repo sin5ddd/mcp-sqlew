@@ -22,7 +22,7 @@ const cliCommands = [
   'on-subagent-stop', 'on-stop', 'on-exit-plan',
 ];
 // CLI flags that should route to CLI (not MCP server)
-const cliFlags = ['--init', '--help', '--version', '--install-saas'];
+const cliFlags = ['--init', '--help', '--version'];
 const isCliCommand = cliCommands.includes(firstArg) || cliFlags.includes(firstArg);
 
 if (isCliCommand) {
@@ -51,7 +51,7 @@ async function startMcpServer(): Promise<void> {
   const { parseArgs, validateArgs } = await import('./server/arg-parser.js');
   const { getToolRegistry } = await import('./server/tool-registry.js');
   const { handleToolCall } = await import('./server/tool-handlers.js');
-  const { initializeServer, startFileWatcher } = await import('./server/setup.js');
+  const { initializeServer } = await import('./server/setup.js');
   const { registerShutdownHandlers, performCleanup } = await import('./server/shutdown.js');
   const { handleInitializationError, safeConsoleError } = await import('./utils/error-handler.js');
 
@@ -118,15 +118,6 @@ async function startMcpServer(): Promise<void> {
     }
 
     safeConsoleError(`  Project: ${setupResult.projectContext.getProjectName()} (ID: ${setupResult.projectContext.getProjectId()}, source: ${setupResult.detectionSource})`);
-    safeConsoleError(`  Auto-delete config: messages=${setupResult.configValues.messageHours}h, file_history=${setupResult.configValues.fileHistoryDays}d, ignore_weekend=${setupResult.configValues.ignoreWeekend}`);
-
-    // Start file watcher for auto-task-tracking (after database is ready)
-    try {
-      await startFileWatcher();
-    } catch (error) {
-      safeConsoleError('⚠ Failed to start file watcher:', error);
-      safeConsoleError('  (Auto task tracking will be disabled)');
-    }
   } catch (error) {
     // If debug logger not initialized, write to stderr as fallback
     if (!debugLoggerInitialized) {

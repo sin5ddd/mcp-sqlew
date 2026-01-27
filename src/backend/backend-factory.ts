@@ -2,14 +2,16 @@
  * Backend Factory
  *
  * Creates and manages backend instances based on configuration.
- * Supports LocalBackend (direct DB) and plugin-based backends (e.g., SaaS).
+ * Supports LocalBackend (direct DB) and SaaS backend (submodule).
  */
 
 import type { ToolBackend } from './types.js';
 import type { SqlewConfig, CloudConfig } from '../config/types.js';
 import { CLOUD_ENV_VARS } from '../config/types.js';
 import { LocalBackend } from './local-backend.js';
-import { loadPlugin, KNOWN_PLUGINS } from './plugin-loader.js';
+import { TransformingBackend } from './transforming-backend.js';
+import { createBackend as createSaaSBackend } from '@sqlew/saas-connector';
+import { debugLog } from '../utils/debug-logger.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -111,7 +113,7 @@ export function validateCloudConfig(config: CloudConfig | null): { valid: boolea
  * @param projectRoot - Project root directory
  * @returns Backend instance
  */
-export function createBackend(config: SqlewConfig, projectRoot?: string): ToolBackend {
+export async function createBackend(config: SqlewConfig, projectRoot?: string): Promise<ToolBackend> {
   if (isCloudMode(config)) {
     // Load cloud config from environment
     const cloudConfig = loadCloudConfig(projectRoot);
@@ -121,18 +123,16 @@ export function createBackend(config: SqlewConfig, projectRoot?: string): ToolBa
       throw new Error(validation.errors.join('; '));
     }
 
-    // Load saas-connector plugin
-    const root = projectRoot || process.cwd();
-    const result = loadPlugin(KNOWN_PLUGINS.SAAS_CONNECTOR, root, cloudConfig);
-
-    if (!result.success || !result.backend) {
+    // Create SaaS backend and wrap with TransformingBackend
+    // TransformingBackend handles quick_set → set transformation locally
+    try {
+      const saasBackend = createSaaSBackend(cloudConfig!);
+      return new TransformingBackend(saasBackend);
+    } catch (error) {
       throw new Error(
-        result.error ||
-        `SaaS connector not found. Run: sqlew --install-saas`
+        `SaaS connector initialization failed. Run: cd saas-connector && npm run build`
       );
     }
-
-    return result.backend;
   }
 
   // Default: LocalBackend
@@ -146,18 +146,18 @@ export function createBackend(config: SqlewConfig, projectRoot?: string): ToolBa
  * @param projectRoot - Project root directory
  * @returns Backend instance
  */
-export function initializeBackend(config: SqlewConfig, projectRoot?: string): ToolBackend {
+export async function initializeBackend(config: SqlewConfig, projectRoot?: string): Promise<ToolBackend> {
   if (initialized && globalBackend) {
     return globalBackend;
   }
 
-  globalBackend = createBackend(config, projectRoot);
+  globalBackend = await createBackend(config, projectRoot);
   initialized = true;
 
-  const modeInfo = globalBackend.backendType === 'plugin'
-    ? `plugin (${globalBackend.pluginName || 'unknown'})`
+  const modeInfo = globalBackend.backendType === 'saas'
+    ? `saas (${globalBackend.pluginName || 'saas-connector'})`
     : globalBackend.backendType;
-  console.error(`✅ ${modeInfo} backend initialized`);
+  debugLog('INFO', 'Backend initialized', { type: modeInfo });
 
   return globalBackend;
 }
@@ -185,7 +185,7 @@ export function isBackendInitialized(): boolean {
 /**
  * Get current backend type
  */
-export function getBackendType(): 'local' | 'plugin' | null {
+export function getBackendType(): 'local' | 'saas' | null {
   return globalBackend?.backendType ?? null;
 }
 

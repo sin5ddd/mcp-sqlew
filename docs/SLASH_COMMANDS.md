@@ -326,4 +326,4 @@ The `/sqlew` command is designed for token efficiency:
 ## Contributing
 
 Found a bug or have a suggestion? Please report at:
-https://github.com/sin5ddd/mcp-sqlew/issues
+https://github.com/sqlew-io/sqlew/issues

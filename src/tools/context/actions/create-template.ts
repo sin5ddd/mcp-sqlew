@@ -53,8 +53,8 @@ export async function createTemplate(
         const defaultsJson = JSON.stringify(params.defaults);
         const requiredFieldsJson = params.required_fields ? JSON.stringify(params.required_fields) : null;
 
-        // Insert template (v3.9.0: t_decision_templates → v4_decision_policies)
-        const [id] = await trx('v4_decision_policies').insert({
+        // Insert template (v3.9.0: t_decision_templates → t_decision_policies)
+        const [id] = await trx('t_decision_policies').insert({
           name: params.name,
           project_id: projectId,
           defaults: defaultsJson,

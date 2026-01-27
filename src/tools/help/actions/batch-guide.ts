@@ -30,14 +30,14 @@ export async function batchGuide(
     const [tool, action] = parts;
 
     // Query for batch-specific examples
-    const examples = await db('v4_help_action_examples')
-      .join('v4_help_actions', 'v4_help_action_examples.action_id', 'v4_help_actions.action_id')
-      .where('v4_help_actions.tool_name', tool)
-      .where('v4_help_actions.action_name', action)
+    const examples = await db('t_help_action_examples')
+      .join('m_help_actions', 't_help_action_examples.action_id', 'm_help_actions.action_id')
+      .where('m_help_actions.tool_name', tool)
+      .where('m_help_actions.action_name', action)
       .select(
-        'v4_help_action_examples.example_title as title',
-        'v4_help_action_examples.example_code as code',
-        'v4_help_action_examples.explanation'
+        't_help_action_examples.example_title as title',
+        't_help_action_examples.example_code as code',
+        't_help_action_examples.explanation'
       );
 
     if (examples.length === 0) {

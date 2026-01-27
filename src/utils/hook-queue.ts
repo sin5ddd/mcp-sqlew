@@ -39,7 +39,7 @@ const LOCK_TIMEOUT_MS = 30000;
  * @param projectPath - Project root path
  * @returns true if lock acquired, false if another process holds the lock
  */
-function tryAcquireLock(projectPath: string): boolean {
+export function tryAcquireLock(projectPath: string): boolean {
   const lockPath = join(projectPath, '.sqlew/queue/pending.lock');
 
   if (existsSync(lockPath)) {
@@ -82,7 +82,7 @@ function tryAcquireLock(projectPath: string): boolean {
  *
  * @param projectPath - Project root path
  */
-function releaseLock(projectPath: string): void {
+export function releaseLock(projectPath: string): void {
   const lockPath = join(projectPath, '.sqlew/queue/pending.lock');
   try {
     unlinkSync(lockPath);
@@ -137,6 +137,18 @@ export interface QueueFile {
   items: QueueItem[];
 }
 
+/** Failed queue item (includes original item + error info) */
+export interface FailedQueueItem {
+  item: QueueItem;
+  error: string;
+  failedAt: string;
+}
+
+/** Failed queue file structure */
+export interface FailedQueueFile {
+  items: FailedQueueItem[];
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -146,6 +158,9 @@ const QUEUE_DIR = '.sqlew/queue';
 
 /** Queue file name */
 const QUEUE_FILE = 'pending.json';
+
+/** Failed queue file name (for items that cannot be retried) */
+const FAILED_QUEUE_FILE = 'failed.json';
 
 // ============================================================================
 // Queue File Operations
@@ -159,12 +174,111 @@ export function getQueuePath(projectPath: string): string {
 }
 
 /**
+ * Get failed queue file path for a project
+ */
+export function getFailedQueuePath(projectPath: string): string {
+  return join(projectPath, QUEUE_DIR, FAILED_QUEUE_FILE);
+}
+
+/**
  * Ensure queue directory exists
  */
 function ensureQueueDir(projectPath: string): void {
   const queueDir = join(projectPath, QUEUE_DIR);
   if (!existsSync(queueDir)) {
     mkdirSync(queueDir, { recursive: true });
+  }
+}
+
+/**
+ * Append failed items to failed queue file
+ *
+ * Items that fail processing (e.g., HighSimilarity errors) are moved here
+ * instead of being retried in pending.json indefinitely.
+ *
+ * @param projectPath - Project root path
+ * @param errors - Array of failed items with error messages
+ */
+export function appendToFailedQueue(
+  projectPath: string,
+  errors: Array<{ item: QueueItem; error: string }>
+): void {
+  if (errors.length === 0) return;
+
+  ensureQueueDir(projectPath);
+  const failedPath = getFailedQueuePath(projectPath);
+
+  // Read existing failed queue
+  let failedQueue: FailedQueueFile = { items: [] };
+  if (existsSync(failedPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(failedPath, 'utf-8'));
+      // Validate structure - items must be an array
+      if (parsed && Array.isArray(parsed.items)) {
+        failedQueue = parsed as FailedQueueFile;
+      }
+      // else: keep default { items: [] }
+    } catch {
+      // Corrupted file, start fresh
+      failedQueue = { items: [] };
+    }
+  }
+
+  // Append new failed items
+  const now = new Date().toISOString();
+  for (const { item, error } of errors) {
+    failedQueue.items.push({
+      item,
+      error,
+      failedAt: now,
+    });
+  }
+
+  // Write atomically
+  const tempPath = failedPath + '.tmp';
+  writeFileSync(tempPath, JSON.stringify(failedQueue, null, 2), 'utf-8');
+  try {
+    renameSync(tempPath, failedPath);
+  } catch {
+    writeFileSync(failedPath, JSON.stringify(failedQueue, null, 2), 'utf-8');
+    try { unlinkSync(tempPath); } catch { /* ignore */ }
+  }
+
+  debugLog('INFO', '[hook-queue] Appended failed items to failed queue', {
+    count: errors.length,
+    failedPath,
+  });
+}
+
+/**
+ * Read failed queue file
+ */
+export function readFailedQueue(projectPath: string): FailedQueueFile {
+  const failedPath = getFailedQueuePath(projectPath);
+  if (!existsSync(failedPath)) {
+    return { items: [] };
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(failedPath, 'utf-8'));
+    // Validate structure - items must be an array
+    if (!parsed || !Array.isArray(parsed.items)) {
+      debugLog('WARN', '[hook-queue] readFailedQueue: invalid structure', { failedPath });
+      return { items: [] };
+    }
+    return parsed as FailedQueueFile;
+  } catch {
+    return { items: [] };
+  }
+}
+
+/**
+ * Clear failed queue file
+ */
+export function clearFailedQueue(projectPath: string): void {
+  const failedPath = getFailedQueuePath(projectPath);
+  if (existsSync(failedPath)) {
+    unlinkSync(failedPath);
+    debugLog('INFO', '[hook-queue] Cleared failed queue', { failedPath });
   }
 }
 
@@ -207,12 +321,21 @@ export function readQueue(projectPath: string): QueueFile {
       contentLength: content.length,
       contentPreview: content.slice(0, 100),
     });
-    const parsed = JSON.parse(content) as QueueFile;
-    writeQueueTrace(projectPath, 'INFO', 'readQueue: SUCCESS', { itemCount: parsed.items?.length ?? 0 });
+    const parsed = JSON.parse(content);
+    // Validate structure - items must be an array
+    if (!parsed || !Array.isArray(parsed.items)) {
+      writeQueueTrace(projectPath, 'WARN', 'readQueue: invalid structure, returning empty', {
+        hasItems: !!parsed?.items,
+        isArray: Array.isArray(parsed?.items),
+      });
+      debugLog('WARN', '[hook-queue] readQueue: invalid structure', { queuePath });
+      return { items: [] };
+    }
+    writeQueueTrace(projectPath, 'INFO', 'readQueue: SUCCESS', { itemCount: parsed.items.length });
     debugLog('DEBUG', '[hook-queue] readQueue: parsed successfully', {
-      itemCount: parsed.items?.length ?? 0,
+      itemCount: parsed.items.length,
     });
-    return parsed;
+    return parsed as QueueFile;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     writeQueueTrace(projectPath, 'ERROR', 'readQueue: JSON parse FAILED', { error: errorMsg });
@@ -234,7 +357,7 @@ export function readQueue(projectPath: string): QueueFile {
  * @param queue - Queue data to write
  * @param caller - Name of the calling function (for debug snapshots)
  */
-function writeQueue(projectPath: string, queue: QueueFile, caller: string = 'unknown'): void {
+export function writeQueue(projectPath: string, queue: QueueFile, caller: string = 'unknown'): void {
   ensureQueueDir(projectPath);
   const queuePath = getQueuePath(projectPath);
   const tempPath = queuePath + '.tmp';
@@ -437,7 +560,6 @@ export async function processQueue(
         const message = error instanceof Error ? error.message : String(error);
         errors.push({ item, error: message });
         debugLog('ERROR', `[hook-queue] Item ${i + 1} failed`, { callId, error: message });
-        console.error(`[hook-queue] Error processing item: ${message}`);
       }
     }
 
@@ -448,14 +570,13 @@ export async function processQueue(
       errorDetails: errors.map(e => e.error),
     });
 
-    // Write back only failed items for retry
+    // Move failed items to failed queue (no retry - errors like HighSimilarity are permanent)
     if (errors.length > 0) {
-      const failedItems = errors.map((e) => e.item);
-      debugLog('WARN', '[hook-queue] Writing back failed items for retry', {
+      debugLog('WARN', '[hook-queue] Moving failed items to failed queue', {
         callId,
-        failedCount: failedItems.length,
+        failedCount: errors.length,
       });
-      writeQueue(projectPath, { items: failedItems }, 'processQueue_retry');
+      appendToFailedQueue(projectPath, errors);
     }
 
     return processed;

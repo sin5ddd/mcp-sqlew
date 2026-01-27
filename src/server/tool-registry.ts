@@ -28,22 +28,6 @@ export function getToolRegistry(): Tool[] {
       },
     },
     {
-      name: 'file',
-      description: 'File Change Tracking - Track file modifications and database operations (SQLite only). Use action: "help" for documentation.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: {
-            type: 'string',
-            description: 'Action',
-            enum: ['record', 'get', 'check_lock', 'record_batch', 'sqlite_flush', 'help', 'example', 'use_case']
-          }
-        },
-        required: ['action'],
-        additionalProperties: true,  // Allow action-specific parameters (file_path, layer, etc.)
-      },
-    },
-    {
       name: 'constraint',
       description: 'Architectural Rules - Define and manage project constraints with priorities. Use action: "help" for documentation.',
       inputSchema: {
@@ -57,22 +41,6 @@ export function getToolRegistry(): Tool[] {
         },
         required: ['action'],
         additionalProperties: true,  // Allow action-specific parameters (constraint_text, priority, etc.)
-      },
-    },
-    {
-      name: 'task',
-      description: 'Task Management - Create, track, and manage tasks with kanban workflow, layers, and file tracking. Use action: "help" for documentation.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: {
-            type: 'string',
-            description: 'Action',
-            enum: ['create', 'update', 'get', 'list', 'move', 'link', 'archive', 'create_batch', 'add_dependency', 'remove_dependency', 'get_dependencies', 'watch_files', 'watcher', 'help', 'example', 'use_case']
-          }
-        },
-        required: ['action'],
-        additionalProperties: true,  // Allow file_actions and other parameters (v3.8.0)
       },
     },
     {
@@ -275,6 +243,26 @@ Use this tool to learn end-to-end workflows and multi-step operations. Returns w
           min_score: {
             type: 'number',
             description: 'Minimum relevance score (default: 30)'
+          }
+        },
+        required: ['action'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'queue',
+      description: 'Hook queue management - list, clear, remove pending items from .sqlew/queue/pending.json. Use action: "help" for documentation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'Queue action to perform',
+            enum: ['list', 'clear', 'remove', 'help', 'example']
+          },
+          index: {
+            type: 'number',
+            description: 'Item index for remove action (0-based)'
           }
         },
         required: ['action'],

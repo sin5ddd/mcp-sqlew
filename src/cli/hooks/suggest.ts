@@ -15,7 +15,7 @@
  */
 
 import { readStdinJson, sendContinue, isPlanAgent, getProjectPath } from './stdin-parser.js';
-import { clearPlanTomlCache, clearCurrentPlan } from '../../config/global-config.js';
+import { clearPlanCache, clearCurrentPlan } from '../../config/global-config.js';
 
 // ============================================================================
 // Main Entry Point
@@ -44,7 +44,7 @@ export async function suggestCommand(): Promise<void> {
         // Clear stale caches from previous sessions (v4.2.0+)
         // This prevents false positives in on-subagent-stop hook
         clearCurrentPlan(projectPath);
-        clearPlanTomlCache(projectPath);
+        clearPlanCache(projectPath);
       }
     }
 

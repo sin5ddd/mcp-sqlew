@@ -1,0 +1,35 @@
+# Use Case: Find related decisions
+# Category: decision_intelligence
+# Complexity: intermediate
+
+[use_case]
+id = 6
+category = "decision_intelligence"
+title = "Find related decisions"
+complexity = "intermediate"
+description = "Discover related decisions using context-aware search. Hybrid scoring combines key similarity, tag overlap, and layer matching."
+
+workflow = """
+1. Use suggest.by_context with key, tags, and layer
+2. Review suggestions with their relevance scores
+3. Optionally link related decisions via decision context
+"""
+
+[[action_sequence]]
+order = 1
+tool = "suggest"
+action = "by_context"
+description = "Search with full context"
+
+[[action_sequence]]
+order = 2
+tool = "decision"
+action = "get"
+description = "Review suggested decisions"
+
+[full_example]
+scenario = "Find auth-related decisions"
+steps = [
+  { step = 1, code = '{"action":"by_context","key":"auth/permissions","tags":["security","authorization"],"layer":"infrastructure"}', note = "Search with context" },
+  { step = 2, code = '{"action":"get","key":"auth/method","include_context":true}', note = "Review related decision" }
+]

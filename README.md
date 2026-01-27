@@ -1,4 +1,5 @@
 # sqlew
+
 ![sqlew_logo](assets/sqlew-logo.png)
 
 [![npm version](https://img.shields.io/npm/v/sqlew.svg)](https://www.npmjs.com/package/sqlew)
@@ -8,17 +9,41 @@
 
 ## 🚀 Quick Start
 
-### 1. Install globally (Recommended)
+### 1. Install MCP Server
 
 ```bash
 npm install -g sqlew
 ```
 
-### 2. Add to your MCP config
+### 2. Install Plugin (Recommended - v5.0.0+)
 
-Add to `.mcp.json` in your project root:
+In Claude Code, run the following commands:
 
-```json
+```bash
+# 1. Add the marketplace
+/plugin marketplace add sqlew-io/sqlew-plugin
+
+# 2. Install the plugin (user-level recommended)
+/plugin install sqlew-plugin
+
+# 3. Restart Claude Code to apply changes
+```
+
+**That's it!** The plugin automatically sets up everything:
+
+- ✅ MCP server config (`.mcp.json`)
+- ✅ Claude Code Skills (Plan Mode guidance)
+- ✅ Claude Code Hooks (automatic decision capture)
+
+> **Note:** Global Rules are automatically created at `~/.claude/rules/sqlew/` when the MCP server starts.
+
+### Alternative: Manual Installation (Legacy)
+
+For users who prefer not to use the plugin system:
+
+```bash
+# 1. Add to .mcp.json manually
+cat >> .mcp.json << 'EOF'
 {
   "mcpServers": {
     "sqlew": {
@@ -26,23 +51,18 @@ Add to `.mcp.json` in your project root:
     }
   }
 }
-```
+EOF
 
-### 3. Initialize project
-
-```bash
+# 2. Initialize legacy hooks and rules
 sqlew --init
 ```
 
-This one-shot command sets up:
-- Claude Code Skills
-- CLAUDE.md integration hints
-- Plan-to-ADR hooks
-- .gitignore entries
+> **Note:** Legacy installation does not include Skills.
 
-### 4. Just use Plan Mode!
+### 3. Just use Plan Mode!
 
 **That's it!** Now every time you:
+
 1. Create a plan in Claude Code
 2. Get user approval (ExitPlanMode)
 
@@ -67,15 +87,18 @@ For manual queries and explicit decision recording:
 **sqlew** is a Model Context Protocol (MCP) server that brings ADR (Architecture Decision Record) capabilities to AI agents through a shared SQL-backed repository.
 
 ### The Problem: AI Agents Lack Decision Memory
+
 Every AI session starts with zero context. Agents must re-learn architectural decisions, can reintroduce previously rejected patterns, and have no systematic way to understand WHY past choices were made.
 
 Traditional ADR approaches use Markdown files scattered across repositories. While human-readable, this format creates challenges for AI agents:
+
 - **No structured querying** – AI must read entire files to find relevant decisions
 - **Context explosion** – Token costs grow linearly with decision history
 - **No duplicate detection** – AI cannot easily identify similar or conflicting decisions
 - **Poor discoverability** – Finding related decisions requires full-text search across many files
 
-### *sqlew* brings structured ADR to AI agents
+### _sqlew_ brings structured ADR to AI agents
+
 sqlew transforms ADR from static documentation into a **queryable, AI-native decision database**:
 
 - **Structured records** – Decisions stored as relational data with metadata, tags, and relationships
@@ -84,18 +107,20 @@ sqlew transforms ADR from static documentation into a **queryable, AI-native dec
 - **Constraint tracking** – Architectural rules and principles as first-class entities
 - **Auto-capture** – Claude Code Hooks automatically record decisions from Plan Mode
 
-> *This software does not send any data to external networks. We NEVER collect any data or usage statistics. Please use it with complete security.*
+> _This software does not send any data to external networks. We NEVER collect any data or usage statistics. Please use it with complete security._
 
 ## Why sqlew?
 
 AI agents automatically accumulate project knowledge through Plan Mode. Decisions are stored in SQL for efficient querying.
 
 **Perfect for:**
+
 - 🏢 Large-scale projects with many architectural decisions
 - 🔧 Long-term maintenance where context must persist across sessions
 - 👥 Team environments where multiple AI agents share knowledge
 
 **Key benefits:**
+
 - ⚡ **60-75% token reduction** vs reading Markdown ADRs
 - 🔍 **Millisecond queries** (2-50ms) even with thousands of decisions
 - 🛡️ **Duplicate prevention** via similarity detection
@@ -107,10 +132,10 @@ AI agents automatically accumulate project knowledge through Plan Mode. Decision
 
 **Technical Features**: 6 MCP tools (3 core: decision, constraint, suggest + 3 utility: help, example, use_case), three-tier similarity detection (0-100 point scoring), ACID transaction support, multi-database backend (SQLite/PostgreSQL/MySQL), metadata-driven organization with layers and tags
 
-
 ## Installation
 
 ### Requirements
+
 - Node.js 20.0.0 or higher
 - npm or npx
 
@@ -126,11 +151,11 @@ Then add to `.mcp.json` in your project root:
 
 ```json
 {
-  "mcpServers": {
-    "sqlew": {
-      "command": "sqlew"
+    "mcpServers": {
+        "sqlew": {
+            "command": "sqlew"
+        }
     }
-  }
 }
 ```
 
@@ -149,11 +174,11 @@ Each project maintains its own context database in `.sqlew/sqlew.db`.
 
 sqlew supports multiple database backends:
 
-| Database | Use Case | Status |
-|----------|----------|--------|
-| **SQLite** | Personal/small projects | ✅ Default |
+| Database                     | Use Case                 | Status       |
+| ---------------------------- | ------------------------ | ------------ |
+| **SQLite**                   | Personal/small projects  | ✅ Default   |
 | **MySQL 8.0+ / MariaDB 10+** | Production, team sharing | ✅ Supported |
-| **PostgreSQL 12+** | Production, team sharing | ✅ Supported |
+| **PostgreSQL 12+**           | Production, team sharing | ✅ Supported |
 
 Configuration is managed via `.sqlew/config.toml` file and CLI arguments.
 
@@ -168,6 +193,7 @@ And `action: "use_case"` shows how to use the tool in a real-world scenario.
 ### On-Demand Documentation
 
 All tools support:
+
 - `action: "help"` - Parameter reference and descriptions
 - `action: "example"` - Usage scenarios and examples
 - `action: "use_case"` - Real-world usage examples
@@ -177,33 +203,42 @@ All tools support:
 **Essential Guides:**
 
 **Advanced Features:**
+
 - [Hooks Guide](docs/HOOKS_GUIDE.md) - Claude Code Hooks integration
 - [Cross Database](docs/CROSS_DATABASE.md) - Multi-database support
 
 **Reference:**
+
 - [Configuration](docs/CONFIGURATION.md) - Config file setup, all options
 
 ### Advanced Usage
 
 - [Configuration Guide](docs/CONFIGURATION.md) - TOML config file setup
 - [CLI Mode Overview](docs/cli/README.md) - Database migration, export/import commands
-- [Migration Guides](docs/MIGRATION_v2.md) - Version upgrade guides
+
+### Upgrade Guides
+
+- **[Upgrade from v4 to v5](docs/MIGRATION_CLEANUP_GUIDE.md)** - Cleanup legacy files after plugin migration
+- [Migration from v2](docs/MIGRATION_v2.md) - Version upgrade guides
 
 ## Use Cases
 
 ### ADR-Driven Development with AI
+
 - **Architecture Evolution** – Document major architectural decisions with full context and alternatives
 - **Pattern Standardization** – Establish coding patterns as constraints, enforce via AI code generation
 - **Technical Debt Tracking** – Record temporary decisions with deprecation paths and future plans
 - **Onboarding Acceleration** – New AI sessions instantly understand architectural history
 
 ### Cross-Session AI Workflows
+
 - **Multi-Session Projects** – AI maintains context across days/weeks without re-reading documentation
 - **Multi-Agent Coordination** – Multiple AI agents share architectural understanding through ADR database
 - **Breaking Change Management** – Document API changes, deprecations, and migration paths systematically
 - **Refactoring Guidance** – AI references past decisions to maintain architectural consistency during refactors
 
 ### Real-World Examples
+
 ```bash
 # Document an architectural decision with alternatives
 /sqlew record we use PostgreSQL over MongoDB. MongoDB was rejected due to lack of ACID transactions for our financial data requirements.
@@ -218,7 +253,6 @@ All tools support:
 /sqlew plan implementing the PostgreSQL connection pool with pgBouncer
 ```
 
-
 ## Performance
 
 - **Query speed**: 2-50ms
@@ -228,7 +262,7 @@ All tools support:
 
 ## Support
 
-Support development via [GitHub Sponsors](https://github.com/sponsors/sin5ddd) - One-time or monthly options available.
+Support development via [GitHub Sponsors](https://github.com/sponsors/sqlew-io) - One-time or monthly options available.
 
 ## Version
 
@@ -236,6 +270,7 @@ Current version: **4.3.1**
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 **What's New in v4.3.1:**
+
 - **`.claude/rules/` Integration** - Safer installation without modifying CLAUDE.md
 - **Incremental gitignore** - Missing entries added even if sqlew section exists
 - **Code Quality** - DRY improvements, obsolete code cleanup
@@ -249,19 +284,19 @@ Apache License 2.0 - Free for commercial and personal use. See [LICENSE](LICENSE
 ## Links
 
 - [npm package](https://www.npmjs.com/package/sqlew)
-- [GitHub repository](https://github.com/sin5ddd/mcp-sqlew)
+- [GitHub repository](https://github.com/sqlew-io/sqlew)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 
 ## Support & Documentation
 
-- Issues: [GitHub Issues](https://github.com/sin5ddd/mcp-sqlew/issues)
+- Issues: [GitHub Issues](https://github.com/sqlew-io/sqlew/issues)
 - Docs: [docs/](docs/) directory
 
 ## Acknowledgments
 
 Built with [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk), [better-sqlite3](https://github.com/WiseLibs/better-sqlite3), and TypeScript.
 
-**Author**: sin5ddd
+**Author**: sqlew-io
 
 ---
 

@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.0.0] - 2026-01-08
+
+### Added
+
+**Queue Tool for Hook Queue Management**
+
+- New `queue` MCP tool to manage `.sqlew/queue/pending.json`
+- Actions: `list` (view pending items), `remove` (delete by index), `clear` (remove all)
+- Lock mechanism to prevent race conditions with QueueWatcher
+- Help documentation in `src/help-data/queue.toml`
+- Queue monitoring rule in `~/.claude/rules/sqlew/queue-monitoring.md`
+
+**TOML-based Help System**
+
+- Help documentation now stored in `src/help-data/*.toml` (version-controlled, human-editable)
+- `HelpSystemLoader` for startup-time loading with in-memory caching (O(1) lookups)
+- 15 TOML files: 8 tool files (including queue) + 6 use case workflows + 1 schema file
+
+### Changed
+
+- `help`, `example`, `use_case` tools now load from TOML files instead of database
+- Database schema reduced: 18 tables (7 master + 11 transaction)
+- Table prefix renamed: `v4_` → `m_/t_` (master/transaction convention)
+
+### Removed
+
+- **7 help database tables**: m_help_tools, m_help_actions, m_help_use_case_cats, t_help_action_params, t_help_action_examples, t_help_use_cases, t_help_action_sequences
+- `help-queries.ts` (replaced by HelpSystemLoader)
+- Task and file management tables (deprecated in v4.3.0)
+
+---
+
 ## [4.3.1] - 2026-01-06
 
 ### Added

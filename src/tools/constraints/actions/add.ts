@@ -77,7 +77,7 @@ export async function addConstraint(
         const categoryId = await getOrCreateCategoryId(actualAdapter, normalizedParams.category, trx);
 
         // Duplicate check: skip if same text + category already exists
-        const existing = await trx('v4_constraints')
+        const existing = await trx('t_constraints')
           .where({
             constraint_text: normalizedParams.constraint_text,
             category_id: categoryId,
@@ -96,7 +96,7 @@ export async function addConstraint(
         // Insert constraint with project_id (agent_id removed in v4.0)
         // v4.2.1: Support active parameter for plan-based workflow
         const activeValue = normalizedParams.active === false ? 0 : SQLITE_TRUE;
-        const [constraintId] = await trx('v4_constraints').insert({
+        const [constraintId] = await trx('t_constraints').insert({
           category_id: categoryId,
           layer_id: layerId,
           constraint_text: normalizedParams.constraint_text,
@@ -112,7 +112,7 @@ export async function addConstraint(
           const tags = parseStringArray(normalizedParams.tags);
           for (const tagName of tags) {
             const tagId = await getOrCreateTag(actualAdapter, projectId, tagName, trx);  // v3.7.3: pass projectId
-            await trx('v4_constraint_tags').insert({
+            await trx('t_constraint_tags').insert({
               constraint_id: Number(constraintId),
               tag_id: tagId
             });

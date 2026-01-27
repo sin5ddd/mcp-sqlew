@@ -1,186 +1,228 @@
 /**
- * Help System Test Suite
+ * Help System Test Suite (TOML-based)
  *
- * Comprehensive tests for all help query actions to ensure:
- * 1. All help queries return valid data
- * 2. Error handling works correctly
- * 3. Token efficiency targets are met
- * 4. Database queries are performant
+ * Tests for HelpSystemLoader and TOML-based help data:
+ * 1. TOML files load correctly
+ * 2. Search functionality works
+ * 3. Use case retrieval works
+ * 4. Token efficiency targets are met
  */
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { initializeDatabase, getDatabase } from '../../../database.js';
-import type { DatabaseAdapter } from '../../../adapters/types.js';
 import {
-  queryHelpAction,
-  queryHelpParams,
-  queryHelpTool,
-  queryHelpUseCase,
-  queryHelpListUseCases,
-  queryHelpNextActions
-} from '../../../tools/help-queries.js';
+  HelpSystemLoader,
+  getHelpLoader,
+  resetHelpLoader
+} from '../../../help-loader.js';
 import { estimateTokens } from '../../../utils/token-estimation.js';
-import * as fs from 'fs';
-import * as path from 'path';
 
-// Test configuration - only current tools (message, config were deprecated in v4.0)
-const TEST_TOOLS = ['decision', 'task', 'file', 'constraint'];
+// Test configuration - current tools
+const TEST_TOOLS = ['decision', 'constraint', 'suggest', 'help', 'example', 'use_case'];
 const TEST_ACTIONS: Record<string, string[]> = {
   decision: ['set', 'get', 'list'],
-  task: ['create', 'list', 'update'],
-  file: ['record', 'get'],
-  constraint: ['add', 'get']
+  constraint: ['add', 'get'],
+  suggest: ['by_key', 'by_tags'],
+  help: ['query_action', 'query_tool'],
+  example: ['get', 'search'],
+  use_case: ['get', 'search']
 };
 
-describe('Help System', () => {
-  let db: DatabaseAdapter;
+describe('Help System (TOML-based)', () => {
+  let loader: HelpSystemLoader;
 
   before(async () => {
-    const dbPath = process.env.DB_PATH || '.sqlew/tmp/test-knex.db';
-    const dbDir = path.dirname(dbPath);
-    fs.mkdirSync(dbDir, { recursive: true });
-    await initializeDatabase({
-      databaseType: 'sqlite',
-      connection: { filename: dbPath }
-    });
-    db = getDatabase();
+    resetHelpLoader();
+    loader = await getHelpLoader();
   });
 
-  describe('queryHelpAction - action documentation queries', () => {
+  after(() => {
+    resetHelpLoader();
+  });
+
+  describe('Tool loading', () => {
+    it('should load all expected tools', () => {
+      const toolNames = loader.getToolNames();
+      for (const tool of TEST_TOOLS) {
+        assert.ok(toolNames.includes(tool), `Tool ${tool} should be loaded`);
+      }
+    });
+
+    for (const tool of TEST_TOOLS) {
+      it(`should have valid data for ${tool}`, () => {
+        const toolData = loader.getTool(tool);
+        assert.ok(toolData, `Tool ${tool} should exist`);
+        assert.ok(toolData.name === tool, `Tool name should match`);
+        assert.ok(toolData.description, `Tool should have description`);
+        assert.ok(toolData.actions.length > 0, `Tool should have actions`);
+      });
+    }
+  });
+
+  describe('Action queries', () => {
     for (const tool of TEST_TOOLS) {
       const actions = TEST_ACTIONS[tool] || ['set', 'get'];
       for (const action of actions) {
-        it(`should return valid help for ${tool}.${action}`, async () => {
-          const result = await queryHelpAction(db, tool, action);
+        it(`should return valid action for ${tool}.${action}`, () => {
+          const result = loader.getAction(tool, action);
 
-          if ('error' in result) {
-            assert.fail(`Expected success but got error: ${result.error}`);
-          }
+          assert.ok(result, `Action ${tool}.${action} should exist`);
+          assert.ok(result.name === action, `Action name should match`);
+          assert.ok(result.description, `Action should have description`);
+          assert.ok(Array.isArray(result.params), `Action should have params array`);
+          assert.ok(Array.isArray(result.examples), `Action should have examples array`);
 
+          // Token estimation on action data
           const tokens = estimateTokens(result);
-          // Token range: 20-500 for varied responses
-          assert.ok(tokens >= 20 && tokens <= 500,
-            `Token count ${tokens} outside target range (20-500)`);
+          assert.ok(tokens >= 10 && tokens <= 600,
+            `Token count ${tokens} outside target range (10-600)`);
         });
       }
     }
   });
 
-  describe('queryHelpParams - parameter list queries', () => {
-    const testCases = TEST_TOOLS.slice(0, 3).map(tool => ({
-      tool,
-      action: TEST_ACTIONS[tool]?.[0] || 'set'
-    }));
+  describe('Example search', () => {
+    it('should find examples by keyword', () => {
+      const results = loader.searchExamples('decision');
+      assert.ok(results.length > 0, 'Should find examples matching "decision"');
+    });
 
-    for (const { tool, action } of testCases) {
-      it(`should return valid params for ${tool}.${action}`, async () => {
-        const result = await queryHelpParams(db, tool, action);
+    it('should filter examples by tool', () => {
+      const results = loader.searchExamples('set', { tool: 'decision' });
+      for (const r of results) {
+        assert.equal(r.tool, 'decision', 'All results should be from decision tool');
+      }
+    });
 
-        if ('error' in result) {
-          // Skip schema-related errors (known issue with action_id column)
-          if (result.error.includes('no such column')) {
-            // Known schema issue - test passes but logs warning
-            console.log(`  ⚠️ Schema issue detected: ${result.error}`);
-            return;
-          }
-          assert.fail(`Expected success but got error: ${result.error}`);
-        }
-
-        const tokens = estimateTokens(result);
-        // Token range: 15-400 for params
-        assert.ok(tokens >= 15 && tokens <= 400,
-          `Token count ${tokens} outside target range (15-400)`);
-      });
-    }
+    it('should respect limit', () => {
+      const results = loader.searchExamples('', { limit: 5 });
+      assert.ok(results.length <= 5, 'Should return at most 5 results');
+    });
   });
 
-  describe('queryHelpTool - tool overview queries', () => {
-    for (const tool of TEST_TOOLS) {
-      it(`should return valid overview for ${tool}`, async () => {
-        const result = await queryHelpTool(db, tool);
+  describe('Example listing', () => {
+    it('should list all examples', () => {
+      const result = loader.listExamples();
+      assert.ok(result.total > 0, 'Should have examples');
+      assert.ok(result.examples.length > 0, 'Should return examples');
+    });
 
-        if ('error' in result) {
-          assert.fail(`Expected success but got error: ${result.error}`);
-        }
+    it('should filter by tool', () => {
+      const result = loader.listExamples({ tool: 'decision' });
+      for (const e of result.examples) {
+        assert.equal(e.tool, 'decision', 'All examples should be from decision tool');
+      }
+    });
 
-        const tokens = estimateTokens(result);
-        // Token range: 50-600 for tool overviews
-        assert.ok(tokens >= 50 && tokens <= 600,
-          `Token count ${tokens} outside target range (50-600)`);
-      });
-    }
+    it('should support pagination', () => {
+      const page1 = loader.listExamples({ limit: 2, offset: 0 });
+      const page2 = loader.listExamples({ limit: 2, offset: 2 });
+
+      assert.equal(page1.examples.length, 2, 'Page 1 should have 2 items');
+      // Pages should be different (if enough data)
+      if (page1.total > 4) {
+        assert.notDeepEqual(page1.examples, page2.examples, 'Pages should be different');
+      }
+    });
   });
 
-  describe('queryHelpUseCase - use case queries', () => {
-    // Note: Seed data only contains ~10 use cases (IDs 1-10)
-    const useCaseIds = [1, 2, 3, 5, 8, 10];
+  describe('Use case queries', () => {
+    it('should get use case by ID', () => {
+      const useCase = loader.getUseCase(1);
+      assert.ok(useCase, 'Use case 1 should exist');
+      assert.equal(useCase.id, 1, 'ID should match');
+      assert.ok(useCase.title, 'Should have title');
+      assert.ok(useCase.description, 'Should have description');
+    });
 
-    for (const id of useCaseIds) {
-      it(`should handle use case ID ${id}`, async () => {
-        const result = await queryHelpUseCase(db, id);
+    it('should return undefined for non-existent ID', () => {
+      const useCase = loader.getUseCase(9999);
+      assert.equal(useCase, undefined, 'Should return undefined for non-existent ID');
+    });
 
-        if ('error' in result) {
-          // IDs > 41 are expected to fail (no data)
-          if (id > 41) {
-            assert.ok(true, 'Error handling works for non-existent ID');
-          } else {
-            assert.fail(`Expected success but got error: ${result.error}`);
-          }
-        } else {
-          const tokens = estimateTokens(result);
-          // Token range: 70-350 for use cases (some may have minimal content)
-          assert.ok(tokens >= 70 && tokens <= 350,
-            `Token count ${tokens} outside target range (70-350)`);
-        }
-      });
-    }
+    it('should search use cases by keyword', () => {
+      const results = loader.searchUseCases('decision');
+      assert.ok(results.length > 0, 'Should find use cases matching "decision"');
+    });
+
+    it('should filter use cases by category', () => {
+      const results = loader.searchUseCases('', { category: 'decision_tracking' });
+      for (const uc of results) {
+        assert.equal(uc.category, 'decision_tracking', 'Category should match');
+      }
+    });
+
+    it('should filter use cases by complexity', () => {
+      const results = loader.searchUseCases('', { complexity: 'basic' });
+      for (const uc of results) {
+        assert.equal(uc.complexity, 'basic', 'Complexity should match');
+      }
+    });
   });
 
-  describe('queryHelpListUseCases - list use cases queries', () => {
-    const listTests = [
-      { name: 'all', params: {} },
-      { name: 'by category', params: { category: 'task_management' } },
-      { name: 'by complexity', params: { complexity: 'basic' } },
-      { name: 'pagination', params: { limit: 5, offset: 0 } },
-    ];
+  describe('Use case listing', () => {
+    it('should list all use cases', () => {
+      const result = loader.listUseCases();
+      assert.ok(result.total > 0, 'Should have use cases');
+      assert.ok(result.use_cases.length > 0, 'Should return use cases');
+    });
 
-    for (const test of listTests) {
-      it(`should list use cases: ${test.name}`, async () => {
-        const result = await queryHelpListUseCases(db, test.params);
+    it('should include categories when no filter', () => {
+      const result = loader.listUseCases();
+      assert.ok(Array.isArray(result.categories), 'Should include categories array');
+      assert.ok(result.categories!.length > 0, 'Should have categories');
+    });
 
-        if ('error' in result) {
-          assert.fail(`Expected success but got error: ${result.error}`);
-        }
-
-        const tokens = estimateTokens(result);
-        // Token range: 50-700 for list results (some categories may have fewer items)
-        assert.ok(tokens >= 50 && tokens <= 700,
-          `Token count ${tokens} outside target range (50-700)`);
-      });
-    }
+    it('should not include categories when filtered', () => {
+      const result = loader.listUseCases({ category: 'decision_tracking' });
+      assert.equal(result.categories, undefined, 'Should not include categories when filtered');
+    });
   });
 
-  describe('queryHelpNextActions - workflow hints queries', () => {
-    const nextActionsTests = [
-      { tool: 'decision', action: 'set' },
-      { tool: 'task', action: 'create' },
-      { tool: 'file', action: 'record' }
-    ];
+  describe('Workflow hints (next actions)', () => {
+    it('should return next actions for decision.set', () => {
+      const nextActions = loader.getNextActions('decision', 'set');
+      // May be empty if no use cases define this sequence
+      assert.ok(Array.isArray(nextActions), 'Should return array');
+    });
 
-    for (const test of nextActionsTests) {
-      it(`should return next actions for ${test.tool}.${test.action}`, async () => {
-        const result = await queryHelpNextActions(db, test.tool, test.action);
+    it('should return empty for non-existent action', () => {
+      const nextActions = loader.getNextActions('decision', 'nonexistent_action');
+      assert.deepEqual(nextActions, [], 'Should return empty array');
+    });
+  });
 
-        if ('error' in result) {
-          assert.fail(`Expected success but got error: ${result.error}`);
+  describe('Categories', () => {
+    it('should return all categories', () => {
+      const categories = loader.getCategories();
+      assert.ok(categories.length > 0, 'Should have categories');
+      for (const cat of categories) {
+        assert.ok(cat.name, 'Category should have name');
+        assert.ok(cat.description, 'Category should have description');
+      }
+    });
+  });
+
+  describe('Token efficiency', () => {
+    it('should meet token targets for tool queries', () => {
+      for (const tool of TEST_TOOLS) {
+        const toolData = loader.getTool(tool);
+        if (toolData) {
+          const tokens = estimateTokens(toolData);
+          // Full tool data (all actions): 50-5000 tokens
+          // Decision tool is largest with 23 actions
+          assert.ok(tokens >= 50 && tokens <= 5000,
+            `Tool ${tool} tokens (${tokens}) outside target range (50-5000)`);
         }
+      }
+    });
 
-        const tokens = estimateTokens(result);
-        // Token range: 10-200 for next actions
-        assert.ok(tokens >= 10 && tokens <= 200,
-          `Token count ${tokens} outside target range (10-200)`);
-      });
-    }
+    it('should meet token targets for use case queries', () => {
+      const result = loader.listUseCases({ limit: 10 });
+      const tokens = estimateTokens(result);
+      // List result: 50-500 tokens
+      assert.ok(tokens >= 30 && tokens <= 600,
+        `Use case list tokens (${tokens}) outside target range (30-600)`);
+    });
   });
 });

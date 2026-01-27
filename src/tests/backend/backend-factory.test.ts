@@ -32,85 +32,83 @@ describe('Backend Factory', () => {
   });
 
   describe('createBackend', () => {
-    it('should create LocalBackend for sqlite config', () => {
+    it('should create LocalBackend for sqlite config', async () => {
       const config: SqlewConfig = {
         database: { type: 'sqlite' },
       };
 
-      const backend = createBackend(config);
+      const backend = await createBackend(config);
       assert.strictEqual(backend.backendType, 'local');
     });
 
-    it('should create LocalBackend for postgres config', () => {
+    it('should create LocalBackend for postgres config', async () => {
       const config: SqlewConfig = {
         database: { type: 'postgres' },
       };
 
-      const backend = createBackend(config);
+      const backend = await createBackend(config);
       assert.strictEqual(backend.backendType, 'local');
     });
 
-    it('should create LocalBackend for mysql config', () => {
+    it('should create LocalBackend for mysql config', async () => {
       const config: SqlewConfig = {
         database: { type: 'mysql' },
       };
 
-      const backend = createBackend(config);
+      const backend = await createBackend(config);
       assert.strictEqual(backend.backendType, 'local');
     });
 
-    it('should create LocalBackend when no config specified', () => {
+    it('should create LocalBackend when no config specified', async () => {
       const config: SqlewConfig = {};
 
-      const backend = createBackend(config);
+      const backend = await createBackend(config);
       assert.strictEqual(backend.backendType, 'local');
     });
 
-    it('should throw error for cloud config without API key', () => {
+    it('should throw error for cloud config without API key', async () => {
       const config: SqlewConfig = {
         database: { type: 'cloud' },
       };
 
-      assert.throws(
-        () => createBackend(config),
+      await assert.rejects(
+        async () => await createBackend(config),
         /SQLEW_API_KEY is required for cloud mode/
       );
     });
 
-    it('should throw error for cloud config when plugin not installed', () => {
+    it('should create SaaS backend when API key is set', async () => {
       const config: SqlewConfig = {
         database: { type: 'cloud' },
       };
 
-      // Set API key but plugin is not installed
+      // Set API key - SaaS backend should be created via submodule
       process.env.SQLEW_API_KEY = 'test-key';
 
-      assert.throws(
-        () => createBackend(config),
-        /saas-connector.*not found|--install-saas/i
-      );
+      const backend = await createBackend(config);
+      assert.strictEqual(backend.backendType, 'saas');
     });
   });
 
   describe('initializeBackend', () => {
-    it('should initialize LocalBackend for local config', () => {
+    it('should initialize LocalBackend for local config', async () => {
       const config: SqlewConfig = {
         database: { type: 'sqlite' },
       };
 
-      const backend = initializeBackend(config);
+      const backend = await initializeBackend(config);
 
       assert.strictEqual(backend.backendType, 'local');
       assert.strictEqual(isBackendInitialized(), true);
       assert.strictEqual(getBackendType(), 'local');
     });
 
-    it('should return same instance on getBackend', () => {
+    it('should return same instance on getBackend', async () => {
       const config: SqlewConfig = {
         database: { type: 'sqlite' },
       };
 
-      const backend1 = initializeBackend(config);
+      const backend1 = await initializeBackend(config);
       const backend2 = getBackend();
 
       assert.strictEqual(backend1, backend2);
@@ -131,7 +129,7 @@ describe('Backend Factory', () => {
         database: { type: 'sqlite' },
       };
 
-      initializeBackend(config);
+      await initializeBackend(config);
       assert.strictEqual(isBackendInitialized(), true);
 
       await resetBackend();

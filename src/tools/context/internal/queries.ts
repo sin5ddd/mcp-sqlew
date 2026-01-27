@@ -174,7 +174,7 @@ async function getVersionHistory(
   }
 
   // Get key_id from key name
-  const keyRecord = await knex('v4_context_keys')
+  const keyRecord = await knex('m_context_keys')
     .where({ key_name: key })
     .select('id')
     .first();
@@ -183,7 +183,7 @@ async function getVersionHistory(
     return []; // No history if key doesn't exist
   }
 
-  const history = await knex('v4_decision_history')
+  const history = await knex('t_decision_history')
     .where({ key_id: keyRecord.id })
     .orderBy('ts', 'desc')
     .limit(limit)
@@ -433,8 +433,8 @@ export async function setDecisionInternal(
   const ts = Math.floor(Date.now() / 1000);
 
   // Check if decision already exists for activity logging and version management
-  // Always check v4_decisions since all decisions now have a row there
-  const existingDecision = await knex('v4_decisions')
+  // Always check t_decisions since all decisions now have a row there
+  const existingDecision = await knex('t_decisions')
     .where({ key_id: keyId, project_id: projectId })
     .first();
 
@@ -461,7 +461,7 @@ export async function setDecisionInternal(
 
       if (validationResult.matchedPolicy && validationResult.valid) {
         // Query policy to check suggest_similar flag
-        const policy = await (trx || knex)('v4_decision_policies')
+        const policy = await (trx || knex)('t_decision_policies')
           .where({ id: validationResult.matchedPolicy.id })
           .select('suggest_similar')
           .first();
@@ -619,6 +619,18 @@ export async function setDecisionInternal(
     versionAction = 'initial';
   }
 
+  // Record history BEFORE update (only for existing decisions)
+  // This preserves the previous version before it gets overwritten
+  if (existingDecision) {
+    await knex('t_decision_history').insert({
+      key_id: keyId,
+      project_id: projectId,
+      version: existingDecision.version,
+      value: existingDecision.value,
+      ts: existingDecision.ts,
+    });
+  }
+
   // Insert or update decision
   // For ALL decisions (text and numeric), create a row in t_decisions
   // For numeric decisions, ALSO create a row in t_decisions_numeric
@@ -643,7 +655,7 @@ export async function setDecisionInternal(
     return acc;
   }, {} as Record<string, any>);
 
-  await knex('v4_decisions')
+  await knex('t_decisions')
     .insert(textDecisionData)
     .onConflict(conflictColumns)
     .merge(updateData);
@@ -666,37 +678,37 @@ export async function setDecisionInternal(
       return acc;
     }, {} as Record<string, any>);
 
-    await knex('v4_decisions_numeric')
+    await knex('t_decisions_numeric')
       .insert(numericDecisionData)
       .onConflict(conflictColumns)
       .merge(numericUpdateData);
   }
 
-  // Handle v4_tags (many-to-many) and v4_tag_index (for search optimization)
+  // Handle m_tags (many-to-many) and t_tag_index (for search optimization)
   if (params.tags && params.tags.length > 0) {
     const tags = parseStringArray(params.tags);
 
     // Clear existing tags for this project
-    await knex('v4_decision_tags')
+    await knex('t_decision_tags')
       .where({ decision_key_id: keyId, project_id: projectId })
       .delete();
 
     // Clear existing tag index entries for this decision
-    await knex('v4_tag_index')
+    await knex('t_tag_index')
       .where({ source_type: 'decision', source_id: keyId, project_id: projectId })
       .delete();
 
     // Insert new tags
     for (const tagName of tags) {
       const tagId = await getOrCreateTag(adapter, projectId, tagName, trx);
-      await knex('v4_decision_tags').insert({
+      await knex('t_decision_tags').insert({
         decision_key_id: keyId,
         tag_id: tagId,
         project_id: projectId
       });
 
-      // Also insert into v4_tag_index for search optimization
-      await knex('v4_tag_index')
+      // Also insert into t_tag_index for search optimization
+      await knex('t_tag_index')
         .insert({
           tag: tagName,
           source_type: 'decision',
@@ -709,19 +721,19 @@ export async function setDecisionInternal(
     }
   }
 
-  // Handle v4_scopes (many-to-many)
+  // Handle m_scopes (many-to-many)
   if (params.scopes && params.scopes.length > 0) {
     const scopes = parseStringArray(params.scopes);
 
     // Clear existing scopes for this project
-    await knex('v4_decision_scopes')
+    await knex('t_decision_scopes')
       .where({ decision_key_id: keyId, project_id: projectId })
       .delete();
 
     // Insert new scopes
     for (const scopeName of scopes) {
       const scopeId = await getOrCreateScope(adapter, projectId, scopeName, trx);
-      await knex('v4_decision_scopes').insert({
+      await knex('t_decision_scopes').insert({
         decision_key_id: keyId,
         scope_id: scopeId,
         project_id: projectId
@@ -767,7 +779,7 @@ export async function setDecisionInternal(
       }
 
       if (validationResult.matchedPolicy && validationResult.valid) {
-        const policy2 = await (trx || knex)('v4_decision_policies')
+        const policy2 = await (trx || knex)('t_decision_policies')
           .where({ id: validationResult.matchedPolicy.id })
           .select('suggest_similar')
           .first();

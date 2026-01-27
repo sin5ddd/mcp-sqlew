@@ -50,8 +50,10 @@ export async function suggestByContext(params: ByContextParams): Promise<Suggest
     priority: params.priority,
   };
 
+  // Use lower default threshold (20) for context searches without tags/layer
+  // Key similarity max is 20 points, so default 30 may filter valid matches
   const suggestions = transformAndScoreDecisions(candidates, context, {
-    minScore: params.min_score,
+    minScore: params.min_score ?? 20,
     limit: params.limit,
   });
 

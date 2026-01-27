@@ -174,7 +174,7 @@ export function validateDatabaseConfig(
   }
 
   // Validate database type
-  const validTypes = ['sqlite', 'postgres', 'mysql'];
+  const validTypes = ['sqlite', 'postgres', 'mysql', 'cloud'];
   if (!validTypes.includes(config.type)) {
     errors.push(`database.type must be one of: ${validTypes.join(', ')}`);
     return { valid: false, errors };
@@ -182,6 +182,11 @@ export function validateDatabaseConfig(
 
   // SQLite doesn't need connection or auth
   if (config.type === 'sqlite') {
+    return { valid: true, errors: [] };
+  }
+
+  // Cloud mode: API key validation is done in backend-factory
+  if (config.type === 'cloud') {
     return { valid: true, errors: [] };
   }
 

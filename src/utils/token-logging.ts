@@ -27,14 +27,14 @@ export async function logTokenUsage(entry: TokenLogEntry, adapter?: DatabaseAdap
     const knex = actualAdapter.getKnex();
 
     // Check if table exists (migration may not have run yet)
-    const tableExists = await knex.schema.hasTable('v4_help_token_usage');
+    const tableExists = await knex.schema.hasTable('t_token_usage');
 
     if (!tableExists) {
       // Silently skip if table doesn't exist
       return;
     }
 
-    await knex('v4_help_token_usage').insert({
+    await knex('t_token_usage').insert({
       query_type: entry.query_type,
       tool_name: entry.tool_name || null,
       action_name: entry.action_name || null,
@@ -65,13 +65,13 @@ export async function getTokenStats(query_type: string, adapter?: DatabaseAdapte
     const actualAdapter = adapter ?? getAdapter();
     const knex = actualAdapter.getKnex();
 
-    const tableExists = await knex.schema.hasTable('v4_help_token_usage');
+    const tableExists = await knex.schema.hasTable('t_token_usage');
 
     if (!tableExists) {
       return null;
     }
 
-    const result = await knex('v4_help_token_usage')
+    const result = await knex('t_token_usage')
       .where({ query_type })
       .select(
         knex.raw('COUNT(*) as total_queries'),
@@ -124,13 +124,13 @@ export async function getAllTokenStats(adapter?: DatabaseAdapter): Promise<Map<s
     const actualAdapter = adapter ?? getAdapter();
     const knex = actualAdapter.getKnex();
 
-    const tableExists = await knex.schema.hasTable('v4_help_token_usage');
+    const tableExists = await knex.schema.hasTable('t_token_usage');
 
     if (!tableExists) {
       return stats;
     }
 
-    const results = await knex('v4_help_token_usage')
+    const results = await knex('t_token_usage')
       .select('query_type')
       .count('* as total_queries')
       .avg('estimated_tokens as avg_tokens')

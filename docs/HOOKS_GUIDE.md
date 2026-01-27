@@ -33,15 +33,24 @@ This architecture ensures zero latency on code edits.
 
 ## Installation
 
-```bash
-# Initialize hooks in your project
-sqlew init --hooks
+As of v5.0.0, hooks are managed by the **sqlew-plugin** (Claude Code Plugin).
 
-# Without Git hooks (MCP hooks only)
-sqlew init --hooks --no-git
+```bash
+# 1. Add the marketplace
+/plugin marketplace add sqlew-io/sqlew-plugin
+
+# 2. Install the plugin (user-level recommended)
+/plugin install sqlew-plugin
+
+# 3. Restart Claude Code to apply changes
 ```
 
-This creates `.claude/settings.local.json` with hook configuration.
+The plugin automatically configures:
+- ✅ MCP server settings (`.mcp.json`)
+- ✅ Claude Code Hooks (PreToolUse/PostToolUse)
+- ✅ Claude Code Skills (Plan Mode guidance)
+
+> **Note:** Global Rules are automatically created at `~/.claude/rules/sqlew/` when the MCP server starts.
 
 ## Hook Commands
 
@@ -66,48 +75,6 @@ This creates `.claude/settings.local.json` with hook configuration.
 |---------|---------|---------|
 | post-merge | `sqlew mark-done` | Mark decisions as complete after merge |
 | post-rewrite | `sqlew mark-done` | Mark decisions as complete after rebase |
-
-## Configuration
-
-Generated configuration in `.claude/settings.local.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sqlew suggest"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sqlew save"
-          }
-        ]
-      },
-      {
-        "matcher": "TodoWrite",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sqlew check-completion"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
 
 ## Queue File Format
 
@@ -134,15 +101,26 @@ Generated configuration in `.claude/settings.local.json`:
 
 ### Hooks not triggering
 
-1. Check `.claude/settings.local.json` exists
-2. Verify hook configuration format
+1. Verify plugin is installed: `/plugin list`
+2. Check plugin status for errors
 3. Restart Claude Code to reload hooks
 
 ### Queue not processing
 
 1. Ensure MCP server is running
-2. Check `.sqlew/queue/pending.json` for items
+2. Use `queue { action: "list" }` to check pending items
 3. Verify QueueWatcher is active (check debug logs)
+
+### Items stuck in queue (High Similarity)
+
+Items may remain in queue if they have 60%+ similarity to existing decisions:
+
+1. **Check queue**: `queue { action: "list" }`
+2. **Search existing**: `/sqlew search for <topic>`
+3. **Remove if duplicate**: `queue { action: "remove", index: N }`
+4. **Or clear all**: `queue { action: "clear" }`
+
+See `~/.claude/rules/sqlew/queue-monitoring.md` for details.
 
 ### Debug logging
 
@@ -156,4 +134,6 @@ log_level = "debug"
 
 ## Version History
 
+- **v5.0.0**: Hooks managed by sqlew-plugin (Claude Code Plugin)
+- **v4.3.0**: Plan-to-ADR - Automatic ADR from Plan Mode
 - **v4.1.0**: Initial Claude Code Hooks integration with File Queue Architecture

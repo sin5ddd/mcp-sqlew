@@ -8,10 +8,10 @@
  */
 
 import {
-  loadPlanTomlCache,
+  loadPlanCache,
   loadCurrentPlan,
   getGlobalConfigDir,
-  type PlanTomlCache,
+  type PlanCache,
   type ConstraintCandidate,
 } from '../../../config/global-config.js';
 
@@ -74,7 +74,7 @@ export async function suggestPendingConstraints(
   }
 
   // Load plan TOML cache
-  const cache = loadPlanTomlCache(projectPath);
+  const cache = loadPlanCache(projectPath);
   if (!cache || cache.plan_id !== planInfo.plan_id) {
     return {
       has_pending: false,

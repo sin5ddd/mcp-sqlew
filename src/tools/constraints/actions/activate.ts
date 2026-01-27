@@ -53,9 +53,9 @@ export async function activateConstraintsByTag(
       const projectId = getProjectContext().getProjectId();
 
       // Find constraints with matching tag that are inactive
-      const constraintIds = await knex('v4_constraints as c')
-        .join('v4_constraint_tags as ct', 'c.id', 'ct.constraint_id')
-        .join('v4_tags as t', 'ct.tag_id', 't.id')
+      const constraintIds = await knex('t_constraints as c')
+        .join('t_constraint_tags as ct', 'c.id', 'ct.constraint_id')
+        .join('m_tags as t', 'ct.tag_id', 't.id')
         .where('c.project_id', projectId)
         .where('c.active', 0)
         .where('t.name', tag)
@@ -67,7 +67,7 @@ export async function activateConstraintsByTag(
       }
 
       // Activate all matching constraints
-      await knex('v4_constraints')
+      await knex('t_constraints')
         .whereIn('id', constraintIds)
         .where('project_id', projectId)
         .update({ active: SQLITE_TRUE });
@@ -105,7 +105,7 @@ export async function activateConstraint(
       const projectId = getProjectContext().getProjectId();
 
       // Check if constraint exists
-      const constraint = await knex('v4_constraints')
+      const constraint = await knex('t_constraints')
         .where('id', normalizedParams.constraint_id)
         .where('project_id', projectId)
         .first();
@@ -123,7 +123,7 @@ export async function activateConstraint(
       }
 
       // Activate the constraint
-      await knex('v4_constraints')
+      await knex('t_constraints')
         .where('id', normalizedParams.constraint_id)
         .where('project_id', projectId)
         .update({ active: SQLITE_TRUE });

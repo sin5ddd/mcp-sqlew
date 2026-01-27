@@ -6,7 +6,6 @@
 
 import { initializeDatabase } from './database.js';
 import { getContext, searchAdvanced } from './tools/context/index.js';
-import { getFileChanges } from './tools/files/index.js';
 import { dbDumpCommand } from './cli/db-dump.js';
 import { dbExportCommand } from './cli/db-export.js';
 import { dbImportCommand } from './cli/db-import.js';
@@ -16,17 +15,15 @@ import { trackPlanCommand } from './cli/hooks/track-plan.js';
 import { saveCommand } from './cli/hooks/save.js';
 import { checkCompletionCommand } from './cli/hooks/check-completion.js';
 import { markDoneCommand } from './cli/hooks/mark-done.js';
-import { initHooksCommand } from './cli/hooks/init-hooks.js';
-import { initializeSkills, initializeRules, initializeGitignore } from './init-skills.js';
+import { initializeGlobalRules, initializeGitignore } from './init-rules.js';
 import { onSubagentStopCommand } from './cli/hooks/on-subagent-stop.js';
 import { onStopCommand } from './cli/hooks/on-stop.js';
 import { onEnterPlanCommand } from './cli/hooks/on-enter-plan.js';
 import { onExitPlanCommand } from './cli/hooks/on-exit-plan.js';
-import { installSaasCommand, showInstallSaasHelp } from './cli/install-saas.js';
+import { onSessionStartCommand } from './cli/hooks/on-session-start.js';
 import type {
   GetContextParams,
   SearchAdvancedParams,
-  GetFileChangesParams,
 } from './types.js';
 
 // ============================================================================
@@ -48,7 +45,6 @@ interface CLIArgs {
   'db-path'?: string;
   help?: boolean;
   init?: boolean;
-  'install-saas'?: boolean;
   force?: boolean;
 }
 
@@ -75,8 +71,6 @@ function parseArgs(args: string[]): CLIArgs {
         parsed.help = true;
       } else if (key === 'init') {
         parsed.init = true;
-      } else if (key === 'install-saas') {
-        parsed['install-saas'] = true;
       } else if (key === 'force') {
         parsed.force = true;
       } else if (value && !value.startsWith('--')) {
@@ -155,42 +149,44 @@ sqlew CLI - Query and database migration tool for mcp-sqlew
 
 USAGE:
   sqlew <command> [options]
-  sqlew --init              # One-shot project setup (recommended)
 
-COMMANDS:
-  Setup:
-    --init           One-shot initialization (Skills + CLAUDE.md + Hooks + gitignore)
-    --install-saas   Install SaaS connector plugin (requires API key)
-    init --hooks     Initialize Claude Code and Git hooks only
+RECOMMENDED SETUP (v5.0.0+):
+  The sqlew-plugin is now the recommended way to install Skills, Hooks, and Agents.
+
+  /plugin marketplace add sqlew-io/sqlew-plugin
+  /plugin add sqlew
+
+  For more info: https://github.com/sqlew-io/sqlew-plugin
+
+LEGACY COMMANDS:
+  Setup (deprecated - use sqlew-plugin instead):
+    --init           Legacy initialization (global rules + gitignore)
 
   Database:
     db:dump    Generate SQL dump for database migration (schema + data)
     db:export  Export project data to JSON format (data-only, for append-import)
     db:import  Import project data from JSON export (append to existing database)
 
-  Claude Code Hooks (v4.1.0+):
+  Claude Code Hooks (internal use):
     suggest          Find related decisions (PreToolUse hook for Task)
     track-plan       Track plan files (PreToolUse hook for Write)
     save             Save decisions on code edit (PostToolUse hook for Edit|Write)
     check-completion Check task completion (PostToolUse hook for TodoWrite)
     mark-done        Mark decisions as implemented (Git hooks or manual)
 
-  Plan Mode Hooks (v4.2.0+):
+  Plan Mode Hooks (internal use):
     on-enter-plan    Inject TOML template (PostToolUse hook for EnterPlanMode)
     on-exit-plan     Prompt TOML documentation (PostToolUse hook for ExitPlanMode)
     on-subagent-stop Process Plan agent completion (SubagentStop hook)
     on-stop          Process main agent stop (Stop hook)
 
 OPTIONS:
-  --init                   Initialize all sqlew integrations
+  --init                   Legacy initialization
   --help                   Show this help message
 
 EXAMPLES:
-  # Full project setup (Skills, CLAUDE.md, Hooks, gitignore)
+  # Legacy initialization (prefer sqlew-plugin instead)
   sqlew --init
-
-  # Initialize only hooks
-  sqlew init --hooks
 
   # Generate MySQL dump for database migration
   npm run db:dump -- mysql -o dump-mysql.sql
@@ -254,38 +250,12 @@ async function queryMessages(args: CLIArgs): Promise<void> {
 
 /**
  * Query files command
+ * @deprecated File tracking system removed in v5.0.0
  */
-async function queryFiles(args: CLIArgs): Promise<void> {
-  const outputFormat = args.output || 'json';
-
-  // Build query params
-  const params: GetFileChangesParams = {};
-
-  if (args.since) {
-    params.since = args.since;
-  }
-
-  if (args.layer) {
-    params.layer = args.layer;
-  }
-
-  if (args.agent) {
-    params.agent_name = args.agent;
-  }
-
-  if (args.limit) {
-    params.limit = args.limit;
-  }
-
-  // Execute query
-  const result = await getFileChanges(params);
-
-  // Output results
-  if (outputFormat === 'json') {
-    formatJSON(result);
-  } else {
-    formatTable(result.changes, ['path', 'changed_by', 'change_type', 'layer', 'changed_at']);
-  }
+async function queryFiles(_args: CLIArgs): Promise<void> {
+  console.error('Error: The file tracking system has been removed in v5.0.0.');
+  console.error('The "files" query command is no longer available.');
+  process.exit(1);
 }
 
 // ============================================================================
@@ -293,45 +263,43 @@ async function queryFiles(args: CLIArgs): Promise<void> {
 // ============================================================================
 
 /**
- * Comprehensive project initialization
- * Sets up Skills, CLAUDE.md integration, Hooks, and gitignore in one command
+ * Project initialization command
+ *
+ * As of v5.0.0, Skills and Hooks are managed by the sqlew-plugin.
+ * This command now sets up:
+ * - Global Rules (~/.claude/rules/sqlew/)
+ * - Project .gitignore
  */
 async function initAllCommand(): Promise<void> {
   const { determineProjectRoot } = await import('./utils/project-root.js');
   const projectPath = determineProjectRoot();
 
-  console.log('[sqlew --init] Starting comprehensive initialization...');
+  console.log('');
+  console.log('⚠ NOTE: sqlew v5.0.0 introduces sqlew-plugin for Skills/Hooks/Agents');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
+  console.log('RECOMMENDED INSTALLATION (v5.0.0+):');
+  console.log('  /plugin marketplace add sqlew-io/sqlew-plugin');
+  console.log('  /plugin add sqlew');
+  console.log('');
+  console.log('For more info: https://github.com/sqlew-io/sqlew-plugin');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
+  console.log('[sqlew --init] Starting initialization...');
   console.log(`[sqlew --init] Project root: ${projectPath}`);
   console.log('');
 
-  // 1. Initialize Skills
-  console.log('[1/4] Initializing Skills...');
+  // 1. Initialize Global Rules (~/.claude/rules/sqlew/)
+  console.log('[1/2] Setting up global rules (~/.claude/rules/sqlew/)...');
   try {
-    initializeSkills(projectPath);
-    console.log('      ✓ Skills initialized');
-  } catch (error) {
-    console.log(`      ✗ Skills failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  // 2. Initialize .claude/rules/
-  console.log('[2/4] Setting up .claude/rules/...');
-  try {
-    initializeRules(projectPath);
-    console.log('      ✓ Plan mode integration rule installed');
+    initializeGlobalRules();
+    console.log('      ✓ Global plan mode integration rule installed');
   } catch (error) {
     console.log(`      ✗ Rules setup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 3. Initialize Hooks
-  console.log('[3/4] Setting up Claude Code Hooks...');
-  try {
-    await initHooksCommand([]);
-  } catch (error) {
-    console.log(`      ✗ Hooks failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  // 4. Initialize gitignore
-  console.log('[4/4] Updating .gitignore...');
+  // 2. Initialize gitignore
+  console.log('[2/2] Updating .sqlew/.gitignore...');
   try {
     initializeGitignore(projectPath);
     console.log('      ✓ .gitignore updated');
@@ -343,8 +311,9 @@ async function initAllCommand(): Promise<void> {
   console.log('[sqlew --init] Initialization complete!');
   console.log('');
   console.log('Next steps:');
-  console.log('  1. Restart Claude Code for hooks to take effect');
-  console.log('  2. Run "/sqlew" to start using sqlew context management');
+  console.log('  1. Consider using sqlew-plugin for better integration');
+  console.log('  2. Restart Claude Code for rules to take effect');
+  console.log('  3. Run "/sqlew" to start using sqlew context management');
 }
 
 // ============================================================================
@@ -427,22 +396,33 @@ export async function runCli(rawArgs: string[]): Promise<void> {
     return;
   }
 
+  // SessionStart hook (v5.0.0+) - handles "clear context" Plan-to-ADR
+  if (args.command === 'on-session-start') {
+    await onSessionStartCommand();
+    return;
+  }
+
   // --init flag: comprehensive initialization (Skills + CLAUDE.md + Hooks + gitignore)
   if (args.init) {
     await initAllCommand();
     return;
   }
 
-  // --install-saas flag: install SaaS connector plugin
-  if (args['install-saas']) {
-    await installSaasCommand(rawArgs);
-    return;
-  }
-
-  // init --hooks command (hooks only)
+  // init --hooks command (removed in v5.0.0 - use sqlew-plugin instead)
   if (args.command === 'init' && rawArgs.includes('--hooks')) {
-    await initHooksCommand(rawArgs.slice(1));
-    return;
+    console.log('');
+    console.log('⚠ The "init --hooks" command has been removed in v5.0.0');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+    console.log('Hooks are now managed by the sqlew-plugin (Claude Code Plugin).');
+    console.log('');
+    console.log('INSTALLATION:');
+    console.log('  /plugin marketplace add sqlew-io/sqlew-plugin');
+    console.log('  /plugin install sqlew-plugin');
+    console.log('');
+    console.log('For more info: https://github.com/sqlew-io/sqlew-plugin');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    process.exit(0);
   }
 
   // Show help if requested or no command

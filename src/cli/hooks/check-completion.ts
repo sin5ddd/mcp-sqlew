@@ -13,9 +13,9 @@
 import { readStdinJson, sendContinue, areAllTodosCompleted, getProjectPath } from './stdin-parser.js';
 import {
   loadCurrentPlan,
-  loadPlanTomlCache,
-  savePlanTomlCache,
-  type PlanTomlCache,
+  loadPlanCache,
+  savePlanCache,
+  type PlanCache,
 } from '../../config/global-config.js';
 import { initializeDatabase } from '../../database.js';
 import { setDecision } from '../../tools/context/actions/set.js';
@@ -45,7 +45,7 @@ const WORKFLOW_TAG_IN_REVIEW = 'workflow:in_review';
  * @param cache - Plan TOML cache with constraint candidates
  * @returns Formatted prompt string with MCP command examples
  */
-function formatConstraintPrompt(cache: PlanTomlCache): string {
+function formatConstraintPrompt(cache: PlanCache): string {
   if (cache.constraints.length === 0) {
     return '';
   }
@@ -87,7 +87,7 @@ function formatConstraintPrompt(cache: PlanTomlCache): string {
  * @param cache - Plan TOML cache
  * @returns Context message with results
  */
-function processPlanTomlCache(projectPath: string, cache: PlanTomlCache): string {
+function processPlanCache(projectPath: string, cache: PlanCache): string {
   const messages: string[] = [];
 
   // Auto-register decisions (queued for MCP server processing)
@@ -113,7 +113,7 @@ function processPlanTomlCache(projectPath: string, cache: PlanTomlCache): string
 
   // Save updated cache
   if (cache.decisions_registered || cache.constraints_prompted) {
-    savePlanTomlCache(projectPath, cache);
+    savePlanCache(projectPath, cache);
   }
 
   return messages.join('\n');
@@ -192,9 +192,9 @@ export async function checkCompletionCommand(): Promise<void> {
 
       // Process TOML decisions and constraints (v4.2.0+)
       let tomlContext = '';
-      const tomlCache = loadPlanTomlCache(projectPath);
+      const tomlCache = loadPlanCache(projectPath);
       if (tomlCache && tomlCache.plan_id === planInfo.plan_id) {
-        tomlContext = processPlanTomlCache(projectPath, tomlCache);
+        tomlContext = processPlanCache(projectPath, tomlCache);
       }
 
       const baseMessage = `[sqlew] All tasks completed! Decision updated to status: ${IN_REVIEW_STATUS}`;
@@ -205,9 +205,9 @@ export async function checkCompletionCommand(): Promise<void> {
       console.error(`[sqlew check-completion] Error updating decision: ${message}`);
 
       // Still process TOML even if decision update failed
-      const tomlCache = loadPlanTomlCache(projectPath);
+      const tomlCache = loadPlanCache(projectPath);
       if (tomlCache && tomlCache.plan_id === planInfo.plan_id) {
-        const tomlContext = processPlanTomlCache(projectPath, tomlCache);
+        const tomlContext = processPlanCache(projectPath, tomlCache);
         if (tomlContext) {
           sendContinue(tomlContext);
           return;

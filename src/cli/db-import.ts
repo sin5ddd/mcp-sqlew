@@ -124,7 +124,7 @@ export async function executeDbImport(args: DbImportArgs): Promise<void> {
   const validationError = validateArgs(args);
   if (validationError) {
     console.error(validationError);
-    console.error('Run "npx sqlew db:import --help" for usage information.');
+    console.error('Run "sqlew db:import --help" for usage information.');
     process.exit(1);
   }
 
@@ -220,9 +220,8 @@ export async function executeDbImport(args: DbImportArgs): Promise<void> {
         console.error(`\n✅ Import successful!`);
         console.error(`   Project: ${result.project_name} (ID: ${result.project_id})`);
         if (result.stats) {
-          console.error(`   Tasks: ${result.stats.transaction_tables.tasks_created}`);
           console.error(`   Decisions: ${result.stats.transaction_tables.decisions_created}`);
-          console.error(`   Files: ${result.stats.master_tables.files_created} created, ${result.stats.master_tables.files_reused} reused`);
+          console.error(`   Constraints: ${result.stats.transaction_tables.constraints_created}`);
         }
       } else {
         console.error(`\n❌ Import failed: ${result.error}`);
