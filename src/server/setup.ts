@@ -27,7 +27,7 @@ import { ensureSqlewDirectory } from '../config/example-generator.js';
 import { determineProjectRoot, isAmbiguousProjectRoot, wasProjectRootExplicit } from '../utils/project-root.js';
 import { ParsedArgs } from './arg-parser.js';
 import { initializeSqlewRules } from '../init-rules.js';
-import { loadGlobalConfig, getDefaultDbPath } from '../config/global-config.js';
+import { loadGlobalConfig, getDefaultDbPath, ensureGlobalConfigDir } from '../config/global-config.js';
 import { initializeBackend, isCloudMode, getBackend } from '../backend/backend-factory.js';
 import { migrateLocalToGlobal } from '../migration/local-to-global.js';
 
@@ -213,6 +213,7 @@ export async function initializeServer(parsedArgs: ParsedArgs): Promise<SetupRes
   }
   const debugLogLevel = fileConfig.debug?.log_level || 'info';
   initDebugLogger(debugLogPath, debugLogLevel);
+  ensureGlobalConfigDir();
 
   debugLog('INFO', 'Config loaded with priority', {
     currentDir,

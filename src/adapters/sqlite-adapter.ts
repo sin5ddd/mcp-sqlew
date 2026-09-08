@@ -1,10 +1,29 @@
 // src/adapters/sqlite-adapter.ts
 import knexLib from 'knex';
 import type { Knex } from 'knex';
+import { mkdirSync } from 'fs';
+import { dirname } from 'path';
 import { BaseAdapter } from './base-adapter.js';
 import type { DatabaseConfig } from '../config/types.js';
 
 const { knex } = knexLib;
+
+function extractSqliteFilename(config: Knex.Config): string | undefined {
+  const connection = config.connection as unknown; // Knex connection is a union; narrow below
+  if (typeof connection === 'string') return connection;
+  if (connection && typeof connection === 'object' && 'filename' in connection) {
+    const filename = connection.filename;
+    if (typeof filename === 'string') return filename;
+  }
+  return undefined;
+}
+
+function ensureSqliteParentDir(filename: string | undefined): void {
+  if (!filename || filename === ':memory:') return;
+  const dir = dirname(filename);
+  if (!dir || dir === '.') return;
+  mkdirSync(dir, { recursive: true });
+}
 
 /** SQLite adapter (file-based, no authentication required). */
 export class SQLiteAdapter extends BaseAdapter {
@@ -50,6 +69,7 @@ export class SQLiteAdapter extends BaseAdapter {
       },
       useNullAsDefault: true,
     };
+    ensureSqliteParentDir(extractSqliteFilename(connectionConfig));
 
     // Create Knex instance
     this.knexInstance = knex(connectionConfig);
