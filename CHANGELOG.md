@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.3.8] - 2026-09-08
+
+### Fixed
+
+**First MCP start crashed when the SQLite parent directory was missing**
+
+better-sqlite3 throws `TypeError: Cannot open database because the directory does not exist` if `~/.config/sqlew` is absent. README / SHARED_DATABASE.md already promised auto-create on first run.
+
+- **`SQLiteAdapter.connect`** — `mkdirSync(dirname(filename), { recursive: true })` immediately before `knex()`, so MCP, `initializeDatabase`, and CLI query share one path. `:memory:` and cwd-relative `foo.db` are no-ops. `mkdir` failures propagate.
+- **`initializeServer`** — calls existing `ensureGlobalConfigDir()` after config load so the `config.toml` template is written too (not only the DB parent dir).
+- **Tests** — unit coverage for missing nested parents and `:memory:`.
+
+Fixes [#123](https://github.com/sqlew-io/sqlew/issues/123).
+
+
 ## [5.3.7] - 2026-07-31
 
 ### Changed
